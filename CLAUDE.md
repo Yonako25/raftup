@@ -8,7 +8,7 @@ Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâch
 - **Compatibilité stricte avec le protocole réseau d'Archipelago.** Un mod de jeu Archipelago existant doit se connecter au serveur Raftup sans aucune modification. Référence : `docs/network protocol.md` du dépôt ArchipelagoMW/Archipelago.
 - **Jamais de jeu, de ROM, d'asset ou de clé distribués.** Raftup installe des mods et applique des patchs sur la copie du joueur, après vérification du hash.
 - **Pas de jeux de consoles Nintendo actuelles** dans le catalogue.
-- **Licences** : Raftup est en double licence MIT / Apache-2.0, sauf le hub en AGPL-3.0-or-later (ADR 0003) ; une crate MIT/Apache ne dépend jamais du hub. Tout code porté depuis Archipelago ou pahoa (MIT) garde sa notice de copyright dans `THIRD_PARTY_NOTICES.md`.
+- **Licences** : Raftup est en double licence MIT / Apache-2.0, sauf le hub en AGPL-3.0-or-later (ADR 0003) ; une crate MIT/Apache ne dépend jamais du hub. Tout code porté depuis un autre projet (Archipelago, pahoa…) garde sa notice de copyright dans `THIRD_PARTY_NOTICES.md`.
 - Ne jamais écrire « Archipelago » ou « AP » dans le nom ou le logo du produit ; écrire « compatible avec Archipelago ».
 
 ## Stack
@@ -16,18 +16,17 @@ Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâch
 - Rust (workspace Cargo), édition 2021, toolchain stable.
 - Async : `tokio`. Sérialisation : `serde` / `serde_json`. Erreurs : `thiserror` dans les bibliothèques, `anyhow` dans les binaires. Logs : `tracing`.
 - Launcher : Tauri v2, interface en HTML/CSS/TypeScript sans framework lourd.
-- Client réseau : crate `archipelago_rs`.
-- Serveur : basé sur pahoa (https://github.com/mooinglemur/pahoa, MIT), dépendance Git épinglée sur un commit.
+- Protocole, serveur et client : écrits par Raftup (ADR 0004), sur `tokio` et `ap-protocol`. Pas de dépendance à pahoa ni à `archipelago_rs` : ce sont des références, avec le serveur Python officiel comme oracle des tests différentiels.
 - Génération au MVP : générateur Archipelago officiel, version épinglée, lancé dans un process Python séparé (python-build-standalone), dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
 
 ## Structure du dépôt
 
 ```
 crates/
-  ap-protocol/     types des paquets du protocole Archipelago (partagés partout)
+  ap-protocol/     types des paquets du protocole Archipelago, dans les deux sens (seule source de vérité)
   multidata/       modèle de partie, lecture sécurisée du .archipelago, format natif .raftup
-  server/          serveur WebSocket (sur la base de pahoa)
-  client-core/     client Archipelago (archipelago_rs), utilisé par le launcher et les tests
+  server/          serveur WebSocket maison (tokio + ap-protocol)
+  client-core/     client Archipelago maison, utilisé par le launcher et les tests
   py-bridge/       pilote le process Python du générateur officiel
   launcher-core/   catalogue, profils d'installation, installation des mods, lancement des jeux
   launcher-ui/     application Tauri (ne dépend que de launcher-core)

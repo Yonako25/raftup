@@ -30,7 +30,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
       │                    │
       │                    ├──► py-bridge ──► générateur Archipelago officiel (process séparé, MVP)
       │                    │                    └─► fichier .archipelago
-      │                    └──► server (base pahoa) ◄── lit .archipelago / .raftup
+      │                    └──► server (maison)   ◄── lit .archipelago / .raftup
       │                                   ▲
       └── client-core (suivi de partie)    │  protocole Archipelago (WebSocket, wss)
                                            │
@@ -41,10 +41,10 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 
 | Crate | Rôle | Jalon |
 | --- | --- | --- |
-| `ap-protocol` | Types serde de tous les paquets du protocole, versions réseau | J0 |
-| `client-core` | Client Archipelago (archipelago_rs) : connexion, objets reçus, progression | J0 |
+| `ap-protocol` | Types serde de tous les paquets du protocole, dans les deux sens ; seule source de vérité (ADR 0004) | J0 |
+| `client-core` | Client Archipelago maison (tokio + `ap-protocol`) : connexion, objets reçus, progression | J0 |
 | `multidata` | Modèle de partie ; lecture sécurisée du `.archipelago` (pickle en liste blanche, quotas) ; format natif `.raftup` (MessagePack + zstd, versionné) | J1 |
-| `server` | Serveur WebSocket sur la base de pahoa | J1 |
+| `server` | Serveur WebSocket maison (tokio + `ap-protocol`) | J1 |
 | `py-bridge` | Lance et pilote le générateur officiel dans un process Python séparé | J3 |
 | `launcher-core` | Catalogue, profils, installation, détection des jeux, lancement | J3 |
 | `launcher-ui` | Interface Tauri | J3 |
@@ -54,7 +54,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 
 ### Décisions déjà prises
 
-- **Serveur** : on réutilise pahoa (MIT) en dépendance Git épinglée ; on contribue en amont plutôt que de forker. Fork uniquement si l'amont refuse un point d'extension indispensable.
+- **Protocole, serveur et client maison** : `ap-protocol`, `server` et `client-core` sont écrits par Raftup, sans dépendre de pahoa ni de `archipelago_rs` ; ces projets et le serveur Python officiel servent de références et d'oracles de test (ADR 0004).
 - **Génération au MVP** : 100 % par le générateur Archipelago officiel, version épinglée. Aucune règle Python ne traverse la frontière au MVP.
 - **Process Python** : python-build-standalone téléchargé au premier usage, un environnement par version d'Archipelago ; dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
 - **Pas de PyO3** (Python embarqué dans le process du launcher) : packaging difficile, pas d'isolation.
@@ -70,7 +70,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 | Jalon | Contenu | Critère de « terminé » |
 | --- | --- | --- |
 | J0 · Bases Rust | `ap-protocol` + `client-core` : une CLI qui se connecte à une vraie room, affiche les joueurs, les objets reçus et la progression | Connexion réussie à une room archipelago.gg ; tests sur des paquets réels capturés |
-| J1 · « Je joue seul » | `server` sur la base de pahoa, qui charge un `.archipelago` généré par AP | Une partie solo d'un premier jeu jouée jusqu'au bout avec le mod officiel non modifié |
+| J1 · « Je joue seul » | `server` maison, qui charge un `.archipelago` généré par AP | Une partie solo d'un premier jeu jouée jusqu'au bout avec le mod officiel non modifié |
 | J2 · « On joue à 4 » | 3 à 4 jeux PC sans ROM ; hints, DeathLink, release/collect, sauvegarde et reprise | Une partie à 4 joueurs sur 4 jeux différents terminée ; reprise après redémarrage du serveur sans perte |
 | J3 · Launcher | Détection des jeux, installation par profil, génération via le process Python, hébergement en un clic, rejoindre par lien, salon de préparation, webhook Discord | Sur une VM Windows propre : lien d'invitation → jeu lancé et connecté en moins de 5 min, sans saisie manuelle quand le mod le permet |
 
@@ -194,7 +194,7 @@ Maquettes de référence : canevas « Raftup — maquette du launcher » (Accuei
 ## 8. Conduite envers la communauté Archipelago
 
 1. Nom et logo distincts, mention « projet non officiel, compatible avec Archipelago ».
-2. Crédits : notices MIT d'Archipelago et de pahoa ; auteurs des worlds affichés dans le launcher.
+2. Crédits : notices MIT de tout code porté (Archipelago, autres projets) ; auteurs des worlds affichés dans le launcher.
 3. Compatibilité stricte et tests publics ; aucun paquet réseau propriétaire sans repli.
 4. Remonter bugs et clarifications du protocole en amont ; prévenir les mainteneurs sur Discord avant toute annonce publique.
 5. Aucune world exclusive à Raftup.
@@ -202,8 +202,8 @@ Maquettes de référence : canevas « Raftup — maquette du launcher » (Accuei
 ## 9. Hypothèses à vérifier avant d'écrire du code
 
 - [ ] Comment le mod Archipelago du premier jeu reçoit hôte, slot et mot de passe (argument, fichier de config, saisie en jeu).
-- [ ] pahoa charge une seed générée par la version d'Archipelago épinglée et tient une partie complète avec ce jeu.
-- [ ] `archipelago_rs` se connecte à une vraie room et reçoit les objets.
+- [ ] Le lecteur `.archipelago` de `multidata` charge une seed générée par la version d'Archipelago épinglée, et le serveur maison tient une partie complète avec ce jeu.
+- [ ] `client-core` se connecte à une vraie room et reçoit les objets.
 - [ ] Le générateur officiel tourne seul via python-build-standalone, sans Python installé, sans droits admin.
 - [ ] Les licences des mods du catalogue MVP autorisent l'installation automatique (référencement par URL + hash, pas de ré-hébergement).
 
@@ -212,7 +212,7 @@ Maquettes de référence : canevas « Raftup — maquette du launcher » (Accuei
 | Risque | Parade |
 | --- | --- |
 | Archipelago change son protocole ou l'API des worlds | Version épinglée, tests sur seeds de référence, suivi des releases |
-| pahoa abandonné | Commit épinglé, fork miroir |
+| Écart de comportement avec le serveur officiel | Tests différentiels contre le serveur Python, vecteurs de paquets réels, matrice de clients (NF01, NF02) |
 | Maintenance des profils par jeu | Versions épinglées, test automatique par profil, jeu cassé marqué indisponible |
 | Courbe d'apprentissage de Rust | Jalons courts, code simple, commentaires pédagogiques |
 | Antivirus / SmartScreen | Signature de code (SignPath pour l'open source, à vérifier) |
