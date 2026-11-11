@@ -8,7 +8,7 @@ Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâch
 - **Compatibilité stricte avec le protocole réseau d'Archipelago.** Un mod de jeu Archipelago existant doit se connecter au serveur Raftup sans aucune modification. Référence : `docs/network protocol.md` du dépôt ArchipelagoMW/Archipelago.
 - **Jamais de jeu, de ROM, d'asset ou de clé distribués.** Raftup installe des mods et applique des patchs sur la copie du joueur, après vérification du hash.
 - **Pas de jeux de consoles Nintendo actuelles** dans le catalogue.
-- **Licences** : Raftup est en double licence MIT / Apache-2.0. Tout code porté depuis Archipelago ou pahoa (MIT) garde sa notice de copyright dans `THIRD_PARTY_NOTICES.md`.
+- **Licences** : Raftup est en double licence MIT / Apache-2.0, sauf le hub en AGPL-3.0-or-later (ADR 0003) ; une crate MIT/Apache ne dépend jamais du hub. Tout code porté depuis Archipelago ou pahoa (MIT) garde sa notice de copyright dans `THIRD_PARTY_NOTICES.md`.
 - Ne jamais écrire « Archipelago » ou « AP » dans le nom ou le logo du produit ; écrire « compatible avec Archipelago ».
 
 ## Stack
@@ -32,6 +32,7 @@ crates/
   launcher-core/   catalogue, profils d'installation, installation des mods, lancement des jeux
   launcher-ui/     application Tauri (ne dépend que de launcher-core)
   logic/  fill/  worlds-native/  generate/   → V2 et V3, ne pas créer avant
+  hub/             service raftup-hub : comptes, amis, présence (AGPL, après le MVP, ne pas créer avant)
 profiles/          profils d'installation déclaratifs, un fichier TOML par jeu
 docs/              SPEC.md, décisions d'architecture (docs/adr/)
 ```

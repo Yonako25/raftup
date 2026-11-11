@@ -50,6 +50,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 | `launcher-ui` | Interface Tauri | J3 |
 | `logic`, `fill`, `generate` | Générateur Rust | V2 |
 | `worlds-native` | Format de world natif déclaratif | V3 |
+| `hub` | Service `raftup-hub` : comptes, amis, présence (AGPL) | V2 |
 
 ### Décisions déjà prises
 
@@ -58,6 +59,9 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 - **Process Python** : python-build-standalone téléchargé au premier usage, un environnement par version d'Archipelago ; dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
 - **Pas de PyO3** (Python embarqué dans le process du launcher) : packaging difficile, pas d'isolation.
 - **Une version d'Archipelago épinglée par version de Raftup**, tests de non-régression sur des seeds de référence.
+- **Catalogue public** : le catalogue entier (profils d'installation) vit dans le dépôt, sous `profiles/`, sans base de données privée, embarqué dans chaque version du launcher ; contributions par pull request (ADR 0001).
+- **Comptes et amis** : service séparé `raftup-hub` (PostgreSQL), vrai compte avec connexion par e-mail + mot de passe ou Discord (d'autres fournisseurs plus tard), pseudo unique (sans code ami), après le MVP (ADR 0002). Code public, base de l'instance officielle privée, sur le modèle de Modrinth.
+- **Licences** : MIT / Apache-2.0 partout, sauf `raftup-hub` en AGPL-3.0-or-later (ADR 0003).
 
 ## 4. Périmètre par jalon
 
