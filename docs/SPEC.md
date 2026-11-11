@@ -74,7 +74,12 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 | J2 · « On joue à 4 » | 3 à 4 jeux PC sans ROM ; hints, DeathLink, release/collect, sauvegarde et reprise | Une partie à 4 joueurs sur 4 jeux différents terminée ; reprise après redémarrage du serveur sans perte |
 | J3 · Launcher | Détection des jeux, installation par profil, génération via le process Python, hébergement en un clic, rejoindre par lien, salon de préparation, webhook Discord | Sur une VM Windows propre : lien d'invitation → jeu lancé et connecté en moins de 5 min, sans saisie manuelle quand le mod le permet |
 
-Catalogue MVP (à confirmer) : Risk of Rain 2, Stardew Valley, Hollow Knight, A Short Hike. **Premier jeu : [À CHOISIR : A Short Hike ou Risk of Rain 2]**.
+Catalogue MVP (à confirmer) : Slime Rancher, Risk of Rain 2, Stardew Valley, Hollow Knight, A Short Hike. **Premier jeu : Slime Rancher (le premier, pas Slime Rancher 2).**
+
+Slime Rancher passe par une world communautaire, pas une world intégrée à Archipelago :
+- mod client : Slimipelago (SWCreeperKing), sur MelonLoader 0.7.3 ; apworld `slime_rancher` distribuée via l'index communautaire des apworlds ;
+- connexion par un menu dans les options du jeu : méthode `manual` au départ (F04) ;
+- l'apworld doit être ajoutée au générateur officiel épinglé, et sa version doit correspondre à celle du mod.
 
 ### V2
 
@@ -201,7 +206,9 @@ Maquettes de référence : canevas « Raftup — maquette du launcher » (Accuei
 
 ## 9. Hypothèses à vérifier avant d'écrire du code
 
-- [ ] Comment le mod Archipelago du premier jeu reçoit hôte, slot et mot de passe (argument, fichier de config, saisie en jeu).
+- [ ] Comment le mod Archipelago du premier jeu reçoit hôte, slot et mot de passe (argument, fichier de config, saisie en jeu). Slimipelago : menu en jeu ; vérifier s'il existe aussi un fichier de config.
+- [ ] Slimipelago n'affiche pas de licence : demander à l'auteur l'autorisation d'installation automatique (référencement par URL + hash) avant de l'ajouter au catalogue.
+- [ ] L'apworld `slime_rancher` fonctionne avec la version d'Archipelago épinglée, et la durée d'une partie complète reste raisonnable pour le critère de J1.
 - [ ] Le lecteur `.archipelago` de `multidata` charge une seed générée par la version d'Archipelago épinglée, et le serveur maison tient une partie complète avec ce jeu.
 - [ ] `client-core` se connecte à une vraie room et reçoit les objets.
 - [ ] Le générateur officiel tourne seul via python-build-standalone, sans Python installé, sans droits admin.
