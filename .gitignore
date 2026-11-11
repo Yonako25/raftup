@@ -1,0 +1,22 @@
+# Compilation Rust
+/target/
+
+# Interface Tauri (dépendances et build front)
+node_modules/
+dist/
+
+# Réglages locaux de Claude Code (propres à chaque poste)
+.claude/settings.local.json
+
+# Éditeurs et systèmes
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Seeds et sauvegardes de parties générées localement (peuvent contenir des mots de passe)
+*.archipelago
+*.raftup
+!tests/fixtures/**/*.archipelago
+!tests/fixtures/**/*.raftup

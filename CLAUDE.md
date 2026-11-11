@@ -1,0 +1,69 @@
+# Raftup
+
+Jumeau d'Archipelago (randomizer multiworld multi-jeux) écrit en Rust, avec un launcher de bureau façon CurseForge / GOG Galaxy.
+Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâche qui touche à l'architecture, au protocole ou au périmètre.
+
+## Règles non négociables
+
+- **Compatibilité stricte avec le protocole réseau d'Archipelago.** Un mod de jeu Archipelago existant doit se connecter au serveur Raftup sans aucune modification. Référence : `docs/network protocol.md` du dépôt ArchipelagoMW/Archipelago.
+- **Jamais de jeu, de ROM, d'asset ou de clé distribués.** Raftup installe des mods et applique des patchs sur la copie du joueur, après vérification du hash.
+- **Pas de jeux de consoles Nintendo actuelles** dans le catalogue.
+- **Licences** : Raftup est en double licence MIT / Apache-2.0. Tout code porté depuis Archipelago ou pahoa (MIT) garde sa notice de copyright dans `THIRD_PARTY_NOTICES.md`.
+- Ne jamais écrire « Archipelago » ou « AP » dans le nom ou le logo du produit ; écrire « compatible avec Archipelago ».
+
+## Stack
+
+- Rust (workspace Cargo), édition 2021, toolchain stable.
+- Async : `tokio`. Sérialisation : `serde` / `serde_json`. Erreurs : `thiserror` dans les bibliothèques, `anyhow` dans les binaires. Logs : `tracing`.
+- Launcher : Tauri v2, interface en HTML/CSS/TypeScript sans framework lourd.
+- Client réseau : crate `archipelago_rs`.
+- Serveur : basé sur pahoa (https://github.com/mooinglemur/pahoa, MIT), dépendance Git épinglée sur un commit.
+- Génération au MVP : générateur Archipelago officiel, version épinglée, lancé dans un process Python séparé (python-build-standalone), dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
+
+## Structure du dépôt
+
+```
+crates/
+  ap-protocol/     types des paquets du protocole Archipelago (partagés partout)
+  multidata/       modèle de partie, lecture sécurisée du .archipelago, format natif .raftup
+  server/          serveur WebSocket (sur la base de pahoa)
+  client-core/     client Archipelago (archipelago_rs), utilisé par le launcher et les tests
+  py-bridge/       pilote le process Python du générateur officiel
+  launcher-core/   catalogue, profils d'installation, installation des mods, lancement des jeux
+  launcher-ui/     application Tauri (ne dépend que de launcher-core)
+  logic/  fill/  worlds-native/  generate/   → V2 et V3, ne pas créer avant
+profiles/          profils d'installation déclaratifs, un fichier TOML par jeu
+docs/              SPEC.md, décisions d'architecture (docs/adr/)
+```
+
+## Commandes
+
+```
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all
+cargo tauri dev        # depuis crates/launcher-ui
+```
+
+## Conventions de code
+
+- Identifiants et code en anglais ; documentation, commentaires de module et messages de commit en français.
+- Pas de `unwrap()` ni `expect()` dans le code de bibliothèque ; erreurs typées.
+- Pas de `unsafe`.
+- Graphes et structures liées : arènes avec index `u32` plutôt que des références avec durées de vie complexes.
+- Ordre déterministe partout où un résultat doit être reproductible : `BTreeMap` / `IndexMap`, jamais d'itération sur une `HashMap` pour produire une sortie.
+- Chaque crate a des tests ; un bug corrigé arrive avec un test qui le reproduit.
+- Le format natif `.raftup` et le format des profils sont versionnés (champ `format_version`).
+
+## Comment travailler avec moi
+
+- Je suis apprentie développeuse, à l'aise en Java, **débutante en Rust**. Garde le code simple et lisible plutôt que malin.
+- Quand tu utilises une notion Rust non triviale (ownership, durées de vie, traits, async), ajoute un court commentaire qui explique pourquoi.
+- Avance par petites étapes testables ; à la fin de chaque tâche, dis ce qui marche, ce qui reste et comment le vérifier.
+- Avant une décision d'architecture qui n'est pas dans `docs/SPEC.md`, propose-la et attends ma validation ; une fois validée, consigne-la dans `docs/adr/`.
+- Ne lance pas de commande qui supprime des fichiers en dehors de `target/` sans me demander.
+
+## Design de l'interface
+
+Voir `docs/SPEC.md` § « Identité visuelle » : palette acier + bleu électrique, angles de 2 px maximum, fonds d'ambiance dégradés avec panneaux semi-transparents, police Chakra Petch pour les titres et Inter pour l'interface.
