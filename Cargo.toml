@@ -1,0 +1,22 @@
+# Workspace Cargo : un seul dépôt qui regroupe plusieurs « crates » (bibliothèques et binaires).
+# Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
+[workspace]
+resolver = "2"
+members = ["crates/ap-protocol"]
+
+# Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/raftup/raftup"
+rust-version = "1.80"
+
+# Règles du compilateur et de clippy communes à toutes les crates.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Pas d'unwrap()/expect() dans le code de bibliothèque (les tests sont autorisés, voir clippy.toml).
+unwrap_used = "deny"
+expect_used = "deny"

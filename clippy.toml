@@ -1,0 +1,3 @@
+# unwrap() et expect() restent permis dans les tests : un test qui échoue doit simplement paniquer.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
