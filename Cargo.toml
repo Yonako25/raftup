@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol"]
+members = ["crates/ap-protocol", "crates/client-core"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -20,6 +20,15 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
 indexmap = { version = "2.14", features = ["serde"] }
 thiserror = "2"
+tracing = "0.1.44"
+tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
+# WebSocket et TLS en Rust pur, certificats racine intégrés (ADR 0005).
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
+# Moteur de chiffrement de rustls : `ring`. Sans moteur, la première connexion wss
+# planterait ; avec un seul moteur activé, rustls l'installe tout seul.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+ap-protocol = { path = "crates/ap-protocol" }
 
 # Règles du compilateur et de clippy communes à toutes les crates.
 [workspace.lints.rust]

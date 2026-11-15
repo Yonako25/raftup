@@ -1,0 +1,27 @@
+[package]
+name = "client-core"
+description = "Client du protocole réseau compatible avec Archipelago, sur tokio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ap-protocol.workspace = true
+futures-util.workspace = true
+# Pas utilisé dans le code : seulement pour choisir le moteur `ring` (voir Cargo.toml du workspace).
+rustls.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
