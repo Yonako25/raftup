@@ -18,7 +18,8 @@ de copyright et le texte de licence du fichier `LICENSE` du dépôt amont, au co
 - Code porté : _aucun pour l'instant_
 - **Données de test** produites par Archipelago 0.6.8 (pas du code, mais elles contiennent du texte et des noms issus du dépôt) :
   - `crates/multidata/tests/data/seed-mit.archipelago` et son `.attendu.json` : seed générée avec les jeux ChecksFinder et Yacht Dice du dépôt officiel ;
-  - `crates/ap-protocol/tests/captures/` : paquets envoyés par le serveur officiel et paquets écrits par son encodeur.
+  - `crates/ap-protocol/tests/captures/` : paquets envoyés par le serveur officiel et paquets écrits par son encodeur ;
+  - `crates/server/tests/data/roominfo-seed-mit.json` : `RoomInfo` envoyé par le serveur officiel pour la seed ci-dessus.
 
 Notice (fichier `LICENSE` du dépôt amont, au commit ci-dessus) :
 
