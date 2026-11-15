@@ -1,0 +1,1 @@
+[{"cmd":"Get","keys":["_read_race_mode","raftup_test"]},{"cmd":"SetNotify","keys":["raftup_test"]}]

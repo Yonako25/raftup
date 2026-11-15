@@ -100,3 +100,33 @@ fn champ_class_ecrit() {
     let value: Value = serde_json::to_value(item).unwrap();
     assert_eq!(value["class"], "NetworkItem");
 }
+
+/// Sans `"class": "Version"`, le serveur Python plante en comparant les versions.
+/// Raftup est plus tolérant : il accepte ce `Connect` à la lecture, et écrit
+/// toujours `"class"` quand il réécrit une version.
+#[test]
+fn connect_sans_class_tolere_puis_reecrit_avec_class() {
+    let text = r#"[{"cmd":"Connect","password":"","game":"Slime Rancher","name":"Rancher1","uuid":"u","version":{"major":0,"minor":6,"build":8},"items_handling":7,"tags":[]}]"#;
+    let packets = ap_protocol::decode_client_frame(text).unwrap();
+    let rewritten = ap_protocol::encode_client_frame(&packets).unwrap();
+    assert!(rewritten.contains(r#""class":"Version""#), "{rewritten}");
+}
+
+/// Le serveur renvoie un `Bounce` entier dans le `Bounced` : `teams`, `operator`
+/// et les champs libres doivent survivre à la relecture.
+#[test]
+fn bounced_garde_tous_les_champs() {
+    let text = r#"[{"cmd":"Bounced","teams":[0],"tags":["DeathLink"],"operator":"or","data":{"time":1.5},"perso":[1,2]}]"#;
+    let packets = decode_server_frame(text).unwrap();
+    let again: Value = serde_json::from_str(&encode_server_frame(&packets).unwrap()).unwrap();
+    let original: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(again, original);
+}
+
+#[test]
+fn commande_client_inconnue_gardee() {
+    let text = r#"[{"cmd":"Nouveaute","x":2}]"#;
+    let packets = ap_protocol::decode_client_frame(text).unwrap();
+    assert!(matches!(packets[0], ap_protocol::ClientPacket::Unknown(_)));
+    assert_eq!(ap_protocol::encode_client_frame(&packets).unwrap(), text);
+}

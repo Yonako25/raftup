@@ -1,0 +1,1 @@
+[{"cmd":"Set","key":"raftup_test","default":0,"want_reply":true,"operations":[{"operation":"add","value":5},{"operation":"max","value":3}]}]

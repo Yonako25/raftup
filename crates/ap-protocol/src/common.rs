@@ -3,8 +3,8 @@
 //! Le serveur Python ajoute à certains objets un champ `"class"` (par exemple
 //! `"class": "NetworkItem"`). Les clients Python s'en servent pour reconstruire
 //! leurs objets : le serveur Raftup doit donc l'écrire aussi. L'attribut
-//! `#[serde(tag = "class")]` s'en charge : serde l'ajoute à l'écriture et le
-//! vérifie à la lecture.
+//! `#[serde(tag = "class")]` s'en charge : serde l'ajoute toujours à l'écriture,
+//! et tolère son absence à la lecture (testé dans `tests/pieges.rs`).
 
 use serde::{Deserialize, Serialize};
 
@@ -118,4 +118,54 @@ impl Permission {
     pub const AUTO: Permission = Permission(6);
     /// Automatique à l'objectif, et autorisée avant.
     pub const AUTO_ENABLED: Permission = Permission(7);
+}
+
+/// Priorité d'un indice : un nombre en JSON.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct HintStatus(pub u8);
+
+impl HintStatus {
+    /// Priorité non précisée.
+    pub const UNSPECIFIED: HintStatus = HintStatus(0);
+    /// Pas prioritaire.
+    pub const NO_PRIORITY: HintStatus = HintStatus(10);
+    /// À éviter (par exemple un piège).
+    pub const AVOID: HintStatus = HintStatus(20);
+    /// Prioritaire.
+    pub const PRIORITY: HintStatus = HintStatus(30);
+    /// Objet déjà trouvé. Un client ne peut pas choisir ce statut lui-même.
+    pub const FOUND: HintStatus = HintStatus(40);
+}
+
+/// État du client, envoyé avec `StatusUpdate` : un nombre en JSON.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ClientStatus(pub u8);
+
+impl ClientStatus {
+    pub const UNKNOWN: ClientStatus = ClientStatus(0);
+    pub const CONNECTED: ClientStatus = ClientStatus(5);
+    pub const READY: ClientStatus = ClientStatus(10);
+    pub const PLAYING: ClientStatus = ClientStatus(20);
+    /// Objectif atteint : définitif, le serveur ne revient pas en arrière.
+    pub const GOAL: ClientStatus = ClientStatus(30);
+}
+
+/// Objets que le client veut recevoir du serveur : une suite de bits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ItemsHandling(pub u8);
+
+impl ItemsHandling {
+    /// Aucun objet : le jeu gère tout lui-même (rare).
+    pub const NONE: ItemsHandling = ItemsHandling(0);
+    /// Objets venant des autres mondes.
+    pub const OTHER_WORLDS: ItemsHandling = ItemsHandling(0b001);
+    /// Objets de son propre monde (à combiner avec `OTHER_WORLDS`).
+    pub const OWN_WORLD: ItemsHandling = ItemsHandling(0b010);
+    /// Inventaire de départ (à combiner avec `OTHER_WORLDS`).
+    pub const STARTING_INVENTORY: ItemsHandling = ItemsHandling(0b100);
+    /// Tous les objets : valeur la plus courante pour un mod.
+    pub const ALL: ItemsHandling = ItemsHandling(0b111);
 }

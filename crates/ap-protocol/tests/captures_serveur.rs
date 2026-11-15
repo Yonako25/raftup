@@ -165,7 +165,7 @@ fn deathlink() {
         bounced.tags.as_deref(),
         Some(&["DeathLink".to_string()][..])
     );
-    assert_eq!(bounced.data["cause"], "test");
+    assert_eq!(bounced.data.as_ref().unwrap()["cause"], "test");
     // `1700000000.0` doit être réécrit avec sa virgule, comme en Python.
     let rewritten = encode_server_frame(&[ServerPacket::Bounced(bounced)]).unwrap();
     assert!(rewritten.contains("1700000000.0"), "{rewritten}");

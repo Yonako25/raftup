@@ -4,22 +4,17 @@
 //! objet dont le champ `cmd` donne le type, par exemple
 //! `[{"cmd":"RoomInfo", ...}, {"cmd":"PrintJSON", ...}]`.
 //!
-//! # Pourquoi on lit `cmd` à la main
-//!
-//! serde sait gérer seul ce genre d'enum (`#[serde(tag = "cmd")]`), mais avec la
-//! fonctionnalité `arbitrary_precision` de serde_json, il n'arrive plus à lire les
-//! nombres à virgule à l'intérieur (testé : « invalid type: map, expected f64 »).
-//! On lit donc d'abord le paquet comme une valeur JSON brute, on regarde `cmd`,
-//! puis on demande à serde la structure qui correspond.
+//! La lecture passe par [`crate::codec`] : voir là-bas pourquoi on lit `cmd` à la main.
 
 use indexmap::IndexMap;
-use serde::de::{DeserializeOwned, Error as _};
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
+use crate::codec::{parse, split_cmd, with_cmd};
 use crate::common::{
-    ItemFlags, ItemId, LocationId, NetworkItem, NetworkPlayer, NetworkSlot, NetworkVersion,
-    Permission, SlotId, TeamId,
+    HintStatus, ItemFlags, ItemId, LocationId, NetworkItem, NetworkPlayer, NetworkSlot,
+    NetworkVersion, Permission, SlotId, TeamId,
 };
 use crate::error::ProtocolError;
 
@@ -45,22 +40,6 @@ pub enum ServerPacket {
     Unknown(Map<String, Value>),
 }
 
-/// Commandes connues, dans l'ordre de l'enum.
-const KNOWN_CMDS: [&str; 12] = [
-    "RoomInfo",
-    "ConnectionRefused",
-    "Connected",
-    "ReceivedItems",
-    "LocationInfo",
-    "RoomUpdate",
-    "PrintJSON",
-    "DataPackage",
-    "Bounced",
-    "InvalidPacket",
-    "Retrieved",
-    "SetReply",
-];
-
 impl ServerPacket {
     /// Nom de la commande, tel qu'il apparaît dans le champ `cmd`.
     pub fn cmd(&self) -> &str {
@@ -84,19 +63,7 @@ impl ServerPacket {
 
     /// Construit un paquet à partir d'une valeur JSON déjà lue.
     pub fn from_value(value: Value) -> Result<Self, ProtocolError> {
-        let Value::Object(mut map) = value else {
-            return Err(ProtocolError::NotAnObject);
-        };
-        let cmd = match map.get("cmd") {
-            Some(Value::String(cmd)) => cmd.clone(),
-            _ => return Err(ProtocolError::MissingCmd),
-        };
-        if !KNOWN_CMDS.contains(&cmd.as_str()) {
-            return Ok(ServerPacket::Unknown(map));
-        }
-        // On retire `cmd` : les structures ne le contiennent pas.
-        // `shift_remove` garde l'ordre des autres clés.
-        map.shift_remove("cmd");
+        let (cmd, map) = split_cmd(value)?;
         let packet = match cmd.as_str() {
             "RoomInfo" => ServerPacket::RoomInfo(parse(&cmd, map)?),
             "ConnectionRefused" => ServerPacket::ConnectionRefused(parse(&cmd, map)?),
@@ -109,41 +76,12 @@ impl ServerPacket {
             "Bounced" => ServerPacket::Bounced(parse(&cmd, map)?),
             "InvalidPacket" => ServerPacket::InvalidPacket(parse(&cmd, map)?),
             "Retrieved" => ServerPacket::Retrieved(parse(&cmd, map)?),
-            // Seul cas restant d'après `KNOWN_CMDS`.
-            _ => ServerPacket::SetReply(parse(&cmd, map)?),
+            "SetReply" => ServerPacket::SetReply(parse(&cmd, map)?),
+            // Commande inconnue : le paquet est gardé tel quel, `cmd` compris.
+            _ => ServerPacket::Unknown(map),
         };
         Ok(packet)
     }
-}
-
-/// Lit une structure de paquet à partir de ses champs (sans `cmd`).
-///
-/// `T: DeserializeOwned` : n'importe quel type que serde sait lire et qui ne
-/// garde pas de référence vers le texte d'origine.
-fn parse<T: DeserializeOwned>(cmd: &str, map: Map<String, Value>) -> Result<T, ProtocolError> {
-    serde_json::from_value(Value::Object(map)).map_err(|source| ProtocolError::InvalidPacket {
-        cmd: cmd.to_string(),
-        source,
-    })
-}
-
-/// Paquet à écrire : le champ `cmd` suivi des champs de la structure.
-///
-/// `#[serde(flatten)]` recopie les champs de `packet` au même niveau que `cmd`.
-/// `'a` : la structure emprunte le paquet le temps de l'écriture, sans le copier.
-#[derive(Serialize)]
-struct WithCmd<'a, T> {
-    cmd: &'static str,
-    #[serde(flatten)]
-    packet: &'a T,
-}
-
-fn with_cmd<T: Serialize, S: Serializer>(
-    cmd: &'static str,
-    packet: &T,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    WithCmd { cmd, packet }.serialize(serializer)
 }
 
 // On écrit `Serialize` à la main pour ajouter le champ `cmd`.
@@ -338,7 +276,7 @@ pub struct JsonMessagePart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub player: Option<SlotId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hint_status: Option<u32>,
+    pub hint_status: Option<HintStatus>,
 }
 
 /// Réponse à `GetDataPackage` : les noms des objets et des lieux de chaque jeu.
@@ -365,13 +303,21 @@ pub struct GameData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bounced {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub teams: Option<Vec<TeamId>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub games: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slots: Option<Vec<SlotId>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     /// Contenu libre, choisi par le client qui a envoyé le `Bounce`.
-    pub data: Map<String, Value>,
+    /// Absent pour un simple « ping » (le client officiel en envoie).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<Map<String, Value>>,
+    /// Autres champs du `Bounce` (par exemple `operator`), renvoyés tels quels :
+    /// le serveur officiel renvoie le paquet entier en changeant seulement `cmd`.
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
 }
 
 /// Le serveur n'a pas compris un paquet du client.
