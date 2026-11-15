@@ -9,7 +9,7 @@ members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crat
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/raftup/raftup"
+repository = "https://github.com/Yonako25/raftup"
 rust-version = "1.80"
 
 # Versions des dépendances partagées : chaque crate écrit `xxx.workspace = true`.
