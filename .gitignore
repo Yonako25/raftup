@@ -20,3 +20,6 @@ Thumbs.db
 *.raftup
 !tests/fixtures/**/*.archipelago
 !tests/fixtures/**/*.raftup
+# Seeds de test des crates (générées pour les tests, sans mot de passe)
+!crates/*/tests/data/*.archipelago
+!crates/*/tests/data/*.raftup
