@@ -9,6 +9,7 @@
 //! seulement pour l'instant.
 
 mod connection;
+mod datastore;
 pub mod error;
 mod game;
 pub mod room;

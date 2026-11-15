@@ -130,3 +130,17 @@ fn commande_client_inconnue_gardee() {
     assert!(matches!(packets[0], ap_protocol::ClientPacket::Unknown(_)));
     assert_eq!(ap_protocol::encode_client_frame(&packets).unwrap(), text);
 }
+
+/// `original_value` : `null` reste `null`, et un champ absent reste absent.
+#[test]
+fn set_reply_original_value() {
+    let with_null = r#"[{"cmd":"SetReply","key":"k","value":1,"original_value":null}]"#;
+    let without = r#"[{"cmd":"SetReply","key":"_read_client_status_0_1","value":5}]"#;
+    for text in [with_null, without] {
+        let packets = ap_protocol::decode_server_frame(text).unwrap();
+        let again = ap_protocol::encode_server_frame(&packets).unwrap();
+        let a: serde_json::Value = serde_json::from_str(text).unwrap();
+        let b: serde_json::Value = serde_json::from_str(&again).unwrap();
+        assert_eq!(a, b);
+    }
+}

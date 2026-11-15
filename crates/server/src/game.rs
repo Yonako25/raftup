@@ -6,7 +6,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ap_protocol::{ClientStatus, LocationId, NetworkItem, SlotId, SlotType, TeamId};
+use ap_protocol::{
+    ClientStatus, Hint, HintStatus, LocationId, NetworkItem, SlotId, SlotType, TeamId,
+};
 use multidata::MultiData;
 
 /// Un objet trouvé dans un lieu, et le slot qui le reçoit.
@@ -34,6 +36,9 @@ pub(crate) struct GameState {
     client_status: BTreeMap<(TeamId, SlotId), ClientStatus>,
     /// Pour chaque groupe, les membres qui ont déjà fait `collect`.
     group_collected: BTreeMap<SlotId, BTreeSet<SlotId>>,
+    /// Indices connus de chaque (équipe, slot). Un ensemble en Python : pas de
+    /// doublon, mais l'ordre ne compte pas.
+    hints: BTreeMap<(TeamId, SlotId), Vec<Hint>>,
 }
 
 impl GameState {
@@ -44,6 +49,14 @@ impl GameState {
         for (slot, info) in &data.slots {
             if info.slot_type != SlotType::PLAYER {
                 game.client_status.insert((0, *slot), ClientStatus::GOAL);
+            }
+        }
+        for (slot, hints) in &data.precollected_hints {
+            let list = game.hints.entry((0, *slot)).or_default();
+            for hint in hints {
+                if !list.contains(hint) {
+                    list.push(hint.clone());
+                }
             }
         }
         game
@@ -69,6 +82,78 @@ impl GameState {
         collected.insert(member);
         let members: BTreeSet<SlotId> = slot_set(data, group).into_iter().collect();
         *collected == members
+    }
+
+    /// Indices d'un slot, tels quels (sans les relire).
+    pub fn hints(&self, team: TeamId, slot: SlotId) -> &[Hint] {
+        match self.hints.get(&(team, slot)) {
+            Some(hints) => hints,
+            None => &[],
+        }
+    }
+
+    /// Relit les indices d'un slot : ceux dont le lieu a été visité passent à
+    /// « trouvé » (`recheck_hints` du serveur officiel). Chaque indice changé
+    /// est aussi remplacé chez les autres slots concernés.
+    ///
+    /// Renvoie les (équipe, slot) dont un indice a changé.
+    pub fn recheck_hints(
+        &mut self,
+        data: &MultiData,
+        team: TeamId,
+        slot: SlotId,
+    ) -> BTreeSet<(TeamId, SlotId)> {
+        let mut changed = BTreeSet::new();
+        let Some(hints) = self.hints.get(&(team, slot)).cloned() else {
+            return changed;
+        };
+        let mut new_hints: Vec<Hint> = Vec::new();
+        for hint in hints {
+            let new_hint = self.re_check(team, &hint);
+            if !new_hints.contains(&new_hint) {
+                new_hints.push(new_hint.clone());
+            }
+            if new_hint == hint {
+                continue;
+            }
+            let mut concerned = slot_set(data, hint.receiving_player);
+            concerned.push(hint.finding_player);
+            for player in concerned {
+                changed.insert((team, player));
+                if player != slot {
+                    self.replace_hint(team, player, &hint, &new_hint);
+                }
+            }
+        }
+        self.hints.insert((team, slot), new_hints);
+        changed
+    }
+
+    /// Un indice dont le lieu a été visité devient « trouvé » (`Hint.re_check`).
+    fn re_check(&self, team: TeamId, hint: &Hint) -> Hint {
+        if hint.found && hint.status == HintStatus::FOUND {
+            return hint.clone();
+        }
+        let checks = self.location_checks.get(&(team, hint.finding_player));
+        if checks.is_some_and(|c| c.contains(&hint.location)) {
+            let mut found = hint.clone();
+            found.found = true;
+            found.status = HintStatus::FOUND;
+            return found;
+        }
+        hint.clone()
+    }
+
+    /// Remplace un indice, seulement s'il est présent chez ce slot.
+    fn replace_hint(&mut self, team: TeamId, slot: SlotId, old: &Hint, new: &Hint) {
+        if let Some(hints) = self.hints.get_mut(&(team, slot)) {
+            if let Some(position) = hints.iter().position(|h| h == old) {
+                hints.remove(position);
+                if !hints.contains(new) {
+                    hints.push(new.clone());
+                }
+            }
+        }
     }
 
     /// Lieux visités par un slot, dans l'ordre croissant.

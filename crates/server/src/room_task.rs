@@ -6,28 +6,29 @@
 //!
 //! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`,
 //! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif),
-//! `LocationScouts`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`.
-//! Les autres paquets de jeu arrivent dans la suite de l'étape 5 de J1.
+//! `LocationScouts`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`,
+//! stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use ap_protocol::client::{
-    Bounce, Connect, ConnectUpdate, GetDataPackage, LocationChecks, LocationScouts,
+    Bounce, Connect, ConnectUpdate, Get, GetDataPackage, LocationChecks, LocationScouts, Set,
 };
 use ap_protocol::server::{
     Bounced, Connected, ConnectionRefused, DataPackage, DataPackageData, GameData, InvalidPacket,
-    JsonMessagePart, LocationInfo, PrintJson, ReceivedItems, RoomUpdate,
+    JsonMessagePart, LocationInfo, PrintJson, ReceivedItems, Retrieved, RoomUpdate, SetReply,
 };
 use ap_protocol::{
-    encode_server_frame, ClientPacket, ClientStatus, ItemFlags, LocationId, NetworkItem,
+    encode_server_frame, ClientPacket, ClientStatus, Hint, ItemFlags, LocationId, NetworkItem,
     NetworkPlayer, NetworkVersion, ServerPacket, SlotId, SlotType, TeamId,
 };
 use indexmap::IndexMap;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
+use crate::datastore::{self, DataStore};
 use crate::game::{locations_for_player, GameState, Sent};
 use crate::room::{now, Room, SERVER_VERSION};
 
@@ -175,6 +176,8 @@ pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
         room,
         game,
         clients: BTreeMap::new(),
+        store: DataStore::default(),
+        subscribers: BTreeMap::new(),
     };
     while let Some(event) = events.recv().await {
         task.handle(event);
@@ -186,6 +189,10 @@ struct RoomTask {
     game: GameState,
     /// `BTreeMap` : les diffusions suivent l'ordre d'arrivée des clients.
     clients: BTreeMap<ClientId, Client>,
+    /// Valeurs rangées par les clients (`Set`).
+    store: DataStore,
+    /// Pour chaque clé, les clients à prévenir quand elle change (`SetNotify`).
+    subscribers: BTreeMap<String, BTreeSet<ClientId>>,
 }
 
 impl RoomTask {
@@ -252,8 +259,160 @@ impl RoomTask {
             ClientPacket::LocationScouts(scouts) => self.on_location_scouts(id, &scouts),
             ClientPacket::Say(say) => self.on_say(id, &say.text),
             ClientPacket::Bounce(bounce) => self.on_bounce(id, bounce),
+            ClientPacket::Get(get) => self.on_get(id, get),
+            ClientPacket::Set(set) => self.on_set(id, set),
+            ClientPacket::SetNotify(notify) => {
+                for key in notify.keys {
+                    self.subscribers.entry(key).or_default().insert(id);
+                }
+            }
             other => debug!(id, cmd = other.cmd(), "paquet pas encore géré, ignoré"),
         }
+    }
+
+    // ----- Stockage de données -------------------------------------------
+
+    /// Valeurs des clés demandées ; `null` pour une clé inconnue.
+    fn on_get(&mut self, id: ClientId, get: Get) {
+        let mut keys = Map::new();
+        for key in &get.keys {
+            let value = match key.strip_prefix("_read_") {
+                Some(name) => self.read_data(name),
+                None => self.store.get(key).cloned(),
+            };
+            // Clé en double : la première place est gardée, comme en Python.
+            keys.insert(key.clone(), value.unwrap_or(Value::Null));
+        }
+        let retrieved = Retrieved {
+            keys,
+            extra: get.extra,
+        };
+        self.send(id, vec![ServerPacket::Retrieved(retrieved)]);
+    }
+
+    /// Clés en lecture seule `_read_…`, calculées par le serveur (`read_data`).
+    fn read_data(&mut self, name: &str) -> Option<Value> {
+        let data = self.room.data();
+        if name == "race_mode" {
+            return Some(Value::from(i64::from(data.race_mode)));
+        }
+        if let Some(rest) = name.strip_prefix("hints_") {
+            let (team, slot) = parse_team_slot(rest)?;
+            if team != 0 || !data.slots.contains_key(&slot) {
+                return None;
+            }
+            self.game.recheck_hints(self.room.data(), team, slot);
+            return Some(hints_value(self.game.hints(team, slot)));
+        }
+        if let Some(rest) = name.strip_prefix("client_status_") {
+            let (team, slot) = parse_team_slot(rest)?;
+            if team != 0 || !data.slots.contains_key(&slot) {
+                return None;
+            }
+            let status = self
+                .game
+                .status(team, slot)
+                .unwrap_or(ClientStatus::UNKNOWN);
+            return Some(Value::from(status.0));
+        }
+        if let Some(rest) = name.strip_prefix("slot_data_") {
+            return data.slot_data.get(&parse_exact(rest)?).cloned();
+        }
+        let (groups, kind) = if let Some(game) = name.strip_prefix("item_name_groups_") {
+            (game, true)
+        } else {
+            (name.strip_prefix("location_name_groups_")?, false)
+        };
+        // Seulement les jeux de la partie, comme le serveur officiel.
+        if !self.room.played_games().iter().any(|g| g == groups) {
+            return None;
+        }
+        let package = data.datapackage.get(groups)?;
+        let map = if kind {
+            &package.item_name_groups
+        } else {
+            &package.location_name_groups
+        };
+        serde_json::to_value(map).ok()
+    }
+
+    /// Modifie une valeur du stockage, puis prévient les clients abonnés.
+    fn on_set(&mut self, id: ClientId, set: Set) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        if set.key.starts_with("_read_") {
+            self.send(id, vec![invalid_packet("arguments", "Set", "Set")]);
+            return;
+        }
+        let default = set.default.clone().unwrap_or(Value::from(0));
+        let stored = self.store.get(&set.key).cloned();
+        // Vrai tant que la valeur est le même objet Python que `default`
+        // (voir `datastore::apply_tracked`).
+        let mut is_default_object = stored.is_none() && set.default.is_some();
+        // Ce que deviendra `default` dans le `SetReply` : modifié sur place tant
+        // que la valeur reste le même objet, puis figé.
+        let mut default_shown = set.default.clone();
+        let original = stored.unwrap_or(default);
+        let mut value = original.clone();
+        for operation in &set.operations {
+            match datastore::apply_tracked(&operation.operation, value, &operation.value) {
+                Ok((new_value, same_object)) => {
+                    is_default_object &= same_object;
+                    if is_default_object {
+                        default_shown = Some(new_value.clone());
+                    }
+                    value = new_value;
+                }
+                Err(error) => {
+                    // Le serveur officiel plante ici et ferme la connexion ;
+                    // la valeur rangée ne change pas.
+                    self.close(id, &error.to_string());
+                    return;
+                }
+            }
+        }
+        self.store.set(set.key.clone(), value.clone());
+
+        // Le `SetReply` reprend tout le `Set` : options, opérations, champs libres.
+        let mut extra = Map::new();
+        if let Some(default) = default_shown {
+            extra.insert("default".to_string(), default);
+        }
+        if let Some(want_reply) = set.want_reply {
+            extra.insert("want_reply".to_string(), Value::Bool(want_reply));
+        }
+        let operations = serde_json::to_value(&set.operations).unwrap_or(Value::Null);
+        extra.insert("operations".to_string(), operations);
+        extra.extend(set.extra);
+        let reply = SetReply {
+            key: set.key.clone(),
+            value,
+            original_value: Some(original),
+            slot: Some(player.slot),
+            extra,
+        };
+
+        let mut targets = self.subscribers.get(&set.key).cloned().unwrap_or_default();
+        if set.want_reply.unwrap_or(false) {
+            targets.insert(id);
+        }
+        self.send_to(&targets, &[ServerPacket::SetReply(reply)]);
+    }
+
+    /// Prévient les abonnés d'une clé `_read_…` qui vient de changer.
+    fn notify_read_key(&self, key: String, value: Value) {
+        let Some(targets) = self.subscribers.get(&key) else {
+            return;
+        };
+        let reply = SetReply {
+            key,
+            value,
+            original_value: None,
+            slot: None,
+            extra: Map::new(),
+        };
+        self.send_to(targets, &[ServerPacket::SetReply(reply)]);
     }
 
     /// Paquet connu aux champs incorrects : la réponse du serveur officiel,
@@ -264,6 +423,9 @@ impl RoomTask {
             _ if self.player(id).is_none() => return,
             "LocationScouts" => "Locations has to be a list of integers".to_string(),
             "Say" => "Say".to_string(),
+            "Get" => "Retrieve".to_string(),
+            "Set" => "Set".to_string(),
+            "SetNotify" => "SetNotify".to_string(),
             "Bounce" => {
                 // Sans champ de liste fautif (par exemple `data` qui n'est pas
                 // un objet), le serveur officiel accepterait : écart connu, rare.
@@ -578,6 +740,10 @@ impl RoomTask {
         let Some(client) = self.clients.remove(&id) else {
             return;
         };
+        // Plus d'abonnement pour ce client.
+        for subscribers in self.subscribers.values_mut() {
+            subscribers.remove(&id);
+        }
         let Some(player) = client.player else {
             return;
         };
@@ -725,6 +891,12 @@ impl RoomTask {
             ..RoomUpdate::default()
         };
         self.broadcast_slot(team, slot, vec![ServerPacket::RoomUpdate(update)]);
+        // 4. Les indices dont le lieu vient d'être visité passent à « trouvé ».
+        let changed = self.game.recheck_hints(self.room.data(), team, slot);
+        for (hint_team, hint_slot) in changed {
+            let value = hints_value(self.game.hints(hint_team, hint_slot));
+            self.notify_read_key(format!("_read_hints_{hint_team}_{hint_slot}"), value);
+        }
     }
 
     /// Envoie aux clients d'un slot la liste complète de ses lieux visités.
@@ -774,6 +946,8 @@ impl RoomTask {
             }
         }
         self.game.set_status(team, slot, status);
+        let key = format!("_read_client_status_{team}_{slot}");
+        self.notify_read_key(key, Value::from(status.0));
     }
 
     /// Annonce l'objectif atteint, puis `collect` et `release` automatiques
@@ -1002,6 +1176,23 @@ impl RoomTask {
         }
     }
 
+    /// Envoie la même trame à une liste de clients.
+    fn send_to(&self, ids: &BTreeSet<ClientId>, packets: &[ServerPacket]) {
+        if ids.is_empty() {
+            return;
+        }
+        let Some(frame) = encode(packets) else {
+            return;
+        };
+        for id in ids {
+            if let Some(client) = self.clients.get(id) {
+                if !client.closing {
+                    let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+                }
+            }
+        }
+    }
+
     /// Message texte pour un seul client connecté (`notify_client`).
     fn notify(&self, id: ClientId, message: PrintJson) {
         if self.player(id).is_some_and(|p| !p.no_text) {
@@ -1032,6 +1223,23 @@ impl RoomTask {
             let _ = client.outbox.send(Outgoing::Close);
         }
     }
+}
+
+/// Lit un nombre écrit exactement comme Python l'écrirait (`7`, pas `07` ni `+7`).
+fn parse_exact(text: &str) -> Option<u32> {
+    let number: u32 = text.parse().ok()?;
+    (number.to_string() == text).then_some(number)
+}
+
+/// Lit `<équipe>_<slot>`, par exemple `0_3`.
+fn parse_team_slot(text: &str) -> Option<(TeamId, SlotId)> {
+    let (team, slot) = text.split_once('_')?;
+    Some((parse_exact(team)?, parse_exact(slot)?))
+}
+
+/// Liste d'indices en JSON, avec `"class": "Hint"` comme le serveur officiel.
+fn hints_value(hints: &[Hint]) -> Value {
+    serde_json::to_value(hints).unwrap_or(Value::Null)
 }
 
 /// Façon de combiner les critères d'un `Bounce` (champ `operator`).

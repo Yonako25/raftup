@@ -30,3 +30,9 @@
 - Même méthode (script `game_vectors.py echanges`, serveur officiel neuf), le 15 novembre 2026.
 - Couvre : `LocationScouts` (lieux valides, mauvais type, lieu inconnu qui ferme la connexion), chat (`Say`, texte non imprimable, client non connecté), `Bounce` avec chaque opérateur (`legacy`, `or`, `and`), par tags, slots, jeux et équipes, liste mal formée, `Bounce` sans `data`.
 - Les commandes `!` ne sont pas capturées : elles arrivent en J2.
+
+## `stockage-seed-mit.json`
+
+- Même méthode (script `game_vectors.py stockage`, serveur officiel neuf), le 15 novembre 2026.
+- Couvre : `Get` (clés libres, clés `_read_…` : mode course, statut, `slot_data`, groupes d'objets et de lieux, indices, clés inconnues ou mal écrites, champ libre renvoyé), `Set` avec les opérations numériques, de texte, de liste et de dictionnaire, `want_reply`, `default`, `SetNotify`, refus (`_read_…`, listes mal formées), notification d'un changement de statut, indices qui passent à « trouvé » après une visite, opération impossible qui ferme la connexion.
+- Particularité reproduite : `update`, `remove` et `pop` modifient la valeur sur place ; si elle venait de `default`, le `default` renvoyé dans le `SetReply` est modifié aussi.

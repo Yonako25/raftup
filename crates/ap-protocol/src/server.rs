@@ -340,12 +340,21 @@ pub struct Retrieved {
     pub extra: Map<String, Value>,
 }
 
-/// Une valeur du stockage de données a changé (après un `Set`).
+/// Une valeur du stockage de données a changé : réponse à un `Set`, ou
+/// notification d'une clé suivie avec `SetNotify`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SetReply {
     pub key: String,
     pub value: Value,
-    pub original_value: Value,
+    /// Valeur avant le `Set`. Absente des notifications envoyées par le
+    /// serveur lui-même (par exemple un changement de statut d'un joueur).
+    /// `Some(Value::Null)` : la valeur d'avant était `null`.
+    #[serde(
+        default,
+        deserialize_with = "present_value",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub original_value: Option<Value>,
     /// Slot qui a fait le `Set`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slot: Option<SlotId>,
@@ -353,4 +362,14 @@ pub struct SetReply {
     /// libres), renvoyés tels quels par le serveur.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// Lit un champ présent, même `null`, comme `Some(valeur)`. Sans cette aide,
+/// serde lirait `null` comme `None`, et le champ disparaîtrait à la réécriture.
+/// (Un champ absent reste `None` grâce à `#[serde(default)]`.)
+fn present_value<'de, D>(deserializer: D) -> Result<Option<Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Value::deserialize(deserializer).map(Some)
 }

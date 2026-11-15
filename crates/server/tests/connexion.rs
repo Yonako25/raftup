@@ -54,7 +54,8 @@ async fn drain(client: &mut Client) -> Vec<String> {
 }
 
 /// Forme comparable d'une trame : la valeur JSON, avec les listes qui viennent
-/// d'un ensemble Python triées (erreurs de `ConnectionRefused`, lieux de `RoomUpdate`).
+/// d'un ensemble Python triées (erreurs de `ConnectionRefused`, lieux de
+/// `RoomUpdate`, indices).
 fn normalize(frame: &str) -> Value {
     if frame == CLOSED {
         return Value::String(CLOSED.to_string());
@@ -70,8 +71,32 @@ fn normalize(frame: &str) -> Value {
                 locations.sort_by_key(|l| l.as_i64());
             }
         }
+        // Les indices d'un slot forment aussi un ensemble Python.
+        if packet["cmd"] == "SetReply" && is_hints_key(&packet["key"]) {
+            sort_by_text(packet.get_mut("value"));
+        }
+        if packet["cmd"] == "Retrieved" {
+            if let Some(Value::Object(keys)) = packet.get_mut("keys") {
+                for (key, value) in keys.iter_mut() {
+                    if key.starts_with("_read_hints_") {
+                        sort_by_text(Some(value));
+                    }
+                }
+            }
+        }
     }
     value
+}
+
+fn is_hints_key(key: &Value) -> bool {
+    key.as_str().is_some_and(|k| k.starts_with("_read_hints_"))
+}
+
+/// Trie une liste selon le texte JSON de ses éléments.
+fn sort_by_text(value: Option<&mut Value>) {
+    if let Some(Value::Array(items)) = value {
+        items.sort_by_key(|item| item.to_string());
+    }
 }
 
 async fn replay(url: &str, name: &str, steps: &[Value]) {
@@ -226,6 +251,18 @@ async fn objectif_comme_python() {
 #[tokio::test]
 async fn echanges_comme_python() {
     let text = std::fs::read_to_string(data_path("tests/data/echanges-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}
+
+/// Stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`) :
+/// `tests/data/stockage-seed-mit.json`, capturé sur le serveur officiel.
+#[tokio::test]
+async fn stockage_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/stockage-seed-mit.json")).unwrap();
     let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
     for (name, steps) in &scenarios {
         let url = start().await;

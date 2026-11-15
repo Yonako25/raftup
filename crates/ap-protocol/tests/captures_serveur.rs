@@ -187,7 +187,7 @@ fn reponse_au_set() {
     };
     assert_eq!(reply.key, "raftup_test");
     assert_eq!(reply.value, 5);
-    assert_eq!(reply.original_value, 0);
+    assert_eq!(reply.original_value, Some(serde_json::json!(0)));
     assert_eq!(reply.slot, Some(1));
     // Les champs du `Set` d'origine sont gardés.
     assert_eq!(reply.extra["want_reply"], true);
