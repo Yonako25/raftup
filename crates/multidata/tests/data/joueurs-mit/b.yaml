@@ -1,0 +1,7 @@
+name: Bob
+game: ChecksFinder
+ChecksFinder:
+  item_links:
+    - name: Lien
+      item_pool: ["Map Bombs"]
+      replacement_item: null

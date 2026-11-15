@@ -26,3 +26,11 @@ Les noms viennent de l'apworld, publié sans licence ; on n'en garde que le mini
 
 - Une commande inconnue (`{"cmd": "CommandeInconnue"}`) ne reçoit **aucune** réponse : le serveur 0.6.8 n'envoie pas d'`InvalidPacket` de type `cmd` dans ce cas.
 - `SetNotify` ne reçoit pas de réponse directe ; seul le `Set` suivant déclenche un `SetReply`.
+
+## Régénérer les captures
+
+Scripts dans [`scripts/`](scripts/), à lancer avec le Python autonome de l'étape 0 (bibliothèque `websockets`), serveur officiel 0.6.8 en local sur la seed Slime Rancher :
+
+- `capture.py <trames.jsonl> [slots…]` : rejoue la suite de commandes et enregistre les trames reçues ;
+- `fixtures.py <trames.jsonl> serveur-0.6.8/` : découpe les trames en un fichier par type de paquet et réduit `DataPackage` ;
+- `client_vectors.py <dossier Archipelago> client-0.6.8/` : écrit les paquets client avec `NetUtils.encode`, puis vérifie que le serveur n'en refuse aucun.

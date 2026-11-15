@@ -1,12 +1,13 @@
 # Données de test du lecteur pickle
 
 Chaque fichier de données a un fichier `<nom>.attendu.json` : le résultat attendu, **calculé par Python**, dans une forme JSON « canonique » que `tests/comparaison_python.rs` reproduit en Rust.
-Les fichiers ont été écrits par le script `gen_pickle_vectors.py` (hors dépôt), le 15 novembre 2026, avec le Python autonome de l'étape 0 et Archipelago 0.6.8.
+Les fichiers ont été écrits par le script [`scripts/gen_pickle_vectors.py`](scripts/gen_pickle_vectors.py), le 15 novembre 2026, avec le Python autonome de l'étape 0 et Archipelago 0.6.8.
 
 ## `seed-mit.archipelago`
 
 - Seed générée par le générateur officiel d'Archipelago 0.6.8 (`Generate.py --seed 4242`), sans le spoiler.
 - 3 joueurs : Alice et Bob sur ChecksFinder, liés par un « item link » (groupe `Lien`), et Chloé sur Yacht Dice. Alice a un indice de départ.
+- Réglages des joueurs : [`joueurs-mit/`](joueurs-mit/), à passer à `Generate.py --player_files_path joueurs-mit --seed 4242`.
 - Ces deux jeux font partie du dépôt officiel (licence MIT, voir `THIRD_PARTY_NOTICES.md`).
 - Résultat attendu : fonction officielle `Utils.restricted_loads` du serveur, celle qui lit les seeds.
 - On y trouve les classes `NetworkSlot`, `SlotType`, `Hint` et `HintStatus`, et de grands entiers (`LONG1`).
@@ -33,7 +34,7 @@ Données simples fabriquées exprès pour couvrir ce que la seed n'a pas (nombre
 
 ## `seed-mit.modele.json`
 
-Le modèle de partie attendu pour `seed-mit.archipelago`, calculé par le script `gen_model_expected.py` (hors dépôt) avec le code officiel : `Utils.restricted_loads`, puis `NetUtils.encode` pour les valeurs que le serveur envoie en JSON (`slot_data`, slots, indices). `tests/modele.rs` construit la même forme à partir de `MultiData` et compare champ par champ.
+Le modèle de partie attendu pour `seed-mit.archipelago`, calculé par le script [`scripts/gen_model_expected.py`](scripts/gen_model_expected.py) avec le code officiel : `Utils.restricted_loads`, puis `NetUtils.encode` pour les valeurs que le serveur envoie en JSON (`slot_data`, slots, indices). `tests/modele.rs` construit la même forme à partir de `MultiData` et compare champ par champ.
 
 Le test `seed_externe_comme_python` (ignoré par défaut) fait la même comparaison sur une seed hors dépôt :
 

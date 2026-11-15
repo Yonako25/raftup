@@ -1,0 +1,8 @@
+name: Alice
+game: ChecksFinder
+ChecksFinder:
+  start_hints: ["Map Width"]
+  item_links:
+    - name: Lien
+      item_pool: ["Map Bombs"]
+      replacement_item: null
