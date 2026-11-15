@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol", "crates/client-core"]
+members = ["crates/ap-protocol", "crates/client-core", "crates/multidata"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -21,6 +21,8 @@ serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_pre
 indexmap = { version = "2.14", features = ["serde"] }
 thiserror = "2"
 tracing = "0.1.44"
+# Décompression zlib du fichier .archipelago (moteur en Rust pur par défaut).
+flate2 = "1"
 tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
 # WebSocket et TLS en Rust pur, certificats racine intégrés (ADR 0005).
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }

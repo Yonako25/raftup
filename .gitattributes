@@ -13,4 +13,5 @@
 *.icns binary
 *.woff2 binary
 *.archipelago binary
+*.pickle binary
 *.raftup binary
