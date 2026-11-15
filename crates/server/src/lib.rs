@@ -5,13 +5,15 @@
 //! chaque connexion a sa tâche, qui ne fait que lire et écrire sur le réseau.
 //!
 //! Avancement (jalon J1) : accueil (`RoomInfo`), connexion des joueurs
-//! (`Connect`), noms des objets et des lieux (`GetDataPackage`). En clair (`ws`)
-//! seulement pour l'instant.
+//! (`Connect`), noms des objets et des lieux (`GetDataPackage`), partie
+//! complète, limites des connexions (ADR 0007). En clair (`ws`) seulement pour
+//! l'instant.
 
 mod connection;
 mod datastore;
 pub mod error;
 mod game;
+pub mod limits;
 pub mod room;
 mod room_task;
 
@@ -19,10 +21,11 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc;
 use tracing::warn;
 
 pub use error::{ConnectionError, ServerError};
+pub use limits::Limits;
 pub use room::Room;
 
 /// Port par défaut du serveur officiel.
@@ -32,6 +35,7 @@ pub const DEFAULT_PORT: u16 = 38281;
 pub struct Server {
     listener: TcpListener,
     room: Room,
+    limits: Limits,
 }
 
 impl Server {
@@ -39,7 +43,17 @@ impl Server {
     /// (pratique pour les tests) : voir [`Server::local_addr`].
     pub async fn bind(address: impl ToSocketAddrs, room: Room) -> Result<Server, ServerError> {
         let listener = TcpListener::bind(address).await?;
-        Ok(Server { listener, room })
+        Ok(Server {
+            listener,
+            room,
+            limits: Limits::default(),
+        })
+    }
+
+    /// Remplace les limites par défaut (celles de la spec) ; utile aux tests.
+    pub fn with_limits(mut self, limits: Limits) -> Server {
+        self.limits = limits;
+        self
     }
 
     /// Adresse réellement écoutée.
@@ -50,9 +64,10 @@ impl Server {
     /// Lance la tâche salle, puis accepte les clients sans fin.
     pub async fn run(self) -> Result<(), ServerError> {
         // Canal unique vers la tâche salle : chaque connexion en garde une copie
-        // de l'émetteur (`clone()`), la salle garde le récepteur.
-        let (events, inbox) = unbounded_channel();
-        tokio::spawn(room_task::run(self.room, inbox));
+        // de l'émetteur (`clone()`), la salle garde le récepteur. Il est borné :
+        // quand il est plein, une connexion attend avant de lire la suite.
+        let (events, inbox) = mpsc::channel(self.limits.room_queue.max(1));
+        tokio::spawn(room_task::run(self.room, self.limits, inbox));
 
         let mut next_id = 0;
         loop {
@@ -60,7 +75,13 @@ impl Server {
                 Ok((stream, peer)) => {
                     next_id += 1;
                     // `tokio::spawn` lance la connexion en parallèle des autres.
-                    tokio::spawn(connection::handle(stream, peer, next_id, events.clone()));
+                    tokio::spawn(connection::handle(
+                        stream,
+                        peer,
+                        next_id,
+                        events.clone(),
+                        self.limits,
+                    ));
                 }
                 Err(error) => {
                     // Souvent passager (trop de fichiers ouverts…) : on attend un

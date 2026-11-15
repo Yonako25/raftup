@@ -29,6 +29,22 @@ pub enum ConnectionError {
     /// Trame illisible : le serveur officiel ferme aussi la connexion.
     #[error("trame invalide : {0}")]
     BadFrame(String),
+
+    /// Message plus gros que la limite (NF03).
+    #[error("message trop gros : {size} octets, {max_size} au plus")]
+    TooLarge { size: usize, max_size: usize },
+
+    /// Plus de paquets par seconde que la limite (NF04).
+    #[error("trop de paquets par seconde")]
+    TooManyPackets,
+
+    /// Le client ne lit pas assez vite : sa file d'envoi est pleine.
+    #[error("client trop lent, file d'envoi pleine")]
+    TooSlow,
+
+    /// Rien reçu du client depuis trop longtemps (NF05).
+    #[error("aucune réponse du client")]
+    Silent,
 }
 
 // Écrit à la main (pas de `#[from]`) pour ranger l'erreur dans une `Box`.

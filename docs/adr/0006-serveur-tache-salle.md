@@ -24,4 +24,4 @@ La spec ne dit pas comment Raftup organise cet état.
 - Les messages partent dans le même ordre que sur le serveur officiel, ce qui facilite les tests différentiels (NF02).
 - La sauvegarde (NF07) se fera au même endroit, avant l'envoi des réponses.
 - Une seule tâche traite toute la partie, donc un seul cœur de processeur par salle. C'est largement suffisant pour une partie, et plusieurs salles pourront tourner en parallèle.
-- Les canaux vers les clients sont pour l'instant sans limite. Un client très lent pourrait faire grossir la mémoire. À traiter avec la robustesse (J1, étape 6).
+- Les canaux vers les clients sont pour l'instant sans limite. Un client très lent pourrait faire grossir la mémoire. Traité par l'ADR 0007 (canaux bornés).

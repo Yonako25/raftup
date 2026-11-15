@@ -10,6 +10,8 @@
 //! stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`).
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::time::Instant;
 
 use ap_protocol::client::{
     Bounce, Connect, ConnectUpdate, Get, GetDataPackage, LocationChecks, LocationScouts, Set,
@@ -24,12 +26,15 @@ use ap_protocol::{
 };
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::Notify;
 use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
 use crate::datastore::{self, DataStore};
 use crate::game::{locations_for_player, GameState, Sent};
+use crate::limits::{ChatRate, Limits};
 use crate::room::{now, Room, SERVER_VERSION};
 
 /// Numéro unique d'une connexion, donné à son arrivée.
@@ -38,10 +43,12 @@ pub(crate) type ClientId = u64;
 /// Ce qu'une connexion signale à la tâche salle.
 #[derive(Debug)]
 pub(crate) enum Event {
-    /// Nouveau client ; `outbox` sert à lui envoyer des trames.
+    /// Nouveau client ; `outbox` sert à lui envoyer des trames, `kill` à le
+    /// fermer tout de suite quand `outbox` est plein (ADR 0007).
     Opened {
         id: ClientId,
-        outbox: UnboundedSender<Outgoing>,
+        outbox: Sender<Outgoing>,
+        kill: Arc<Notify>,
     },
     /// Une trame reçue, déjà découpée en paquets.
     Frame { id: ClientId, items: Vec<Incoming> },
@@ -150,11 +157,29 @@ impl Player {
 /// Une connexion vue par la salle.
 #[derive(Debug)]
 struct Client {
-    outbox: UnboundedSender<Outgoing>,
+    /// File bornée vers la connexion.
+    outbox: Sender<Outgoing>,
+    /// Ferme la connexion sans passer par la file (quand elle est pleine).
+    kill: Arc<Notify>,
     /// `None` tant que le client n'a pas réussi son `Connect`.
     player: Option<Player>,
     /// Vrai quand la salle a demandé la fermeture : on ignore la suite.
     closing: bool,
+    /// Messages de chat récents (NF04).
+    chat: ChatRate,
+}
+
+impl Client {
+    /// Dépose un message dans la file du client, sans jamais attendre.
+    ///
+    /// File pleine : le client lit trop lentement, on le ferme par `kill`.
+    /// File fermée : la connexion est finie, son événement `Closed` va arriver.
+    fn push(&self, message: Outgoing) {
+        if let Err(TrySendError::Full(_)) = self.outbox.try_send(message) {
+            // `notify_one` garde le signal même si la connexion n'attend pas encore.
+            self.kill.notify_one();
+        }
+    }
 }
 
 /// Résultat de la vérification d'un `Connect`.
@@ -170,10 +195,11 @@ enum ConnectCheck {
 }
 
 /// Fait tourner la tâche salle jusqu'à ce que plus personne ne puisse lui écrire.
-pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
+pub(crate) async fn run(room: Room, limits: Limits, mut events: Receiver<Event>) {
     let game = GameState::new(room.data());
     let mut task = RoomTask {
         room,
+        limits,
         game,
         clients: BTreeMap::new(),
         store: DataStore::default(),
@@ -186,6 +212,7 @@ pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
 
 struct RoomTask {
     room: Room,
+    limits: Limits,
     game: GameState,
     /// `BTreeMap` : les diffusions suivent l'ordre d'arrivée des clients.
     clients: BTreeMap<ClientId, Client>,
@@ -198,11 +225,13 @@ struct RoomTask {
 impl RoomTask {
     fn handle(&mut self, event: Event) {
         match event {
-            Event::Opened { id, outbox } => {
+            Event::Opened { id, outbox, kill } => {
                 let client = Client {
                     outbox,
+                    kill,
                     player: None,
                     closing: false,
+                    chat: ChatRate::default(),
                 };
                 self.clients.insert(id, client);
                 let info = self.room.room_info(now());
@@ -481,6 +510,28 @@ impl RoomTask {
             self.send(id, vec![invalid_packet("arguments", "Say", "Say")]);
             return;
         }
+        // NF03 : longueur en caractères Unicode, comme `len()` en Python.
+        let max_length = self.limits.max_chat_length;
+        if text.chars().count() > max_length {
+            let notice = format!("Message not sent: longer than {max_length} characters.");
+            self.notify(id, text_message(notice));
+            return;
+        }
+        // NF04 : seuls les messages acceptés comptent.
+        let limits = self.limits;
+        let allowed = match self.clients.get_mut(&id) {
+            Some(client) => client.chat.allow(&limits, Instant::now()),
+            None => return,
+        };
+        if !allowed {
+            let notice = format!(
+                "Message not sent: at most {} messages every {} seconds.",
+                limits.chat_messages,
+                limits.chat_window.as_secs()
+            );
+            self.notify(id, text_message(notice));
+            return;
+        }
         // Comme le serveur officiel : même une commande est montrée à tous,
         // sauf `!admin`, qui peut contenir un mot de passe.
         if !text.starts_with("!admin") {
@@ -537,7 +588,7 @@ impl RoomTask {
             };
             let game = data.slots.get(&other.slot).map_or("", |s| s.game.as_str());
             if !client.closing && target.matches(operator, other, game) {
-                let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+                client.push(Outgoing::Frame(frame.clone()));
             }
         }
     }
@@ -1159,7 +1210,7 @@ impl RoomTask {
         };
         if let Some(frame) = encode(&packets) {
             // Échec = connexion déjà finie ; son événement `Closed` va arriver.
-            let _ = client.outbox.send(Outgoing::Frame(frame));
+            client.push(Outgoing::Frame(frame));
         }
     }
 
@@ -1171,7 +1222,7 @@ impl RoomTask {
         for client in self.clients.values() {
             let wanted = client.player.as_ref().is_some_and(&filter);
             if wanted && !client.closing {
-                let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+                client.push(Outgoing::Frame(frame.clone()));
             }
         }
     }
@@ -1187,7 +1238,7 @@ impl RoomTask {
         for id in ids {
             if let Some(client) = self.clients.get(id) {
                 if !client.closing {
-                    let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+                    client.push(Outgoing::Frame(frame.clone()));
                 }
             }
         }
@@ -1220,7 +1271,7 @@ impl RoomTask {
         if let Some(client) = self.clients.get_mut(&id) {
             warn!(id, "fermeture de la connexion : {reason}");
             client.closing = true;
-            let _ = client.outbox.send(Outgoing::Close);
+            client.push(Outgoing::Close);
         }
     }
 }
