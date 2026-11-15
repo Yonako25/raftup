@@ -1,0 +1,516 @@
+{
+ "alice": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  }
+ ],
+ "chloe_puis_alice": [
+  {
+   "client": "c",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "Yacht Dice",
+     "name": "Chloé",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [],
+     "slot_data": false
+    }
+   ],
+   "recu": {
+    "a": [],
+    "c": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":3,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[16871244501,16871244502,16871244503,16871244504,16871244505,16871244506,16871244507,16871244508,16871244509,16871244510,16871244511,16871244512,16871244513,16871244514,16871244515,16871244517,16871244520,16871244523,16871244526,16871244529,16871244533,16871244537,16871244541,16871244545,16871244549,16871244554,16871244559,16871244565,16871244570,16871244576,16871244582,16871244589,16871244595,16871244602,16871244610,16871244617,16871244625,16871244633,16871244641,16871244650,16871244659,16871244668,16871244678,16871244688,16871244698,16871244708,16871244719,16871244730,16871244742,16871244753,16871244765,16871244778,16871244790,16871244803,16871244817,16871244830,16871244844,16871244859,16871244873,16871244888,16871244903,16871244919,16871244935,16871244951,16871244968,16871244985,16871245002,16871245020,16871245038,16871245056,16871245075,16871245094,16871245113,16871245133,16871245153,16871245174,16871245195,16871245216,16871245237,16871245259,16871245304,16871245327,16871245350,16871245374,16871245398,16871245423,16871245448,16871245500],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0},{\"cmd\":\"ReceivedItems\",\"index\":0,\"items\":[{\"item\":16871244109,\"location\":-2,\"player\":0,\"flags\":0,\"class\":\"NetworkItem\"},{\"item\":16871244110,\"location\":-2,\"player\":0,\"flags\":0,\"class\":\"NetworkItem\"},{\"item\":16871244000,\"location\":-2,\"player\":0,\"flags\":0,\"class\":\"NetworkItem\"},{\"item\":16871244002,\"location\":-2,\"player\":0,\"flags\":0,\"class\":\"NetworkItem\"}]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Chloé (Team #1) playing Yacht Dice has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":3,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "DeathLink"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), ['DeathLink'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[\"DeathLink\"]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ],
+    "c": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), ['DeathLink'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[\"DeathLink\"]}]"
+    ]
+   }
+  }
+ ],
+ "chloe_sans_inventaire_distant": [
+  {
+   "client": "c",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "Yacht Dice",
+     "name": "Chloé",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 3,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "c": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":3,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[16871244501,16871244502,16871244503,16871244504,16871244505,16871244506,16871244507,16871244508,16871244509,16871244510,16871244511,16871244512,16871244513,16871244514,16871244515,16871244517,16871244520,16871244523,16871244526,16871244529,16871244533,16871244537,16871244541,16871244545,16871244549,16871244554,16871244559,16871244565,16871244570,16871244576,16871244582,16871244589,16871244595,16871244602,16871244610,16871244617,16871244625,16871244633,16871244641,16871244650,16871244659,16871244668,16871244678,16871244688,16871244698,16871244708,16871244719,16871244730,16871244742,16871244753,16871244765,16871244778,16871244790,16871244803,16871244817,16871244830,16871244844,16871244859,16871244873,16871244888,16871244903,16871244919,16871244935,16871244951,16871244968,16871244985,16871245002,16871245020,16871245038,16871245056,16871245075,16871245094,16871245113,16871245133,16871245153,16871245174,16871245195,16871245216,16871245237,16871245259,16871245304,16871245327,16871245350,16871245374,16871245398,16871245423,16871245448,16871245500],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"seed_name\":\"72844992796894532502\",\"player_name\":\"Chloé\",\"player_id\":3,\"race\":false,\"game_difficulty\":2,\"score_for_last_check\":1000,\"score_for_goal\":777,\"number_of_dice_fragments_per_dice\":4,\"number_of_roll_fragments_per_roll\":4,\"which_story\":-1,\"allow_manual_input\":1,\"goal_score\":777,\"last_check_score\":1000,\"allowed_categories\":[\"Category Choice\",\"Category Inverse Choice\",\"Category Ones\",\"Category Twos\",\"Category Threes\",\"Category Fours\",\"Category Fives\",\"Category Sixes\",\"Category Pair\",\"Category Three of a Kind\",\"Category Four of a Kind\",\"Category Tiny Straight\",\"Category Small Straight\",\"Category Large Straight\",\"Category Full House\",\"Category Yacht\"],\"ap_world_version\":\"2.1.4\"}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Chloé (Team #1) playing Yacht Dice has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":3,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  }
+ ],
+ "chloe_sans_objets": [
+  {
+   "client": "c",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "Yacht Dice",
+     "name": "Chloé",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 0,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "c": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":3,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[16871244501,16871244502,16871244503,16871244504,16871244505,16871244506,16871244507,16871244508,16871244509,16871244510,16871244511,16871244512,16871244513,16871244514,16871244515,16871244517,16871244520,16871244523,16871244526,16871244529,16871244533,16871244537,16871244541,16871244545,16871244549,16871244554,16871244559,16871244565,16871244570,16871244576,16871244582,16871244589,16871244595,16871244602,16871244610,16871244617,16871244625,16871244633,16871244641,16871244650,16871244659,16871244668,16871244678,16871244688,16871244698,16871244708,16871244719,16871244730,16871244742,16871244753,16871244765,16871244778,16871244790,16871244803,16871244817,16871244830,16871244844,16871244859,16871244873,16871244888,16871244903,16871244919,16871244935,16871244951,16871244968,16871244985,16871245002,16871245020,16871245038,16871245056,16871245075,16871245094,16871245113,16871245133,16871245153,16871245174,16871245195,16871245216,16871245237,16871245259,16871245304,16871245327,16871245350,16871245374,16871245398,16871245423,16871245448,16871245500],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"seed_name\":\"72844992796894532502\",\"player_name\":\"Chloé\",\"player_id\":3,\"race\":false,\"game_difficulty\":2,\"score_for_last_check\":1000,\"score_for_goal\":777,\"number_of_dice_fragments_per_dice\":4,\"number_of_roll_fragments_per_roll\":4,\"which_story\":-1,\"allow_manual_input\":1,\"goal_score\":777,\"last_check_score\":1000,\"allowed_categories\":[\"Category Choice\",\"Category Inverse Choice\",\"Category Ones\",\"Category Twos\",\"Category Threes\",\"Category Fours\",\"Category Fives\",\"Category Sixes\",\"Category Pair\",\"Category Three of a Kind\",\"Category Four of a Kind\",\"Category Tiny Straight\",\"Category Small Straight\",\"Category Large Straight\",\"Category Full House\",\"Category Yacht\"],\"ap_world_version\":\"2.1.4\"}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Chloé (Team #1) playing Yacht Dice has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":3,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  }
+ ],
+ "suivi_textonly": [
+  {
+   "client": "t",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 5,
+      "build": 0,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "AP",
+      "TextOnly"
+     ]
+    }
+   ],
+   "recu": {
+    "t": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":2,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":3781797212,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Bob\",\"player_id\":2,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) viewing ChecksFinder has joined. Client(0.5.0), ['AP', 'TextOnly'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[\"AP\",\"TextOnly\"]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  }
+ ],
+ "refus_nom": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Personne",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"ConnectionRefused\",\"errors\":[\"InvalidSlot\"]}]"
+    ]
+   }
+  }
+ ],
+ "refus_jeu": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "Yacht Dice",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"ConnectionRefused\",\"errors\":[\"InvalidGame\"]}]"
+    ]
+   }
+  }
+ ],
+ "refus_version": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 4,
+      "build": 9,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"ConnectionRefused\",\"errors\":[\"IncompatibleVersion\"]}]"
+    ]
+   }
+  }
+ ],
+ "refus_items_handling": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 6,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"ConnectionRefused\",\"errors\":[\"InvalidItemsHandling\"]}]"
+    ]
+   }
+  }
+ ],
+ "refus_jeu_et_version": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "Yacht Dice",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 1,
+      "build": 0,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"ConnectionRefused\",\"errors\":[\"IncompatibleVersion\",\"InvalidGame\"]}]"
+    ]
+   }
+  }
+ ],
+ "connect_sans_game": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "name": "Alice",
+     "uuid": "x",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"Connect\",\"original_cmd\":\"Connect\"}]"
+    ]
+   }
+  }
+ ],
+ "reconnexion_meme_socket": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "DeathLink"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]"
+    ]
+   }
+  }
+ ],
+ "changement_de_slot": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ]
+   }
+  }
+ ],
+ "datapackage_avant_connect": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "GetDataPackage",
+     "games": [
+      "ChecksFinder",
+      "Inconnu"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"DataPackage\",\"data\":{\"games\":{\"ChecksFinder\":{\"item_name_to_id\":{\"Map Width\":80000,\"Map Height\":80001,\"Map Bombs\":80002},\"location_name_to_id\":{\"Tile 1\":81000,\"Tile 2\":81001,\"Tile 3\":81002,\"Tile 4\":81003,\"Tile 5\":81004,\"Tile 6\":81005,\"Tile 7\":81006,\"Tile 8\":81007,\"Tile 9\":81008,\"Tile 10\":81009,\"Tile 11\":81010,\"Tile 12\":81011,\"Tile 13\":81012,\"Tile 14\":81013,\"Tile 15\":81014,\"Tile 16\":81015,\"Tile 17\":81016,\"Tile 18\":81017,\"Tile 19\":81018,\"Tile 20\":81019,\"Tile 21\":81020,\"Tile 22\":81021,\"Tile 23\":81022,\"Tile 24\":81023,\"Tile 25\":81024},\"checksum\":\"fa1495135d77947e94aeec67ace94286ba5892b2\"}}}}]"
+    ]
+   }
+  }
+ ],
+ "datapackage_sans_games": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "GetDataPackage"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"DataPackage\",\"data\":{\"games\":{}}}]"
+    ]
+   }
+  }
+ ],
+ "groupe": [
+  {
+   "client": "g",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Lien",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "g": [
+     "<fermé>"
+    ]
+   }
+  }
+ ]
+}

@@ -21,8 +21,9 @@ futures-util.workspace = true
 indexmap.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# rt-multi-thread et signal : pour le binaire (plusieurs cœurs, Ctrl+C).
-tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+# rt-multi-thread et signal : pour le binaire (plusieurs cœurs, Ctrl+C) ;
+# sync : canaux entre les connexions et la tâche salle (ADR 0006).
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "sync"] }
 tokio-tungstenite.workspace = true
 tracing.workspace = true
 # Binaire raftup-server seulement.

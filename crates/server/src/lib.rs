@@ -1,19 +1,23 @@
 //! Serveur de parties multimondes de Raftup, compatible avec le protocole
 //! réseau d'Archipelago (ADR 0004).
 //!
-//! Étape 3 du jalon J1 : le socle. Le serveur charge une seed, accepte les
-//! connexions WebSocket en clair et envoie `RoomInfo` à chaque client.
-//! La connexion des joueurs (`Connect`) arrive à l'étape 4.
+//! Organisation (ADR 0006) : une tâche « salle » possède l'état de la partie ;
+//! chaque connexion a sa tâche, qui ne fait que lire et écrire sur le réseau.
+//!
+//! Avancement (jalon J1) : accueil (`RoomInfo`), connexion des joueurs
+//! (`Connect`), noms des objets et des lieux (`GetDataPackage`). En clair (`ws`)
+//! seulement pour l'instant.
 
 mod connection;
 pub mod error;
 pub mod room;
+mod room_task;
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::sync::mpsc::unbounded_channel;
 use tracing::warn;
 
 pub use error::{ConnectionError, ServerError};
@@ -25,9 +29,7 @@ pub const DEFAULT_PORT: u16 = 38281;
 /// Un serveur à l'écoute, prêt à accepter des clients.
 pub struct Server {
     listener: TcpListener,
-    /// `Arc` (compteur de références partagé entre tâches) : chaque connexion
-    /// tourne dans sa propre tâche tokio et a besoin de lire la salle.
-    room: Arc<Room>,
+    room: Room,
 }
 
 impl Server {
@@ -35,10 +37,7 @@ impl Server {
     /// (pratique pour les tests) : voir [`Server::local_addr`].
     pub async fn bind(address: impl ToSocketAddrs, room: Room) -> Result<Server, ServerError> {
         let listener = TcpListener::bind(address).await?;
-        Ok(Server {
-            listener,
-            room: Arc::new(room),
-        })
+        Ok(Server { listener, room })
     }
 
     /// Adresse réellement écoutée.
@@ -46,14 +45,20 @@ impl Server {
         Ok(self.listener.local_addr()?)
     }
 
-    /// Accepte les clients sans fin. Chaque client est servi dans sa propre tâche.
+    /// Lance la tâche salle, puis accepte les clients sans fin.
     pub async fn run(self) -> Result<(), ServerError> {
+        // Canal unique vers la tâche salle : chaque connexion en garde une copie
+        // de l'émetteur (`clone()`), la salle garde le récepteur.
+        let (events, inbox) = unbounded_channel();
+        tokio::spawn(room_task::run(self.room, inbox));
+
+        let mut next_id = 0;
         loop {
             match self.listener.accept().await {
                 Ok((stream, peer)) => {
-                    // `tokio::spawn` lance la tâche en parallèle ; elle reçoit sa
-                    // propre copie de l'`Arc` (même salle, compteur + 1).
-                    tokio::spawn(connection::handle(stream, peer, Arc::clone(&self.room)));
+                    next_id += 1;
+                    // `tokio::spawn` lance la connexion en parallèle des autres.
+                    tokio::spawn(connection::handle(stream, peer, next_id, events.clone()));
                 }
                 Err(error) => {
                     // Souvent passager (trop de fichiers ouverts…) : on attend un

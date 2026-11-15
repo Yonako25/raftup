@@ -22,6 +22,10 @@ pub enum ConnectionError {
     #[error("protocole : {0}")]
     Protocol(#[from] ap_protocol::ProtocolError),
 
+    /// La tâche salle est arrêtée : le serveur s'éteint.
+    #[error("la salle est fermée")]
+    RoomClosed,
+
     /// Trame illisible : le serveur officiel ferme aussi la connexion.
     #[error("trame invalide : {0}")]
     BadFrame(String),
