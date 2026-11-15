@@ -99,7 +99,6 @@ cargo run -p client-core --example suivi -- 127.0.0.1:38281 Bob
 <details>
 <summary>Points ouverts</summary>
 
-- CI GitHub : premier lancement le 15 novembre 2026, résultat à vérifier
 - Captures et seeds de test : générées hors dépôt (scripts dans le dossier temporaire de la session)
 
 </details>
