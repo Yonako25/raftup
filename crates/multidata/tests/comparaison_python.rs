@@ -81,7 +81,8 @@ fn tous_les_vecteurs_comme_python() {
     for entry in fs::read_dir(data_dir()).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().to_string();
-        if name.ends_with(".json") || name.ends_with(".md") {
+        // Sous-dossiers (`scripts/`, `joueurs-mit/`) et fichiers d'accompagnement : pas des vecteurs.
+        if path.is_dir() || name.ends_with(".json") || name.ends_with(".md") {
             continue;
         }
         let bytes = fs::read(&path).unwrap();

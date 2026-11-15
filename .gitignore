@@ -23,3 +23,6 @@ Thumbs.db
 # Seeds de test des crates (générées pour les tests, sans mot de passe)
 !crates/*/tests/data/*.archipelago
 !crates/*/tests/data/*.raftup
+
+# Python (scripts de test)
+__pycache__/

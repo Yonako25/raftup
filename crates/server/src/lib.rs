@@ -14,6 +14,7 @@ mod datastore;
 pub mod error;
 mod game;
 pub mod limits;
+mod python;
 pub mod room;
 mod room_task;
 

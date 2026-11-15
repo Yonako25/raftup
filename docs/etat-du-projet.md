@@ -2,14 +2,14 @@
 
 > [!IMPORTANT]
 > - **J0 atteint** : client connecté à une vraie salle archipelago.gg
-> - **J1 : étapes 1 à 6 faites** sur 9 — protocole de jeu complet, limites des connexions en place
-> - **101 tests** passent, dont **6 scénarios** identiques au serveur officiel 0.6.8
+> - **J1 : étapes 1 à 7 faites** sur 9 — protocole complet, limites en place, tests différentiels
+> - **106 tests** passent, dont **8 scénarios** identiques au serveur officiel 0.6.8
+> - **0 écart** avec le serveur officiel sur 22 scénarios fixes et 150 tirés au hasard
 
 Mis à jour le **15 novembre 2026**.
 
 ## À faire (J1)
 
-- [ ] Étape 7 : tests différentiels contre le serveur Python (NF02)
 - [ ] Étape 8 : chiffrement wss / TLS (NF06)
 - [ ] Étape 9 : partie réelle de Slime Rancher sur le serveur Raftup
 - [ ] Demander à l'auteur de Slimipelago l'autorisation d'installation automatique
@@ -54,6 +54,7 @@ Mis à jour le **15 novembre 2026**.
 - Stockage : `Get`, `Set` (18 opérations), `SetNotify`, clés `_read_…`
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
 - Binaire : `raftup-server <seed> --no-tls` (wss exigé par défaut, pas encore codé)
+- Tests différentiels (ADR 0008) : `tests/differentiel/`, lancés à la main, hors CI
 
 ## Décisions (ADR)
 
@@ -64,6 +65,7 @@ Mis à jour le **15 novembre 2026**.
 - **0005** : WebSocket avec tokio-tungstenite + rustls ; pas de compression
 - **0006** : serveur organisé autour d'une tâche « salle »
 - **0007** : limites des connexions et files bornées
+- **0008** : tests différentiels contre le serveur officiel
 
 ## Reporté à J2
 
@@ -86,12 +88,19 @@ cargo run -p server --bin raftup-server -- crates/multidata/tests/data/seed-mit.
 cargo run -p client-core --example suivi -- 127.0.0.1:38281 Bob
 ```
 
+Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
+
+## Mesures
+
+- `DataPackage` complet de la seed MIT : **26 298 octets** sans compression, **5 732** compressé (zlib) : Raftup, sans compression (ADR 0005), envoie environ 4,6 fois plus. Acceptable pour l'instant : envoyé une fois par client et par jeu.
+
 <details>
 <summary>Écarts connus avec le serveur officiel</summary>
 
 - Entiers plus grands qu'un `i64` non gérés dans le stockage
 - `mul` refuse un résultat de plus d'un million d'éléments
-- Quelques paquets mal formés : réponse un peu différente (rare)
+- `Bounce` dont `data` n'est pas un objet : refusé chez Raftup, accepté par le serveur officiel
+- Paquet sans `cmd` : les caractères Unicode « non imprimables » ne sont pas échappés comme en Python dans la réponse
 - Plantages du serveur officiel reproduits par une fermeture de connexion : changement de slot, connexion d'un groupe, lieu inconnu dans `LocationScouts`
 
 </details>

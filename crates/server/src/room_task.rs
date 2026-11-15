@@ -35,6 +35,7 @@ use crate::connection::Incoming;
 use crate::datastore::{self, DataStore};
 use crate::game::{locations_for_player, GameState, Sent};
 use crate::limits::{ChatRate, Limits};
+use crate::python;
 use crate::room::{now, Room, SERVER_VERSION};
 
 /// Numéro unique d'une connexion, donné à son arrivée.
@@ -189,7 +190,12 @@ enum ConnectCheck {
         slot: SlotId,
         items: ItemsChoice,
     },
-    Refused(Vec<String>),
+    /// Refus ; `items` : le `items_handling` demandé, s'il est valable et que
+    /// le nom existe (le serveur officiel l'applique même en cas de refus).
+    Refused {
+        errors: Vec<String>,
+        items: Option<ItemsChoice>,
+    },
     /// Cas où le serveur officiel plante et ferme la connexion.
     Fatal(&'static str),
 }
@@ -255,13 +261,21 @@ impl RoomTask {
                     debug!(id, %cmd, "paquet aux champs incorrects : {error}");
                     self.on_bad_arguments(id, &cmd, raw.as_ref());
                 }
-                Incoming::CmdNotText => {
-                    let reply = invalid_cmd("cmd doit être du texte");
-                    self.send(id, vec![reply]);
+                // Mêmes textes que le serveur officiel (`process_client_cmd`).
+                Incoming::CmdNotText(cmd) => {
+                    let text = format!(
+                        "Command should be str, got <class '{}'>",
+                        python::type_name(&cmd)
+                    );
+                    self.send(id, vec![invalid_cmd(&text)]);
                 }
-                Incoming::NoCmd => {
-                    let reply = invalid_cmd("paquet sans champ « cmd »");
-                    self.send(id, vec![reply]);
+                Incoming::NoCmd(packet) => {
+                    // `f"{args}"` en Python : le `str()` du paquet.
+                    let text = format!(
+                        "Could not get command from {} at `cmd`",
+                        python::str_of(&packet)
+                    );
+                    self.send(id, vec![invalid_cmd(&text)]);
                     self.close(id, "paquet sans « cmd »");
                 }
             }
@@ -450,6 +464,12 @@ impl RoomTask {
         let text = match cmd {
             "Connect" => "Connect".to_string(),
             _ if self.player(id).is_none() => return,
+            // Le serveur officiel refuse un outil de suivi avant de lire les lieux.
+            "LocationChecks" if self.player(id).is_some_and(|p| p.no_locations) => {
+                let text = "Trackers can't register new Location Checks";
+                self.send(id, vec![invalid_packet("cmd", cmd, text)]);
+                return;
+            }
             "LocationScouts" => "Locations has to be a list of integers".to_string(),
             "Say" => "Say".to_string(),
             "Get" => "Retrieve".to_string(),
@@ -598,8 +618,16 @@ impl RoomTask {
     fn on_connect(&mut self, id: ClientId, connect: &Connect) {
         let (team, slot, items) = match self.check_connect(connect) {
             ConnectCheck::Accepted { team, slot, items } => (team, slot, items),
-            ConnectCheck::Refused(errors) => {
+            ConnectCheck::Refused { errors, items } => {
                 info!(id, ?errors, name = %connect.name, "connexion refusée");
+                // Le serveur officiel range le nouveau `items_handling` avant de
+                // décider du refus : un client déjà connecté le garde.
+                if let Some(items) = items {
+                    if let Some(player) = self.clients.get_mut(&id).and_then(|c| c.player.as_mut())
+                    {
+                        player.items = items;
+                    }
+                }
                 let refused = ConnectionRefused { errors };
                 self.send(id, vec![ServerPacket::ConnectionRefused(refused)]);
                 return;
@@ -739,7 +767,10 @@ impl RoomTask {
             Some((team, slot, items)) if errors.is_empty() => {
                 ConnectCheck::Accepted { team, slot, items }
             }
-            _ => ConnectCheck::Refused(errors.into_iter().map(String::from).collect()),
+            _ => ConnectCheck::Refused {
+                errors: errors.into_iter().map(String::from).collect(),
+                items: accepted.map(|(_, _, items)| items),
+            },
         }
     }
 
@@ -772,7 +803,7 @@ impl RoomTask {
             "{name} (Team #{}) {verb} {game} has joined. Client({}), {}.",
             player.team + 1,
             version_text(&player.version),
-            python_list_repr(&player.tags),
+            python::list_repr(&player.tags),
         );
         let mut join = text_message(text);
         join.kind = Some("Join".to_string());
@@ -815,7 +846,7 @@ impl RoomTask {
             "{name} (Team #{}) has {verb} the game. Client({}), {}.",
             player.team + 1,
             version_text(&player.version),
-            python_list_repr(&player.tags),
+            python::list_repr(&player.tags),
         );
         let mut part = text_message(text);
         part.kind = Some("Part".to_string());
@@ -869,8 +900,8 @@ impl RoomTask {
                     "{} (Team #{}) has changed tags from {} to {}.",
                     self.slot_name(player.slot),
                     player.team + 1,
-                    python_list_repr(&old_tags),
-                    python_list_repr(&player.tags),
+                    python::list_repr(&old_tags),
+                    python::list_repr(&player.tags),
                 );
                 let mut message = text_message(text);
                 message.kind = Some("TagsChanged".to_string());
@@ -1500,57 +1531,9 @@ fn version_text(version: &NetworkVersion) -> String {
     format!("{}.{}.{}", version.major, version.minor, version.build)
 }
 
-/// Écrit une liste de textes comme Python l'affiche : `['AP', 'TextOnly']`.
-///
-/// Le serveur officiel met cette forme dans ses messages « a rejoint ».
-fn python_list_repr(items: &[String]) -> String {
-    let parts: Vec<String> = items.iter().map(|s| python_str_repr(s)).collect();
-    format!("[{}]", parts.join(", "))
-}
-
-/// `repr()` d'un texte en Python : guillemets simples, sauf si le texte en
-/// contient et pas de doubles. Caractères de contrôle échappés.
-fn python_str_repr(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push(quote);
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c == quote => {
-                out.push('\\');
-                out.push(c);
-            }
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
-                out.push_str(&format!("\\x{:02x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push(quote);
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn repr_comme_python() {
-        assert_eq!(python_list_repr(&[]), "[]");
-        let tags = vec!["AP".to_string(), "TextOnly".to_string()];
-        assert_eq!(python_list_repr(&tags), "['AP', 'TextOnly']");
-        assert_eq!(python_str_repr("l'eau"), "\"l'eau\"");
-        assert_eq!(python_str_repr("a'b\"c"), "'a\\'b\"c'");
-        assert_eq!(python_str_repr("a\\b\n"), "'a\\\\b\\n'");
-    }
 
     #[test]
     fn items_handling_comme_python() {

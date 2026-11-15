@@ -269,3 +269,30 @@ async fn stockage_comme_python() {
         replay(&url, name, steps.as_array().unwrap()).await;
     }
 }
+
+/// Paquets mal formés (`cmd` qui n'est pas du texte, paquet sans `cmd`, outil
+/// de suivi qui envoie des lieux) : écarts trouvés par les tests différentiels,
+/// capturés ensuite sur le serveur officiel (`tests/data/malformes-seed-mit.json`).
+#[tokio::test]
+async fn malformes_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/malformes-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}
+
+/// Un `Connect` refusé d'un client déjà connecté change quand même son
+/// `items_handling` : écart trouvé par les tests différentiels, capturé ensuite
+/// sur le serveur officiel (`tests/data/refus-connecte-seed-mit.json`).
+#[tokio::test]
+async fn refus_connecte_comme_python() {
+    let text =
+        std::fs::read_to_string(data_path("tests/data/refus-connecte-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}

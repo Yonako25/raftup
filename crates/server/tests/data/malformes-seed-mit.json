@@ -1,0 +1,248 @@
+{
+ "malformes": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ],
+    "b": [],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": []
+   }
+  },
+  {
+   "client": "t",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "Tracker"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) tracking ChecksFinder has joined. Client(0.6.8), ['Tracker'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[\"Tracker\"]}]"
+    ],
+    "b": [],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":2,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":3781797212,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Bob\",\"player_id\":2,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) tracking ChecksFinder has joined. Client(0.6.8), ['Tracker'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[\"Tracker\"]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": 5
+    },
+    {
+     "cmd": null
+    },
+    {
+     "cmd": 1.5
+    },
+    {
+     "cmd": true
+    },
+    {
+     "cmd": [
+      1
+     ]
+    },
+    {
+     "cmd": {
+      "x": 1
+     }
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'int'>\"}]",
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'NoneType'>\"}]",
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'float'>\"}]",
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'bool'>\"}]",
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'list'>\"}]",
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Command should be str, got <class 'dict'>\"}]"
+    ],
+    "b": [],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": []
+   }
+  },
+  {
+   "client": "t",
+   "envoi": [
+    {
+     "cmd": "LocationChecks",
+     "locations": "pas une liste"
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"text\":\"Trackers can't register new Location Checks\",\"original_cmd\":\"LocationChecks\"}]"
+    ]
+   }
+  },
+  {
+   "client": "t",
+   "envoi": [
+    {
+     "cmd": "LocationChecks",
+     "locations": [
+      81000
+     ]
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"text\":\"Trackers can't register new Location Checks\",\"original_cmd\":\"LocationChecks\"}]"
+    ]
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "pas": "de cmd",
+     "n": 1e+300,
+     "f": 0.5,
+     "z": -0.0,
+     "e": [
+      null,
+      true,
+      "l'eau"
+     ],
+     "o": {}
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Could not get command from {'pas': 'de cmd', 'n': 1e+300, 'f': 0.5, 'z': -0.0, 'e': [None, True, \\\"l'eau\\\"], 'o': {}} at `cmd`\"}]",
+     "<fermé>"
+    ],
+    "c": [],
+    "d": [],
+    "e": [],
+    "t": []
+   }
+  },
+  {
+   "client": "c",
+   "envoi": [
+    "texte"
+   ],
+   "recu": {
+    "a": [],
+    "b": [
+     "<fermé>"
+    ],
+    "c": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Could not get command from texte at `cmd`\"}]",
+     "<fermé>"
+    ],
+    "d": [],
+    "e": [],
+    "t": []
+   }
+  },
+  {
+   "client": "d",
+   "envoi": [
+    5
+   ],
+   "recu": {
+    "a": [],
+    "b": [
+     "<fermé>"
+    ],
+    "c": [
+     "<fermé>"
+    ],
+    "d": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Could not get command from 5 at `cmd`\"}]",
+     "<fermé>"
+    ],
+    "e": [],
+    "t": []
+   }
+  },
+  {
+   "client": "e",
+   "envoi": [
+    [
+     1,
+     2.0
+    ]
+   ],
+   "recu": {
+    "a": [],
+    "b": [
+     "<fermé>"
+    ],
+    "c": [
+     "<fermé>"
+    ],
+    "d": [
+     "<fermé>"
+    ],
+    "e": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"cmd\",\"original_cmd\":null,\"text\":\"Could not get command from [1, 2.0] at `cmd`\"}]",
+     "<fermé>"
+    ],
+    "t": []
+   }
+  }
+ ]
+}

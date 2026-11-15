@@ -326,7 +326,8 @@ pub struct InvalidPacket {
     /// `cmd` (commande inconnue) ou `arguments` (champs incorrects).
     #[serde(rename = "type")]
     pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Toujours écrit, `null` compris : le serveur officiel l'envoie à chaque fois.
+    #[serde(default)]
     pub original_cmd: Option<String>,
     pub text: String,
 }

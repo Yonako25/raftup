@@ -49,3 +49,11 @@ python -I scripts/game_vectors.py partie partie-seed-mit.json
 ```
 
 `game_vectors.py` modifie l'état de la partie : relancer un serveur neuf avant chaque scénario (`partie`, `objectif`, `echanges`, `stockage`).
+
+## `malformes-seed-mit.json` et `refus-connecte-seed-mit.json`
+
+- Écarts trouvés par les tests différentiels (`tests/differentiel/`, ADR 0008), réduits à un petit scénario, puis capturés sur un serveur officiel 0.6.8 neuf (scripts `game_vectors.py malformes` et `game_vectors.py refus_connecte`), le 15 novembre 2026.
+- `malformes` : `cmd` qui n'est pas du texte, paquet sans `cmd` (le serveur recopie le paquet à la façon de Python), outil de suivi qui envoie des lieux mal formés.
+- `refus_connecte` : un `Connect` refusé d'un client déjà connecté change quand même son `items_handling`.
+
+Les scénarios eux-mêmes sont dans [`scripts/scenarios.py`](scripts/scenarios.py).
