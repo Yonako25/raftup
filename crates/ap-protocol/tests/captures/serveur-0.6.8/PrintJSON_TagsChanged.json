@@ -1,0 +1,1 @@
+[{"cmd":"PrintJSON","data":[{"text":"Rancher1 (Team #1) has changed tags from ['AP'] to ['AP', 'DeathLink']."}],"type":"TagsChanged","team":0,"slot":1,"tags":["AP","DeathLink"]}]

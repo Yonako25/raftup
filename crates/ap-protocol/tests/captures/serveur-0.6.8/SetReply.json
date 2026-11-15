@@ -1,0 +1,1 @@
+[{"cmd":"SetReply","key":"raftup_test","default":0,"want_reply":true,"operations":[{"operation":"add","value":5}],"original_value":0,"slot":1,"value":5}]

@@ -12,6 +12,15 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/raftup/raftup"
 rust-version = "1.80"
 
+# Versions des dépendances partagées : chaque crate écrit `xxx.workspace = true`.
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+# preserve_order : garde l'ordre des clés comme Python ; arbitrary_precision : garde
+# les entiers plus grands que u64 sans les arrondir (ADR 0004, pièges connus).
+serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
+indexmap = { version = "2.14", features = ["serde"] }
+thiserror = "2"
+
 # Règles du compilateur et de clippy communes à toutes les crates.
 [workspace.lints.rust]
 unsafe_code = "forbid"
