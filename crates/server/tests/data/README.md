@@ -19,3 +19,8 @@
 - Cinq connexions : Alice, Bob, Chloé, un outil `TextOnly` sur le slot de Bob, puis une seconde connexion de Bob.
 - Couvre : lieux visités (`LocationChecks`, y compris en double ou inconnus), messages `ItemSend`, objets distribués (`ReceivedItems`, avec le groupe `Lien`), `RoomUpdate`, refus pour un outil `TextOnly`, `Sync`, `ConnectUpdate` (`items_handling` et tags), reconnexion.
 - `tests/connexion.rs` trie aussi `checked_locations` de `RoomUpdate`, un ensemble en Python.
+
+## `objectif-seed-mit.json`
+
+- Même méthode que `partie-seed-mit.json` (script `game_vectors.py objectif`, serveur officiel neuf), le 15 novembre 2026.
+- Couvre : `StatusUpdate` (refus pour un outil `TextOnly`, statut « prêt »), objectif atteint (`Goal`), `collect` et `release` automatiques (options `auto` de la seed), `collect` du groupe `Lien` quand ses deux membres ont fini, objectif définitif, message de fin d'équipe.

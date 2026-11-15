@@ -4,7 +4,8 @@
 //! traite un par un, dans l'ordre, comme la boucle unique du serveur officiel.
 //! Les réponses partent par le canal de chaque client.
 //!
-//! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`.
+//! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`,
+//! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif).
 //! Les autres paquets de jeu arrivent dans la suite de l'étape 5 de J1.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,8 +16,8 @@ use ap_protocol::server::{
     JsonMessagePart, PrintJson, ReceivedItems, RoomUpdate,
 };
 use ap_protocol::{
-    encode_server_frame, ClientPacket, ItemFlags, NetworkItem, NetworkPlayer, NetworkVersion,
-    ServerPacket, SlotId, TeamId,
+    encode_server_frame, ClientPacket, ClientStatus, ItemFlags, LocationId, NetworkItem,
+    NetworkPlayer, NetworkVersion, ServerPacket, SlotId, SlotType, TeamId,
 };
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -24,7 +25,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
-use crate::game::{GameState, Sent};
+use crate::game::{locations_for_player, GameState, Sent};
 use crate::room::{now, Room, SERVER_VERSION};
 
 /// Numéro unique d'une connexion, donné à son arrivée.
@@ -166,9 +167,10 @@ enum ConnectCheck {
 
 /// Fait tourner la tâche salle jusqu'à ce que plus personne ne puisse lui écrire.
 pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
+    let game = GameState::new(room.data());
     let mut task = RoomTask {
         room,
-        game: GameState::default(),
+        game,
         clients: BTreeMap::new(),
     };
     while let Some(event) = events.recv().await {
@@ -246,6 +248,7 @@ impl RoomTask {
             ClientPacket::ConnectUpdate(update) => self.on_connect_update(id, update),
             ClientPacket::Sync => self.on_sync(id),
             ClientPacket::LocationChecks(checks) => self.on_location_checks(id, &checks),
+            ClientPacket::StatusUpdate(update) => self.on_status_update(id, update.status),
             other => debug!(id, cmd = other.cmd(), "paquet pas encore géré, ignoré"),
         }
     }
@@ -418,6 +421,10 @@ impl RoomTask {
 
     /// Annonce l'arrivée d'un joueur à tous, puis lui envoie le tutoriel.
     fn on_joined(&mut self, id: ClientId, player: &Player) {
+        let status = self.game.status(player.team, player.slot);
+        if status.unwrap_or(ClientStatus::UNKNOWN) == ClientStatus::UNKNOWN {
+            self.update_client_status(player.team, player.slot, ClientStatus::CONNECTED);
+        }
         let name = self.slot_name(player.slot);
         let game = self.slot_game(player.slot);
         let verb = non_game_verb(&player.tags).unwrap_or("playing");
@@ -447,6 +454,14 @@ impl RoomTask {
         let Some(player) = client.player else {
             return;
         };
+        // Plus aucune connexion sur ce slot : statut « inconnu ».
+        let others = self.clients.values().filter_map(|c| c.player.as_ref());
+        if !others
+            .into_iter()
+            .any(|p| (p.team, p.slot) == (player.team, player.slot))
+        {
+            self.update_client_status(player.team, player.slot, ClientStatus::UNKNOWN);
+        }
         let name = self.slot_name(player.slot);
         let verb = match non_game_verb(&player.tags) {
             Some(verb) => format!("stopped {verb}"),
@@ -552,14 +567,19 @@ impl RoomTask {
             self.send(id, vec![invalid_packet("cmd", "LocationChecks", text)]);
             return;
         }
-        let (team, slot) = (player.team, player.slot);
+        self.register_location_checks(player.team, player.slot, &checks.locations);
+    }
+
+    /// Enregistre des lieux visités et prévient tout le monde
+    /// (`register_location_checks` du serveur officiel).
+    fn register_location_checks(&mut self, team: TeamId, slot: SlotId, locations: &[LocationId]) {
         let (new_locations, sent) =
             self.game
-                .register_checks(self.room.data(), team, slot, &checks.locations);
+                .register_checks(self.room.data(), team, slot, locations);
         if new_locations.is_empty() {
             return;
         }
-        info!(id, slot, count = new_locations.len(), "lieux visités");
+        info!(team, slot, count = new_locations.len(), "lieux visités");
 
         // 1. Messages « X a envoyé Y à Z » à toute l'équipe, par paquets de 140.
         for chunk in sent.chunks(ITEM_SEND_CHUNK) {
@@ -578,6 +598,131 @@ impl RoomTask {
             ..RoomUpdate::default()
         };
         self.broadcast_slot(team, slot, vec![ServerPacket::RoomUpdate(update)]);
+    }
+
+    /// Envoie aux clients d'un slot la liste complète de ses lieux visités.
+    fn update_checked_locations(&mut self, team: TeamId, slot: SlotId) {
+        let update = RoomUpdate {
+            checked_locations: Some(self.game.checked(team, slot)),
+            ..RoomUpdate::default()
+        };
+        self.broadcast_slot(team, slot, vec![ServerPacket::RoomUpdate(update)]);
+    }
+
+    // ----- Statut et objectif --------------------------------------------
+
+    fn on_status_update(&mut self, id: ClientId, status: ClientStatus) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        if player.no_locations && status == ClientStatus::GOAL {
+            let text = "Trackers can't register Goal Complete";
+            self.send(id, vec![invalid_packet("cmd", "StatusUpdate", text)]);
+            return;
+        }
+        self.update_client_status(player.team, player.slot, status);
+    }
+
+    /// Change le statut d'un slot (`update_client_status` du serveur officiel).
+    /// L'objectif atteint est définitif : ensuite, plus rien ne change.
+    fn update_client_status(&mut self, team: TeamId, slot: SlotId, status: ClientStatus) {
+        if self.game.status(team, slot) == Some(ClientStatus::GOAL) {
+            return;
+        }
+        if status == ClientStatus::GOAL {
+            self.on_goal_achieved(team, slot);
+            // Tous les autres slots de l'équipe (groupes compris) ont fini ?
+            // Un slot jamais connecté n'a pas de statut : il n'a donc pas fini.
+            let slots: Vec<SlotId> = self.room.data().slots.keys().copied().collect();
+            let all_done = slots
+                .iter()
+                .filter(|other| **other != slot)
+                .all(|other| self.game.status(team, *other) == Some(ClientStatus::GOAL));
+            if all_done {
+                let text = format!(
+                    "Team #{} has completed all of their games! Congratulations!",
+                    team + 1
+                );
+                self.broadcast_text_all(text_message(text));
+            }
+        }
+        self.game.set_status(team, slot, status);
+    }
+
+    /// Annonce l'objectif atteint, puis `collect` et `release` automatiques
+    /// si les options de la salle le prévoient (`auto` ou `auto-enabled`).
+    fn on_goal_achieved(&mut self, team: TeamId, slot: SlotId) {
+        let text = format!(
+            "{} (Team #{}) has completed their goal.",
+            self.slot_name(slot),
+            team + 1
+        );
+        info!(team, slot, "objectif atteint");
+        let mut message = text_message(text);
+        message.kind = Some("Goal".to_string());
+        message.team = Some(team);
+        message.slot = Some(slot);
+        self.broadcast_text_all(message);
+
+        let options = &self.room.data().server_options;
+        let auto_collect = options.collect_mode.contains("auto");
+        let auto_release = options.release_mode.contains("auto");
+        if auto_collect {
+            self.collect_player(team, slot, false);
+        }
+        if auto_release {
+            self.release_player(team, slot);
+        }
+    }
+
+    /// Envoie aux autres tous les objets encore cachés dans le monde de ce slot.
+    fn release_player(&mut self, team: TeamId, slot: SlotId) {
+        let text = format!(
+            "{} (Team #{}) has released all remaining items from their world.",
+            self.slot_name(slot),
+            team + 1
+        );
+        self.broadcast_text_all(slot_message(text, "Release", team, slot));
+        let all_locations: Vec<LocationId> = match self.room.data().locations.get(&slot) {
+            Some(locations) => locations.keys().copied().collect(),
+            None => Vec::new(),
+        };
+        self.register_location_checks(team, slot, &all_locations);
+        self.update_checked_locations(team, slot);
+    }
+
+    /// Récupère tous les objets de ce slot encore cachés dans les autres mondes.
+    /// Quand tous les membres d'un groupe l'ont fait, le groupe aussi.
+    fn collect_player(&mut self, team: TeamId, slot: SlotId, is_group: bool) {
+        let text = format!(
+            "{} (Team #{}) has collected their items from other worlds.",
+            self.slot_name(slot),
+            team + 1
+        );
+        self.broadcast_text_all(slot_message(text, "Collect", team, slot));
+        for (source, locations) in locations_for_player(self.room.data(), slot) {
+            self.register_location_checks(team, source, &locations);
+            self.update_checked_locations(team, source);
+        }
+        if !is_group {
+            let groups: Vec<SlotId> = self
+                .room
+                .data()
+                .slots
+                .iter()
+                .filter(|(_, info)| info.slot_type == SlotType::GROUP)
+                .filter(|(_, info)| info.group_members.contains(&slot))
+                .map(|(group, _)| *group)
+                .collect();
+            for group in groups {
+                if self
+                    .game
+                    .mark_group_collected(self.room.data(), group, slot)
+                {
+                    self.collect_player(team, group, true);
+                }
+            }
+        }
     }
 
     /// Envoie à chaque joueur les objets qu'il n'a pas encore reçus (`send_new_items`).
@@ -827,6 +972,15 @@ fn text_message(text: String) -> PrintJson {
         tags: None,
         countdown: None,
     }
+}
+
+/// Message texte d'un genre donné, qui concerne un slot (`Goal`, `Release`…).
+fn slot_message(text: String, kind: &str, team: TeamId, slot: SlotId) -> PrintJson {
+    let mut message = text_message(text);
+    message.kind = Some(kind.to_string());
+    message.team = Some(team);
+    message.slot = Some(slot);
+    message
 }
 
 /// Message « Alice sent Objet to Bob (Lieu) » (`json_format_send_event`).

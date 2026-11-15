@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ap_protocol::{LocationId, NetworkItem, SlotId, SlotType, TeamId};
+use ap_protocol::{ClientStatus, LocationId, NetworkItem, SlotId, SlotType, TeamId};
 use multidata::MultiData;
 
 /// Un objet trouvé dans un lieu, et le slot qui le reçoit.
@@ -29,9 +29,48 @@ pub(crate) struct GameState {
     /// - `true` : tous les objets, y compris ceux trouvés dans son propre monde ;
     /// - `false` : seulement ceux trouvés par les autres.
     received_items: BTreeMap<(TeamId, SlotId, bool), Vec<NetworkItem>>,
+    /// Statut de chaque (équipe, slot) déjà vu : connecté, prêt, objectif atteint…
+    /// Absent = jamais connecté (le serveur officiel distingue ce cas).
+    client_status: BTreeMap<(TeamId, SlotId), ClientStatus>,
+    /// Pour chaque groupe, les membres qui ont déjà fait `collect`.
+    group_collected: BTreeMap<SlotId, BTreeSet<SlotId>>,
 }
 
 impl GameState {
+    /// État de départ : les slots qui ne sont pas des joueurs (groupes,
+    /// spectateurs) ont atteint leur objectif d'office.
+    pub fn new(data: &MultiData) -> GameState {
+        let mut game = GameState::default();
+        for (slot, info) in &data.slots {
+            if info.slot_type != SlotType::PLAYER {
+                game.client_status.insert((0, *slot), ClientStatus::GOAL);
+            }
+        }
+        game
+    }
+
+    /// Statut d'un slot ; `None` s'il ne s'est jamais connecté.
+    pub fn status(&self, team: TeamId, slot: SlotId) -> Option<ClientStatus> {
+        self.client_status.get(&(team, slot)).copied()
+    }
+
+    pub fn set_status(&mut self, team: TeamId, slot: SlotId, status: ClientStatus) {
+        self.client_status.insert((team, slot), status);
+    }
+
+    /// Note qu'un membre de groupe a fait `collect` ; vrai si tous l'ont fait.
+    pub fn mark_group_collected(
+        &mut self,
+        data: &MultiData,
+        group: SlotId,
+        member: SlotId,
+    ) -> bool {
+        let collected = self.group_collected.entry(group).or_default();
+        collected.insert(member);
+        let members: BTreeSet<SlotId> = slot_set(data, group).into_iter().collect();
+        *collected == members
+    }
+
     /// Lieux visités par un slot, dans l'ordre croissant.
     pub fn checked(&self, team: TeamId, slot: SlotId) -> Vec<LocationId> {
         match self.location_checks.get(&(team, slot)) {
@@ -148,6 +187,23 @@ pub(crate) fn slot_set(data: &MultiData, slot: SlotId) -> Vec<SlotId> {
         Some(info) if info.slot_type == SlotType::GROUP => info.group_members.clone(),
         _ => vec![slot],
     }
+}
+
+/// Lieux qui contiennent un objet pour ce slot, groupés par monde d'origine,
+/// dans l'ordre croissant (`get_for_player` du serveur officiel).
+pub(crate) fn locations_for_player(
+    data: &MultiData,
+    slot: SlotId,
+) -> BTreeMap<SlotId, Vec<LocationId>> {
+    let mut found: BTreeMap<SlotId, Vec<LocationId>> = BTreeMap::new();
+    for (source, locations) in &data.locations {
+        for (location, placed) in locations {
+            if placed.player == slot {
+                found.entry(*source).or_default().push(*location);
+            }
+        }
+    }
+    found
 }
 
 #[cfg(test)]

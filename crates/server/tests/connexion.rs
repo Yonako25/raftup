@@ -208,3 +208,15 @@ async fn partie_comme_python() {
         replay(&url, name, steps.as_array().unwrap()).await;
     }
 }
+
+/// Statuts et objectif atteint, avec `collect` et `release` automatiques :
+/// `tests/data/objectif-seed-mit.json`, capturé sur le serveur officiel.
+#[tokio::test]
+async fn objectif_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/objectif-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}
