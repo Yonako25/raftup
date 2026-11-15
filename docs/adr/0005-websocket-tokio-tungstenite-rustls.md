@@ -22,3 +22,4 @@ Il faut aussi décider ce que fait le client quand l'adresse saisie n'a pas de s
 - Les serveurs locaux en clair (serveur Python lancé à la main, tests) marchent sans taper `ws://`.
 - Le secours en `ws://` envoie le mot de passe de la salle en clair si le serveur n'a pas de TLS : c'est le même risque qu'avec le client officiel. Le launcher pourra l'afficher.
 - Les certificats racine intégrés doivent être mis à jour avec les dépendances.
+- **Risque : pas de compression.** tungstenite (0.30) ne gère pas la compression WebSocket (`permessage-deflate`). Le serveur officiel 0.6.8 accepte ces clients, mais il prévient : « your client does not support compressed websocket connections! It may stop working in the future ». On garde tungstenite pour l'instant (décision du 2026-11-15). Il faut revoir la question avant le serveur (J1) : soit tungstenite gère la compression d'ici là, soit on envisage une autre bibliothèque (par exemple `yawc`).

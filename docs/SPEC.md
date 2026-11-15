@@ -210,7 +210,7 @@ Maquettes de référence : canevas « Raftup — maquette du launcher » (Accuei
 - [ ] Slimipelago n'affiche pas de licence : demander à l'auteur l'autorisation d'installation automatique (référencement par URL + hash) avant de l'ajouter au catalogue.
 - [ ] L'apworld `slime_rancher` fonctionne avec la version d'Archipelago épinglée, et la durée d'une partie complète reste raisonnable pour le critère de J1.
 - [ ] Le lecteur `.archipelago` de `multidata` charge une seed générée par la version d'Archipelago épinglée, et le serveur maison tient une partie complète avec ce jeu.
-- [ ] `client-core` se connecte à une vraie room et reçoit les objets.
+- [x] `client-core` se connecte à une vraie room et reçoit les objets (15 novembre 2026 : salle archipelago.gg en wss, exemple `suivi`).
 - [ ] Le générateur officiel tourne seul via python-build-standalone, sans Python installé, sans droits admin.
 - [ ] Les licences des mods du catalogue MVP autorisent l'installation automatique (référencement par URL + hash, pas de ré-hébergement).
 
