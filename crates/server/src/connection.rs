@@ -30,6 +30,9 @@ pub(crate) enum Incoming {
     BadArguments {
         cmd: String,
         error: serde_json::Error,
+        /// Le paquet tel que reçu, gardé seulement pour `Bounce` : la réponse
+        /// du serveur officiel nomme le champ fautif.
+        raw: Option<Value>,
     },
     /// `cmd` présent mais pas du texte.
     CmdNotText,
@@ -126,11 +129,15 @@ fn read_packet(value: Value) -> Incoming {
         Some(Value::String(_)) => {}
         Some(_) => return Incoming::CmdNotText,
     }
+    // `from_value` consomme la valeur : on en garde une copie si besoin.
+    let raw = (value["cmd"] == "Bounce").then(|| value.clone());
     match ClientPacket::from_value(value) {
         Ok(packet) => Incoming::Packet(Box::new(packet)),
-        Err(ProtocolError::InvalidPacket { cmd, source }) => {
-            Incoming::BadArguments { cmd, error: source }
-        }
+        Err(ProtocolError::InvalidPacket { cmd, source }) => Incoming::BadArguments {
+            cmd,
+            error: source,
+            raw,
+        },
         // Déjà vérifié plus haut : objet avec un `cmd` texte.
         Err(_) => Incoming::NoCmd,
     }

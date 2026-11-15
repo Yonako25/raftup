@@ -5,15 +5,18 @@
 //! Les réponses partent par le canal de chaque client.
 //!
 //! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`,
-//! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif).
+//! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif),
+//! `LocationScouts`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`.
 //! Les autres paquets de jeu arrivent dans la suite de l'étape 5 de J1.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ap_protocol::client::{Connect, ConnectUpdate, GetDataPackage, LocationChecks};
+use ap_protocol::client::{
+    Bounce, Connect, ConnectUpdate, GetDataPackage, LocationChecks, LocationScouts,
+};
 use ap_protocol::server::{
-    Connected, ConnectionRefused, DataPackage, DataPackageData, GameData, InvalidPacket,
-    JsonMessagePart, PrintJson, ReceivedItems, RoomUpdate,
+    Bounced, Connected, ConnectionRefused, DataPackage, DataPackageData, GameData, InvalidPacket,
+    JsonMessagePart, LocationInfo, PrintJson, ReceivedItems, RoomUpdate,
 };
 use ap_protocol::{
     encode_server_frame, ClientPacket, ClientStatus, ItemFlags, LocationId, NetworkItem,
@@ -212,12 +215,9 @@ impl RoomTask {
             }
             match item {
                 Incoming::Packet(packet) => self.on_packet(id, *packet),
-                Incoming::BadArguments { cmd, error } => {
+                Incoming::BadArguments { cmd, error, raw } => {
                     debug!(id, %cmd, "paquet aux champs incorrects : {error}");
-                    if cmd == "Connect" {
-                        let reply = invalid_packet("arguments", "Connect", "Connect");
-                        self.send(id, vec![reply]);
-                    }
+                    self.on_bad_arguments(id, &cmd, raw.as_ref());
                 }
                 Incoming::CmdNotText => {
                     let reply = invalid_cmd("cmd doit être du texte");
@@ -249,7 +249,134 @@ impl RoomTask {
             ClientPacket::Sync => self.on_sync(id),
             ClientPacket::LocationChecks(checks) => self.on_location_checks(id, &checks),
             ClientPacket::StatusUpdate(update) => self.on_status_update(id, update.status),
+            ClientPacket::LocationScouts(scouts) => self.on_location_scouts(id, &scouts),
+            ClientPacket::Say(say) => self.on_say(id, &say.text),
+            ClientPacket::Bounce(bounce) => self.on_bounce(id, bounce),
             other => debug!(id, cmd = other.cmd(), "paquet pas encore géré, ignoré"),
+        }
+    }
+
+    /// Paquet connu aux champs incorrects : la réponse du serveur officiel,
+    /// quand il en a une. Avant la connexion, seul `Connect` répond.
+    fn on_bad_arguments(&mut self, id: ClientId, cmd: &str, raw: Option<&Value>) {
+        let text = match cmd {
+            "Connect" => "Connect".to_string(),
+            _ if self.player(id).is_none() => return,
+            "LocationScouts" => "Locations has to be a list of integers".to_string(),
+            "Say" => "Say".to_string(),
+            "Bounce" => {
+                // Sans champ de liste fautif (par exemple `data` qui n'est pas
+                // un objet), le serveur officiel accepterait : écart connu, rare.
+                match raw.and_then(bad_bounce_field) {
+                    Some(field) => format!(
+                        "Bounce: \"{field}\" list provided did not have the correct format."
+                    ),
+                    None => "Bounce: invalid packet.".to_string(),
+                }
+            }
+            // Les autres seront traités avec leurs paquets.
+            _ => return,
+        };
+        self.send(id, vec![invalid_packet("arguments", cmd, &text)]);
+    }
+
+    // ----- LocationScouts, Say, Bounce -----------------------------------
+
+    /// Contenu des lieux demandés, sans les visiter.
+    fn on_location_scouts(&mut self, id: ClientId, scouts: &LocationScouts) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        let slot_locations = self.room.data().locations.get(&player.slot);
+        let mut locations = Vec::new();
+        for location in &scouts.locations {
+            let Some(placed) = slot_locations.and_then(|l| l.get(location)) else {
+                // Lieu inconnu : le serveur officiel 0.6.8 plante et ferme la connexion.
+                self.close(id, "LocationScouts sur un lieu inconnu");
+                return;
+            };
+            locations.push(NetworkItem {
+                item: placed.item,
+                location: *location,
+                player: placed.player,
+                flags: placed.flags,
+            });
+        }
+        if scouts.create_as_hint.unwrap_or(0) != 0 {
+            // Les indices arrivent en J2 : pour l'instant, on répond sans en créer.
+            debug!(id, "LocationScouts : création d'indices pas encore gérée");
+        }
+        let info = LocationInfo { locations };
+        self.send(id, vec![ServerPacket::LocationInfo(info)]);
+    }
+
+    /// Message de chat, envoyé à tous. Les commandes `!` arrivent en J2.
+    fn on_say(&mut self, id: ClientId, text: &str) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        if !is_printable(text) {
+            self.send(id, vec![invalid_packet("arguments", "Say", "Say")]);
+            return;
+        }
+        // Comme le serveur officiel : même une commande est montrée à tous,
+        // sauf `!admin`, qui peut contenir un mot de passe.
+        if !text.starts_with("!admin") {
+            let line = format!("{}: {text}", self.slot_name(player.slot));
+            let mut message = slot_message(line, "Chat", player.team, player.slot);
+            message.message = Some(text.to_string());
+            self.broadcast_text_all(message);
+        }
+        if text.starts_with('!') {
+            debug!(id, "commande « {text} » pas encore gérée (J2)");
+        }
+    }
+
+    /// Relaie un message libre (par exemple un DeathLink) aux clients visés.
+    fn on_bounce(&mut self, id: ClientId, bounce: Bounce) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        let operator = match bounce.extra.get("operator") {
+            None => "legacy",
+            Some(Value::String(text)) => text.as_str(),
+            Some(_) => "",
+        };
+        let operator = match operator {
+            "legacy" => BounceOperator::Legacy,
+            "or" => BounceOperator::Or,
+            "and" => BounceOperator::And,
+            // Le serveur officiel 0.6.8 plante ici (variable inconnue) et ferme.
+            _ => return self.close(id, "Bounce : opérateur inconnu"),
+        };
+        let target = BounceTarget {
+            // Équipe par défaut : celle de l'expéditeur.
+            teams: Some(bounce.teams.clone().unwrap_or_else(|| vec![player.team])),
+            games: bounce.games.clone(),
+            tags: bounce.tags.clone(),
+            slots: bounce.slots.clone(),
+        };
+
+        let bounced = Bounced {
+            teams: bounce.teams,
+            games: bounce.games,
+            slots: bounce.slots,
+            tags: bounce.tags,
+            data: bounce.data,
+            extra: bounce.extra,
+        };
+        let Some(frame) = encode(&[ServerPacket::Bounced(bounced)]) else {
+            return;
+        };
+        let data = self.room.data();
+        for client in self.clients.values() {
+            let Some(other) = &client.player else {
+                continue;
+            };
+            let game = data.slots.get(&other.slot).map_or("", |s| s.game.as_str());
+            if !client.closing && target.matches(operator, other, game) {
+                let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+            }
         }
     }
 
@@ -907,6 +1034,87 @@ impl RoomTask {
     }
 }
 
+/// Façon de combiner les critères d'un `Bounce` (champ `operator`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BounceOperator {
+    /// Par défaut : la bonne équipe, et au moins un des autres critères.
+    Legacy,
+    /// Au moins un critère, équipe comprise.
+    Or,
+    /// Tous les critères.
+    And,
+}
+
+/// Destinataires d'un `Bounce` (`BounceTarget` du serveur officiel).
+/// `None` = critère absent.
+struct BounceTarget {
+    teams: Option<Vec<TeamId>>,
+    games: Option<Vec<String>>,
+    tags: Option<Vec<String>>,
+    slots: Option<Vec<SlotId>>,
+}
+
+impl BounceTarget {
+    fn matches(&self, operator: BounceOperator, player: &Player, game: &str) -> bool {
+        let team = self.teams.as_ref().map(|t| t.contains(&player.team));
+        // Les critères autres que l'équipe, seulement ceux qui sont présents.
+        let others = [
+            self.games.as_ref().map(|g| g.iter().any(|x| x == game)),
+            self.tags
+                .as_ref()
+                .map(|t| t.iter().any(|x| player.tags.contains(x))),
+            self.slots.as_ref().map(|s| s.contains(&player.slot)),
+        ];
+        let others: Vec<bool> = others.into_iter().flatten().collect();
+        match operator {
+            // Sans autre critère, `any` est faux : personne ne reçoit le message.
+            BounceOperator::Legacy => team.unwrap_or(true) && others.iter().any(|m| *m),
+            BounceOperator::Or => team.into_iter().chain(others).any(|m| m),
+            BounceOperator::And => team.into_iter().chain(others).all(|m| m),
+        }
+    }
+}
+
+/// Premier champ de liste mal formé d'un `Bounce`, dans l'ordre où le serveur
+/// officiel les vérifie : une liste de nombres (`teams`, `slots`) ou de textes.
+fn bad_bounce_field(raw: &Value) -> Option<&'static str> {
+    let fields = [
+        ("teams", true),
+        ("games", false),
+        ("tags", false),
+        ("slots", true),
+    ];
+    fields.into_iter().find_map(|(name, numbers)| {
+        let value = raw.get(name)?;
+        let ok = value.as_array().is_some_and(|items| {
+            items.iter().all(|item| {
+                if numbers {
+                    item.is_i64() || item.is_u64()
+                } else {
+                    item.is_string()
+                }
+            })
+        });
+        (!ok).then_some(name)
+    })
+}
+
+/// Imite `str.isprintable()` de Python : faux si le texte contient un caractère
+/// de contrôle, un séparateur autre que l'espace, un caractère de format
+/// (invisible) ou un caractère à usage privé.
+fn is_printable(text: &str) -> bool {
+    text.chars().all(|c| {
+        let code = c as u32;
+        let separator = c != ' ' && c.is_whitespace();
+        let format = matches!(code,
+            0xAD | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x180E
+            | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F
+            | 0xFEFF | 0xFFF9..=0xFFFB);
+        let private = matches!(code, 0xE000..=0xF8FF | 0xF0000..=0x10FFFF);
+        !(c.is_control() || separator || format || private)
+    })
+}
+
 fn encode(packets: &[ServerPacket]) -> Option<String> {
     match encode_server_frame(packets) {
         Ok(frame) => Some(frame),
@@ -1095,5 +1303,47 @@ mod tests {
                 Some(value)
             );
         }
+    }
+
+    #[test]
+    fn imprimable_comme_python() {
+        assert!(is_printable(""));
+        assert!(is_printable("Bonjour à tous ! 🎉"));
+        assert!(!is_printable("ligne\nsuivante"));
+        assert!(!is_printable("tab\t"));
+        assert!(!is_printable("espace\u{a0}insécable"));
+        assert!(!is_printable("zéro\u{200b}largeur"));
+    }
+
+    #[test]
+    fn destinataires_bounce() {
+        let player = Player {
+            team: 0,
+            slot: 2,
+            version: SERVER_VERSION,
+            tags: vec!["DeathLink".to_string()],
+            items: ItemsChoice::decode(7).unwrap_or(ItemsChoice {
+                no_items: false,
+                remote_items: true,
+                remote_start_inventory: true,
+            }),
+            send_index: 0,
+            no_locations: false,
+            no_text: false,
+        };
+        let target = |tags: Option<Vec<&str>>, slots: Option<Vec<SlotId>>| BounceTarget {
+            teams: Some(vec![0]),
+            games: None,
+            tags: tags.map(|t| t.into_iter().map(String::from).collect()),
+            slots,
+        };
+        use BounceOperator::*;
+        // Legacy sans autre critère que l'équipe : personne.
+        assert!(!target(None, None).matches(Legacy, &player, "Jeu"));
+        assert!(target(Some(vec!["DeathLink"]), None).matches(Legacy, &player, "Jeu"));
+        assert!(target(Some(vec!["Autre"]), Some(vec![2])).matches(Legacy, &player, "Jeu"));
+        assert!(!target(Some(vec!["Autre"]), Some(vec![2])).matches(And, &player, "Jeu"));
+        assert!(target(None, None).matches(Or, &player, "Jeu"));
+        assert!(target(Some(vec!["DeathLink"]), Some(vec![2])).matches(And, &player, "Jeu"));
     }
 }

@@ -24,3 +24,9 @@
 
 - Même méthode que `partie-seed-mit.json` (script `game_vectors.py objectif`, serveur officiel neuf), le 15 novembre 2026.
 - Couvre : `StatusUpdate` (refus pour un outil `TextOnly`, statut « prêt »), objectif atteint (`Goal`), `collect` et `release` automatiques (options `auto` de la seed), `collect` du groupe `Lien` quand ses deux membres ont fini, objectif définitif, message de fin d'équipe.
+
+## `echanges-seed-mit.json`
+
+- Même méthode (script `game_vectors.py echanges`, serveur officiel neuf), le 15 novembre 2026.
+- Couvre : `LocationScouts` (lieux valides, mauvais type, lieu inconnu qui ferme la connexion), chat (`Say`, texte non imprimable, client non connecté), `Bounce` avec chaque opérateur (`legacy`, `or`, `and`), par tags, slots, jeux et équipes, liste mal formée, `Bounce` sans `data`.
+- Les commandes `!` ne sont pas capturées : elles arrivent en J2.
