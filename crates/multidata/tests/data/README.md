@@ -30,3 +30,15 @@ Données simples fabriquées exprès pour couvrir ce que la seed n'a pas (nombre
 | dictionnaire | `{"dict": [[clé, valeur], …]}`, dans l'ordre |
 | ensemble | `{"set": […]}`, `{"frozenset": […]}` ; ordre libre (trié avant comparaison) |
 | objet d'une classe autorisée | `{"object": "module.Classe", "args": […], "state": … ou null}` |
+
+## `seed-mit.modele.json`
+
+Le modèle de partie attendu pour `seed-mit.archipelago`, calculé par le script `gen_model_expected.py` (hors dépôt) avec le code officiel : `Utils.restricted_loads`, puis `NetUtils.encode` pour les valeurs que le serveur envoie en JSON (`slot_data`, slots, indices). `tests/modele.rs` construit la même forme à partir de `MultiData` et compare champ par champ.
+
+Le test `seed_externe_comme_python` (ignoré par défaut) fait la même comparaison sur une seed hors dépôt :
+
+```text
+RAFTUP_SEED=<seed.archipelago> RAFTUP_SEED_MODELE=<modèle.json> cargo test -p multidata --test modele -- --ignored
+```
+
+Il a été lancé le 15 novembre 2026 sur la seed Slime Rancher de l'étape 0 : identique à Python.

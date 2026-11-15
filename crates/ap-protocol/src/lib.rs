@@ -19,7 +19,7 @@ pub mod server;
 // Raccourcis : `ap_protocol::ServerPacket` au lieu de `ap_protocol::server::ServerPacket`.
 pub use client::{decode_client_frame, encode_client_frame, ClientPacket};
 pub use common::{
-    ClientStatus, HintStatus, ItemFlags, ItemId, ItemsHandling, LocationId, NetworkItem,
+    ClientStatus, Hint, HintStatus, ItemFlags, ItemId, ItemsHandling, LocationId, NetworkItem,
     NetworkPlayer, NetworkSlot, NetworkVersion, Permission, SlotId, SlotType, TeamId,
 };
 pub use error::ProtocolError;

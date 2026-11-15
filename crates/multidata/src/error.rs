@@ -56,3 +56,21 @@ pub enum ArchiveError {
     #[error(transparent)]
     Pickle(#[from] PickleError),
 }
+
+/// Champ de la seed absent ou de mauvais type.
+#[derive(Debug, thiserror::Error)]
+#[error("seed invalide, champ {path} : {problem}")]
+pub struct ModelError {
+    /// Chemin du champ, par exemple `locations[1][81000]`.
+    pub path: String,
+    pub problem: String,
+}
+
+/// Erreur de chargement complet d'une seed.
+#[derive(Debug, thiserror::Error)]
+pub enum LoadError {
+    #[error(transparent)]
+    Archive(#[from] ArchiveError),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+}

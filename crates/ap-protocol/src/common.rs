@@ -169,3 +169,34 @@ impl ItemsHandling {
     /// Tous les objets : valeur la plus courante pour un mod.
     pub const ALL: ItemsHandling = ItemsHandling(0b111);
 }
+
+/// Un indice : où se trouve un objet (`"class": "Hint"`).
+///
+/// Stocké dans la seed (indices de départ) et envoyé aux clients par le
+/// stockage de données (clés `_read_hints_<équipe>_<slot>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "class", rename = "Hint")]
+pub struct Hint {
+    /// Joueur qui recevra l'objet.
+    pub receiving_player: SlotId,
+    /// Joueur dans le monde duquel se trouve l'objet.
+    pub finding_player: SlotId,
+    pub location: LocationId,
+    pub item: ItemId,
+    /// Vrai si l'objet a déjà été trouvé.
+    pub found: bool,
+    /// Entrée à prendre pour atteindre le lieu (randomisation des entrées) ; souvent vide.
+    #[serde(default)]
+    pub entrance: String,
+    #[serde(default)]
+    pub item_flags: ItemFlags,
+    #[serde(default = "HintStatus::unspecified")]
+    pub status: HintStatus,
+}
+
+impl HintStatus {
+    /// Valeur par défaut d'un indice (pour serde).
+    fn unspecified() -> HintStatus {
+        HintStatus::UNSPECIFIED
+    }
+}

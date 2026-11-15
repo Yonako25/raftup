@@ -323,7 +323,9 @@ dependencies = [
 name = "multidata"
 version = "0.1.0"
 dependencies = [
+ "ap-protocol",
  "flate2",
+ "indexmap",
  "serde_json",
  "thiserror",
 ]
