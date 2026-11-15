@@ -4,19 +4,19 @@
 //! traite un par un, dans l'ordre, comme la boucle unique du serveur officiel.
 //! Les réponses partent par le canal de chaque client.
 //!
-//! Étape 4 de J1 : `Connect`, `Connected`, inventaire de départ, `GetDataPackage`,
-//! messages « a rejoint » et « est parti ». Les paquets de jeu viennent à l'étape 5.
+//! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`.
+//! Les autres paquets de jeu arrivent dans la suite de l'étape 5 de J1.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ap_protocol::client::{Connect, GetDataPackage};
+use ap_protocol::client::{Connect, ConnectUpdate, GetDataPackage, LocationChecks};
 use ap_protocol::server::{
     Connected, ConnectionRefused, DataPackage, DataPackageData, GameData, InvalidPacket,
-    JsonMessagePart, PrintJson, ReceivedItems,
+    JsonMessagePart, PrintJson, ReceivedItems, RoomUpdate,
 };
 use ap_protocol::{
-    encode_server_frame, ClientPacket, ItemFlags, ItemsHandling, NetworkItem, NetworkPlayer,
-    NetworkVersion, ServerPacket, SlotId, TeamId,
+    encode_server_frame, ClientPacket, ItemFlags, NetworkItem, NetworkPlayer, NetworkVersion,
+    ServerPacket, SlotId, TeamId,
 };
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -24,6 +24,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
+use crate::game::{GameState, Sent};
 use crate::room::{now, Room, SERVER_VERSION};
 
 /// Numéro unique d'une connexion, donné à son arrivée.
@@ -78,6 +79,43 @@ const TUTORIAL: &str = "Now that you are connected, you can use !help to list co
 via the server. If your client supports it, you may have additional local commands you can \
 list with /help.";
 
+/// Nombre maximal de messages `ItemSend` par trame, comme le serveur officiel.
+const ITEM_SEND_CHUNK: usize = 140;
+
+/// Choix de réception des objets (`items_handling`), décodé.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ItemsChoice {
+    /// Aucun objet : le jeu gère tout lui-même.
+    no_items: bool,
+    /// Recevoir aussi les objets trouvés dans son propre monde.
+    remote_items: bool,
+    /// Recevoir l'inventaire de départ.
+    remote_start_inventory: bool,
+}
+
+impl ItemsChoice {
+    /// Décode `items_handling` ; `None` si la combinaison est impossible
+    /// (bits 2 ou 3 sans le bit 1), comme le refuse le serveur officiel.
+    fn decode(value: u8) -> Option<ItemsChoice> {
+        if value & 0b001 == 0 && value & 0b110 != 0 {
+            return None;
+        }
+        Some(ItemsChoice {
+            no_items: value & 0b001 == 0,
+            remote_items: value & 0b010 != 0,
+            remote_start_inventory: value & 0b100 != 0,
+        })
+    }
+
+    /// Valeur actuelle, recalculée comme la propriété `items_handling` officielle.
+    fn encode(self) -> u8 {
+        if self.no_items {
+            return 0;
+        }
+        1 + (u8::from(self.remote_items) << 1) + (u8::from(self.remote_start_inventory) << 2)
+    }
+}
+
 /// Un joueur authentifié (après un `Connect` accepté).
 #[derive(Debug, Clone)]
 struct Player {
@@ -85,11 +123,23 @@ struct Player {
     slot: SlotId,
     version: NetworkVersion,
     tags: Vec<String>,
-    /// Nombre d'objets déjà envoyés à ce client (servira à l'étape 5).
-    #[allow(dead_code)]
+    items: ItemsChoice,
+    /// Nombre d'objets (inventaire de départ compris) déjà envoyés à ce client.
     send_index: usize,
+    /// Vrai pour un outil qui ne joue pas : il ne peut pas visiter de lieux.
+    no_locations: bool,
     /// Vrai si le client ne veut pas des messages texte (`PrintJSON`).
     no_text: bool,
+}
+
+impl Player {
+    fn set_tags(&mut self, tags: Vec<String>) {
+        let has_tag = |tag: &str| tags.iter().any(|t| t == tag);
+        self.no_locations = NON_GAME_TAGS.iter().any(|(tag, _)| has_tag(tag));
+        self.no_text =
+            has_tag("NoText") || (has_tag("PopTracker") && version_key(&self.version) < (0, 5, 1));
+        self.tags = tags;
+    }
 }
 
 /// Une connexion vue par la salle.
@@ -107,6 +157,7 @@ enum ConnectCheck {
     Accepted {
         team: TeamId,
         slot: SlotId,
+        items: ItemsChoice,
     },
     Refused(Vec<String>),
     /// Cas où le serveur officiel plante et ferme la connexion.
@@ -117,6 +168,7 @@ enum ConnectCheck {
 pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
     let mut task = RoomTask {
         room,
+        game: GameState::default(),
         clients: BTreeMap::new(),
     };
     while let Some(event) = events.recv().await {
@@ -126,6 +178,7 @@ pub(crate) async fn run(room: Room, mut events: UnboundedReceiver<Event>) {
 
 struct RoomTask {
     room: Room,
+    game: GameState,
     /// `BTreeMap` : les diffusions suivent l'ordre d'arrivée des clients.
     clients: BTreeMap<ClientId, Client>,
 }
@@ -134,14 +187,12 @@ impl RoomTask {
     fn handle(&mut self, event: Event) {
         match event {
             Event::Opened { id, outbox } => {
-                self.clients.insert(
-                    id,
-                    Client {
-                        outbox,
-                        player: None,
-                        closing: false,
-                    },
-                );
+                let client = Client {
+                    outbox,
+                    player: None,
+                    closing: false,
+                };
+                self.clients.insert(id, client);
                 let info = self.room.room_info(now());
                 self.send(id, vec![ServerPacket::RoomInfo(info)]);
             }
@@ -162,17 +213,16 @@ impl RoomTask {
                 Incoming::BadArguments { cmd, error } => {
                     debug!(id, %cmd, "paquet aux champs incorrects : {error}");
                     if cmd == "Connect" {
-                        let reply = invalid_packet("arguments", Some("Connect"), "Connect");
+                        let reply = invalid_packet("arguments", "Connect", "Connect");
                         self.send(id, vec![reply]);
                     }
-                    // Les autres seront traités avec les paquets de jeu (étape 5).
                 }
                 Incoming::CmdNotText => {
-                    let reply = invalid_packet("cmd", None, "cmd doit être du texte");
+                    let reply = invalid_cmd("cmd doit être du texte");
                     self.send(id, vec![reply]);
                 }
                 Incoming::NoCmd => {
-                    let reply = invalid_packet("cmd", None, "paquet sans champ « cmd »");
+                    let reply = invalid_cmd("paquet sans champ « cmd »");
                     self.send(id, vec![reply]);
                     self.close(id, "paquet sans « cmd »");
                 }
@@ -182,21 +232,29 @@ impl RoomTask {
 
     fn on_packet(&mut self, id: ClientId, packet: ClientPacket) {
         match packet {
-            ClientPacket::Connect(connect) => self.on_connect(id, &connect),
-            ClientPacket::GetDataPackage(request) => self.on_get_data_package(id, &request),
-            other => {
-                // Non connecté : ignoré, comme sur le serveur officiel.
-                // Connecté : paquets de jeu, pas encore gérés (étape 5).
-                debug!(id, cmd = other.cmd(), "paquet pas encore géré, ignoré");
-            }
+            ClientPacket::Connect(connect) => return self.on_connect(id, &connect),
+            ClientPacket::GetDataPackage(request) => return self.on_get_data_package(id, &request),
+            _ => {}
+        }
+        // Les autres paquets demandent un joueur connecté ; sinon, ignorés
+        // sans réponse, comme sur le serveur officiel.
+        if self.player(id).is_none() {
+            debug!(id, cmd = packet.cmd(), "paquet avant connexion, ignoré");
+            return;
+        }
+        match packet {
+            ClientPacket::ConnectUpdate(update) => self.on_connect_update(id, update),
+            ClientPacket::Sync => self.on_sync(id),
+            ClientPacket::LocationChecks(checks) => self.on_location_checks(id, &checks),
+            other => debug!(id, cmd = other.cmd(), "paquet pas encore géré, ignoré"),
         }
     }
 
     // ----- Connect -------------------------------------------------------
 
     fn on_connect(&mut self, id: ClientId, connect: &Connect) {
-        let (team, slot) = match self.check_connect(connect) {
-            ConnectCheck::Accepted { team, slot } => (team, slot),
+        let (team, slot, items) = match self.check_connect(connect) {
+            ConnectCheck::Accepted { team, slot, items } => (team, slot, items),
             ConnectCheck::Refused(errors) => {
                 info!(id, ?errors, name = %connect.name, "connexion refusée");
                 let refused = ConnectionRefused { errors };
@@ -211,7 +269,7 @@ impl RoomTask {
 
         // `clone()` : on garde une copie de l'ancien joueur, car `self` sera
         // modifié plus bas (le compilateur interdit de garder une référence).
-        let previous = self.clients.get(&id).and_then(|c| c.player.clone());
+        let previous = self.player(id).cloned();
         if let Some(previous) = &previous {
             if (previous.team, previous.slot) != (team, slot) {
                 // Le serveur officiel 0.6.8 plante dans ce cas et ferme la connexion.
@@ -220,20 +278,9 @@ impl RoomTask {
             }
         }
         // Le serveur officiel plante aussi pour un slot sans lieux (un groupe).
-        let Some(locations) = self.room.data().locations.get(&slot) else {
+        let Some(missing_locations) = self.game.missing(self.room.data(), team, slot) else {
             self.close(id, "slot sans lieux (groupe)");
             return;
-        };
-        // Aucun lieu visité pour l'instant : tous manquent, dans l'ordre croissant.
-        let missing_locations: Vec<_> = locations.keys().copied().collect();
-
-        let handling = connect.items_handling.0;
-        let wants_items = handling & ItemsHandling::OTHER_WORLDS.0 != 0;
-        let wants_start_inventory = handling & ItemsHandling::STARTING_INVENTORY.0 != 0;
-        let start_inventory = if wants_start_inventory {
-            self.start_inventory(slot)
-        } else {
-            Vec::new()
         };
 
         let data = self.room.data();
@@ -249,37 +296,38 @@ impl RoomTask {
             slot,
             players: self.players(),
             missing_locations,
-            checked_locations: Vec::new(),
+            checked_locations: self.game.checked(team, slot),
             slot_data,
             slot_info: data
                 .slots
                 .iter()
                 .map(|(s, info)| (*s, info.clone()))
                 .collect(),
-            // Points d'indice : aucun lieu visité ni indice acheté pour l'instant.
-            hint_points: 0,
+            hint_points: self.hint_points(team, slot),
         };
-        let mut reply = vec![ServerPacket::Connected(connected)];
-        let mut send_index = 0;
-        if !start_inventory.is_empty() && wants_items {
-            send_index = start_inventory.len();
-            reply.push(ServerPacket::ReceivedItems(ReceivedItems {
-                index: 0,
-                items: start_inventory,
-            }));
-        }
 
-        let has_tag = |tag: &str| connect.tags.iter().any(|t| t == tag);
-        let no_text = has_tag("NoText")
-            || (has_tag("PopTracker") && version_key(&connect.version) < (0, 5, 1));
-        let player = Player {
+        let mut player = Player {
             team,
             slot,
             version: connect.version,
-            tags: connect.tags.clone(),
-            send_index,
-            no_text,
+            tags: Vec::new(),
+            items,
+            // Une reconnexion garde son compteur, comme sur le serveur officiel.
+            send_index: previous.as_ref().map_or(0, |p| p.send_index),
+            no_locations: false,
+            no_text: false,
         };
+        player.set_tags(connect.tags.clone());
+
+        let mut reply = vec![ServerPacket::Connected(connected)];
+        let all_items = self.all_items(&player);
+        if !all_items.is_empty() && !player.items.no_items {
+            player.send_index = all_items.len();
+            reply.push(ServerPacket::ReceivedItems(ReceivedItems {
+                index: 0,
+                items: all_items,
+            }));
+        }
         if let Some(client) = self.clients.get_mut(&id) {
             client.player = Some(player.clone());
         }
@@ -331,13 +379,12 @@ impl RoomTask {
                 if version_key(&minimum) > version_key(&connect.version) {
                     errors.insert("IncompatibleVersion");
                 }
-                // Recevoir ses propres objets ou l'inventaire de départ sans
-                // recevoir d'objets du tout n'a pas de sens.
-                let handling = connect.items_handling.0;
-                if handling & 0b001 == 0 && handling & 0b110 != 0 {
-                    errors.insert("InvalidItemsHandling");
+                match ItemsChoice::decode(connect.items_handling.0) {
+                    Some(items) => accepted = Some((team, slot, items)),
+                    None => {
+                        errors.insert("InvalidItemsHandling");
+                    }
                 }
-                accepted = Some((team, slot));
             }
         }
         // Compatibilité 0 : seule la version exacte du serveur est acceptée.
@@ -346,7 +393,9 @@ impl RoomTask {
         }
 
         match accepted {
-            Some((team, slot)) if errors.is_empty() => ConnectCheck::Accepted { team, slot },
+            Some((team, slot, items)) if errors.is_empty() => {
+                ConnectCheck::Accepted { team, slot, items }
+            }
             _ => ConnectCheck::Refused(errors.into_iter().map(String::from).collect()),
         }
     }
@@ -367,36 +416,6 @@ impl RoomTask {
         })
     }
 
-    /// Inventaire de départ : lieu `-2`, joueur `0` (le serveur).
-    fn start_inventory(&self, slot: SlotId) -> Vec<NetworkItem> {
-        let items = self.room.data().precollected_items.get(&slot);
-        // `into_iter().flatten()` : rien si le slot n'a pas d'entrée.
-        items
-            .into_iter()
-            .flatten()
-            .map(|&item| NetworkItem {
-                item,
-                location: -2,
-                player: 0,
-                flags: ItemFlags(0),
-            })
-            .collect()
-    }
-
-    /// Tous les slots de l'équipe 0, groupes compris, dans l'ordre des slots.
-    fn players(&self) -> Vec<NetworkPlayer> {
-        let slots = &self.room.data().slots;
-        slots
-            .iter()
-            .map(|(slot, info)| NetworkPlayer {
-                team: 0,
-                slot: *slot,
-                alias: info.name.clone(),
-                name: info.name.clone(),
-            })
-            .collect()
-    }
-
     /// Annonce l'arrivée d'un joueur à tous, puis lui envoie le tutoriel.
     fn on_joined(&mut self, id: ClientId, player: &Player) {
         let name = self.slot_name(player.slot);
@@ -413,7 +432,7 @@ impl RoomTask {
         join.team = Some(player.team);
         join.slot = Some(player.slot);
         join.tags = Some(player.tags.clone());
-        self.broadcast_text(join);
+        self.broadcast_text_all(join);
 
         let mut tutorial = text_message(TUTORIAL.to_string());
         tutorial.kind = Some("Tutorial".to_string());
@@ -444,7 +463,145 @@ impl RoomTask {
         part.team = Some(player.team);
         part.slot = Some(player.slot);
         info!(id, slot = player.slot, "joueur parti");
-        self.broadcast_text(part);
+        self.broadcast_text_all(part);
+    }
+
+    // ----- ConnectUpdate et Sync -----------------------------------------
+
+    /// Change `items_handling` ou les tags d'un joueur déjà connecté.
+    fn on_connect_update(&mut self, id: ClientId, update: ConnectUpdate) {
+        let Some(mut player) = self.player(id).cloned() else {
+            return;
+        };
+        if let Some(handling) = update.items_handling {
+            if handling.0 != player.items.encode() {
+                let Some(items) = ItemsChoice::decode(handling.0) else {
+                    let text = "Invalid items_handling: Invalid flag combination";
+                    self.send(id, vec![invalid_packet("arguments", "ConnectUpdate", text)]);
+                    return;
+                };
+                player.items = items;
+                let all_items = self.all_items(&player);
+                if !all_items.is_empty() && !player.items.no_items {
+                    player.send_index = all_items.len();
+                    self.set_player(id, player.clone());
+                    let packet = ReceivedItems {
+                        index: 0,
+                        items: all_items,
+                    };
+                    self.send(id, vec![ServerPacket::ReceivedItems(packet)]);
+                } else {
+                    player.send_index = 0;
+                }
+            }
+        }
+        if let Some(tags) = update.tags {
+            let old_tags = player.tags.clone();
+            // Comparaison comme des ensembles : l'ordre et les doublons ne comptent pas.
+            let changed = to_set(&old_tags) != to_set(&tags);
+            if changed {
+                player.set_tags(tags);
+            } else {
+                player.tags = tags;
+            }
+            self.set_player(id, player.clone());
+            if changed {
+                let text = format!(
+                    "{} (Team #{}) has changed tags from {} to {}.",
+                    self.slot_name(player.slot),
+                    player.team + 1,
+                    python_list_repr(&old_tags),
+                    python_list_repr(&player.tags),
+                );
+                let mut message = text_message(text);
+                message.kind = Some("TagsChanged".to_string());
+                message.team = Some(player.team);
+                message.slot = Some(player.slot);
+                message.tags = Some(player.tags.clone());
+                self.broadcast_text_all(message);
+            }
+        }
+        self.set_player(id, player);
+    }
+
+    /// Renvoie toute la liste des objets reçus, depuis le début.
+    fn on_sync(&mut self, id: ClientId) {
+        let Some(mut player) = self.player(id).cloned() else {
+            return;
+        };
+        let all_items = self.all_items(&player);
+        if !all_items.is_empty() && !player.items.no_items {
+            player.send_index = all_items.len();
+            self.set_player(id, player);
+            let packet = ReceivedItems {
+                index: 0,
+                items: all_items,
+            };
+            self.send(id, vec![ServerPacket::ReceivedItems(packet)]);
+        }
+    }
+
+    // ----- LocationChecks ------------------------------------------------
+
+    fn on_location_checks(&mut self, id: ClientId, checks: &LocationChecks) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        if player.no_locations {
+            let text = "Trackers can't register new Location Checks";
+            self.send(id, vec![invalid_packet("cmd", "LocationChecks", text)]);
+            return;
+        }
+        let (team, slot) = (player.team, player.slot);
+        let (new_locations, sent) =
+            self.game
+                .register_checks(self.room.data(), team, slot, &checks.locations);
+        if new_locations.is_empty() {
+            return;
+        }
+        info!(id, slot, count = new_locations.len(), "lieux visités");
+
+        // 1. Messages « X a envoyé Y à Z » à toute l'équipe, par paquets de 140.
+        for chunk in sent.chunks(ITEM_SEND_CHUNK) {
+            let messages: Vec<ServerPacket> = chunk
+                .iter()
+                .map(|s| ServerPacket::PrintJson(item_send_message(s)))
+                .collect();
+            self.broadcast_team_text(team, messages);
+        }
+        // 2. Les nouveaux objets à chaque client qui doit les recevoir.
+        self.send_new_items();
+        // 3. Les lieux visités et les points d'indice aux clients de ce slot.
+        let update = RoomUpdate {
+            hint_points: Some(self.hint_points(team, slot)),
+            checked_locations: Some(new_locations),
+            ..RoomUpdate::default()
+        };
+        self.broadcast_slot(team, slot, vec![ServerPacket::RoomUpdate(update)]);
+    }
+
+    /// Envoie à chaque joueur les objets qu'il n'a pas encore reçus (`send_new_items`).
+    fn send_new_items(&mut self) {
+        let ids: Vec<ClientId> = self.clients.keys().copied().collect();
+        for id in ids {
+            let Some(mut player) = self.player(id).cloned() else {
+                continue;
+            };
+            if player.items.no_items {
+                continue;
+            }
+            let all_items = self.all_items(&player);
+            if all_items.len() > player.send_index {
+                let index = player.send_index;
+                player.send_index = all_items.len();
+                self.set_player(id, player);
+                let packet = ReceivedItems {
+                    index: u32::try_from(index).unwrap_or(u32::MAX),
+                    items: all_items[index..].to_vec(),
+                };
+                self.send(id, vec![ServerPacket::ReceivedItems(packet)]);
+            }
+        }
     }
 
     // ----- GetDataPackage ------------------------------------------------
@@ -473,7 +630,69 @@ impl RoomTask {
         self.send(id, vec![ServerPacket::DataPackage(package)]);
     }
 
-    // ----- Envois --------------------------------------------------------
+    // ----- Données des joueurs -------------------------------------------
+
+    fn player(&self, id: ClientId) -> Option<&Player> {
+        self.clients.get(&id).and_then(|c| c.player.as_ref())
+    }
+
+    fn set_player(&mut self, id: ClientId, player: Player) {
+        if let Some(client) = self.clients.get_mut(&id) {
+            client.player = Some(player);
+        }
+    }
+
+    /// Inventaire de départ (si demandé) puis objets reçus : la liste complète
+    /// que le client doit avoir, dans l'ordre.
+    fn all_items(&self, player: &Player) -> Vec<NetworkItem> {
+        let mut items = Vec::new();
+        if player.items.remote_start_inventory {
+            items.extend(self.start_inventory(player.slot));
+        }
+        let received = self
+            .game
+            .received(player.team, player.slot, player.items.remote_items);
+        items.extend_from_slice(received);
+        items
+    }
+
+    /// Inventaire de départ : lieu `-2`, joueur `0` (le serveur).
+    fn start_inventory(&self, slot: SlotId) -> Vec<NetworkItem> {
+        let items = self.room.data().precollected_items.get(&slot);
+        // `into_iter().flatten()` : rien si le slot n'a pas d'entrée.
+        items
+            .into_iter()
+            .flatten()
+            .map(|&item| NetworkItem {
+                item,
+                location: -2,
+                player: 0,
+                flags: ItemFlags(0),
+            })
+            .collect()
+    }
+
+    /// Points d'indice : gagnés en visitant des lieux.
+    /// Les indices achetés (qui en coûtent) arriveront avec les indices, en J2.
+    fn hint_points(&self, team: TeamId, slot: SlotId) -> i64 {
+        let per_check = self.room.data().server_options.location_check_points;
+        let checked = i64::try_from(self.game.checked_count(team, slot)).unwrap_or(i64::MAX);
+        per_check.saturating_mul(checked)
+    }
+
+    /// Tous les slots de l'équipe 0, groupes compris, dans l'ordre des slots.
+    fn players(&self) -> Vec<NetworkPlayer> {
+        let slots = &self.room.data().slots;
+        slots
+            .iter()
+            .map(|(slot, info)| NetworkPlayer {
+                team: 0,
+                slot: *slot,
+                alias: info.name.clone(),
+                name: info.name.clone(),
+            })
+            .collect()
+    }
 
     fn slot_name(&self, slot: SlotId) -> String {
         let slots = &self.room.data().slots;
@@ -484,6 +703,8 @@ impl RoomTask {
         let slots = &self.room.data().slots;
         slots.get(&slot).map(|s| s.game.clone()).unwrap_or_default()
     }
+
+    // ----- Envois --------------------------------------------------------
 
     /// Envoie des paquets à un client, dans une seule trame.
     fn send(&self, id: ClientId, packets: Vec<ServerPacket>) {
@@ -496,29 +717,39 @@ impl RoomTask {
         }
     }
 
+    /// Envoie la même trame aux joueurs connectés qui passent le filtre.
+    fn broadcast(&self, packets: &[ServerPacket], filter: impl Fn(&Player) -> bool) {
+        let Some(frame) = encode(packets) else {
+            return;
+        };
+        for client in self.clients.values() {
+            let wanted = client.player.as_ref().is_some_and(&filter);
+            if wanted && !client.closing {
+                let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
+            }
+        }
+    }
+
     /// Message texte pour un seul client connecté (`notify_client`).
     fn notify(&self, id: ClientId, message: PrintJson) {
-        let wants_text = self
-            .clients
-            .get(&id)
-            .and_then(|c| c.player.as_ref())
-            .is_some_and(|p| !p.no_text);
-        if wants_text {
+        if self.player(id).is_some_and(|p| !p.no_text) {
             self.send(id, vec![ServerPacket::PrintJson(message)]);
         }
     }
 
     /// Message texte pour tous les clients connectés (`broadcast_text_all`).
-    fn broadcast_text(&self, message: PrintJson) {
-        let Some(frame) = encode(&[ServerPacket::PrintJson(message)]) else {
-            return;
-        };
-        for client in self.clients.values() {
-            let wants_text = client.player.as_ref().is_some_and(|p| !p.no_text);
-            if wants_text && !client.closing {
-                let _ = client.outbox.send(Outgoing::Frame(frame.clone()));
-            }
-        }
+    fn broadcast_text_all(&self, message: PrintJson) {
+        self.broadcast(&[ServerPacket::PrintJson(message)], |p| !p.no_text);
+    }
+
+    /// Messages texte pour une équipe (`broadcast_team`).
+    fn broadcast_team_text(&self, team: TeamId, messages: Vec<ServerPacket>) {
+        self.broadcast(&messages, |p| p.team == team && !p.no_text);
+    }
+
+    /// Paquets pour les clients d'un slot (`ctx.broadcast(ctx.clients[team][slot])`).
+    fn broadcast_slot(&self, team: TeamId, slot: SlotId, packets: Vec<ServerPacket>) {
+        self.broadcast(&packets, |p| p.team == team && p.slot == slot);
     }
 
     /// Demande la fermeture d'une connexion.
@@ -541,12 +772,25 @@ fn encode(packets: &[ServerPacket]) -> Option<String> {
     }
 }
 
-fn invalid_packet(kind: &str, original_cmd: Option<&str>, text: &str) -> ServerPacket {
+fn invalid_packet(kind: &str, original_cmd: &str, text: &str) -> ServerPacket {
     ServerPacket::InvalidPacket(InvalidPacket {
         kind: kind.to_string(),
-        original_cmd: original_cmd.map(String::from),
+        original_cmd: Some(original_cmd.to_string()),
         text: text.to_string(),
     })
+}
+
+/// `InvalidPacket` de type `cmd`, sans commande d'origine.
+fn invalid_cmd(text: &str) -> ServerPacket {
+    ServerPacket::InvalidPacket(InvalidPacket {
+        kind: "cmd".to_string(),
+        original_cmd: None,
+        text: text.to_string(),
+    })
+}
+
+fn to_set(tags: &[String]) -> BTreeSet<&str> {
+    tags.iter().map(String::as_str).collect()
 }
 
 /// Verbe affiché pour un outil qui ne joue pas (`viewing`…), selon ses tags.
@@ -557,17 +801,22 @@ fn non_game_verb(tags: &[String]) -> Option<&'static str> {
         .map(|(_, verb)| *verb)
 }
 
+/// Morceau de texte simple d'un `PrintJSON`.
+fn text_part(text: impl Into<String>) -> JsonMessagePart {
+    JsonMessagePart {
+        text: Some(text.into()),
+        kind: None,
+        color: None,
+        flags: None,
+        player: None,
+        hint_status: None,
+    }
+}
+
 /// `PrintJSON` d'un seul morceau de texte, sans genre.
 fn text_message(text: String) -> PrintJson {
     PrintJson {
-        data: vec![JsonMessagePart {
-            text: Some(text),
-            kind: None,
-            color: None,
-            flags: None,
-            player: None,
-            hint_status: None,
-        }],
+        data: vec![text_part(text)],
         kind: None,
         receiving: None,
         item: None,
@@ -578,6 +827,46 @@ fn text_message(text: String) -> PrintJson {
         tags: None,
         countdown: None,
     }
+}
+
+/// Message « Alice sent Objet to Bob (Lieu) » (`json_format_send_event`).
+/// Les numéros sont remplacés par des noms chez le client, grâce au DataPackage.
+fn item_send_message(sent: &Sent) -> PrintJson {
+    let item = sent.item;
+    let player_part = |slot: SlotId| JsonMessagePart {
+        kind: Some("player_id".to_string()),
+        ..text_part(slot.to_string())
+    };
+    let item_part = |owner: SlotId| JsonMessagePart {
+        kind: Some("item_id".to_string()),
+        player: Some(owner),
+        flags: Some(item.flags),
+        ..text_part(item.item.to_string())
+    };
+    let mut parts = vec![player_part(item.player)];
+    if item.player == sent.receiver {
+        parts.push(text_part(" found their "));
+        parts.push(item_part(item.player));
+    } else {
+        parts.push(text_part(" sent "));
+        parts.push(item_part(sent.receiver));
+        parts.push(text_part(" to "));
+        parts.push(player_part(sent.receiver));
+    }
+    parts.push(text_part(" ("));
+    parts.push(JsonMessagePart {
+        kind: Some("location_id".to_string()),
+        player: Some(item.player),
+        ..text_part(item.location.to_string())
+    });
+    parts.push(text_part(")"));
+
+    let mut message = text_message(String::new());
+    message.data = parts;
+    message.kind = Some("ItemSend".to_string());
+    message.receiving = Some(sent.receiver);
+    message.item = Some(item);
+    message
 }
 
 /// Version sous forme de triplet, pour comparer comme Python compare des tuples.
@@ -640,5 +929,17 @@ mod tests {
         assert_eq!(python_str_repr("l'eau"), "\"l'eau\"");
         assert_eq!(python_str_repr("a'b\"c"), "'a\\'b\"c'");
         assert_eq!(python_str_repr("a\\b\n"), "'a\\\\b\\n'");
+    }
+
+    #[test]
+    fn items_handling_comme_python() {
+        assert_eq!(ItemsChoice::decode(0b110), None);
+        assert_eq!(ItemsChoice::decode(0b010), None);
+        for value in [0, 1, 3, 5, 7] {
+            assert_eq!(
+                ItemsChoice::decode(value).map(ItemsChoice::encode),
+                Some(value)
+            );
+        }
     }
 }

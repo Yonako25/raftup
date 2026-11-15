@@ -10,6 +10,7 @@
 
 mod connection;
 pub mod error;
+mod game;
 pub mod room;
 mod room_task;
 

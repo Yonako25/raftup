@@ -53,8 +53,8 @@ async fn drain(client: &mut Client) -> Vec<String> {
     }
 }
 
-/// Forme comparable d'une trame : la valeur JSON, avec les erreurs de
-/// `ConnectionRefused` triées (le serveur officiel les tire d'un ensemble).
+/// Forme comparable d'une trame : la valeur JSON, avec les listes qui viennent
+/// d'un ensemble Python triées (erreurs de `ConnectionRefused`, lieux de `RoomUpdate`).
 fn normalize(frame: &str) -> Value {
     if frame == CLOSED {
         return Value::String(CLOSED.to_string());
@@ -63,6 +63,12 @@ fn normalize(frame: &str) -> Value {
     for packet in value.as_array_mut().unwrap() {
         if let Some(Value::Array(errors)) = packet.get_mut("errors") {
             errors.sort_by_key(|e| e.to_string());
+        }
+        // `RoomUpdate.checked_locations` vient aussi d'un ensemble Python.
+        if packet["cmd"] == "RoomUpdate" {
+            if let Some(Value::Array(locations)) = packet.get_mut("checked_locations") {
+                locations.sort_by_key(|l| l.as_i64());
+            }
         }
     }
     value
@@ -189,4 +195,16 @@ async fn mot_de_passe() {
         .unwrap();
     let frames = drain(&mut client).await;
     assert_eq!(normalize(&frames[0])[0]["cmd"], "Connected");
+}
+
+/// Une partie entière (lieux visités, objets, `Sync`, `ConnectUpdate`),
+/// capturée sur le serveur officiel : `tests/data/partie-seed-mit.json`.
+#[tokio::test]
+async fn partie_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/partie-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
 }
