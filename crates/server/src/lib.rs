@@ -29,7 +29,7 @@ use std::time::Duration;
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 pub use error::{ConnectionError, ServerError, TlsError};
 pub use limits::Limits;
@@ -37,7 +37,8 @@ pub use monitor::{GameEvent, ServerStatus, SlotStatus};
 pub use room::Room;
 pub use tls::TlsConfig;
 
-use room_task::Event;
+use multidata::raftup::{SaveFile, Snapshot};
+use room_task::{Event, SaveState};
 
 /// Port par défaut du serveur officiel.
 pub const DEFAULT_PORT: u16 = 38281;
@@ -49,6 +50,8 @@ pub struct Server {
     limits: Limits,
     /// `None` : en clair (`ws`), seulement sur demande explicite (NF06).
     tls: Option<TlsConfig>,
+    /// `None` : pas de sauvegarde (`--disable_save`).
+    save: Option<SaveState>,
 }
 
 impl Server {
@@ -61,6 +64,7 @@ impl Server {
             room,
             limits: Limits::default(),
             tls: None,
+            save: None,
         })
     }
 
@@ -73,6 +77,14 @@ impl Server {
     /// Sert les clients en `wss` avec ce certificat (ADR 0009).
     pub fn with_tls(mut self, tls: TlsConfig) -> Server {
         self.tls = Some(tls);
+        self
+    }
+
+    /// Sauvegarde la partie dans ce fichier `.raftup` (ADR 0014). Le fichier
+    /// est déjà ouvert (`SaveFile::open`) ou créé (`SaveFile::create`) ; la
+    /// partie reprend à l'état `snapshot` qu'il contient.
+    pub fn with_save(mut self, file: SaveFile, snapshot: Snapshot) -> Server {
+        self.save = Some(SaveState { file, snapshot });
         self
     }
 
@@ -102,12 +114,32 @@ impl Server {
         // quand il est plein, une connexion attend avant de lire la suite.
         let (events, inbox) = mpsc::channel(self.limits.room_queue.max(1));
         let (monitor, _) = broadcast::channel(monitor::EVENT_CAPACITY);
-        let room = tokio::spawn(room_task::run(
-            self.room,
-            self.limits,
-            inbox,
-            monitor.clone(),
-        ));
+        // La salle tourne sur un thread système à elle (ADR 0014) : ses
+        // écritures sur le disque (fsync) attendent sans bloquer les
+        // connexions, qui restent sur le runtime tokio de l'appelant.
+        // Elle a son propre petit runtime (un seul fil) pour ses minuteurs.
+        let (done, room) = oneshot::channel();
+        let room_monitor = monitor.clone();
+        let (room_data, limits, save) = (self.room, self.limits, self.save);
+        std::thread::Builder::new()
+            .name("raftup-salle".to_string())
+            .spawn(move || {
+                match tokio::runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                {
+                    Ok(runtime) => runtime.block_on(room_task::run(
+                        room_data,
+                        limits,
+                        inbox,
+                        room_monitor,
+                        save,
+                    )),
+                    Err(error) => error!("runtime de la salle impossible : {error}"),
+                }
+                // Prévient `stop` ; personne n'attend peut-être : on ignore l'échec.
+                let _ = done.send(());
+            })?;
         let accept = tokio::spawn(accept_loop(
             self.listener,
             events.clone(),
@@ -163,7 +195,8 @@ pub struct RunningServer {
     events: mpsc::Sender<Event>,
     monitor: broadcast::Sender<GameEvent>,
     accept: JoinHandle<()>,
-    room: JoinHandle<()>,
+    /// Répond quand le thread de la salle a fini.
+    room: oneshot::Receiver<()>,
 }
 
 impl RunningServer {
@@ -198,8 +231,10 @@ impl RunningServer {
     /// Le port est libéré au retour de la fonction.
     pub async fn stop(self) {
         self.accept.abort();
-        self.room.abort();
-        // On attend la fin réelle des deux tâches : l'écoute du port est alors
+        // La salle s'arrête à la réception de `Stop` ; si elle est déjà
+        // arrêtée, l'envoi échoue, ce qui ne change rien.
+        let _ = self.events.send(Event::Stop).await;
+        // On attend la fin réelle des deux : l'écoute du port est alors
         // fermée. Une tâche annulée répond par une erreur « cancelled ».
         let _ = self.accept.await;
         let _ = self.room.await;

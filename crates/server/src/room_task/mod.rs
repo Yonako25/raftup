@@ -9,6 +9,7 @@
 //! `LocationScouts`, `CreateHints`, `UpdateHint`, `Say` (chat et commandes `!`), `Bounce`,
 //! stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`).
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Instant;
@@ -38,6 +39,7 @@ use crate::limits::{ChatRate, Limits};
 use crate::monitor::{GameEvent, Names, ServerStatus, SlotStatus};
 use crate::python;
 use crate::room::{now, Room, SERVER_VERSION};
+use multidata::raftup::{diff, SaveFile, SlotActivity, Snapshot, StoreEntry};
 
 // Le gros `impl RoomTask` est réparti entre les sous-modules : en Rust, un
 // `impl` peut être découpé en plusieurs blocs, même dans plusieurs fichiers
@@ -78,6 +80,8 @@ pub(crate) enum Event {
     },
     /// Message de l'hôte à tous les joueurs.
     Announce { text: String },
+    /// Arrêt de la salle (`RunningServer::stop`).
+    Stop,
 }
 
 /// Ce que la tâche salle demande à une connexion.
@@ -128,17 +132,46 @@ struct Client {
     closing: bool,
     /// Messages de chat récents (NF04).
     chat: ChatRate,
+    /// Messages en attente : ils ne partent qu'après l'écriture de la
+    /// sauvegarde sur le disque (NF07, ADR 0014), dans `flush`.
+    ///
+    /// `RefCell` : les fonctions d'envoi ne reçoivent qu'une référence
+    /// partagée (`&self`) ; `RefCell` permet quand même d'ajouter à la file.
+    /// Il vérifie à l'exécution qu'un seul emprunt modifiable existe à la fois
+    /// (la tâche salle n'a qu'un fil d'exécution : ça ne peut pas échouer ici).
+    pending: RefCell<Vec<Outgoing>>,
 }
 
 impl Client {
-    /// Dépose un message dans la file du client, sans jamais attendre.
+    fn new(outbox: Sender<Outgoing>, kill: Arc<Notify>) -> Client {
+        Client {
+            outbox,
+            kill,
+            player: None,
+            closing: false,
+            chat: ChatRate::default(),
+            pending: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Met un message en attente ; il part au prochain `flush`.
+    fn push(&self, message: Outgoing) {
+        self.pending.borrow_mut().push(message);
+    }
+
+    /// Dépose les messages en attente dans la file du client, sans attendre.
     ///
     /// File pleine : le client lit trop lentement, on le ferme par `kill`.
     /// File fermée : la connexion est finie, son événement `Closed` va arriver.
-    fn push(&self, message: Outgoing) {
-        if let Err(TrySendError::Full(_)) = self.outbox.try_send(message) {
-            // `notify_one` garde le signal même si la connexion n'attend pas encore.
-            self.kill.notify_one();
+    fn flush(&self) {
+        // `take` vide la file et rend son contenu, en un seul emprunt.
+        let messages = self.pending.take();
+        for message in messages {
+            if let Err(TrySendError::Full(_)) = self.outbox.try_send(message) {
+                // `notify_one` garde le signal même si la connexion n'attend pas encore.
+                self.kill.notify_one();
+                return;
+            }
         }
     }
 }
@@ -152,23 +185,56 @@ pub(crate) async fn run(
     limits: Limits,
     mut events: Receiver<Event>,
     monitor: broadcast::Sender<GameEvent>,
+    save: Option<SaveState>,
 ) {
-    let game = GameState::new(room.data());
+    // Reprise : l'état vient de la sauvegarde ; sinon, l'état de départ.
+    let (game, store, activity, save) = match save {
+        Some(SaveState { file, snapshot }) => (
+            GameState::from_snapshot(room.data(), &snapshot),
+            DataStore::from_entries(
+                snapshot
+                    .store
+                    .iter()
+                    .map(|e| (e.key.clone(), e.value.clone())),
+            ),
+            snapshot
+                .activity
+                .iter()
+                .map(|a| ((a.team, a.slot), a.time))
+                .collect(),
+            Some(Saver {
+                file,
+                last: snapshot,
+            }),
+        ),
+        None => (
+            GameState::new(room.data()),
+            DataStore::default(),
+            BTreeMap::new(),
+            None,
+        ),
+    };
     let names = Names::new(room.data());
     let mut task = RoomTask {
         room,
         limits,
         game,
         clients: BTreeMap::new(),
-        store: DataStore::default(),
+        store,
         subscribers: BTreeMap::new(),
         names,
         monitor,
-        activity: BTreeMap::new(),
+        activity,
         countdown_timer: 0,
         countdown_next: None,
         admin_client: None,
+        save,
     };
+    // Écrit tout de suite ce que l'état de départ ajoute à un fichier neuf
+    // (statuts des groupes, indices de départ).
+    if !task.commit() {
+        return;
+    }
     loop {
         // Sans compte à rebours, on attend seulement le prochain événement.
         // Avec, `select!` attend le premier des deux : un événement, ou
@@ -179,13 +245,19 @@ pub(crate) async fn run(
                 event = events.recv() => event,
                 _ = tokio::time::sleep_until(next) => {
                     task.countdown_step();
+                    if !task.commit() {
+                        return;
+                    }
                     continue;
                 }
             },
         };
         match event {
+            Some(Event::Stop) | None => break,
             Some(event) => task.handle(event),
-            None => break,
+        }
+        if !task.commit() {
+            return;
         }
     }
 }
@@ -213,20 +285,79 @@ struct RoomTask {
     countdown_next: Option<tokio::time::Instant>,
     /// Client connecté en administrateur avec `!admin login` (un seul à la fois).
     admin_client: Option<ClientId>,
+    /// Sauvegarde `.raftup` ; `None` avec `--disable_save`.
+    save: Option<Saver>,
+}
+
+/// Le fichier de sauvegarde et l'état qu'il contient déjà.
+struct Saver {
+    file: SaveFile,
+    /// Dernier instantané écrit (instantané + deltas du fichier) : on écrit
+    /// seulement la différence avec lui (`raftup::diff`).
+    last: Snapshot,
+}
+
+/// Une sauvegarde à reprendre : le fichier ouvert et ce qu'il contenait
+/// (`Snapshot::default()` pour un fichier neuf).
+pub struct SaveState {
+    pub file: SaveFile,
+    pub snapshot: Snapshot,
 }
 
 impl RoomTask {
+    /// Instantané de toute la partie, pour la sauvegarde.
+    fn snapshot(&self) -> Snapshot {
+        let mut snapshot = Snapshot::default();
+        self.game.fill_snapshot(&mut snapshot);
+        snapshot.store = self
+            .store
+            .entries()
+            .map(|(key, value)| StoreEntry {
+                key: key.clone(),
+                value: value.clone(),
+            })
+            .collect();
+        snapshot.activity = self
+            .activity
+            .iter()
+            .map(|((team, slot), time)| SlotActivity {
+                team: *team,
+                slot: *slot,
+                time: *time,
+            })
+            .collect();
+        snapshot
+    }
+
+    /// Fin d'un événement : écrit les changements sur le disque (fsync), PUIS
+    /// envoie les messages en attente (NF07, ADR 0014).
+    ///
+    /// Renvoie `false` si l'écriture a échoué : la salle doit s'arrêter sans
+    /// rien envoyer, car un client ne doit jamais recevoir de réponse pour un
+    /// changement qui n'est pas sur le disque.
+    fn commit(&mut self) -> bool {
+        if self.save.is_some() {
+            let now = self.snapshot();
+            // `as_mut` : on modifie le `Saver` sur place, sans le sortir de l'`Option`.
+            if let Some(saver) = self.save.as_mut() {
+                let records = diff(&saver.last, &now);
+                if let Err(error) = saver.file.append(&records) {
+                    error!("écriture de la sauvegarde impossible, arrêt de la salle : {error}");
+                    return false;
+                }
+                saver.last = now;
+            }
+        }
+        for client in self.clients.values() {
+            client.flush();
+        }
+        true
+    }
+
     fn handle(&mut self, event: Event) {
         match event {
             Event::Opened { id, outbox, kill } => {
-                let client = Client {
-                    outbox,
-                    kill,
-                    player: None,
-                    closing: false,
-                    chat: ChatRate::default(),
-                };
-                self.clients.insert(id, client);
+                self.clients.insert(id, Client::new(outbox, kill));
                 let info = self.room.room_info(now());
                 self.send(id, vec![ServerPacket::RoomInfo(info)]);
             }
@@ -237,6 +368,8 @@ impl RoomTask {
                 let _ = reply.send(self.status());
             }
             Event::Announce { text } => self.announce(text),
+            // Traité dans la boucle de `run`, avant d'arriver ici.
+            Event::Stop => {}
         }
     }
 

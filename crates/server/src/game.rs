@@ -10,6 +10,10 @@ use ap_protocol::{
     ClientStatus, Hint, HintStatus, ItemFlags, ItemId, LocationId, NetworkItem, SlotId, SlotType,
     TeamId,
 };
+use multidata::raftup::{
+    GroupCollectedEntry, SlotAlias, SlotChecks, SlotHints, SlotHintsUsed, SlotItems,
+    SlotStatusEntry, Snapshot,
+};
 use multidata::{MultiData, PlacedItem};
 
 /// Un objet trouvé dans un lieu, et le slot qui le reçoit.
@@ -630,6 +634,113 @@ pub(crate) fn locations_for_player(
     found
 }
 
+/// Sauvegarde (ADR 0014) : passage de l'état à un instantané `.raftup`, et retour.
+impl GameState {
+    /// Copie l'état de la partie dans `snapshot` (le stockage et l'activité
+    /// sont ajoutés par la tâche salle). Ordre déterministe : celui des `BTreeMap`.
+    pub fn fill_snapshot(&self, snapshot: &mut Snapshot) {
+        snapshot.location_checks = self
+            .location_checks
+            .iter()
+            .map(|((team, slot), locations)| SlotChecks {
+                team: *team,
+                slot: *slot,
+                locations: locations.iter().copied().collect(),
+            })
+            .collect();
+        snapshot.received_items = self
+            .received_items
+            .iter()
+            .map(|((team, slot, remote), items)| SlotItems {
+                team: *team,
+                slot: *slot,
+                remote: *remote,
+                items: items.clone(),
+            })
+            .collect();
+        snapshot.client_status = self
+            .client_status
+            .iter()
+            .map(|((team, slot), status)| SlotStatusEntry {
+                team: *team,
+                slot: *slot,
+                status: status.0,
+            })
+            .collect();
+        snapshot.hints = self
+            .hints
+            .iter()
+            .map(|((team, slot), hints)| SlotHints {
+                team: *team,
+                slot: *slot,
+                hints: hints.clone(),
+            })
+            .collect();
+        snapshot.hints_used = self
+            .hints_used
+            .iter()
+            .map(|((team, slot), count)| SlotHintsUsed {
+                team: *team,
+                slot: *slot,
+                count: *count,
+            })
+            .collect();
+        snapshot.aliases = self
+            .aliases
+            .iter()
+            .map(|((team, slot), alias)| SlotAlias {
+                team: *team,
+                slot: *slot,
+                alias: alias.clone(),
+            })
+            .collect();
+        snapshot.group_collected = self
+            .group_collected
+            .iter()
+            .flat_map(|(group, members)| {
+                members.iter().map(|member| GroupCollectedEntry {
+                    group: *group,
+                    member: *member,
+                })
+            })
+            .collect();
+    }
+
+    /// État repris d'une sauvegarde : l'état de départ de la seed, puis tout
+    /// ce que l'instantané contient (il remplace, slot par slot).
+    pub fn from_snapshot(data: &MultiData, snapshot: &Snapshot) -> GameState {
+        let mut game = GameState::new(data);
+        for e in &snapshot.location_checks {
+            game.location_checks
+                .insert((e.team, e.slot), e.locations.iter().copied().collect());
+        }
+        for e in &snapshot.received_items {
+            game.received_items
+                .insert((e.team, e.slot, e.remote), e.items.clone());
+        }
+        for e in &snapshot.client_status {
+            game.client_status
+                .insert((e.team, e.slot), ClientStatus(e.status));
+        }
+        for e in &snapshot.hints {
+            game.hints.insert((e.team, e.slot), e.hints.clone());
+        }
+        for e in &snapshot.hints_used {
+            game.hints_used.insert((e.team, e.slot), e.count);
+        }
+        for e in &snapshot.aliases {
+            game.aliases.insert((e.team, e.slot), e.alias.clone());
+        }
+        for e in &snapshot.group_collected {
+            game.group_collected
+                .entry(e.group)
+                .or_default()
+                .insert(e.member);
+        }
+        game
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -951,5 +1062,37 @@ mod tests {
         // Deuxième passage : rien de nouveau.
         let (new, sent) = game.register_checks(&data, 0, 1, &[10]);
         assert!(new.is_empty() && sent.is_empty());
+    }
+
+    #[test]
+    fn snapshot_round_trip() {
+        let data = tiny();
+        let mut game = GameState::new(&data);
+        game.register_checks(&data, 0, 1, &[10, 11]);
+        game.add_cheat_item(
+            0,
+            2,
+            NetworkItem {
+                item: 7,
+                location: -1,
+                player: 2,
+                flags: ItemFlags(0),
+            },
+        );
+        game.set_status(0, 1, ClientStatus::GOAL);
+        game.set_alias(0, 2, "Zoé".to_string());
+        game.add_hints_used(0, 1, 3);
+        game.mark_group_collected(&data, 3, 1);
+        game.add_hint(0, 1, &hint_for(2, 1, 10, true));
+
+        let mut first = Snapshot::default();
+        game.fill_snapshot(&mut first);
+        let back = GameState::from_snapshot(&data, &first);
+        let mut second = Snapshot::default();
+        back.fill_snapshot(&mut second);
+        assert_eq!(first, second);
+        assert_eq!(back.alias(0, 2), Some("Zoé"));
+        assert_eq!(back.hints_used(0, 1), 3);
+        assert_eq!(back.checked(0, 1), vec![10, 11]);
     }
 }

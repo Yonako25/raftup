@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use ap_protocol::{Hint, HintStatus, ItemFlags, NetworkItem};
-use multidata::raftup::{seed_sha256, Record, SaveError, SaveFile, SaveHeader, Snapshot};
+use multidata::raftup::{diff, seed_sha256, Record, SaveError, SaveFile, SaveHeader, Snapshot};
 
 /// Chemin unique par test, sous le dossier temporaire de cargo.
 fn path(name: &str) -> PathBuf {
@@ -375,4 +375,83 @@ fn failed_create_keeps_the_previous_save() {
     std::fs::remove_dir(&tmp).unwrap();
     assert!(result.is_err());
     assert_eq!(std::fs::read(&p).unwrap(), before);
+}
+
+/// Une partie simulée : `sample_records` puis des changements de chaque sorte,
+/// y compris un surnom retiré et une valeur du stockage remplacée.
+fn evolution() -> Vec<Record> {
+    let mut records = sample_records();
+    records.extend([
+        Record::Checks {
+            team: 0,
+            slot: 2,
+            locations: vec![7],
+        },
+        Record::Items {
+            team: 0,
+            slot: 1,
+            remote: false,
+            items: vec![item(2), item(3)],
+        },
+        Record::Hints {
+            team: 0,
+            slot: 1,
+            hints: vec![hint(1), hint(2)],
+        },
+        Record::HintsUsed {
+            team: 0,
+            slot: 1,
+            total: 2,
+        },
+        Record::GroupCollected {
+            group: 5,
+            member: 1,
+        },
+        Record::Alias {
+            team: 0,
+            slot: 1,
+            alias: None,
+        },
+        Record::Store {
+            key: "k".into(),
+            value: serde_json::json!(12345678901234567890u64),
+        },
+        Record::Status {
+            team: 0,
+            slot: 1,
+            status: 30,
+        },
+    ]);
+    records
+}
+
+#[test]
+fn diff_step_by_step_rebuilds_each_snapshot() {
+    let mut before = Snapshot::default();
+    for record in evolution() {
+        let mut after = before.clone();
+        after.apply(&record);
+        let mut rebuilt = before.clone();
+        for delta in diff(&before, &after) {
+            rebuilt.apply(&delta);
+        }
+        assert_eq!(rebuilt, after, "après {record:?}");
+        before = after;
+    }
+}
+
+#[test]
+fn diff_in_one_jump_rebuilds_the_end() {
+    let start = Snapshot::default();
+    let mut end = Snapshot::default();
+    for record in evolution() {
+        end.apply(&record);
+    }
+    let mut rebuilt = start.clone();
+    for delta in diff(&start, &end) {
+        rebuilt.apply(&delta);
+    }
+    assert_eq!(rebuilt, end);
+    // Rien n'a changé : aucun delta.
+    assert!(diff(&end, &end).is_empty());
 }

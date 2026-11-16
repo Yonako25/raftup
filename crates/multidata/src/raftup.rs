@@ -240,6 +240,139 @@ pub enum Record {
     },
 }
 
+/// Les deltas qui font passer de `old` à `new` : `old.apply(...)` de chacun
+/// donne `new` (sauf `activity`, qui n'a pas de delta et n'est écrite que dans
+/// les instantanés).
+///
+/// La tâche salle compare l'état avant et après chaque événement : un seul
+/// endroit produit les deltas, au lieu d'un appel dans chaque commande.
+/// Hypothèses (vraies pour un serveur Archipelago) : les lieux visités, les
+/// objets reçus et `group_collected` ne font que grandir, et une clé du
+/// stockage n'est jamais supprimée.
+pub fn diff(old: &Snapshot, new: &Snapshot) -> Vec<Record> {
+    let mut records = Vec::new();
+    for entry in &new.location_checks {
+        let before = old
+            .location_checks
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        let added: Vec<i64> = entry
+            .locations
+            .iter()
+            .filter(|l| !before.is_some_and(|b| b.locations.contains(l)))
+            .copied()
+            .collect();
+        if !added.is_empty() {
+            records.push(Record::Checks {
+                team: entry.team,
+                slot: entry.slot,
+                locations: added,
+            });
+        }
+    }
+    for entry in &new.received_items {
+        let known = old
+            .received_items
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot && e.remote == entry.remote)
+            .map_or(0, |e| e.items.len());
+        // `get` : une liste plus courte qu'avant ne donne rien (elle ne devrait
+        // pas exister), au lieu de paniquer.
+        if let Some(added) = entry.items.get(known..).filter(|a| !a.is_empty()) {
+            records.push(Record::Items {
+                team: entry.team,
+                slot: entry.slot,
+                remote: entry.remote,
+                items: added.to_vec(),
+            });
+        }
+    }
+    for entry in &new.client_status {
+        let before = old
+            .client_status
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before.map(|e| e.status) != Some(entry.status) {
+            records.push(Record::Status {
+                team: entry.team,
+                slot: entry.slot,
+                status: entry.status,
+            });
+        }
+    }
+    for entry in &new.hints {
+        let before = old
+            .hints
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before.map(|e| &e.hints) != Some(&entry.hints) {
+            records.push(Record::Hints {
+                team: entry.team,
+                slot: entry.slot,
+                hints: entry.hints.clone(),
+            });
+        }
+    }
+    for entry in &new.hints_used {
+        let before = old
+            .hints_used
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before.map(|e| e.count) != Some(entry.count) {
+            records.push(Record::HintsUsed {
+                team: entry.team,
+                slot: entry.slot,
+                total: entry.count,
+            });
+        }
+    }
+    for entry in &new.aliases {
+        let before = old
+            .aliases
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before.map(|e| &e.alias) != Some(&entry.alias) {
+            records.push(Record::Alias {
+                team: entry.team,
+                slot: entry.slot,
+                alias: Some(entry.alias.clone()),
+            });
+        }
+    }
+    // Surnoms retirés.
+    for entry in &old.aliases {
+        if !new
+            .aliases
+            .iter()
+            .any(|e| e.team == entry.team && e.slot == entry.slot)
+        {
+            records.push(Record::Alias {
+                team: entry.team,
+                slot: entry.slot,
+                alias: None,
+            });
+        }
+    }
+    for entry in &new.group_collected {
+        if !old.group_collected.contains(entry) {
+            records.push(Record::GroupCollected {
+                group: entry.group,
+                member: entry.member,
+            });
+        }
+    }
+    for entry in &new.store {
+        let before = old.store.iter().find(|e| e.key == entry.key);
+        if before.map(|e| &e.value) != Some(&entry.value) {
+            records.push(Record::Store {
+                key: entry.key.clone(),
+                value: entry.value.clone(),
+            });
+        }
+    }
+    records
+}
+
 impl Snapshot {
     /// Applique un delta, sans aucune logique de jeu : seulement de la mise à jour de données.
     pub fn apply(&mut self, record: &Record) {

@@ -39,6 +39,18 @@ impl DataStore {
     pub fn set(&mut self, key: String, value: Value) {
         self.values.insert(key, value);
     }
+
+    /// Stockage repris d'une sauvegarde.
+    pub fn from_entries(entries: impl Iterator<Item = (String, Value)>) -> DataStore {
+        DataStore {
+            values: entries.collect(),
+        }
+    }
+
+    /// Toutes les valeurs, par clé croissante (pour la sauvegarde).
+    pub fn entries(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.values.iter()
+    }
 }
 
 /// Comme [`apply`], et dit en plus si le résultat est le *même objet* Python
