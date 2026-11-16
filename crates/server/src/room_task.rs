@@ -28,13 +28,14 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::Notify;
+use tokio::sync::{broadcast, oneshot, Notify};
 use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
 use crate::datastore::{self, DataStore};
 use crate::game::{locations_for_player, GameState, Sent};
 use crate::limits::{ChatRate, Limits};
+use crate::monitor::{GameEvent, Names, ServerStatus, SlotStatus};
 use crate::python;
 use crate::room::{now, Room, SERVER_VERSION};
 
@@ -55,6 +56,10 @@ pub(crate) enum Event {
     Frame { id: ClientId, items: Vec<Incoming> },
     /// Le client est parti (ou sa connexion a échoué).
     Closed { id: ClientId },
+    /// Demande de photo de l'état, pour le suivi (ADR 0010).
+    Status {
+        reply: oneshot::Sender<ServerStatus>,
+    },
 }
 
 /// Ce que la tâche salle demande à une connexion.
@@ -201,8 +206,17 @@ enum ConnectCheck {
 }
 
 /// Fait tourner la tâche salle jusqu'à ce que plus personne ne puisse lui écrire.
-pub(crate) async fn run(room: Room, limits: Limits, mut events: Receiver<Event>) {
+///
+/// `monitor` : le fil d'événements du suivi (ADR 0010) ; envoyer dedans ne
+/// bloque jamais, même sans abonné.
+pub(crate) async fn run(
+    room: Room,
+    limits: Limits,
+    mut events: Receiver<Event>,
+    monitor: broadcast::Sender<GameEvent>,
+) {
     let game = GameState::new(room.data());
+    let names = Names::new(room.data());
     let mut task = RoomTask {
         room,
         limits,
@@ -210,6 +224,9 @@ pub(crate) async fn run(room: Room, limits: Limits, mut events: Receiver<Event>)
         clients: BTreeMap::new(),
         store: DataStore::default(),
         subscribers: BTreeMap::new(),
+        names,
+        monitor,
+        activity: BTreeMap::new(),
     };
     while let Some(event) = events.recv().await {
         task.handle(event);
@@ -226,6 +243,12 @@ struct RoomTask {
     store: DataStore,
     /// Pour chaque clé, les clients à prévenir quand elle change (`SetNotify`).
     subscribers: BTreeMap<String, BTreeSet<ClientId>>,
+    /// Noms des objets et des lieux, pour les événements du suivi.
+    names: Names,
+    /// Fil d'événements du suivi.
+    monitor: broadcast::Sender<GameEvent>,
+    /// Heure du dernier paquet reçu de chaque slot.
+    activity: BTreeMap<(TeamId, SlotId), f64>,
 }
 
 impl RoomTask {
@@ -245,6 +268,10 @@ impl RoomTask {
             }
             Event::Frame { id, items } => self.on_frame(id, items),
             Event::Closed { id } => self.on_closed(id),
+            Event::Status { reply } => {
+                // Le demandeur a pu abandonner : on ignore l'échec.
+                let _ = reply.send(self.status());
+            }
         }
     }
 
@@ -290,10 +317,11 @@ impl RoomTask {
         }
         // Les autres paquets demandent un joueur connecté ; sinon, ignorés
         // sans réponse, comme sur le serveur officiel.
-        if self.player(id).is_none() {
+        let Some(player) = self.player(id) else {
             debug!(id, cmd = packet.cmd(), "paquet avant connexion, ignoré");
             return;
-        }
+        };
+        self.activity.insert((player.team, player.slot), now());
         match packet {
             ClientPacket::ConnectUpdate(update) => self.on_connect_update(id, update),
             ClientPacket::Sync => self.on_sync(id),
@@ -555,6 +583,12 @@ impl RoomTask {
         // Comme le serveur officiel : même une commande est montrée à tous,
         // sauf `!admin`, qui peut contenir un mot de passe.
         if !text.starts_with("!admin") {
+            self.emit(GameEvent::Chat {
+                time: now(),
+                slot: player.slot,
+                name: self.slot_name(player.slot),
+                text: text.to_string(),
+            });
             let line = format!("{}: {text}", self.slot_name(player.slot));
             let mut message = slot_message(line, "Chat", player.team, player.slot);
             message.message = Some(text.to_string());
@@ -798,6 +832,13 @@ impl RoomTask {
         }
         let name = self.slot_name(player.slot);
         let game = self.slot_game(player.slot);
+        self.emit(GameEvent::Joined {
+            time: now(),
+            slot: player.slot,
+            name: name.clone(),
+            game: game.clone(),
+            tags: player.tags.clone(),
+        });
         let verb = non_game_verb(&player.tags).unwrap_or("playing");
         let text = format!(
             "{name} (Team #{}) {verb} {game} has joined. Client({}), {}.",
@@ -838,6 +879,11 @@ impl RoomTask {
             self.update_client_status(player.team, player.slot, ClientStatus::UNKNOWN);
         }
         let name = self.slot_name(player.slot);
+        self.emit(GameEvent::Left {
+            time: now(),
+            slot: player.slot,
+            name: name.clone(),
+        });
         let verb = match non_game_verb(&player.tags) {
             Some(verb) => format!("stopped {verb}"),
             None => "left".to_string(),
@@ -955,6 +1001,10 @@ impl RoomTask {
             return;
         }
         info!(team, slot, count = new_locations.len(), "lieux visités");
+        for s in &sent {
+            let event = self.item_event(s);
+            self.emit(event);
+        }
 
         // 1. Messages « X a envoyé Y à Z » à toute l'équipe, par paquets de 140.
         for chunk in sent.chunks(ITEM_SEND_CHUNK) {
@@ -1041,6 +1091,11 @@ impl RoomTask {
             team + 1
         );
         info!(team, slot, "objectif atteint");
+        self.emit(GameEvent::Goal {
+            time: now(),
+            slot,
+            name: self.slot_name(slot),
+        });
         let mut message = text_message(text);
         message.kind = Some("Goal".to_string());
         message.team = Some(team);
@@ -1230,6 +1285,67 @@ impl RoomTask {
     fn slot_game(&self, slot: SlotId) -> String {
         let slots = &self.room.data().slots;
         slots.get(&slot).map(|s| s.game.clone()).unwrap_or_default()
+    }
+
+    // ----- Suivi (ADR 0010) ----------------------------------------------
+
+    /// Publie un événement ; sans abonné, il est simplement perdu.
+    fn emit(&self, event: GameEvent) {
+        let _ = self.monitor.send(event);
+    }
+
+    /// Événement « objet envoyé », avec les noms lisibles.
+    fn item_event(&self, sent: &Sent) -> GameEvent {
+        let finder = sent.item.player;
+        GameEvent::ItemSent {
+            time: now(),
+            finder: self.slot_name(finder),
+            receiver: self.slot_name(sent.receiver),
+            item: self
+                .names
+                .item(&self.slot_game(sent.receiver), sent.item.item),
+            location: self
+                .names
+                .location(&self.slot_game(finder), sent.item.location),
+            flags: u32::from(sent.item.flags.0),
+        }
+    }
+
+    /// Photo de l'état de chaque slot.
+    fn status(&self) -> ServerStatus {
+        let data = self.room.data();
+        let mut slots = Vec::new();
+        for (slot, info) in &data.slots {
+            let team = 0;
+            let players: Vec<&Player> = self
+                .clients
+                .values()
+                .filter_map(|c| c.player.as_ref())
+                .filter(|p| (p.team, p.slot) == (team, *slot))
+                .collect();
+            let tags = players
+                .iter()
+                .find(|p| !p.no_locations)
+                .map(|p| p.tags.clone())
+                .unwrap_or_default();
+            slots.push(SlotStatus {
+                team,
+                slot: *slot,
+                name: info.name.clone(),
+                game: info.game.clone(),
+                is_group: info.slot_type != SlotType::PLAYER,
+                connections: players.len(),
+                tags,
+                checked: self.game.checked_count(team, *slot),
+                total: data.locations.get(slot).map_or(0, |l| l.len()),
+                status: u32::from(self.game.status(team, *slot).map_or(0, |s| s.0)),
+                last_activity: self.activity.get(&(team, *slot)).copied(),
+            });
+        }
+        ServerStatus {
+            slots,
+            connections: self.clients.len(),
+        }
     }
 
     // ----- Envois --------------------------------------------------------

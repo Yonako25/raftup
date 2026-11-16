@@ -6,6 +6,10 @@ pub enum ServerError {
     /// Erreur réseau (port déjà pris, adresse invalide…).
     #[error("erreur réseau : {0}")]
     Io(#[from] std::io::Error),
+
+    /// Une tâche du serveur s'est arrêtée de façon inattendue.
+    #[error("tâche du serveur interrompue : {0}")]
+    Task(String),
 }
 
 /// Raison de la fermeture d'une connexion. Seule cette connexion est fermée.

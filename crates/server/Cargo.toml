@@ -19,6 +19,7 @@ ap-protocol.workspace = true
 multidata.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 # rt-multi-thread et signal : pour le binaire (plusieurs cœurs, Ctrl+C) ;
@@ -39,5 +40,6 @@ rustls.workspace = true
 tokio-rustls.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio-tungstenite.workspace = true

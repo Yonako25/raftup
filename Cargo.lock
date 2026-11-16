@@ -287,6 +287,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
 
 [[package]]
+name = "launcher-core"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "multidata",
+ "serde",
+ "serde_json",
+ "server",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -544,6 +560,7 @@ dependencies = [
  "multidata",
  "rcgen",
  "rustls",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",
