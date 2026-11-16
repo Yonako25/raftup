@@ -9,9 +9,11 @@
 //! complète, limites des connexions (ADR 0007), chiffrement `wss` (ADR 0009),
 //! suivi depuis le launcher (ADR 0010).
 
+mod command_line;
 mod connection;
 mod datastore;
 pub mod error;
+mod fuzzy;
 mod game;
 pub mod limits;
 pub mod monitor;

@@ -1,0 +1,733 @@
+[
+ {
+  "raw": "/help",
+  "split": [
+   "/help"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "/help   ",
+  "split": [
+   "/help"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "   /help",
+  "split": [
+   "/help"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "/countdown 10",
+  "split": [
+   "/countdown",
+   "10"
+  ],
+  "arg": "10"
+ },
+ {
+  "raw": "/countdown   10   ",
+  "split": [
+   "/countdown",
+   "10"
+  ],
+  "arg": "10   "
+ },
+ {
+  "raw": "/send Alice Dice",
+  "split": [
+   "/send",
+   "Alice",
+   "Dice"
+  ],
+  "arg": "Alice Dice"
+ },
+ {
+  "raw": "/send  Alice   'Dice Fragment'",
+  "split": [
+   "/send",
+   "Alice",
+   "Dice Fragment"
+  ],
+  "arg": "Alice   'Dice Fragment'"
+ },
+ {
+  "raw": "/send \"Alice\" \"Dice Fragment\"",
+  "split": [
+   "/send",
+   "Alice",
+   "Dice Fragment"
+  ],
+  "arg": "\"Alice\" \"Dice Fragment\""
+ },
+ {
+  "raw": "/send Alice 'Dice Fragment' 3",
+  "split": [
+   "/send",
+   "Alice",
+   "Dice Fragment",
+   "3"
+  ],
+  "arg": "Alice 'Dice Fragment' 3"
+ },
+ {
+  "raw": "/send 'Alice Dice",
+  "split": [
+   "/send",
+   "'Alice",
+   "Dice"
+  ],
+  "arg": "'Alice Dice"
+ },
+ {
+  "raw": "/send \"Alice Dice",
+  "split": [
+   "/send",
+   "\"Alice",
+   "Dice"
+  ],
+  "arg": "\"Alice Dice"
+ },
+ {
+  "raw": "/send Alice\\",
+  "split": [
+   "/send",
+   "Alice\\"
+  ],
+  "arg": "Alice\\"
+ },
+ {
+  "raw": "/send Alice\\ Bob",
+  "split": [
+   "/send",
+   "Alice Bob"
+  ],
+  "arg": "Alice\\ Bob"
+ },
+ {
+  "raw": "/send a\\\\b",
+  "split": [
+   "/send",
+   "a\\b"
+  ],
+  "arg": "a\\\\b"
+ },
+ {
+  "raw": "/send \"a\\\"b\"",
+  "split": [
+   "/send",
+   "a\"b"
+  ],
+  "arg": "\"a\\\"b\""
+ },
+ {
+  "raw": "/send \"a\\\\b\"",
+  "split": [
+   "/send",
+   "a\\b"
+  ],
+  "arg": "\"a\\\\b\""
+ },
+ {
+  "raw": "/send \"a\\nb\"",
+  "split": [
+   "/send",
+   "a\\nb"
+  ],
+  "arg": "\"a\\nb\""
+ },
+ {
+  "raw": "/send 'a\\nb'",
+  "split": [
+   "/send",
+   "a\\nb"
+  ],
+  "arg": "'a\\nb'"
+ },
+ {
+  "raw": "/send 'a\\'b'",
+  "split": [
+   "/send",
+   "'a\\'b'"
+  ],
+  "arg": "'a\\'b'"
+ },
+ {
+  "raw": "/send 'a'\"b\"c",
+  "split": [
+   "/send",
+   "abc"
+  ],
+  "arg": "'a'\"b\"c"
+ },
+ {
+  "raw": "/send '' x",
+  "split": [
+   "/send",
+   "",
+   "x"
+  ],
+  "arg": "'' x"
+ },
+ {
+  "raw": "/send \"\" x",
+  "split": [
+   "/send",
+   "",
+   "x"
+  ],
+  "arg": "\"\" x"
+ },
+ {
+  "raw": "/send ''",
+  "split": [
+   "/send",
+   ""
+  ],
+  "arg": "''"
+ },
+ {
+  "raw": "''",
+  "split": [
+   ""
+  ],
+  "arg": null
+ },
+ {
+  "raw": "\"\"",
+  "split": [
+   ""
+  ],
+  "arg": null
+ },
+ {
+  "raw": "/send a''b",
+  "split": [
+   "/send",
+   "ab"
+  ],
+  "arg": "a''b"
+ },
+ {
+  "raw": "/send a'  'b",
+  "split": [
+   "/send",
+   "a  b"
+  ],
+  "arg": "a'  'b"
+ },
+ {
+  "raw": "/forfeit Alice",
+  "split": [
+   "/forfeit",
+   "Alice"
+  ],
+  "arg": "Alice"
+ },
+ {
+  "raw": "/forfeit 'Émilie Zoë'",
+  "split": [
+   "/forfeit",
+   "Émilie Zoë"
+  ],
+  "arg": "'Émilie Zoë'"
+ },
+ {
+  "raw": "/forfeit Émilie",
+  "split": [
+   "/forfeit",
+   "Émilie"
+  ],
+  "arg": "Émilie"
+ },
+ {
+  "raw": "/forfeit \"Émilie\"",
+  "split": [
+   "/forfeit",
+   "Émilie"
+  ],
+  "arg": "\"Émilie\""
+ },
+ {
+  "raw": "/forfeit Zoë\\ Bob",
+  "split": [
+   "/forfeit",
+   "Zoë Bob"
+  ],
+  "arg": "Zoë\\ Bob"
+ },
+ {
+  "raw": "/send 日本語 'テキスト 二'",
+  "split": [
+   "/send",
+   "日本語",
+   "テキスト 二"
+  ],
+  "arg": "日本語 'テキスト 二'"
+ },
+ {
+  "raw": "/send 😀 \"😀 😀\"",
+  "split": [
+   "/send",
+   "😀",
+   "😀 😀"
+  ],
+  "arg": "😀 \"😀 😀\""
+ },
+ {
+  "raw": "/send_multiple 3 Alice 'Dice Fragment'",
+  "split": [
+   "/send_multiple",
+   "3",
+   "Alice",
+   "Dice Fragment"
+  ],
+  "arg": "3 Alice 'Dice Fragment'"
+ },
+ {
+  "raw": "hello world",
+  "split": [
+   "hello",
+   "world"
+  ],
+  "arg": "world"
+ },
+ {
+  "raw": "hello   world  ",
+  "split": [
+   "hello",
+   "world"
+  ],
+  "arg": "world  "
+ },
+ {
+  "raw": "  hello",
+  "split": [
+   "hello"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "hello 'world",
+  "split": [
+   "hello",
+   "'world"
+  ],
+  "arg": "'world"
+ },
+ {
+  "raw": "hello \"world",
+  "split": [
+   "hello",
+   "\"world"
+  ],
+  "arg": "\"world"
+ },
+ {
+  "raw": "hello\\",
+  "split": [
+   "hello\\"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "a\tb",
+  "split": [
+   "a",
+   "b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a\nb",
+  "split": [
+   "a",
+   "b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a\r\nb",
+  "split": [
+   "a",
+   "b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a b",
+  "split": [
+   "a b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a　b",
+  "split": [
+   "a　b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a b",
+  "split": [
+   "a b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a\u001cb",
+  "split": [
+   "a\u001cb"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a\u000bb",
+  "split": [
+   "a\u000bb"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "a\fb",
+  "split": [
+   "a\fb"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "ab",
+  "split": [
+   "ab"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": " a b",
+  "split": [
+   " a",
+   "b"
+  ],
+  "arg": "b"
+ },
+ {
+  "raw": "  \t ",
+  "split": [],
+  "arg": null
+ },
+ {
+  "raw": "",
+  "split": [],
+  "arg": null
+ },
+ {
+  "raw": " ",
+  "split": [],
+  "arg": null
+ },
+ {
+  "raw": "\\",
+  "split": [
+   "\\"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "'",
+  "split": [
+   "'"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "\"",
+  "split": [
+   "\""
+  ],
+  "arg": null
+ },
+ {
+  "raw": "\\ ",
+  "split": [
+   " "
+  ],
+  "arg": null
+ },
+ {
+  "raw": "a\\ ",
+  "split": [
+   "a "
+  ],
+  "arg": null
+ },
+ {
+  "raw": "# not a comment",
+  "split": [
+   "#",
+   "not",
+   "a",
+   "comment"
+  ],
+  "arg": "not a comment"
+ },
+ {
+  "raw": "a#b",
+  "split": [
+   "a#b"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "a #b c",
+  "split": [
+   "a",
+   "#b",
+   "c"
+  ],
+  "arg": "#b c"
+ },
+ {
+  "raw": "/cmd 'it''s'",
+  "split": [
+   "/cmd",
+   "its"
+  ],
+  "arg": "'it''s'"
+ },
+ {
+  "raw": "/cmd \"it\"\"s\"",
+  "split": [
+   "/cmd",
+   "its"
+  ],
+  "arg": "\"it\"\"s\""
+ },
+ {
+  "raw": "/cmd it's",
+  "split": [
+   "/cmd",
+   "it's"
+  ],
+  "arg": "it's"
+ },
+ {
+  "raw": "/cmd it\"s",
+  "split": [
+   "/cmd",
+   "it\"s"
+  ],
+  "arg": "it\"s"
+ },
+ {
+  "raw": "/cmd \"a'b\"",
+  "split": [
+   "/cmd",
+   "a'b"
+  ],
+  "arg": "\"a'b\""
+ },
+ {
+  "raw": "/cmd 'a\"b'",
+  "split": [
+   "/cmd",
+   "a\"b"
+  ],
+  "arg": "'a\"b'"
+ },
+ {
+  "raw": "/cmd \"a\\'b\"",
+  "split": [
+   "/cmd",
+   "a\\'b"
+  ],
+  "arg": "\"a\\'b\""
+ },
+ {
+  "raw": "/cmd \"a\\$b\"",
+  "split": [
+   "/cmd",
+   "a\\$b"
+  ],
+  "arg": "\"a\\$b\""
+ },
+ {
+  "raw": "/cmd \"\\\\\\\"\"",
+  "split": [
+   "/cmd",
+   "\\\""
+  ],
+  "arg": "\"\\\\\\\"\""
+ },
+ {
+  "raw": "/cmd a\\\"b",
+  "split": [
+   "/cmd",
+   "a\"b"
+  ],
+  "arg": "a\\\"b"
+ },
+ {
+  "raw": "/cmd a\\'b",
+  "split": [
+   "/cmd",
+   "a'b"
+  ],
+  "arg": "a\\'b"
+ },
+ {
+  "raw": "/cmd \\\\",
+  "split": [
+   "/cmd",
+   "\\"
+  ],
+  "arg": "\\\\"
+ },
+ {
+  "raw": "/cmd 'a\\\\b'",
+  "split": [
+   "/cmd",
+   "a\\\\b"
+  ],
+  "arg": "'a\\\\b'"
+ },
+ {
+  "raw": "/cmd \"unclosed\\\"",
+  "split": [
+   "/cmd",
+   "\"unclosed\\\""
+  ],
+  "arg": "\"unclosed\\\""
+ },
+ {
+  "raw": "/cmd 'x' 'y",
+  "split": [
+   "/cmd",
+   "'x'",
+   "'y"
+  ],
+  "arg": "'x' 'y"
+ },
+ {
+  "raw": "/cmd \"x\" \"y",
+  "split": [
+   "/cmd",
+   "\"x\"",
+   "\"y"
+  ],
+  "arg": "\"x\" \"y"
+ },
+ {
+  "raw": "/cmd a\\\nb",
+  "split": [
+   "/cmd",
+   "a\nb"
+  ],
+  "arg": "a\\\nb"
+ },
+ {
+  "raw": "/cmd \"a\\\nb\"",
+  "split": [
+   "/cmd",
+   "a\\\nb"
+  ],
+  "arg": "\"a\\\nb\""
+ },
+ {
+  "raw": "/cmd a  b c  d ",
+  "split": [
+   "/cmd",
+   "a",
+   "b c",
+   "d"
+  ],
+  "arg": "a  b c  d "
+ },
+ {
+  "raw": "/cmd (a) [b] {c} ;d |e &f <g >h",
+  "split": [
+   "/cmd",
+   "(a)",
+   "[b]",
+   "{c}",
+   ";d",
+   "|e",
+   "&f",
+   "<g",
+   ">h"
+  ],
+  "arg": "(a) [b] {c} ;d |e &f <g >h"
+ },
+ {
+  "raw": "/cmd a=b --flag=\"x y\"",
+  "split": [
+   "/cmd",
+   "a=b",
+   "--flag=x y"
+  ],
+  "arg": "a=b --flag=\"x y\""
+ },
+ {
+  "raw": "/cmd ​a",
+  "split": [
+   "/cmd",
+   "​a"
+  ],
+  "arg": "​a"
+ },
+ {
+  "raw": "/cmd é\\é",
+  "split": [
+   "/cmd",
+   "éé"
+  ],
+  "arg": "é\\é"
+ },
+ {
+  "raw": "/cmd \"é\\é\"",
+  "split": [
+   "/cmd",
+   "é\\é"
+  ],
+  "arg": "\"é\\é\""
+ },
+ {
+  "raw": "ab\\",
+  "split": [
+   "ab\\"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "\"ab\\",
+  "split": [
+   "\"ab\\"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "'ab\\",
+  "split": [
+   "'ab\\"
+  ],
+  "arg": null
+ },
+ {
+  "raw": "x \\\n",
+  "split": [
+   "x",
+   "\n"
+  ],
+  "arg": "\\\n"
+ },
+ {
+  "raw": " x y",
+  "split": [
+   " x y"
+  ],
+  "arg": "y"
+ }
+]
