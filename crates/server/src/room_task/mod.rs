@@ -187,49 +187,7 @@ pub(crate) async fn run(
     monitor: broadcast::Sender<GameEvent>,
     save: Option<SaveState>,
 ) {
-    // Reprise : l'état vient de la sauvegarde ; sinon, l'état de départ.
-    let (game, store, activity, save) = match save {
-        Some(SaveState { file, snapshot }) => (
-            GameState::from_snapshot(room.data(), &snapshot),
-            DataStore::from_entries(
-                snapshot
-                    .store
-                    .iter()
-                    .map(|e| (e.key.clone(), e.value.clone())),
-            ),
-            snapshot
-                .activity
-                .iter()
-                .map(|a| ((a.team, a.slot), a.time))
-                .collect(),
-            Some(Saver {
-                file,
-                last: snapshot,
-            }),
-        ),
-        None => (
-            GameState::new(room.data()),
-            DataStore::default(),
-            BTreeMap::new(),
-            None,
-        ),
-    };
-    let names = Names::new(room.data());
-    let mut task = RoomTask {
-        room,
-        limits,
-        game,
-        clients: BTreeMap::new(),
-        store,
-        subscribers: BTreeMap::new(),
-        names,
-        monitor,
-        activity,
-        countdown_timer: 0,
-        countdown_next: None,
-        admin_client: None,
-        save,
-    };
+    let mut task = RoomTask::new(room, limits, monitor, save);
     // Écrit tout de suite ce que l'état de départ ajoute à un fichier neuf
     // (statuts des groupes, indices de départ), puis compacte (ADR 0014 :
     // compactage au démarrage).
@@ -269,6 +227,61 @@ pub(crate) async fn run(
 /// Au-delà de ce nombre de deltas, le fichier est réécrit en un seul
 /// instantané (ADR 0014 : « au-delà d'environ 10 000 lignes »).
 const COMPACT_AFTER_LINES: usize = 10_000;
+
+impl RoomTask {
+    /// Une salle prête à tourner : état de départ de la seed, ou état repris
+    /// d'une sauvegarde.
+    fn new(
+        room: Room,
+        limits: Limits,
+        monitor: broadcast::Sender<GameEvent>,
+        save: Option<SaveState>,
+    ) -> RoomTask {
+        // Reprise : l'état vient de la sauvegarde ; sinon, l'état de départ.
+        let (game, store, activity, save) = match save {
+            Some(SaveState { file, snapshot }) => (
+                GameState::from_snapshot(room.data(), &snapshot),
+                DataStore::from_entries(
+                    snapshot
+                        .store
+                        .iter()
+                        .map(|e| (e.key.clone(), e.value.clone())),
+                ),
+                snapshot
+                    .activity
+                    .iter()
+                    .map(|a| ((a.team, a.slot), a.time))
+                    .collect(),
+                Some(Saver {
+                    file,
+                    last: snapshot,
+                }),
+            ),
+            None => (
+                GameState::new(room.data()),
+                DataStore::default(),
+                BTreeMap::new(),
+                None,
+            ),
+        };
+        let names = Names::new(room.data());
+        RoomTask {
+            room,
+            limits,
+            game,
+            clients: BTreeMap::new(),
+            store,
+            subscribers: BTreeMap::new(),
+            names,
+            monitor,
+            activity,
+            countdown_timer: 0,
+            countdown_next: None,
+            admin_client: None,
+            save,
+        }
+    }
+}
 
 struct RoomTask {
     room: Room,

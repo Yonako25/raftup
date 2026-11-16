@@ -110,7 +110,7 @@ async fn run(
             }
             _ = tick.tick() => {}
         }
-        refresh(&host, &shared, &logs, &mut next_event, &mut next_log).await;
+        refresh(&mut host, &shared, &logs, &mut next_event, &mut next_log).await;
         ctx.request_repaint();
     }
     // Arrêt propre : la salle reçoit `Stop`, compacte sa sauvegarde et ferme
@@ -129,6 +129,12 @@ fn with_shared<R>(shared: &Mutex<Shared>, f: impl FnOnce(&mut Shared) -> R) -> R
 async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_event: &mut u64) {
     match command {
         Command::Start(options) => {
+            // Partie déjà lancée : ce `Start` vient d'un double clic envoyé
+            // avant que l'écran change. On l'ignore au lieu d'afficher
+            // « une partie est déjà hébergée ».
+            if host.is_running() {
+                return;
+            }
             with_shared(shared, |s| {
                 s.starting = true;
                 s.error = None;
@@ -169,7 +175,7 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
 
 /// Recopie la photo, les nouveaux événements et les nouvelles lignes de journal.
 async fn refresh(
-    host: &Host,
+    host: &mut Host,
     shared: &Mutex<Shared>,
     logs: &LogBuffer,
     next_event: &mut u64,
@@ -183,9 +189,22 @@ async fn refresh(
     };
     let events = host.events_since(*next_event);
     let new_logs = logs.since(*next_log);
+    // Hébergée mais muette : la salle s'est arrêtée seule (erreur d'écriture
+    // de la sauvegarde, panique…). On libère le port au lieu d'afficher une
+    // partie figée « en ligne ».
+    let dead = host.is_running() && status.is_none();
+    if dead {
+        let _ = host.stop().await;
+    }
 
     with_shared(shared, |s| {
-        if status.is_some() {
+        if dead {
+            s.status = None;
+            s.error = Some(
+                "La partie s'est arrêtée d'elle-même. Le journal du serveur en donne la raison."
+                    .to_string(),
+            );
+        } else if status.is_some() {
             s.status = status;
         }
         if let Some(last) = events.last() {

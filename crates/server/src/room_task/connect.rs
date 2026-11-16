@@ -274,10 +274,14 @@ impl RoomTask {
         if self.admin_client == Some(id) {
             self.admin_client = None;
         }
-        // Plus d'abonnement pour ce client.
-        for subscribers in self.subscribers.values_mut() {
+        // Plus d'abonnement pour ce client. Une clé sans plus aucun abonné est
+        // retirée : sinon, un client qui s'abonne à des milliers de clés puis
+        // se reconnecte en boucle ferait grandir la table sans fin.
+        // `retain` garde les entrées pour lesquelles la fonction renvoie vrai.
+        self.subscribers.retain(|_, subscribers| {
             subscribers.remove(&id);
-        }
+            !subscribers.is_empty()
+        });
         let Some(player) = client.player else {
             return;
         };
@@ -470,5 +474,39 @@ mod tests {
                 Some(value)
             );
         }
+    }
+
+    /// Salle de test sur la seed MIT, sans sauvegarde.
+    fn test_task() -> RoomTask {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../multidata/tests/data/seed-mit.archipelago");
+        let bytes = std::fs::read(path).expect("seed de test");
+        let data = multidata::load_archipelago(&bytes, &multidata::ArchiveLimits::default())
+            .expect("seed de test valide");
+        let (monitor, _) = broadcast::channel(16);
+        RoomTask::new(Room::new(data), Limits::default(), monitor, None)
+    }
+
+    #[test]
+    fn deconnexion_retire_les_abonnements_vides() {
+        let mut task = test_task();
+        let mut open = |id| {
+            let (outbox, _inbox) = tokio::sync::mpsc::channel(8);
+            let kill = Arc::new(Notify::new());
+            task.handle(Event::Opened { id, outbox, kill });
+        };
+        open(1);
+        open(2);
+        // Le client 1 seul sur « a », les deux sur « b ».
+        task.subscribers.entry("a".into()).or_default().insert(1);
+        task.subscribers
+            .entry("b".into())
+            .or_default()
+            .extend([1, 2]);
+
+        task.handle(Event::Closed { id: 1 });
+        // « a » n'a plus d'abonné : la clé disparaît ; « b » garde le client 2.
+        assert!(!task.subscribers.contains_key("a"));
+        assert_eq!(task.subscribers["b"], BTreeSet::from([2]));
     }
 }
