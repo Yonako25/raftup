@@ -678,3 +678,116 @@ async fn admin_login_et_logout() {
         ["You must first login using !admin login [password]"]
     );
 }
+
+/// Paquets `PrintJSON` de type `Hint`.
+fn hint_messages(packets: &[Value]) -> Vec<&Value> {
+    packets.iter().filter(|p| p["type"] == "Hint").collect()
+}
+
+#[tokio::test]
+async fn hint_gratuit() {
+    let mut data = seed();
+    data.server_options.hint_cost = 0;
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+
+    let packets = run(&mut alice, "!hint").await;
+    assert_eq!(
+        results(&packets),
+        ["A hint costs 0 points. You have 0 points."]
+    );
+
+    // Indices gratuits : tous les emplacements de l'objet d'un coup.
+    let packets = run(&mut alice, "!hint map hieght").await;
+    let hints = hint_messages(&packets);
+    assert!(!hints.is_empty());
+    assert!(hints.iter().all(|h| h["receiving"] == 1));
+    assert!(results(&packets).is_empty());
+    // Deuxième fois : déjà connus, rien n'est payé.
+    let packets = run(&mut alice, "!hint Map Height").await;
+    assert_eq!(hint_messages(&packets).len(), hints.len());
+    assert_eq!(
+        results(&packets),
+        ["Hint was previously used, no points deducted."]
+    );
+    // Sans argument : réaffiche ses indices.
+    // (avec ceux donnés au départ par la seed, sur « Map Width »).
+    let packets = run(&mut alice, "!hint").await;
+    let height = hint_messages(&packets)
+        .into_iter()
+        .filter(|h| h["item"]["item"] == 80001)
+        .count();
+    assert_eq!(height, hints.len());
+
+    // Par lieu, et par numéro inconnu.
+    let mut other = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut other, "!hint_location Tile 1").await;
+    let hints = hint_messages(&packets);
+    assert_eq!(hints.len(), 1);
+    assert_eq!(hints[0]["item"]["player"], 1);
+    let packets = run(&mut other, "!hint 99999999999999999999").await;
+    assert_eq!(
+        results(&packets),
+        ["Nothing found for recognized item name \"None\". \
+          Item appears to not exist in this multiworld."]
+    );
+    let packets = run(&mut other, "!hint zzzzzzzzzzzz").await;
+    let texts = results(&packets);
+    assert_eq!(texts.len(), 1);
+    assert!(texts[0].starts_with("Didn't find something that closely matches 'zzzzzzzzzzzz'"));
+}
+
+#[tokio::test]
+async fn hint_trop_cher() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut alice, "!hint").await;
+    let first = results(&packets);
+    // « A hint costs N points. You have 0 points. »
+    let cost: i64 = first[0]
+        .strip_prefix("A hint costs ")
+        .and_then(|rest| rest.split(' ').next())
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(cost > 0);
+    let packets = run(&mut alice, "!hint Map Height").await;
+    assert!(hint_messages(&packets).is_empty());
+    assert_eq!(
+        results(&packets),
+        [format!(
+            "You can't afford the hint. You have 0 points and need at least {cost}."
+        )]
+    );
+}
+
+/// Alice visite deux lieux (2 points), puis paie un indice sur « Map Height ».
+/// Renvoie le lieu indiqué et les réponses texte.
+async fn hint_paye() -> (Value, Vec<String>) {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    // 81003 et 81006 contiennent « Map Width » : aucun indice « Map Height » trouvé.
+    let checks = json!([{"cmd": "LocationChecks", "locations": [81003, 81006]}]);
+    alice.send(Message::text(checks.to_string())).await.unwrap();
+    drain(&mut alice).await;
+    let packets = run(&mut alice, "!hint Map Height").await;
+    let hints = hint_messages(&packets);
+    assert_eq!(hints.len(), 1, "un seul indice payé");
+    (hints[0]["item"].clone(), results(&packets))
+}
+
+#[tokio::test]
+async fn hint_paye_un_seul_et_toujours_le_meme() {
+    let (item, texts) = hint_paye().await;
+    assert_eq!(item["item"], 80001);
+    assert_eq!(
+        texts,
+        [
+            "There may be more hintables, however, you cannot afford to pay for any more.  \
+          You have 0 and need at least 2."
+        ]
+    );
+    // Tirage déterministe (ADR 0012) : même partie, même résultat.
+    let (again, _) = hint_paye().await;
+    assert_eq!(item, again);
+}

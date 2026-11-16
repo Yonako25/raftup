@@ -149,3 +149,60 @@ mod tests {
         assert_eq!(parts[11]["text"], "(avoid)");
     }
 }
+
+/// Mélange déterministe pour le tirage de `!hint` (ADR 0012) : même `seed_text`,
+/// même ordre, à chaque fois.
+///
+/// La graine est le hachage FNV-1a de `seed_text` ; les nombres viennent de
+/// SplitMix64, et le mélange suit l'algorithme de Fisher-Yates (comme
+/// `random.shuffle` de Python, mais avec un autre générateur : écart déclaré).
+pub(crate) fn deterministic_shuffle<T>(items: &mut [T], seed_text: &str) {
+    // FNV-1a 64 bits : simple, stable d'une version de Rust à l'autre
+    // (contrairement au hachage de `std`, qui peut changer).
+    let mut state: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in seed_text.bytes() {
+        state ^= u64::from(byte);
+        state = state.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    let mut next = || {
+        // SplitMix64 : un pas, un nombre de 64 bits bien mélangé.
+        state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    for i in (1..items.len()).rev() {
+        // `i + 1` tient dans un u64 : la taille d'une liste en mémoire aussi.
+        let j = (next() % (i as u64 + 1)) as usize;
+        items.swap(i, j);
+    }
+}
+
+#[cfg(test)]
+mod shuffle_tests {
+    use super::deterministic_shuffle;
+
+    #[test]
+    fn same_seed_same_order() {
+        let mut a: Vec<u32> = (0..20).collect();
+        let mut b = a.clone();
+        deterministic_shuffle(&mut a, "seed|0|1|0");
+        deterministic_shuffle(&mut b, "seed|0|1|0");
+        assert_eq!(a, b);
+        // Bien un mélange, et rien de perdu.
+        assert_ne!(a, (0..20).collect::<Vec<u32>>());
+        let mut sorted = a.clone();
+        sorted.sort();
+        assert_eq!(sorted, (0..20).collect::<Vec<u32>>());
+    }
+
+    #[test]
+    fn other_seed_other_order() {
+        let mut a: Vec<u32> = (0..20).collect();
+        let mut b = a.clone();
+        deterministic_shuffle(&mut a, "seed|0|1|0");
+        deterministic_shuffle(&mut b, "seed|0|1|1");
+        assert_ne!(a, b);
+    }
+}

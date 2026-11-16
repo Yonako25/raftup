@@ -159,23 +159,36 @@ impl GameState {
         self.hints.insert((team, slot), new_hints);
         changed
     }
+
+    /// `!hint` sans argument : relit seulement les indices de ce slot (sans
+    /// toucher aux autres slots, comme le serveur officiel) et les renvoie.
+    pub fn recheck_own_hints(&mut self, team: TeamId, slot: SlotId) -> Vec<Hint> {
+        let mut rechecked: Vec<Hint> = Vec::new();
+        for hint in self.hints(team, slot) {
+            let new_hint = self.re_check(team, hint);
+            if !rechecked.contains(&new_hint) {
+                rechecked.push(new_hint);
+            }
+        }
+        self.hints.insert((team, slot), rechecked.clone());
+        rechecked
+    }
 }
 
-// Moteur d'indices. Les méthodes encore inutilisées (pour `!hint`, la
-// sauvegarde) portent chacune un `allow(dead_code)`.
+// Moteur d'indices. Les méthodes encore inutilisées (pour la sauvegarde,
+// T9) portent chacune un `allow(dead_code)`.
 impl GameState {
     /// Nombre d'indices déjà payés par un slot.
     pub fn hints_used(&self, team: TeamId, slot: SlotId) -> u32 {
         self.hints_used.get(&(team, slot)).copied().unwrap_or(0)
     }
 
-    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
+    #[allow(dead_code)] // pour la sauvegarde (T9), pas encore branché
     /// Fixe le nombre d'indices payés (chargement d'une sauvegarde).
     pub fn set_hints_used(&mut self, team: TeamId, slot: SlotId, used: u32) {
         self.hints_used.insert((team, slot), used);
     }
 
-    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
     /// Ajoute `count` indices payés ; renvoie le nouveau total.
     pub fn add_hints_used(&mut self, team: TeamId, slot: SlotId, count: u32) -> u32 {
         let used = self.hints_used.entry((team, slot)).or_insert(0);
@@ -254,7 +267,6 @@ impl GameState {
         vec![make_hint(data, slot, location, placed, found, status)]
     }
 
-    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
     /// Indices pour un objet (`collect_hints`) : tous les lieux, dans tous les
     /// mondes, qui contiennent cet objet pour le slot ou pour un groupe dont il
     /// fait partie. Ordre : monde croissant, puis lieu croissant (le serveur

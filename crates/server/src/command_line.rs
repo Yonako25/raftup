@@ -151,8 +151,6 @@ pub(crate) fn raw_argument(raw: &str) -> Option<String> {
 
 /// Approximation de `str.isnumeric()` : non vide et tous les caractères numériques
 /// Unicode (`char::is_numeric` couvre les catégories Nd, Nl et No, comme Python).
-// Pour `!hint` (T7b).
-#[allow(dead_code)]
 pub(crate) fn py_isnumeric(s: &str) -> bool {
     !s.is_empty() && s.chars().all(char::is_numeric)
 }

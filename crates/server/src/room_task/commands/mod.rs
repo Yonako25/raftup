@@ -8,6 +8,7 @@ use super::*;
 use crate::command_line::{raw_argument, split_command, truncate_chars};
 
 mod actions;
+mod hint;
 mod info;
 
 /// Commandes connues, dans l'ordre du serveur officiel (celui de `commands`,
@@ -141,15 +142,17 @@ impl RoomTask {
             "checked" => self.cmd_checked(id, &text),
             "alias" => self.cmd_alias(id, &text),
             "getitem" => self.cmd_getitem(id, &text),
+            "hint" => self.cmd_hint(id, &text, false),
+            "hint_location" => self.cmd_hint(id, &text, true),
             _ => self.todo_command(id, command),
         }
     }
 
-    /// Bouchon des commandes pas encore faites :
-    /// `hint`, `hint_location`.
-    /// T7b/T8 : elles ne répondent rien pour l'instant.
+    /// Commande de `COMMANDS` sans branche dans `run_command` /
+    /// `run_raw_command`. Toutes sont branchées : n'arrive que si on ajoute une
+    /// commande à la liste en oubliant son code.
     fn todo_command(&mut self, id: ClientId, command: &str) {
-        debug!(id, command, "commande pas encore gérée (T7b/T8)");
+        debug!(id, command, "commande connue mais sans code");
     }
 
     /// `!admin` : diffuse la ligne avec les mots de passe masqués, puis gère
