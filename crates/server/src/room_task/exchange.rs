@@ -96,6 +96,8 @@ impl RoomTask {
                     None => "Bounce: invalid packet.".to_string(),
                 }
             }
+            "CreateHints" => return self.on_bad_create_hints(id, raw),
+            "UpdateHint" => return self.on_bad_update_hint(id, raw),
             // Les autres seront traités avec leurs paquets.
             _ => return,
         };
@@ -107,14 +109,26 @@ impl RoomTask {
         let Some(player) = self.player(id).cloned() else {
             return;
         };
+        let create_as_hint = scouts.create_as_hint.unwrap_or(0);
         let slot_locations = self.room.data().locations.get(&player.slot);
         let mut locations = Vec::new();
+        let mut hints = Vec::new();
         for location in &scouts.locations {
             let Some(placed) = slot_locations.and_then(|l| l.get(location)) else {
                 // Lieu inconnu : le serveur officiel 0.6.8 plante et ferme la connexion.
                 self.close(id, "LocationScouts sur un lieu inconnu");
                 return;
             };
+            if create_as_hint != 0 {
+                // Statut « non précisé » : le défaut Python de `collect_hint_location_id`.
+                hints.extend(self.game.collect_hint_location_id(
+                    self.room.data(),
+                    player.team,
+                    player.slot,
+                    *location,
+                    Some(HintStatus::UNSPECIFIED),
+                ));
+            }
             locations.push(NetworkItem {
                 item: placed.item,
                 location: *location,
@@ -122,12 +136,23 @@ impl RoomTask {
                 flags: placed.flags,
             });
         }
-        if scouts.create_as_hint.unwrap_or(0) != 0 {
-            // Les indices arrivent en J2 : pour l'instant, on répond sans en créer.
-            debug!(id, "LocationScouts : création d'indices pas encore gérée");
-        }
+        // `notify_hints` change l'état tout de suite, comme en Python.
+        let effects = self.game.notify_hints(
+            self.room.data(),
+            player.team,
+            &hints,
+            create_as_hint == 2,
+            true,
+            None,
+        );
+        // Ordre à vérifier par capture : le serveur officiel lance les envois
+        // des indices en tâches (`async_start`) puis attend l'envoi de
+        // `LocationInfo`, dont l'écriture part avant que les tâches ne tournent.
+        // On envoie donc `LocationInfo` d'abord, puis les `SetReply` /
+        // `RoomUpdate` / `PrintJSON` des indices.
         let info = LocationInfo { locations };
         self.send(id, vec![ServerPacket::LocationInfo(info)]);
+        self.apply_hint_effects(player.team, effects);
     }
 
     /// Message de chat, envoyé à tous. Les commandes `!` arrivent en J2.

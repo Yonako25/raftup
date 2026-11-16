@@ -41,12 +41,10 @@ pub(crate) struct GameState {
     /// doublon, mais l'ordre ne compte pas.
     hints: BTreeMap<(TeamId, SlotId), Vec<Hint>>,
     /// Nombre d'indices payés par (équipe, slot) (`hints_used` du serveur officiel).
-    #[allow(dead_code)] // lu par le moteur d'indices, pas encore branché
     hints_used: BTreeMap<(TeamId, SlotId), u32>,
 }
 
 /// Ce que `notify_hints` demande d'envoyer, une fois l'état mis à jour.
-#[allow(dead_code)]
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct HintEffects {
     /// Slots dont la liste d'indices a reçu un nouvel indice : pour chacun, un
@@ -146,19 +144,21 @@ impl GameState {
     }
 }
 
-// Moteur d'indices : pas encore branché sur la tâche salle (tests seulement).
-#[allow(dead_code)]
+// Moteur d'indices. Les méthodes encore inutilisées (pour `!hint`, la
+// sauvegarde) portent chacune un `allow(dead_code)`.
 impl GameState {
     /// Nombre d'indices déjà payés par un slot.
     pub fn hints_used(&self, team: TeamId, slot: SlotId) -> u32 {
         self.hints_used.get(&(team, slot)).copied().unwrap_or(0)
     }
 
+    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
     /// Fixe le nombre d'indices payés (chargement d'une sauvegarde).
     pub fn set_hints_used(&mut self, team: TeamId, slot: SlotId, used: u32) {
         self.hints_used.insert((team, slot), used);
     }
 
+    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
     /// Ajoute `count` indices payés ; renvoie le nouveau total.
     pub fn add_hints_used(&mut self, team: TeamId, slot: SlotId, count: u32) -> u32 {
         let used = self.hints_used.entry((team, slot)).or_insert(0);
@@ -237,6 +237,7 @@ impl GameState {
         vec![make_hint(data, slot, location, placed, found, status)]
     }
 
+    #[allow(dead_code)] // pour `!hint` / la sauvegarde, pas encore branché
     /// Indices pour un objet (`collect_hints`) : tous les lieux, dans tous les
     /// mondes, qui contiennent cet objet pour le slot ou pour un groupe dont il
     /// fait partie. Ordre : monde croissant, puis lieu croissant (le serveur
@@ -374,6 +375,7 @@ impl GameState {
         changed
     }
 
+    #[allow(dead_code)] // pour `!getitem`, pas encore branché
     /// Objet donné par `!getitem` : ajouté aux deux listes du slot.
     pub fn add_cheat_item(&mut self, team: TeamId, slot: SlotId, item: NetworkItem) {
         for remote_items in [false, true] {

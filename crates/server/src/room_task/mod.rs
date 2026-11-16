@@ -6,7 +6,7 @@
 //!
 //! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`,
 //! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif),
-//! `LocationScouts`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`,
+//! `LocationScouts`, `CreateHints`, `UpdateHint`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`,
 //! stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,8 +21,8 @@ use ap_protocol::server::{
     JsonMessagePart, LocationInfo, PrintJson, ReceivedItems, Retrieved, RoomUpdate, SetReply,
 };
 use ap_protocol::{
-    encode_server_frame, ClientPacket, ClientStatus, Hint, ItemFlags, LocationId, NetworkItem,
-    NetworkPlayer, NetworkVersion, ServerPacket, SlotId, SlotType, TeamId,
+    encode_server_frame, ClientPacket, ClientStatus, Hint, HintStatus, ItemFlags, LocationId,
+    NetworkItem, NetworkPlayer, NetworkVersion, ServerPacket, SlotId, SlotType, TeamId,
 };
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
@@ -45,6 +45,7 @@ use crate::room::{now, Room, SERVER_VERSION};
 // modules enfants, d'où le `pub(super)` sur les méthodes partagées.
 mod connect;
 mod exchange;
+mod hints;
 mod messages;
 mod monitoring;
 mod play;
@@ -265,6 +266,8 @@ impl RoomTask {
             ClientPacket::LocationChecks(checks) => self.on_location_checks(id, &checks),
             ClientPacket::StatusUpdate(update) => self.on_status_update(id, update.status),
             ClientPacket::LocationScouts(scouts) => self.on_location_scouts(id, &scouts),
+            ClientPacket::CreateHints(request) => self.on_create_hints(id, request),
+            ClientPacket::UpdateHint(request) => self.on_update_hint(id, request),
             ClientPacket::Say(say) => self.on_say(id, &say.text),
             ClientPacket::Bounce(bounce) => self.on_bounce(id, bounce),
             ClientPacket::Get(get) => self.on_get(id, get),
