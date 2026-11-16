@@ -1,0 +1,2495 @@
+[
+ {
+  "input": "Alice",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Alice",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "alice",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Alice",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "ALICE",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Alice",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Emilie",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Emilie",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "émilie",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Émilie",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Zoe",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Zoe",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "zoë",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "Zoë",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "élodie",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "strasse",
+  "candidates": [
+   "Alice",
+   "Alicia",
+   "Bob",
+   "Bobby",
+   "Émilie",
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "ÉLODIE",
+   "Straße",
+   "STRASSE"
+  ],
+  "expected": [
+   "STRASSE",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Bob",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   true,
+   "Only Option Match"
+  ]
+ },
+ {
+  "input": "bob",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   true,
+   "Only Option Match"
+  ]
+ },
+ {
+  "input": "Bobb",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches 'Bobb', did you mean 'Bob'? (75% sure)"
+  ]
+ },
+ {
+  "input": "Bo",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches 'Bo', did you mean 'Bob'? (66% sure)"
+  ]
+ },
+ {
+  "input": "xyz",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches 'xyz', did you mean 'Bob'? (0% sure)"
+  ]
+ },
+ {
+  "input": "Dice",
+  "candidates": [
+   "Dice",
+   "Dice"
+  ],
+  "expected": [
+   "Dice",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "dice",
+  "candidates": [
+   "Dice",
+   "DICE"
+  ],
+  "expected": [
+   "Dice",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Alic",
+  "candidates": [
+   "Alice",
+   "Alicia"
+  ],
+  "expected": [
+   "Alice",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Alicx",
+  "candidates": [
+   "Alicia",
+   "Alice"
+  ],
+  "expected": [
+   "Alice",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches '', did you mean 'Bob'? (0% sure)"
+  ]
+ },
+ {
+  "input": "",
+  "candidates": [
+   "Bob",
+   "Al"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches '', did you mean 'Bob'? (0% sure)"
+  ]
+ },
+ {
+  "input": "a",
+  "candidates": [
+   "a",
+   "A"
+  ],
+  "expected": [
+   "a",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "ab",
+  "candidates": [
+   "ba",
+   "ab "
+  ],
+  "expected": [
+   "ab ",
+   false,
+   "Didn't find something that closely matches 'ab', did you mean 'ab '? (66% sure)"
+  ]
+ },
+ {
+  "input": "ca",
+  "candidates": [
+   "abc"
+  ],
+  "expected": [
+   "abc",
+   false,
+   "Didn't find something that closely matches 'ca', did you mean 'abc'? (33% sure)"
+  ]
+ },
+ {
+  "input": "abc",
+  "candidates": [
+   "ca"
+  ],
+  "expected": [
+   "ca",
+   false,
+   "Didn't find something that closely matches 'abc', did you mean 'ca'? (33% sure)"
+  ]
+ },
+ {
+  "input": "İstanbul",
+  "candidates": [
+   "istanbul",
+   "Istanbul"
+  ],
+  "expected": [
+   "istanbul",
+   false,
+   "Too many close matches for 'İstanbul', did you mean 'istanbul'? (87% sure)"
+  ]
+ },
+ {
+  "input": "日本語",
+  "candidates": [
+   "日本",
+   "日本語テキスト"
+  ],
+  "expected": [
+   "日本",
+   false,
+   "Didn't find something that closely matches '日本語', did you mean '日本'? (66% sure)"
+  ]
+ },
+ {
+  "input": "naïve",
+  "candidates": [
+   "naive",
+   "naïve!"
+  ],
+  "expected": [
+   "naïve!",
+   false,
+   "Too many close matches for 'naïve', did you mean 'naïve!'? (83% sure)"
+  ]
+ },
+ {
+  "input": "😀smile",
+  "candidates": [
+   "😀smile",
+   "smile"
+  ],
+  "expected": [
+   "😀smile",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "map widht",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Width",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Map Hieght",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Height",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "map bomb",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Bombs",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "nothin",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Nothing",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "tile 1",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Tile 1",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Tile 3",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Tile 1",
+   false,
+   "Too many close matches for 'Tile 3', did you mean 'Tile 1'? (83% sure)"
+  ]
+ },
+ {
+  "input": "tile 100",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Tile 10",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Mapp Width",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Width",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "bombs",
+  "candidates": [
+   "Map Width",
+   "Map Height",
+   "Map Bombs",
+   "Nothing",
+   "Tile 1",
+   "Tile 2",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Bombs",
+   false,
+   "Didn't find something that closely matches 'bombs', did you mean 'Map Bombs'? (55% sure)"
+  ]
+ },
+ {
+  "input": "dice",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Dice",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "dice fragmnt",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Dice Fragment",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "roll fragment",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Roll Fragment",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Fixed Score Multiplier",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Fixed Score Multiplier",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "fixed score multiplier",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Fixed Score Multiplier",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "step score multipler",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Step Score Multiplier",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "category yacth",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Category Yacht",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Category Full Hosue",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Category Full House",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Category One",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Category Ones",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "1 point",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "1 Point",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "10 point",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "10 Points",
+   false,
+   "Too many close matches for '10 point', did you mean '10 Points'? (88% sure)"
+  ]
+ },
+ {
+  "input": "100 points",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "10 Points",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Category Large Straigth",
+  "candidates": [
+   "Dice",
+   "Dice Fragment",
+   "Roll",
+   "Roll Fragment",
+   "Fixed Score Multiplier",
+   "Step Score Multiplier",
+   "Category Ones",
+   "Category Twos",
+   "Category Threes",
+   "Category Full House",
+   "Category Large Straight",
+   "Category Yacht",
+   "1 Point",
+   "10 Points"
+  ],
+  "expected": [
+   "Category Large Straight",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "ocarina of time",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Ocarina of Tim",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "yacht dice",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Yacht Dice",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Yatch Dice",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Yacht Dice",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "checksfinder",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "ChecksFinder",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "Checks Finder",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "ChecksFinder",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "factoro",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Factorio",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "hollow knigt",
+  "candidates": [
+   "Ocarina of Time",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Hollow Knight",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcd",
+  "candidates": [
+   "abcx",
+   "abxx"
+  ],
+  "expected": [
+   "abcx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcde",
+  "candidates": [
+   "abcdx",
+   "abxyz"
+  ],
+  "expected": [
+   "abcdx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefgh",
+  "candidates": [
+   "abcdefxx",
+   "abcdexxx"
+  ],
+  "expected": [
+   "abcdefxx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefgh",
+  "candidates": [
+   "abcdefgx",
+   "abcdefxx"
+  ],
+  "expected": [
+   "abcdefgx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefghij",
+  "candidates": [
+   "abcdefghix",
+   "abcdefgxxx"
+  ],
+  "expected": [
+   "abcdefghix",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefghij",
+  "candidates": [
+   "abcdefghix"
+  ],
+  "expected": [
+   "abcdefghix",
+   false,
+   "Didn't find something that closely matches 'abcdefghij', did you mean 'abcdefghix'? (90% sure)"
+  ]
+ },
+ {
+  "input": "abcdefghijk",
+  "candidates": [
+   "abcdefghijx"
+  ],
+  "expected": [
+   "abcdefghijx",
+   false,
+   "Didn't find something that closely matches 'abcdefghijk', did you mean 'abcdefghijx'? (90% sure)"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrst",
+  "candidates": [
+   "abcdefghijklmnopqrsx"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrsx",
+   true,
+   "Only Option Match"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrstu",
+  "candidates": [
+   "abcdefghijklmnopqrstx"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrstx",
+   true,
+   "Only Option Match"
+  ]
+ },
+ {
+  "input": "abcdefghijkl",
+  "candidates": [
+   "abcdefghijkx",
+   "abcdefghikxx"
+  ],
+  "expected": [
+   "abcdefghijkx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrst",
+  "candidates": [
+   "abcdefghijklmnopqrxx",
+   "abcdefghijklmnopqxxx"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrxx",
+   false,
+   "Too many close matches for 'abcdefghijklmnopqrst', did you mean 'abcdefghijklmnopqrxx'? (90% sure)"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrst",
+  "candidates": [
+   "abcdefghijklmnopqrxx",
+   "abcdefghijklmnopxxxx"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrxx",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrst",
+  "candidates": [
+   "abcdefghijklmnopqrst0"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrst0",
+   true,
+   "Only Option Match"
+  ]
+ },
+ {
+  "input": "abcdefghijklmnopqrst",
+  "candidates": [
+   "abcdefghijklmnopqrxx",
+   "abcdefghijklmnopqrxy"
+  ],
+  "expected": [
+   "abcdefghijklmnopqrxx",
+   false,
+   "Too many close matches for 'abcdefghijklmnopqrst', did you mean 'abcdefghijklmnopqrxx'? (90% sure)"
+  ]
+ },
+ {
+  "input": "LÉyODIc",
+  "candidates": [
+   "STRASSE",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'LÉyODIc', did you mean 'ÉLODIE'? (57% sure)"
+  ]
+ },
+ {
+  "input": "strea",
+  "candidates": [
+   "ÉLODIE",
+   "Bob",
+   "Alicia",
+   "Emilie",
+   "Alice"
+  ],
+  "expected": [
+   "Alicia",
+   false,
+   "Didn't find something that closely matches 'strea', did you mean 'Alicia'? (16% sure)"
+  ]
+ },
+ {
+  "input": "CHECKSFINDER",
+  "candidates": [
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Hollow Knight",
+   false,
+   "Didn't find something that closely matches 'CHECKSFINDER', did you mean 'Hollow Knight'? (7% sure)"
+  ]
+ },
+ {
+  "input": "Dice Fraent",
+  "candidates": [
+   "Fixed Score Multiplier"
+  ],
+  "expected": [
+   "Fixed Score Multiplier",
+   false,
+   "Didn't find something that closely matches 'Dice Fraent', did you mean 'Fixed Score Multiplier'? (22% sure)"
+  ]
+ },
+ {
+  "input": "straße",
+  "candidates": [
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'straße', did you mean 'ÉLODIE'? (16% sure)"
+  ]
+ },
+ {
+  "input": "émilie",
+  "candidates": [
+   "Emilie",
+   "Zoë",
+   "Zoe",
+   "Alice"
+  ],
+  "expected": [
+   "Emilie",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "DICE FRAGENT",
+  "candidates": [
+   "Fixed Score Multiplier",
+   "Category Twos",
+   "Roll",
+   "Dice Fragment",
+   "Step Score Multiplier",
+   "Dice"
+  ],
+  "expected": [
+   "Dice Fragment",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Stxrdße",
+  "candidates": [
+   "Straße",
+   "Bob"
+  ],
+  "expected": [
+   "Straße",
+   false,
+   "Didn't find something that closely matches 'Stxrdße', did you mean 'Straße'? (71% sure)"
+  ]
+ },
+ {
+  "input": "Factorio",
+  "candidates": [
+   "Hollow Knight",
+   "Yacht Dice",
+   "Ocarina of Time 2",
+   "Factorio",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Factorio",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "1 Poe dint",
+  "candidates": [
+   "Step Score Multiplier"
+  ],
+  "expected": [
+   "Step Score Multiplier",
+   false,
+   "Didn't find something that closely matches '1 Poe dint', did you mean 'Step Score Multiplier'? (23% sure)"
+  ]
+ },
+ {
+  "input": "Srtae",
+  "candidates": [
+   "Bobby",
+   "Straße",
+   "Bob",
+   "Emilie",
+   "Alicia"
+  ],
+  "expected": [
+   "Straße",
+   false,
+   "Didn't find something that closely matches 'Srtae', did you mean 'Straße'? (66% sure)"
+  ]
+ },
+ {
+  "input": "Step Sc re Multiplier",
+  "candidates": [
+   "Category Ones",
+   "Category Twos",
+   "Fixed Score Multiplier",
+   "Roll",
+   "Step Score Multiplier"
+  ],
+  "expected": [
+   "Step Score Multiplier",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Ocraia of Tim ",
+  "candidates": [
+   "Factorio",
+   "Hollow Knight",
+   "Ocarina of Time 2",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   false,
+   "Too many close matches for 'Ocraia of Tim ', did you mean 'Ocarina of Time'? (80% sure)"
+  ]
+ },
+ {
+  "input": "Rlol",
+  "candidates": [
+   "Dice Fragment",
+   "Category Full House"
+  ],
+  "expected": [
+   "Category Full House",
+   false,
+   "Didn't find something that closely matches 'Rlol', did you mean 'Category Full House'? (15% sure)"
+  ]
+ },
+ {
+  "input": "Tile 10",
+  "candidates": [
+   "Tile 25",
+   "Map Width"
+  ],
+  "expected": [
+   "Tile 25",
+   false,
+   "Didn't find something that closely matches 'Tile 10', did you mean 'Tile 25'? (71% sure)"
+  ]
+ },
+ {
+  "input": "oby",
+  "candidates": [
+   "Bob"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches 'oby', did you mean 'Bob'? (33% sure)"
+  ]
+ },
+ {
+  "input": "YachtzDice",
+  "candidates": [
+   "Yacht Dice"
+  ],
+  "expected": [
+   "Yacht Dice",
+   false,
+   "Didn't find something that closely matches 'YachtzDice', did you mean 'Yacht Dice'? (90% sure)"
+  ]
+ },
+ {
+  "input": "A",
+  "candidates": [
+   "Bobby",
+   "Bob"
+  ],
+  "expected": [
+   "Bobby",
+   false,
+   "Didn't find something that closely matches 'A', did you mean 'Bobby'? (0% sure)"
+  ]
+ },
+ {
+  "input": "Til 2e",
+  "candidates": [
+   "Map Width"
+  ],
+  "expected": [
+   "Map Width",
+   false,
+   "Didn't find something that closely matches 'Til 2e', did you mean 'Map Width'? (11% sure)"
+  ]
+ },
+ {
+  "input": "ytyraeß",
+  "candidates": [
+   "Zoë",
+   "ÉLODIE",
+   "Bob",
+   "Bobby",
+   "Alicia",
+   "Zoe"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'ytyraeß', did you mean 'ÉLODIE'? (14% sure)"
+  ]
+ },
+ {
+  "input": "Yach xDice",
+  "candidates": [
+   "Ocarina of Time",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Factorio",
+   false,
+   "Didn't find something that closely matches 'Yach xDice', did you mean 'Factorio'? (30% sure)"
+  ]
+ },
+ {
+  "input": " Stßre",
+  "candidates": [
+   "Zoe",
+   "ÉLODIE",
+   "Bob",
+   "Zoë"
+  ],
+  "expected": [
+   "Zoe",
+   false,
+   "Didn't find something that closely matches ' Stßre', did you mean 'Zoe'? (16% sure)"
+  ]
+ },
+ {
+  "input": "TILE 1",
+  "candidates": [
+   "Nothing",
+   "Tile 2",
+   "Tile 1"
+  ],
+  "expected": [
+   "Tile 1",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "OACRIBA OF TIME",
+  "candidates": [
+   "Ocarina of Time 2",
+   "Ocarina of Time",
+   "Yacht Dice"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "ÉMILIE",
+  "candidates": [
+   "Emilie",
+   "Alice",
+   "Émilie",
+   "Straße"
+  ],
+  "expected": [
+   "Émilie",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "YAXHT DICE",
+  "candidates": [
+   "Factorio",
+   "Ocarina of Time",
+   "Hollow Knight",
+   "Yacht Dice",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "Yacht Dice",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "ACATEOY YACHT",
+  "candidates": [
+   "Category Twos",
+   "Category Large Straight",
+   "Category Threes",
+   "1 Point",
+   "Category Ones"
+  ],
+  "expected": [
+   "Category Threes",
+   false,
+   "Didn't find something that closely matches 'ACATEOY YACHT', did you mean 'Category Threes'? (40% sure)"
+  ]
+ },
+ {
+  "input": "1 Poabnt",
+  "candidates": [
+   "Category Yacht",
+   "Roll Fragment",
+   "10 Points",
+   "Step Score Multiplier",
+   "Category Ones"
+  ],
+  "expected": [
+   "10 Points",
+   false,
+   "Didn't find something that closely matches '1 Poabnt', did you mean '10 Points'? (55% sure)"
+  ]
+ },
+ {
+  "input": "Tileac1",
+  "candidates": [
+   "Tile 1",
+   "Map Bombs",
+   "Map Height",
+   "Tile 25",
+   "Tile 10",
+   "Nothing"
+  ],
+  "expected": [
+   "Tile 1",
+   false,
+   "Didn't find something that closely matches 'Tileac1', did you mean 'Tile 1'? (71% sure)"
+  ]
+ },
+ {
+  "input": "EMIIE",
+  "candidates": [
+   "Emilie",
+   "Bob",
+   "Zoë",
+   "Straße",
+   "Bobby",
+   "Zoe"
+  ],
+  "expected": [
+   "Emilie",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "bob",
+  "candidates": [
+   "Alice",
+   "Emilie",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'bob', did you mean 'ÉLODIE'? (16% sure)"
+  ]
+ },
+ {
+  "input": "Ocarian o féime",
+  "candidates": [
+   "Yacht Dice"
+  ],
+  "expected": [
+   "Yacht Dice",
+   false,
+   "Didn't find something that closely matches 'Ocarian o féime', did you mean 'Yacht Dice'? (26% sure)"
+  ]
+ },
+ {
+  "input": "alice",
+  "candidates": [
+   "STRASSE",
+   "Alicia",
+   "Straße"
+  ],
+  "expected": [
+   "Alicia",
+   false,
+   "Didn't find something that closely matches 'alice', did you mean 'Alicia'? (66% sure)"
+  ]
+ },
+ {
+  "input": "actegoryfull house",
+  "candidates": [
+   "Dice"
+  ],
+  "expected": [
+   "Dice",
+   false,
+   "Didn't find something that closely matches 'actegoryfull house', did you mean 'Dice'? (5% sure)"
+  ]
+ },
+ {
+  "input": "ftorio",
+  "candidates": [
+   "Factorio",
+   "Ocarina of Time 2",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Factorio",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Ocarna of xiem",
+  "candidates": [
+   "Factorio",
+   "Hollow Knight",
+   "Ocarina of Time",
+   "Yacht Dice",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "STARSSE",
+  "candidates": [
+   "Emilie",
+   "ÉLODIE",
+   "Émilie",
+   "Bobby"
+  ],
+  "expected": [
+   "Emilie",
+   false,
+   "Didn't find something that closely matches 'STARSSE', did you mean 'Emilie'? (14% sure)"
+  ]
+ },
+ {
+  "input": "category ufll house",
+  "candidates": [
+   "Roll Fragment"
+  ],
+  "expected": [
+   "Roll Fragment",
+   false,
+   "Didn't find something that closely matches 'category ufll house', did you mean 'Roll Fragment'? (15% sure)"
+  ]
+ },
+ {
+  "input": "FAT RIO",
+  "candidates": [
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "Hollow Knight",
+   "Factorio"
+  ],
+  "expected": [
+   "Factorio",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "OCXRNA OF TÉIME",
+  "candidates": [
+   "Yacht Dice",
+   "Hollow Knight",
+   "ChecksFinder",
+   "Ocarina of Time 2",
+   "Factorio",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Categor Ones",
+  "candidates": [
+   "1 Point",
+   "Dice",
+   "Roll",
+   "Fixed Score Multiplier"
+  ],
+  "expected": [
+   "Fixed Score Multiplier",
+   false,
+   "Didn't find something that closely matches 'Categor Ones', did you mean 'Fixed Score Multiplier'? (22% sure)"
+  ]
+ },
+ {
+  "input": "yactroio",
+  "candidates": [
+   "Yacht Dice",
+   "ChecksFinder",
+   "Ocarina of Time 2",
+   "Factorio",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Factorio",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "HOLLOW KNIGC",
+  "candidates": [
+   "ChecksFinder",
+   "Ocarina of Time",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Hollow Knight",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "CATEGORY THEEÉ",
+  "candidates": [
+   "10 Points",
+   "Category Twos"
+  ],
+  "expected": [
+   "Category Twos",
+   false,
+   "Didn't find something that closely matches 'CATEGORY THEEÉ', did you mean 'Category Twos'? (71% sure)"
+  ]
+ },
+ {
+  "input": "Béb",
+  "candidates": [
+   "Bobby",
+   "Zoë"
+  ],
+  "expected": [
+   "Bobby",
+   false,
+   "Didn't find something that closely matches 'Béb', did you mean 'Bobby'? (40% sure)"
+  ]
+ },
+ {
+  "input": "map boms",
+  "candidates": [
+   "Map Bombs",
+   "Nothing",
+   "Tile 10",
+   "Tile 25"
+  ],
+  "expected": [
+   "Map Bombs",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "eaiile",
+  "candidates": [
+   "Zoe",
+   "Straße",
+   "Bobby",
+   "Bob"
+  ],
+  "expected": [
+   "Zoe",
+   false,
+   "Didn't find something that closely matches 'eaiile', did you mean 'Zoe'? (16% sure)"
+  ]
+ },
+ {
+  "input": "facteo",
+  "candidates": [
+   "Yacht Dice"
+  ],
+  "expected": [
+   "Yacht Dice",
+   false,
+   "Didn't find something that closely matches 'facteo', did you mean 'Yacht Dice'? (30% sure)"
+  ]
+ },
+ {
+  "input": "DOTHING",
+  "candidates": [
+   "Map Height",
+   "Map Bombs",
+   "Tile 25",
+   "Map Width",
+   "Nothing"
+  ],
+  "expected": [
+   "Nothing",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Catezory To",
+  "candidates": [
+   "Fixed Score Multiplier",
+   "Category Large Straight",
+   "10 Points",
+   "Category Threes",
+   "Category Yacht"
+  ],
+  "expected": [
+   "Category Threes",
+   false,
+   "Didn't find something that closely matches 'Catezory To', did you mean 'Category Threes'? (60% sure)"
+  ]
+ },
+ {
+  "input": "Fatyorio",
+  "candidates": [
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   false,
+   "Didn't find something that closely matches 'Fatyorio', did you mean 'Ocarina of Time'? (19% sure)"
+  ]
+ },
+ {
+  "input": "LDIaE",
+  "candidates": [
+   "Emilie",
+   "Straße",
+   "Zoe"
+  ],
+  "expected": [
+   "Emilie",
+   false,
+   "Didn't find something that closely matches 'LDIaE', did you mean 'Emilie'? (33% sure)"
+  ]
+ },
+ {
+  "input": "0y Pionts",
+  "candidates": [
+   "Dice Fragment",
+   "Roll"
+  ],
+  "expected": [
+   "Dice Fragment",
+   false,
+   "Didn't find something that closely matches '0y Pionts', did you mean 'Dice Fragment'? (15% sure)"
+  ]
+ },
+ {
+  "input": "yobdby",
+  "candidates": [
+   "Alicia",
+   "Émilie",
+   "Bob",
+   "Zoe",
+   "Emilie",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "Bob",
+   false,
+   "Didn't find something that closely matches 'yobdby', did you mean 'Bob'? (33% sure)"
+  ]
+ },
+ {
+  "input": "tdile ",
+  "candidates": [
+   "Nothing"
+  ],
+  "expected": [
+   "Nothing",
+   false,
+   "Didn't find something that closely matches 'tdile ', did you mean 'Nothing'? (14% sure)"
+  ]
+ },
+ {
+  "input": "traße",
+  "candidates": [
+   "STRASSE",
+   "Émilie",
+   "Alicia",
+   "Zoë",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "STRASSE",
+   false,
+   "Didn't find something that closely matches 'traße', did you mean 'STRASSE'? (57% sure)"
+  ]
+ },
+ {
+  "input": "FACTORIO",
+  "candidates": [
+   "Yacht Dice",
+   "Ocarina of Time",
+   "ChecksFinder"
+  ],
+  "expected": [
+   "Yacht Dice",
+   false,
+   "Didn't find something that closely matches 'FACTORIO', did you mean 'Yacht Dice'? (40% sure)"
+  ]
+ },
+ {
+  "input": "BCARINA OF TIME 2",
+  "candidates": [
+   "Ocarina of Time 2",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time 2",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "StepS core Multiplier",
+  "candidates": [
+   "Category Ones",
+   "1 Point",
+   "Roll",
+   "Category Yacht",
+   "10 Points",
+   "Step Score Multiplier"
+  ],
+  "expected": [
+   "Step Score Multiplier",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "émilie",
+  "candidates": [
+   "Straße",
+   "Emilie",
+   "Émilie"
+  ],
+  "expected": [
+   "Émilie",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "SRTAESS",
+  "candidates": [
+   "Zoë",
+   "Alice",
+   "ÉLODIE",
+   "Bob",
+   "Zoe",
+   "Bobby"
+  ],
+  "expected": [
+   "Alice",
+   false,
+   "Didn't find something that closely matches 'SRTAESS', did you mean 'Alice'? (14% sure)"
+  ]
+ },
+ {
+  "input": "Map Height",
+  "candidates": [
+   "Tile 25",
+   "Tile 1",
+   "Map Height",
+   "Map Width",
+   "Tile 2",
+   "Map Bombs"
+  ],
+  "expected": [
+   "Map Height",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "Ocarina of Time 2",
+  "candidates": [
+   "Yacht Dice",
+   "Factorio",
+   "ChecksFinder",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "Ocarina of Time 2",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "oBbdby",
+  "candidates": [
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'oBbdby', did you mean 'ÉLODIE'? (16% sure)"
+  ]
+ },
+ {
+  "input": "OCARINA BOF TÉI ME 2",
+  "candidates": [
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   false,
+   "Didn't find something that closely matches 'OCARINA BOF TÉI ME 2', did you mean 'Ocarina of Time'? (75% sure)"
+  ]
+ },
+ {
+  "input": "ChadkcsFinder",
+  "candidates": [
+   "ChecksFinder",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "ChecksFinder",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Fixed Score Multiplier",
+  "candidates": [
+   "Step Score Multiplier",
+   "10 Points",
+   "Fixed Score Multiplier",
+   "Category Full House"
+  ],
+  "expected": [
+   "Fixed Score Multiplier",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "ox",
+  "candidates": [
+   "Zoe",
+   "Zoë",
+   "Bobby",
+   "Alice",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "Zoe",
+   false,
+   "Didn't find something that closely matches 'ox', did you mean 'Zoe'? (33% sure)"
+  ]
+ },
+ {
+  "input": "RYLL RAGMBNT",
+  "candidates": [
+   "Category Yacht",
+   "Roll",
+   "Step Score Multiplier",
+   "Category Full House",
+   "10 Points",
+   "Dice Fragment"
+  ],
+  "expected": [
+   "Dice Fragment",
+   false,
+   "Didn't find something that closely matches 'RYLL RAGMBNT', did you mean 'Dice Fragment'? (53% sure)"
+  ]
+ },
+ {
+  "input": "HOLLOW KNIGHT",
+  "candidates": [
+   "ChecksFinder",
+   "Factorio",
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Hollow Knight",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ },
+ {
+  "input": "OHLLOW KNAIGHT",
+  "candidates": [
+   "Ocarina of Time",
+   "Hollow Knight",
+   "ChecksFinder",
+   "Yacht Dice",
+   "Factorio",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "Hollow Knight",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Category Oneéxs",
+  "candidates": [
+   "1 Point",
+   "Roll Fragment",
+   "Category Full House"
+  ],
+  "expected": [
+   "Category Full House",
+   false,
+   "Didn't find something that closely matches 'Category Oneéxs', did you mean 'Category Full House'? (52% sure)"
+  ]
+ },
+ {
+  "input": "category ycaht",
+  "candidates": [
+   "1 Point",
+   "Category Twos"
+  ],
+  "expected": [
+   "Category Twos",
+   false,
+   "Didn't find something that closely matches 'category ycaht', did you mean 'Category Twos'? (64% sure)"
+  ]
+ },
+ {
+  "input": "Ocarina of Time 2",
+  "candidates": [
+   "Yacht Dice",
+   "Ocarina of Time 2",
+   "Factorio",
+   "Ocarina of Time",
+   "ChecksFinder"
+  ],
+  "expected": [
+   "Ocarina of Time 2",
+   true,
+   "Perfect Match"
+  ]
+ },
+ {
+  "input": "Ailcdia",
+  "candidates": [
+   "STRASSE",
+   "Émilie",
+   "Bob",
+   "Zoë",
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'Ailcdia', did you mean 'ÉLODIE'? (42% sure)"
+  ]
+ },
+ {
+  "input": "OCARNIA OF TME",
+  "candidates": [
+   "Factorio",
+   "Ocarina of Time 2",
+   "Yacht Dice",
+   "Hollow Knight",
+   "Ocarina of Time"
+  ],
+  "expected": [
+   "Ocarina of Time",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Map Width",
+  "candidates": [
+   "Tile 2"
+  ],
+  "expected": [
+   "Tile 2",
+   false,
+   "Didn't find something that closely matches 'Map Width', did you mean 'Tile 2'? (0% sure)"
+  ]
+ },
+ {
+  "input": "Nothing",
+  "candidates": [
+   "Tile 1",
+   "Tile 25",
+   "Map Height",
+   "Map Width",
+   "Tile 2"
+  ],
+  "expected": [
+   "Map Height",
+   false,
+   "Didn't find something that closely matches 'Nothing', did you mean 'Map Height'? (19% sure)"
+  ]
+ },
+ {
+  "input": "tile 1",
+  "candidates": [
+   "Nothing",
+   "Map Height",
+   "Map Bombs",
+   "Tile 25",
+   "Tile 2",
+   "Tile 10"
+  ],
+  "expected": [
+   "Tile 10",
+   false,
+   "Too many close matches for 'tile 1', did you mean 'Tile 10'? (85% sure)"
+  ]
+ },
+ {
+  "input": "Tile 2",
+  "candidates": [
+   "Tile 10",
+   "Map Bombs"
+  ],
+  "expected": [
+   "Tile 10",
+   false,
+   "Didn't find something that closely matches 'Tile 2', did you mean 'Tile 10'? (71% sure)"
+  ]
+ },
+ {
+  "input": "BOZAE",
+  "candidates": [
+   "Alicia",
+   "Émilie"
+  ],
+  "expected": [
+   "Émilie",
+   false,
+   "Didn't find something that closely matches 'BOZAE', did you mean 'Émilie'? (16% sure)"
+  ]
+ },
+ {
+  "input": "AILCIA",
+  "candidates": [
+   "Straße",
+   "Bob",
+   "Zoë",
+   "Bobby"
+  ],
+  "expected": [
+   "Straße",
+   false,
+   "Didn't find something that closely matches 'AILCIA', did you mean 'Straße'? (0% sure)"
+  ]
+ },
+ {
+  "input": "Catdegory Twos",
+  "candidates": [
+   "Step Score Multiplier",
+   "Category Yacht",
+   "Category Full House",
+   "1 Point",
+   "Dice Fragment",
+   "10 Points"
+  ],
+  "expected": [
+   "Category Yacht",
+   false,
+   "Didn't find something that closely matches 'Catdegory Twos', did you mean 'Category Yacht'? (57% sure)"
+  ]
+ },
+ {
+  "input": "CATEGORY YACÉH",
+  "candidates": [
+   "Dice",
+   "Category Twos",
+   "10 Points",
+   "Step Score Multiplier",
+   "Category Full House"
+  ],
+  "expected": [
+   "Category Twos",
+   false,
+   "Didn't find something that closely matches 'CATEGORY YACÉH', did you mean 'Category Twos'? (64% sure)"
+  ]
+ },
+ {
+  "input": "BMAP WIDTH",
+  "candidates": [
+   "Map Bombs",
+   "Map Width",
+   "Map Height",
+   "Nothing"
+  ],
+  "expected": [
+   "Map Width",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Map Height",
+  "candidates": [
+   "Tile 1",
+   "Tile 2"
+  ],
+  "expected": [
+   "Tile 1",
+   false,
+   "Didn't find something that closely matches 'Map Height', did you mean 'Tile 1'? (9% sure)"
+  ]
+ },
+ {
+  "input": "Zoe",
+  "candidates": [
+   "ÉLODIE"
+  ],
+  "expected": [
+   "ÉLODIE",
+   false,
+   "Didn't find something that closely matches 'Zoe', did you mean 'ÉLODIE'? (33% sure)"
+  ]
+ },
+ {
+  "input": "éice fragmetcn",
+  "candidates": [
+   "10 Points"
+  ],
+  "expected": [
+   "10 Points",
+   false,
+   "Didn't find something that closely matches 'éice fragmetcn', did you mean '10 Points'? (14% sure)"
+  ]
+ },
+ {
+  "input": "tile 2",
+  "candidates": [
+   "Tile 25",
+   "Tile 10"
+  ],
+  "expected": [
+   "Tile 25",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "TILE 10",
+  "candidates": [
+   "Map Height",
+   "Tile 2",
+   "Map Width"
+  ],
+  "expected": [
+   "Tile 2",
+   false,
+   "Didn't find something that closely matches 'TILE 10', did you mean 'Tile 2'? (71% sure)"
+  ]
+ },
+ {
+  "input": "ÉLODIE",
+  "candidates": [
+   "Zoe",
+   "STRASSE",
+   "Zoë",
+   "Émilie",
+   "Bobby",
+   "Straße"
+  ],
+  "expected": [
+   "Émilie",
+   false,
+   "Didn't find something that closely matches 'ÉLODIE', did you mean 'Émilie'? (50% sure)"
+  ]
+ },
+ {
+  "input": "Ocarina f Time 2",
+  "candidates": [
+   "ChecksFinder",
+   "Ocarina of Time",
+   "Hollow Knight",
+   "Yacht Dice",
+   "Ocarina of Time 2"
+  ],
+  "expected": [
+   "Ocarina of Time 2",
+   true,
+   "Close Match"
+  ]
+ },
+ {
+  "input": "Nobhing",
+  "candidates": [
+   "Tile 1",
+   "Tile 10"
+  ],
+  "expected": [
+   "Tile 1",
+   false,
+   "Didn't find something that closely matches 'Nobhing', did you mean 'Tile 1'? (0% sure)"
+  ]
+ },
+ {
+  "input": "tie 25",
+  "candidates": [
+   "Tile 2",
+   "Map Width",
+   "Tile 10",
+   "Map Bombs",
+   "Nothing"
+  ],
+  "expected": [
+   "Tile 2",
+   false,
+   "Didn't find something that closely matches 'tie 25', did you mean 'Tile 2'? (66% sure)"
+  ]
+ },
+ {
+  "input": "ocarina ox time",
+  "candidates": [
+   "Hollow Knight"
+  ],
+  "expected": [
+   "Hollow Knight",
+   false,
+   "Didn't find something that closely matches 'ocarina ox time', did you mean 'Hollow Knight'? (6% sure)"
+  ]
+ },
+ {
+  "input": "Cataeoéy Yacht",
+  "candidates": [
+   "Dice",
+   "Category Large Straight",
+   "Fixed Score Multiplier"
+  ],
+  "expected": [
+   "Category Large Straight",
+   false,
+   "Didn't find something that closely matches 'Cataeoéy Yacht', did you mean 'Category Large Straight'? (39% sure)"
+  ]
+ },
+ {
+  "input": "Map Height",
+  "candidates": [
+   "Tile 25",
+   "Tile 1",
+   "Tile 10",
+   "Tile 2"
+  ],
+  "expected": [
+   "Tile 25",
+   false,
+   "Didn't find something that closely matches 'Map Height', did you mean 'Tile 25'? (9% sure)"
+  ]
+ },
+ {
+  "input": "category threes",
+  "candidates": [
+   "Category Ones",
+   "Category Yacht",
+   "Fixed Score Multiplier",
+   "Category Threes",
+   "Category Full House",
+   "Roll"
+  ],
+  "expected": [
+   "Category Threes",
+   true,
+   "Case Insensitive Perfect Match"
+  ]
+ }
+]

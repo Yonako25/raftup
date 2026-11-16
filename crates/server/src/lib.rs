@@ -8,9 +8,11 @@
 //! (`Connect`), noms des objets et des lieux (`GetDataPackage`), partie
 //! complète, limites des connexions (ADR 0007), chiffrement `wss` (ADR 0009).
 
+mod command_line;
 mod connection;
 mod datastore;
 pub mod error;
+mod fuzzy;
 mod game;
 pub mod limits;
 mod python;
