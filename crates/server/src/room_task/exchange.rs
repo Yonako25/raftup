@@ -175,9 +175,8 @@ impl RoomTask {
             message.message = Some(text.to_string());
             self.broadcast_text_all(message);
         }
-        if text.starts_with('!') {
-            debug!(id, "commande « {text} » pas encore gérée (J2)");
-        }
+        // Les commandes `!` s'exécutent après la diffusion, comme sur le serveur officiel.
+        self.on_command_line(id, text);
     }
 
     /// Relaie un message libre (par exemple un DeathLink) aux clients visés.

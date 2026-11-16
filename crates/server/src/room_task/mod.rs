@@ -6,7 +6,7 @@
 //!
 //! Gérés : `Connect`, `GetDataPackage`, `ConnectUpdate`, `Sync`, `LocationChecks`,
 //! `StatusUpdate` (avec `collect` et `release` automatiques à l'objectif),
-//! `LocationScouts`, `Say` (chat ; les commandes `!` arrivent en J2), `Bounce`,
+//! `LocationScouts`, `Say` (chat et commandes `!`), `Bounce`,
 //! stockage de données (`Get`, `Set`, `SetNotify`, clés `_read_…`).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -43,6 +43,7 @@ use crate::room::{now, Room, SERVER_VERSION};
 // `impl` peut être découpé en plusieurs blocs, même dans plusieurs fichiers
 // d'un même module. Les champs privés de `RoomTask` restent visibles des
 // modules enfants, d'où le `pub(super)` sur les méthodes partagées.
+mod commands;
 mod connect;
 mod exchange;
 mod messages;
