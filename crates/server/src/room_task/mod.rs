@@ -167,6 +167,7 @@ pub(crate) async fn run(
         activity: BTreeMap::new(),
         countdown_timer: 0,
         countdown_next: None,
+        admin_client: None,
     };
     loop {
         // Sans compte à rebours, on attend seulement le prochain événement.
@@ -210,6 +211,8 @@ struct RoomTask {
     countdown_timer: i64,
     /// Heure de la prochaine annonce ; `None` si aucun compte à rebours ne tourne.
     countdown_next: Option<tokio::time::Instant>,
+    /// Client connecté en administrateur avec `!admin login` (un seul à la fois).
+    admin_client: Option<ClientId>,
 }
 
 impl RoomTask {

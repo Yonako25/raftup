@@ -616,3 +616,65 @@ async fn countdown_refuse() {
         ]
     );
 }
+
+#[tokio::test]
+async fn admin_login_et_logout() {
+    let mut data = seed();
+    data.server_options.server_password = Some("admin".to_string());
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+
+    let packets = run(&mut alice, "!admin").await;
+    assert_eq!(results(&packets), ["Usage: !admin login [password]"]);
+    let packets = run(&mut alice, "!admin /players").await;
+    assert_eq!(
+        results(&packets),
+        ["You must first login using !admin login [password]"]
+    );
+    let packets = run(&mut alice, "!admin login faux").await;
+    assert_eq!(results(&packets), ["Password incorrect."]);
+    let packets = run(&mut alice, "!admin login admin").await;
+    assert_eq!(
+        results(&packets),
+        ["Login successful. You can now issue server side commands."]
+    );
+    let packets = run(&mut alice, "!admin").await;
+    assert_eq!(
+        results(&packets),
+        [
+            "Usage: !admin [Server command].\nUse !admin /help for help.\n\
+          Use !admin logout to log out of the current session."
+        ]
+    );
+
+    // Une autre connexion n'est pas administratrice (et le chat est limité :
+    // nouvelle connexion pour la suite).
+    let mut other = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut other, "!admin /players").await;
+    assert_eq!(
+        results(&packets),
+        ["You must first login using !admin login [password]"]
+    );
+    run(&mut other, "!admin login admin").await;
+    // Commandes serveur pas encore disponibles (J3).
+    let packets = run(&mut other, "!admin /players").await;
+    let admin: Vec<&Value> = packets
+        .iter()
+        .filter(|p| p["type"] == "AdminCommandResult")
+        .collect();
+    assert_eq!(admin.len(), 1);
+    assert_eq!(
+        admin[0]["data"][0]["text"],
+        "Server commands are not available yet."
+    );
+    let packets = run(&mut other, "!admin logout").await;
+    assert_eq!(
+        results(&packets),
+        ["Logout successful. You can no longer issue server side commands."]
+    );
+    let packets = run(&mut other, "!admin /players").await;
+    assert_eq!(
+        results(&packets),
+        ["You must first login using !admin login [password]"]
+    );
+}

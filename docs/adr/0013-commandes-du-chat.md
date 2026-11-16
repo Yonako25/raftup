@@ -43,7 +43,7 @@ Exemple : `!hint Épe` propose `Épée` avec un score de 75 %.
 - `!options` masque le mot de passe de la salle : il s'affiche en `*`, comme `server_password`. Ça répond à NF09 (aucun mot de passe dans les logs ni les réponses). Écart déclaré : le serveur officiel l'affiche en clair.
 - `!license` affiche la notice de Raftup (double licence MIT / Apache-2.0), et non celle d'Archipelago.
 - Erreur d'arguments qui fait planter le serveur officiel : Raftup répond par un texte court (par exemple « Argument manquant pour !hint ») et ne ferme pas la connexion.
-- Les commandes serveur qui suivent `!admin` sont reportées à J3.
+- Les commandes serveur qui suivent `!admin` sont reportées à J3. `!admin login`, `!admin logout` et les textes d'aide sont faits ; une fois connecté, toute autre commande reçoit pour l'instant « Server commands are not available yet. » (genre `AdminCommandResult`).
 
 ## Conséquences
 

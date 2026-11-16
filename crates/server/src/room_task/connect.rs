@@ -270,6 +270,10 @@ impl RoomTask {
         let Some(client) = self.clients.remove(&id) else {
             return;
         };
+        // Une nouvelle connexion devra se reconnecter en administrateur.
+        if self.admin_client == Some(id) {
+            self.admin_client = None;
+        }
         // Plus d'abonnement pour ce client.
         for subscribers in self.subscribers.values_mut() {
             subscribers.remove(&id);

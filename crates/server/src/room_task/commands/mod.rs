@@ -152,8 +152,8 @@ impl RoomTask {
         debug!(id, command, "commande pas encore gérée (T7b/T8)");
     }
 
-    /// `!admin` : diffuse la ligne avec les mots de passe masqués, puis répond.
-    /// Le reste de l'administration à distance arrive avec T7b.
+    /// `!admin` : diffuse la ligne avec les mots de passe masqués, puis gère
+    /// `login` / `logout`. Les commandes serveur elles-mêmes arrivent en J3.
     fn cmd_admin(&mut self, id: ClientId, command: &str) {
         let Some(player) = self.player(id).cloned() else {
             return;
@@ -185,19 +185,63 @@ impl RoomTask {
         message.message = Some(line);
         self.broadcast_text_all(message);
 
-        let has_password = self
+        let password = self
             .room
             .data()
             .server_options
             .server_password
-            .as_ref()
-            .is_some_and(|p| !p.is_empty());
-        if !has_password {
+            .clone()
+            .unwrap_or_default();
+        if password.is_empty() {
             self.output(id, "Sorry, Remote administration is disabled");
             return;
         }
-        // T7b : connexion et commandes d'administration.
-        debug!(id, "!admin avec mot de passe pas encore géré (T7b)");
+        // Un seul administrateur à la fois, comme le serveur officiel
+        // (`commandprocessor.client`) : se connecter remplace le précédent.
+        let is_admin = self.admin_client == Some(id);
+
+        if command.is_empty() {
+            if is_admin {
+                self.output(
+                    id,
+                    "Usage: !admin [Server command].\nUse !admin /help for help.\n\
+                     Use !admin logout to log out of the current session.",
+                );
+            } else {
+                self.output(id, "Usage: !admin login [password]");
+            }
+            return;
+        }
+        // Comparaison exacte, casse comprise, comme en Python.
+        if command.starts_with("login ") {
+            if command == format!("login {password}") {
+                self.output(
+                    id,
+                    "Login successful. You can now issue server side commands.",
+                );
+                self.admin_client = Some(id);
+            } else {
+                self.output(id, "Password incorrect.");
+            }
+            return;
+        }
+        if !is_admin {
+            self.output(id, "You must first login using !admin login [password]");
+            return;
+        }
+        if command == "logout" {
+            self.output(
+                id,
+                "Logout successful. You can no longer issue server side commands.",
+            );
+            self.admin_client = None;
+            return;
+        }
+        // Commandes serveur : reportées à J3 (ADR 0013). Réponse du genre
+        // `AdminCommandResult`, comme celles de la console officielle.
+        let mut message = text_message("Server commands are not available yet.".to_string());
+        message.kind = Some("AdminCommandResult".to_string());
+        self.notify(id, message);
     }
 }
 
