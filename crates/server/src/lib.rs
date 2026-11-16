@@ -12,6 +12,10 @@ mod connection;
 mod datastore;
 pub mod error;
 mod game;
+// Pas encore branché : les paquets d'indices et les commandes `!hint` viendront
+// de la tâche salle ; en attendant, ces fonctions ne sont appelées que par les tests.
+#[allow(dead_code)]
+mod hints;
 pub mod limits;
 mod python;
 pub mod room;

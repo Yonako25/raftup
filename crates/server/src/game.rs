@@ -7,9 +7,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ap_protocol::{
-    ClientStatus, Hint, HintStatus, LocationId, NetworkItem, SlotId, SlotType, TeamId,
+    ClientStatus, Hint, HintStatus, ItemFlags, ItemId, LocationId, NetworkItem, SlotId, SlotType,
+    TeamId,
 };
-use multidata::MultiData;
+use multidata::{MultiData, PlacedItem};
 
 /// Un objet trouvé dans un lieu, et le slot qui le reçoit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +40,21 @@ pub(crate) struct GameState {
     /// Indices connus de chaque (équipe, slot). Un ensemble en Python : pas de
     /// doublon, mais l'ordre ne compte pas.
     hints: BTreeMap<(TeamId, SlotId), Vec<Hint>>,
+    /// Nombre d'indices payés par (équipe, slot) (`hints_used` du serveur officiel).
+    #[allow(dead_code)] // lu par le moteur d'indices, pas encore branché
+    hints_used: BTreeMap<(TeamId, SlotId), u32>,
+}
+
+/// Ce que `notify_hints` demande d'envoyer, une fois l'état mis à jour.
+#[allow(dead_code)]
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct HintEffects {
+    /// Slots dont la liste d'indices a reçu un nouvel indice : pour chacun, un
+    /// `SetReply` de `_read_hints_<équipe>_<slot>` puis un `RoomUpdate` `hint_points`.
+    pub new_hint_slots: BTreeSet<(TeamId, SlotId)>,
+    /// Messages `PrintJSON` de type `Hint`, par slot concerné (ordre croissant).
+    /// Les indices de ce slot (où il est celui qui trouve) viennent en premier.
+    pub messages: Vec<(SlotId, Vec<Hint>)>,
 }
 
 impl GameState {
@@ -128,7 +144,248 @@ impl GameState {
         self.hints.insert((team, slot), new_hints);
         changed
     }
+}
 
+// Moteur d'indices : pas encore branché sur la tâche salle (tests seulement).
+#[allow(dead_code)]
+impl GameState {
+    /// Nombre d'indices déjà payés par un slot.
+    pub fn hints_used(&self, team: TeamId, slot: SlotId) -> u32 {
+        self.hints_used.get(&(team, slot)).copied().unwrap_or(0)
+    }
+
+    /// Fixe le nombre d'indices payés (chargement d'une sauvegarde).
+    pub fn set_hints_used(&mut self, team: TeamId, slot: SlotId, used: u32) {
+        self.hints_used.insert((team, slot), used);
+    }
+
+    /// Ajoute `count` indices payés ; renvoie le nouveau total.
+    pub fn add_hints_used(&mut self, team: TeamId, slot: SlotId, count: u32) -> u32 {
+        let used = self.hints_used.entry((team, slot)).or_insert(0);
+        *used = used.saturating_add(count);
+        *used
+    }
+
+    /// Points d'indice d'un slot (`get_slot_points`) : points des lieux visités
+    /// moins le coût des indices déjà payés.
+    pub fn slot_points(
+        &self,
+        data: &MultiData,
+        team: TeamId,
+        slot: SlotId,
+        location_check_points: i64,
+    ) -> i64 {
+        let checked = self.checked_count(team, slot) as i64;
+        let cost = i64::from(hint_cost(data, slot));
+        let used = i64::from(self.hints_used(team, slot));
+        location_check_points * checked - cost * used
+    }
+
+    /// L'indice déjà connu pour ce lieu de ce slot (`get_hint`).
+    pub fn get_hint(&self, team: TeamId, finding: SlotId, location: LocationId) -> Option<&Hint> {
+        self.hints(team, finding)
+            .iter()
+            .find(|h| h.location == location && h.finding_player == finding)
+    }
+
+    /// Statut d'un nouvel indice : « trouvé » si le lieu est visité, sinon le
+    /// statut demandé, ou (`None`) un statut automatique : à éviter pour un
+    /// piège, prioritaire sinon.
+    fn new_hint_status(
+        &self,
+        team: TeamId,
+        finding: SlotId,
+        location: LocationId,
+        flags: ItemFlags,
+        status: Option<HintStatus>,
+    ) -> (bool, HintStatus) {
+        let found = self
+            .location_checks
+            .get(&(team, finding))
+            .is_some_and(|c| c.contains(&location));
+        let status = if found {
+            HintStatus::FOUND
+        } else {
+            match status {
+                Some(status) => status,
+                None if flags.contains(ItemFlags::TRAP) => HintStatus::AVOID,
+                None => HintStatus::PRIORITY,
+            }
+        };
+        (found, status)
+    }
+
+    /// Indice pour un lieu du slot (`collect_hint_location_id`). Si l'indice
+    /// existe déjà, c'est lui qui est renvoyé. Lieu inconnu : liste vide.
+    /// Le serveur officiel prend `HINT_UNSPECIFIED` par défaut : à l'appelant
+    /// de passer `Some(HintStatus::UNSPECIFIED)`.
+    pub fn collect_hint_location_id(
+        &self,
+        data: &MultiData,
+        team: TeamId,
+        slot: SlotId,
+        location: LocationId,
+        status: Option<HintStatus>,
+    ) -> Vec<Hint> {
+        if let Some(previous) = self.get_hint(team, slot, location) {
+            return vec![previous.clone()];
+        }
+        let Some(placed) = data.locations.get(&slot).and_then(|l| l.get(&location)) else {
+            return Vec::new();
+        };
+        let (found, status) = self.new_hint_status(team, slot, location, placed.flags, status);
+        vec![make_hint(data, slot, location, placed, found, status)]
+    }
+
+    /// Indices pour un objet (`collect_hints`) : tous les lieux, dans tous les
+    /// mondes, qui contiennent cet objet pour le slot ou pour un groupe dont il
+    /// fait partie. Ordre : monde croissant, puis lieu croissant (le serveur
+    /// officiel suit l'ordre d'insertion du multidata : à vérifier).
+    pub fn collect_hints(
+        &self,
+        data: &MultiData,
+        team: TeamId,
+        slot: SlotId,
+        item: ItemId,
+        status: Option<HintStatus>,
+    ) -> Vec<Hint> {
+        let mut receivers = BTreeSet::from([slot]);
+        for (group_id, info) in &data.slots {
+            if info.slot_type == SlotType::GROUP && info.group_members.contains(&slot) {
+                receivers.insert(*group_id);
+            }
+        }
+        let mut hints = Vec::new();
+        for (finding, locations) in &data.locations {
+            for (location, placed) in locations {
+                if placed.item != item || !receivers.contains(&placed.player) {
+                    continue;
+                }
+                if let Some(previous) = self.get_hint(team, *finding, *location) {
+                    hints.push(previous.clone());
+                    continue;
+                }
+                let (found, status) =
+                    self.new_hint_status(team, *finding, *location, placed.flags, status);
+                hints.push(make_hint(data, *finding, *location, placed, found, status));
+            }
+        }
+        hints
+    }
+
+    /// Mémorise et diffuse des indices (`notify_hints`). Modifie l'état et
+    /// renvoie ce que la tâche salle doit envoyer.
+    ///
+    /// - `only_new` : ignore les indices que le slot qui trouve connaît déjà ;
+    /// - `persist_even_if_found` : mémorise aussi les indices déjà trouvés
+    ///   (`LocationScouts`) ; sinon ils sont seulement affichés ;
+    /// - `recipients` : si présent, seuls ces slots reçoivent le message.
+    pub fn notify_hints(
+        &mut self,
+        data: &MultiData,
+        team: TeamId,
+        hints: &[Hint],
+        only_new: bool,
+        persist_even_if_found: bool,
+        recipients: Option<&[SlotId]>,
+    ) -> HintEffects {
+        let mut effects = HintEffects::default();
+        // On manipule des références (`&Hint`) : pas de copie, et elles restent
+        // valables tant que `hints` (emprunté par l'appelant) existe.
+        let mut hints: Vec<&Hint> = hints.iter().collect();
+        if only_new {
+            hints.retain(|h| !self.hints(team, h.finding_player).contains(h));
+        }
+        if hints.is_empty() {
+            return effects;
+        }
+        // Tri stable, « trouvés » d'abord (comme `sorted(..., reverse=True)` de
+        // Python, qui garde l'ordre d'origine des égalités).
+        hints.sort_by_key(|h| std::cmp::Reverse(h.found));
+
+        let mut concerns: BTreeMap<SlotId, Vec<&Hint>> = BTreeMap::new();
+        for hint in hints {
+            for player in slot_set(data, hint.receiving_player) {
+                concerns.entry(player).or_default().push(hint);
+            }
+            let local = hint.receiving_player == hint.finding_player;
+            let list = concerns.entry(hint.finding_player).or_default();
+            if !local && !list.contains(&hint) {
+                list.push(hint);
+            }
+            if (!hint.found || persist_even_if_found)
+                && !self.hints(team, hint.finding_player).contains(hint)
+            {
+                self.add_hint(team, hint.finding_player, hint);
+                effects.new_hint_slots.insert((team, hint.finding_player));
+                for player in slot_set(data, hint.receiving_player) {
+                    self.add_hint(team, player, hint);
+                    effects.new_hint_slots.insert((team, player));
+                }
+            }
+        }
+        for (slot, list) in concerns {
+            if recipients.is_some_and(|r| !r.contains(&slot)) {
+                continue;
+            }
+            let mut list: Vec<Hint> = list.into_iter().cloned().collect();
+            // Tri stable : les indices que ce slot a trouvés d'abord.
+            list.sort_by_key(|h| h.finding_player != slot);
+            effects.messages.push((slot, list));
+        }
+        effects
+    }
+
+    /// Ajoute un indice à un slot, sans doublon (un ensemble en Python).
+    fn add_hint(&mut self, team: TeamId, slot: SlotId, hint: &Hint) {
+        let list = self.hints.entry((team, slot)).or_default();
+        if !list.contains(hint) {
+            list.push(hint.clone());
+        }
+    }
+
+    /// Change le statut d'un indice (`UpdateHint`) chez tous les slots concernés.
+    /// Les contrôles du paquet (droits, statut valide) restent à l'appelant.
+    ///
+    /// Renvoie les (équipe, slot) dont la clé `_read_hints` change ; vide si
+    /// l'indice est inconnu ou inchangé.
+    pub fn update_hint(
+        &mut self,
+        data: &MultiData,
+        team: TeamId,
+        finding: SlotId,
+        location: LocationId,
+        status: HintStatus,
+    ) -> BTreeSet<(TeamId, SlotId)> {
+        let mut changed = BTreeSet::new();
+        let Some(hint) = self.get_hint(team, finding, location).cloned() else {
+            return changed;
+        };
+        let new_hint = re_prioritize(&hint, status);
+        if new_hint == hint {
+            return changed;
+        }
+        let mut concerned = slot_set(data, hint.receiving_player);
+        concerned.push(hint.finding_player);
+        for player in concerned {
+            self.replace_hint(team, player, &hint, &new_hint);
+            changed.insert((team, player));
+        }
+        changed
+    }
+
+    /// Objet donné par `!getitem` : ajouté aux deux listes du slot.
+    pub fn add_cheat_item(&mut self, team: TeamId, slot: SlotId, item: NetworkItem) {
+        for remote_items in [false, true] {
+            self.received_items
+                .entry((team, slot, remote_items))
+                .or_default()
+                .push(item);
+        }
+    }
+}
+
+impl GameState {
     /// Un indice dont le lieu a été visité devient « trouvé » (`Hint.re_check`).
     fn re_check(&self, team: TeamId, hint: &Hint) -> Hint {
         if hint.found && hint.status == HintStatus::FOUND {
@@ -266,6 +523,58 @@ impl GameState {
     }
 }
 
+/// Coût d'un indice pour un slot (`get_hint_cost`) : un pourcentage du nombre
+/// de ses lieux, au moins 1 ; 0 si les indices sont gratuits.
+pub(crate) fn hint_cost(data: &MultiData, slot: SlotId) -> u32 {
+    let percent = data.server_options.hint_cost;
+    if percent == 0 {
+        return 0;
+    }
+    let count = data.locations.get(&slot).map_or(0, |l| l.len());
+    // Même ordre de calcul que Python (flottants), puis troncature.
+    let cost = (percent as f64 * 0.01 * count as f64) as i64;
+    u32::try_from(cost.max(1)).unwrap_or(u32::MAX)
+}
+
+/// `Hint.re_prioritize` : un indice trouvé reste « trouvé ».
+pub(crate) fn re_prioritize(hint: &Hint, status: HintStatus) -> Hint {
+    let status = if hint.found && status != HintStatus::FOUND {
+        HintStatus::FOUND
+    } else {
+        status
+    };
+    let mut new_hint = hint.clone();
+    new_hint.status = status;
+    new_hint
+}
+
+/// Construit un indice pour un lieu du slot `finding`.
+fn make_hint(
+    data: &MultiData,
+    finding: SlotId,
+    location: LocationId,
+    placed: &PlacedItem,
+    found: bool,
+    status: HintStatus,
+) -> Hint {
+    let entrance = data
+        .er_hint_data
+        .get(&finding)
+        .and_then(|e| e.get(&location))
+        .cloned()
+        .unwrap_or_default();
+    Hint {
+        receiving_player: placed.player,
+        finding_player: finding,
+        location,
+        item: placed.item,
+        found,
+        entrance,
+        item_flags: placed.flags,
+        status,
+    }
+}
+
 /// Les slots concernés par un slot : les membres pour un groupe, lui-même sinon.
 pub(crate) fn slot_set(data: &MultiData, slot: SlotId) -> Vec<SlotId> {
     match data.slots.get(&slot) {
@@ -294,8 +603,7 @@ pub(crate) fn locations_for_player(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ap_protocol::{ItemFlags, NetworkSlot};
-    use multidata::PlacedItem;
+    use ap_protocol::NetworkSlot;
 
     /// Partie minuscule : Alice (1) et Bob (2), groupe 3 = {1, 2}.
     fn tiny() -> MultiData {
@@ -347,6 +655,238 @@ mod tests {
             server_options: Default::default(),
             datapackage: Default::default(),
         }
+    }
+
+    fn hint_for(receiving: SlotId, finding: SlotId, location: LocationId, found: bool) -> Hint {
+        Hint {
+            receiving_player: receiving,
+            finding_player: finding,
+            location,
+            item: 1,
+            found,
+            entrance: String::new(),
+            item_flags: ItemFlags(0),
+            status: if found {
+                HintStatus::FOUND
+            } else {
+                HintStatus::UNSPECIFIED
+            },
+        }
+    }
+
+    #[test]
+    fn cout_des_indices() {
+        let mut data = tiny(); // Alice a 3 lieux, Bob 1.
+        data.server_options.hint_cost = 0;
+        assert_eq!(hint_cost(&data, 1), 0);
+        // 10 % de 3 lieux = 0,3 : minimum 1.
+        data.server_options.hint_cost = 10;
+        assert_eq!(hint_cost(&data, 1), 1);
+        // 50 % de 3 lieux = 1,5 : tronqué à 1 ; 100 % : 3.
+        data.server_options.hint_cost = 50;
+        assert_eq!(hint_cost(&data, 1), 1);
+        data.server_options.hint_cost = 100;
+        assert_eq!(hint_cost(&data, 1), 3);
+        // 67 % de 3 = 2,01 : 2.
+        data.server_options.hint_cost = 67;
+        assert_eq!(hint_cost(&data, 1), 2);
+    }
+
+    #[test]
+    fn points_d_indice() {
+        let mut data = tiny();
+        data.server_options.hint_cost = 100; // 3 points par indice pour Alice
+        let mut game = GameState::default();
+        game.register_checks(&data, 0, 1, &[10, 11]);
+        assert_eq!(game.slot_points(&data, 0, 1, 5), 10);
+        assert_eq!(game.add_hints_used(0, 1, 2), 2);
+        assert_eq!(game.hints_used(0, 1), 2);
+        assert_eq!(game.slot_points(&data, 0, 1, 5), 4);
+        // Peut devenir négatif, comme en Python.
+        game.set_hints_used(0, 1, 10);
+        assert_eq!(game.slot_points(&data, 0, 1, 5), -20);
+    }
+
+    #[test]
+    fn creation_d_indices() {
+        let mut data = tiny();
+        // Lieu 10 d'Alice : un piège pour Bob.
+        data.locations.get_mut(&1).unwrap().insert(
+            10,
+            PlacedItem {
+                item: 100,
+                player: 2,
+                flags: ItemFlags::TRAP,
+            },
+        );
+        let mut game = GameState::default();
+        // Statut par défaut du code : UNSPECIFIED ; automatique : AVOID (piège).
+        let h = game.collect_hint_location_id(&data, 0, 1, 10, Some(HintStatus::UNSPECIFIED));
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].status, HintStatus::UNSPECIFIED);
+        assert!(!h[0].found);
+        let h = game.collect_hint_location_id(&data, 0, 1, 10, None);
+        assert_eq!(h[0].status, HintStatus::AVOID);
+        // Pas un piège : PRIORITY.
+        let h = game.collect_hint_location_id(&data, 0, 1, 11, None);
+        assert_eq!(h[0].status, HintStatus::PRIORITY);
+        // Lieu inconnu.
+        assert!(game
+            .collect_hint_location_id(&data, 0, 1, 99, None)
+            .is_empty());
+        // Lieu déjà visité : trouvé, quel que soit le statut demandé.
+        game.register_checks(&data, 0, 1, &[11]);
+        let h = game.collect_hint_location_id(&data, 0, 1, 11, Some(HintStatus::PRIORITY));
+        assert!(h[0].found);
+        assert_eq!(h[0].status, HintStatus::FOUND);
+        // Un indice déjà connu est renvoyé tel quel.
+        let known = hint_for(2, 1, 10, false);
+        game.add_hint(0, 1, &known);
+        assert_eq!(
+            game.collect_hint_location_id(&data, 0, 1, 10, None),
+            [known]
+        );
+    }
+
+    #[test]
+    fn indices_par_objet_et_groupes() {
+        let data = tiny();
+        let game = GameState::default();
+        // Objet 102 : dans le lieu 12 d'Alice, pour le groupe 3 = {1, 2}.
+        // Bob (membre du groupe) le cherche : trouvé via son groupe.
+        let hints = game.collect_hints(&data, 0, 2, 102, None);
+        assert_eq!(hints.len(), 1);
+        assert_eq!(hints[0].receiving_player, 3);
+        assert_eq!(hints[0].finding_player, 1);
+        assert_eq!(hints[0].status, HintStatus::PRIORITY);
+        // Objet 200 (lieu 20 de Bob, pour Alice) : Bob ne le reçoit pas.
+        assert!(game.collect_hints(&data, 0, 2, 200, None).is_empty());
+        assert_eq!(game.collect_hints(&data, 0, 1, 200, None).len(), 1);
+    }
+
+    #[test]
+    fn diffusion_d_un_indice_non_local() {
+        let data = tiny();
+        let mut game = GameState::default();
+        // Alice (1) trouve, Bob (2) recevra.
+        let hint = hint_for(2, 1, 10, false);
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&hint), false, false, None);
+        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(effects.messages.len(), 2);
+        assert_eq!(effects.messages[0], (1, vec![hint.clone()]));
+        assert_eq!(effects.messages[1], (2, vec![hint.clone()]));
+        assert_eq!(game.hints(0, 1), std::slice::from_ref(&hint));
+        assert_eq!(game.hints(0, 2), std::slice::from_ref(&hint));
+
+        // only_new : déjà connu, rien à faire du tout.
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&hint), true, false, None);
+        assert_eq!(effects, HintEffects::default());
+        // Sans only_new : réaffiché, mais pas de nouveau slot.
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&hint), false, false, None);
+        assert!(effects.new_hint_slots.is_empty());
+        assert_eq!(effects.messages.len(), 2);
+        // Destinataires restreints.
+        let effects = game.notify_hints(&data, 0, &[hint], false, false, Some(&[2]));
+        assert_eq!(effects.messages.len(), 1);
+        assert_eq!(effects.messages[0].0, 2);
+    }
+
+    #[test]
+    fn diffusion_d_un_indice_local_ou_de_groupe() {
+        let data = tiny();
+        let mut game = GameState::default();
+        // Local : Alice trouve et reçoit, un seul message, une seule copie.
+        let local = hint_for(1, 1, 11, false);
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&local), false, false, None);
+        assert_eq!(effects.messages, [(1, vec![local.clone()])]);
+        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1)]));
+        // Groupe 3 = {1, 2} reçoit, Alice trouve : le groupe lui-même n'a pas de
+        // client, mais ses membres 1 et 2 sont prévenus ; Alice une seule fois.
+        let grouped = hint_for(3, 1, 12, false);
+        let effects =
+            game.notify_hints(&data, 0, std::slice::from_ref(&grouped), false, false, None);
+        let slots: Vec<_> = effects.messages.iter().map(|(s, _)| *s).collect();
+        assert_eq!(slots, [1, 2]);
+        assert_eq!(effects.messages[0].1.len(), 1);
+        assert_eq!(game.hints(0, 1).len(), 2);
+        assert_eq!(game.hints(0, 2), [grouped]);
+    }
+
+    #[test]
+    fn indice_trouve_et_persistance() {
+        let data = tiny();
+        let mut game = GameState::default();
+        let found = hint_for(2, 1, 10, true);
+        // Trouvé : affiché mais pas mémorisé.
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&found), false, false, None);
+        assert!(effects.new_hint_slots.is_empty());
+        assert_eq!(effects.messages.len(), 2);
+        assert!(game.hints(0, 1).is_empty());
+        // Avec persist (LocationScouts) : mémorisé.
+        let effects = game.notify_hints(&data, 0, std::slice::from_ref(&found), false, true, None);
+        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(game.hints(0, 1), [found]);
+    }
+
+    #[test]
+    fn tri_des_messages() {
+        let data = tiny();
+        let mut game = GameState::default();
+        // Pour Bob : un indice trouvé par Alice (non trouvé), un trouvé par lui.
+        let by_alice = hint_for(2, 1, 10, false);
+        let by_bob = hint_for(2, 2, 20, false);
+        let found = hint_for(2, 1, 11, true);
+        let effects = game.notify_hints(
+            &data,
+            0,
+            &[by_alice.clone(), by_bob.clone(), found.clone()],
+            false,
+            false,
+            None,
+        );
+        // Bob : d'abord ce qu'il a trouvé lui-même, puis le reste, avec les
+        // « trouvés » avant les autres (tri stable en deux passes).
+        let for_bob = &effects.messages.iter().find(|(s, _)| *s == 2).unwrap().1;
+        assert_eq!(for_bob, &[by_bob, found, by_alice]);
+    }
+
+    #[test]
+    fn changement_de_statut() {
+        let data = tiny();
+        let mut game = GameState::default();
+        let hint = hint_for(3, 1, 12, false);
+        game.notify_hints(&data, 0, std::slice::from_ref(&hint), false, false, None);
+        let changed = game.update_hint(&data, 0, 1, 12, HintStatus::AVOID);
+        assert_eq!(changed, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(game.hints(0, 1)[0].status, HintStatus::AVOID);
+        assert_eq!(game.hints(0, 2)[0].status, HintStatus::AVOID);
+        // Même statut ou indice inconnu : rien ne change.
+        assert!(game
+            .update_hint(&data, 0, 1, 12, HintStatus::AVOID)
+            .is_empty());
+        assert!(game
+            .update_hint(&data, 0, 1, 99, HintStatus::AVOID)
+            .is_empty());
+        // Un indice trouvé reste « trouvé ».
+        let found = hint_for(2, 1, 10, true);
+        game.notify_hints(&data, 0, std::slice::from_ref(&found), false, true, None);
+        assert!(game
+            .update_hint(&data, 0, 1, 10, HintStatus::PRIORITY)
+            .is_empty());
+    }
+
+    #[test]
+    fn objet_de_triche() {
+        let mut game = GameState::default();
+        let item = NetworkItem {
+            item: 5,
+            location: -1,
+            player: 0,
+            flags: ItemFlags(0),
+        };
+        game.add_cheat_item(0, 1, item);
+        assert_eq!(game.received(0, 1, true), [item]);
+        assert_eq!(game.received(0, 1, false), [item]);
     }
 
     #[test]
