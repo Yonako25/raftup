@@ -269,7 +269,13 @@ async fn connexion_muette() {
     let end = tokio::time::Instant::now() + Duration::from_millis(600);
     while tokio::time::timeout_at(end, other.next()).await.is_ok() {}
 
-    assert_eq!(wait_closed(&mut silent).await, Some(CloseCode::Away));
+    // La connexion doit être fermée. Le code (1001, `Away`) n'arrive que si le
+    // client lit avant la fin du délai de grâce du serveur (1 s) : sur une
+    // machine lente, ses réponses aux pings arrivent après la coupure, et
+    // Windows efface alors la trame de fermeture (RST). Un vrai client muet
+    // ne lit de toute façon plus rien : seule la fermeture compte.
+    let code = wait_closed(&mut silent).await;
+    assert!(matches!(code, Some(CloseCode::Away) | None), "{code:?}");
     assert_alive(&mut other).await;
 }
 
