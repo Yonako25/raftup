@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use multidata::{load_archipelago, ArchiveLimits};
+use multidata::{load_archipelago, read_file_bounded, ArchiveLimits, MAX_SEED_FILE_BYTES};
 use serde::{Deserialize, Serialize};
 use server::save::{default_save_path, open_or_create};
 use server::{GameEvent, Room, RunningServer, Server, ServerStatus, TlsConfig};
@@ -34,7 +34,10 @@ pub enum Encryption {
 }
 
 /// Réglages de l'écran « Héberger une partie ».
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Debug` est écrit à la main (plus bas) : il masque le mot de passe, pour
+/// qu'un `info!(?options)` ne l'écrive jamais dans le journal (NF09).
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostOptions {
     /// Fichier `.archipelago`.
     pub seed: PathBuf,
@@ -51,6 +54,21 @@ pub struct HostOptions {
     /// reprend si ce fichier existe déjà (ADR 0014).
     #[serde(default)]
     pub disable_save: bool,
+}
+
+impl std::fmt::Debug for HostOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Un mot de passe donné apparaît comme « *** », jamais en clair.
+        let password = self.password.as_ref().map(|_| "***");
+        f.debug_struct("HostOptions")
+            .field("seed", &self.seed)
+            .field("port", &self.port)
+            .field("password", &password)
+            .field("encryption", &self.encryption)
+            .field("public_host", &self.public_host)
+            .field("disable_save", &self.disable_save)
+            .finish()
+    }
 }
 
 fn default_public_host() -> String {
@@ -129,9 +147,11 @@ impl Host {
         };
         // Les octets de la seed servent deux fois : la lecture, et l'empreinte
         // qui lie la sauvegarde à cette seed.
-        let bytes = std::fs::read(&options.seed).map_err(|source| LauncherError::Read {
-            path: options.seed.display().to_string(),
-            source,
+        let bytes = read_file_bounded(&options.seed, MAX_SEED_FILE_BYTES).map_err(|source| {
+            LauncherError::Read {
+                path: options.seed.display().to_string(),
+                source,
+            }
         })?;
         let data = load_archipelago(&bytes, &ArchiveLimits::default())?;
         let seed = SeedSummary::of(&data);

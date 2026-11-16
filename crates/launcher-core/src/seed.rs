@@ -4,7 +4,9 @@
 
 use std::path::Path;
 
-use multidata::{load_archipelago, ArchiveLimits, MultiData};
+use multidata::{
+    load_archipelago, read_file_bounded, ArchiveLimits, MultiData, MAX_SEED_FILE_BYTES,
+};
 use serde::Serialize;
 
 use crate::error::LauncherError;
@@ -43,10 +45,11 @@ pub struct SeedSlot {
 impl SeedSummary {
     /// Lit et résume une seed.
     pub fn load(path: &Path) -> Result<(SeedSummary, MultiData), LauncherError> {
-        let bytes = std::fs::read(path).map_err(|source| LauncherError::Read {
-            path: path.display().to_string(),
-            source,
-        })?;
+        let bytes =
+            read_file_bounded(path, MAX_SEED_FILE_BYTES).map_err(|source| LauncherError::Read {
+                path: path.display().to_string(),
+                source,
+            })?;
         let data = load_archipelago(&bytes, &ArchiveLimits::default())?;
         Ok((SeedSummary::of(&data), data))
     }

@@ -99,6 +99,8 @@ impl eframe::App for App {
         });
 
         drop(shared);
+        // Verrou relâché : on peut ouvrir une boîte de dialogue (elle bloque).
+        setup::open_pending_dialog(&mut self.setup, &self.worker);
         if let Some(page) = goto {
             self.page = page;
         }

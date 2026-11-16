@@ -166,3 +166,29 @@ async fn sauvegarde_puis_reprise() {
     assert_eq!(status.server.slots[0].checked, 2);
     host.stop().await.unwrap();
 }
+
+#[test]
+fn debug_masque_le_mot_de_passe() {
+    let mut options = plain(0);
+    options.password = Some("secret".to_string());
+    let shown = format!("{options:?}");
+    assert!(!shown.contains("secret"), "{shown}");
+    assert!(shown.contains("***"), "{shown}");
+}
+
+#[test]
+fn seed_trop_grosse_refusee() {
+    // Un fichier d'un octet de plus que la limite, plein de zéros (creux).
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("seed-trop-grosse");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("enorme.archipelago");
+    let file = std::fs::File::create(&path).unwrap();
+    file.set_len(multidata::MAX_SEED_FILE_BYTES + 1).unwrap();
+    drop(file);
+    let error = SeedSummary::load(&path).unwrap_err();
+    assert!(
+        matches!(&error, LauncherError::Read { source, .. }
+            if source.to_string().contains("trop gros")),
+        "{error}"
+    );
+}

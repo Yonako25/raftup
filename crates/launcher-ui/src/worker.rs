@@ -10,7 +10,11 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use launcher_core::{Host, HostOptions, HostStatus, LogBuffer, LogLine, NumberedEvent};
+use std::path::PathBuf;
+
+use launcher_core::{
+    Host, HostOptions, HostStatus, LogBuffer, LogLine, NumberedEvent, SeedSummary,
+};
 use tokio::sync::{mpsc, oneshot};
 
 /// Nombre maximal d'événements et de lignes de journal gardés pour l'affichage.
@@ -23,6 +27,8 @@ pub enum Command {
     Announce(String),
     /// La fenêtre se ferme : arrêter proprement la partie, puis le worker.
     Shutdown,
+    /// Lire et résumer une seed, hors du fil de l'interface.
+    LoadSeed(PathBuf),
 }
 
 /// L'état lu par l'interface.
@@ -38,6 +44,8 @@ pub struct Shared {
     pub starting: bool,
     /// Dernière erreur d'une commande, à montrer une fois.
     pub error: Option<String>,
+    /// Dernière seed lue : son chemin et son résumé, ou le message d'erreur.
+    pub seed: Option<(PathBuf, Result<SeedSummary, String>)>,
 }
 
 /// Poignée côté interface.
@@ -170,6 +178,19 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
         }
         // Traitée dans la boucle de `run`, qui s'arrête avant d'appeler `handle`.
         Command::Shutdown => {}
+        Command::LoadSeed(path) => {
+            // Lecture de fichier + décompression + pickle : du travail qui
+            // bloque. `spawn_blocking` le fait sur un thread prévu pour ça,
+            // sans gêner les tâches async (le serveur, s'il tourne).
+            let to_read = path.clone();
+            let loaded = tokio::task::spawn_blocking(move || SeedSummary::load(&to_read)).await;
+            let result = match loaded {
+                Ok(Ok((summary, _data))) => Ok(summary),
+                Ok(Err(e)) => Err(e.to_string()),
+                Err(e) => Err(format!("lecture de la seed interrompue : {e}")),
+            };
+            with_shared(shared, |s| s.seed = Some((path, result)));
+        }
     }
 }
 

@@ -78,8 +78,12 @@ impl TlsConfig {
     }
 }
 
+/// Taille maximale d'un fichier PEM : un certificat avec sa chaîne fait
+/// quelques Kio ; au-delà d'1 Mio, ce n'est sûrement pas le bon fichier.
+const MAX_PEM_BYTES: u64 = 1024 * 1024;
+
 fn read(path: &Path) -> Result<Vec<u8>, TlsError> {
-    std::fs::read(path).map_err(|source| TlsError::Read {
+    multidata::read_file_bounded(path, MAX_PEM_BYTES).map_err(|source| TlsError::Read {
         path: path.display().to_string(),
         source,
     })

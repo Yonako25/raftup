@@ -136,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
     // avant de lire la seed.
     let tls = tls_config(&options)?;
 
-    let bytes = std::fs::read(&options.seed)
+    let bytes = multidata::read_file_bounded(&options.seed, multidata::MAX_SEED_FILE_BYTES)
         .with_context(|| format!("lecture de {}", options.seed.display()))?;
     let data = load_archipelago(&bytes, &ArchiveLimits::default())
         .with_context(|| format!("seed invalide : {}", options.seed.display()))?;

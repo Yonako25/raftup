@@ -11,11 +11,23 @@ use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Shared, Worker};
 
+/// Fichier à choisir avec une boîte de dialogue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pick {
+    Seed,
+    Cert,
+    Key,
+}
+
 /// Ce que l'hôte a saisi. `Default` est écrit à la main pour mettre les valeurs par défaut.
 pub struct SetupForm {
     seed_path: Option<PathBuf>,
     /// Résumé de la seed choisie, pour montrer ses slots avant le démarrage.
     seed: Option<SeedSummary>,
+    /// La seed choisie est en cours de lecture par le worker.
+    seed_loading: bool,
+    /// Boîte de dialogue demandée pendant le dessin, ouverte après (verrou relâché).
+    pending_pick: Option<Pick>,
     port: String,
     password: String,
     public_host: String,
@@ -29,6 +41,8 @@ impl Default for SetupForm {
         SetupForm {
             seed_path: None,
             seed: None,
+            seed_loading: false,
+            pending_pick: None,
             port: "38281".to_string(),
             password: String::new(),
             public_host: "localhost".to_string(),
@@ -46,6 +60,7 @@ pub fn show(
     worker: &Worker,
     shared: &Shared,
 ) -> Option<Page> {
+    take_loaded_seed(form, error, shared);
     let mut goto = None;
     super::page(ui, |ui| {
         super::header(
@@ -118,9 +133,11 @@ fn config_panel(
     widgets::panel(ui, "Configuration", |ui| {
         labelled(ui, "Fichier de partie (.archipelago)");
         if file_row(ui, &form.seed_path) {
-            pick_seed(form, error);
+            form.pending_pick = Some(Pick::Seed);
         }
-        if let Some(seed) = &form.seed {
+        if form.seed_loading {
+            ui.label(widgets::dim("Lecture de la seed…").size(13.0));
+        } else if let Some(seed) = &form.seed {
             ui.label(
                 RichText::new(format!(
                     "Seed {} · générée avec Archipelago {} · {} joueur{}",
@@ -157,11 +174,11 @@ fn config_panel(
                 ui.add_space(4.0);
                 ui.label(widgets::dim("Certificat (PEM)").size(13.0));
                 if file_row(ui, &form.cert) {
-                    form.cert = pick_pem("Certificat PEM", &["pem", "crt"]).or(form.cert.take());
+                    form.pending_pick = Some(Pick::Cert);
                 }
                 ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
                 if file_row(ui, &form.key) {
-                    form.key = pick_pem("Clé privée PEM", &["pem", "key"]).or(form.key.take());
+                    form.pending_pick = Some(Pick::Key);
                 }
             },
         );
@@ -207,23 +224,59 @@ fn config_panel(
     });
 }
 
-/// Ouvre la boîte « choisir la seed » et la lit.
-fn pick_seed(form: &mut SetupForm, error: &mut Option<String>) {
-    let picked = rfd::FileDialog::new()
-        .set_title("Choisir un fichier de partie")
-        .add_filter("Partie Archipelago", &["archipelago"])
-        .pick_file();
-    let Some(path) = picked else { return };
-    match SeedSummary::load(&path) {
-        Ok((summary, _data)) => {
-            *error = None;
-            form.seed = Some(summary);
-            form.seed_path = Some(path);
+/// Ouvre la boîte de dialogue demandée pendant le dessin.
+///
+/// Appelée par `App` APRÈS avoir relâché le verrou de l'état partagé : la
+/// boîte bloque le fil de l'interface tant qu'elle est ouverte, et le worker
+/// ne doit pas attendre ce verrou pendant ce temps.
+pub fn open_pending_dialog(form: &mut SetupForm, worker: &Worker) {
+    let Some(pick) = form.pending_pick.take() else {
+        return;
+    };
+    match pick {
+        Pick::Seed => {
+            let picked = rfd::FileDialog::new()
+                .set_title("Choisir un fichier de partie")
+                .add_filter("Partie Archipelago", &["archipelago"])
+                .pick_file();
+            if let Some(path) = picked {
+                // Le worker lit la seed ; `take_loaded_seed` reprendra le résultat.
+                form.seed = None;
+                form.seed_loading = true;
+                form.seed_path = Some(path.clone());
+                worker.send(Command::LoadSeed(path));
+            }
         }
-        Err(e) => {
+        Pick::Cert => {
+            form.cert = pick_pem("Certificat PEM", &["pem", "crt"]).or(form.cert.take());
+        }
+        Pick::Key => {
+            form.key = pick_pem("Clé privée PEM", &["pem", "key"]).or(form.key.take());
+        }
+    }
+}
+
+/// Reprend le résumé de la seed lue par le worker, s'il correspond au
+/// fichier choisi (l'hôte a pu en choisir un autre entre-temps).
+fn take_loaded_seed(form: &mut SetupForm, error: &mut Option<String>, shared: &Shared) {
+    if !form.seed_loading {
+        return;
+    }
+    let Some((path, result)) = &shared.seed else {
+        return;
+    };
+    if form.seed_path.as_ref() != Some(path) {
+        return;
+    }
+    form.seed_loading = false;
+    match result {
+        Ok(summary) => {
+            *error = None;
+            form.seed = Some(summary.clone());
+        }
+        Err(message) => {
             form.seed = None;
-            form.seed_path = Some(path);
-            *error = Some(e.to_string());
+            *error = Some(message.clone());
         }
     }
 }
