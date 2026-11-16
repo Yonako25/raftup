@@ -137,6 +137,8 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - `Bounce` dont `data` n'est pas un objet : refusé chez Raftup, accepté par le serveur officiel
 - Paquet sans `cmd` : les caractères Unicode « non imprimables » ne sont pas échappés comme en Python dans la réponse
 - Plantages du serveur officiel reproduits par une fermeture de connexion : changement de slot, connexion d'un groupe, lieu inconnu dans `LocationScouts`
+- `ConnectUpdate` avec `"tags": null` : traité comme un champ absent ; le serveur officiel fait `set(None)`, plante et ferme la connexion
+- Pas d'avertissement « your client does not support compressed websocket connections! » à la connexion : Raftup ne compresse pas (ADR 0005), le message n'aurait pas de sens
 
 **Commandes et indices** (ADR 0012, 0013)
 

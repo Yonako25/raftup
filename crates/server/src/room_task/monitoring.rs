@@ -16,8 +16,10 @@ impl RoomTask {
     }
 
     /// Publie un événement ; sans abonné, il est simplement perdu.
+    /// Met un événement en attente : il part au launcher dans `commit`,
+    /// après l'écriture de la sauvegarde (comme les messages aux clients).
     pub(super) fn emit(&self, event: GameEvent) {
-        let _ = self.monitor.send(event);
+        self.pending_events.borrow_mut().push(event);
     }
 
     /// Événement « objet envoyé », avec les noms lisibles.

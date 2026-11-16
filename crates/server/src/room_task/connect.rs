@@ -509,4 +509,35 @@ mod tests {
         assert!(!task.subscribers.contains_key("a"));
         assert_eq!(task.subscribers["b"], BTreeSet::from([2]));
     }
+
+    /// L'événement `Frame` d'une trame JSON, décodée comme par la connexion.
+    fn frame(text: &str) -> Event {
+        let items = crate::connection::read_frame(text).expect("trame de test valide");
+        Event::Frame { id: 1, items }
+    }
+
+    #[test]
+    fn evenements_qui_changent_l_etat() {
+        // Lecture seule : pas de photo au `commit`.
+        for text in [
+            r#"[{"cmd":"Get","keys":["a"]}]"#,
+            r#"[{"cmd":"Sync"}]"#,
+            r#"[{"cmd":"SetNotify","keys":["a"]}]"#,
+            r#"[{"cmd":"Bounce","data":{}}]"#,
+            r#"[{"cmd":"GetDataPackage"}]"#,
+            r#"[{"pas":"de cmd"}]"#,
+        ] {
+            assert!(!super::super::may_change_state(&frame(text)), "{text}");
+        }
+        // Peut changer l'état sauvegardé.
+        for text in [
+            r#"[{"cmd":"LocationChecks","locations":[1]}]"#,
+            r#"[{"cmd":"Say","text":"!alias Zoé"}]"#,
+            r#"[{"cmd":"Set","key":"a","operations":[]}]"#,
+            r#"[{"cmd":"Get","keys":["a"]},{"cmd":"StatusUpdate","status":30}]"#,
+        ] {
+            assert!(super::super::may_change_state(&frame(text)), "{text}");
+        }
+        assert!(super::super::may_change_state(&Event::Closed { id: 1 }));
+    }
 }

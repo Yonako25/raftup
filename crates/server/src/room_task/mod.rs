@@ -224,6 +224,32 @@ pub(crate) async fn run(
     task.compact();
 }
 
+/// Vrai si l'événement peut changer l'état sauvegardé (lieux, objets,
+/// statuts, indices, surnoms, stockage…). En cas de doute : vrai, c'est
+/// seulement une photo de trop.
+fn may_change_state(event: &Event) -> bool {
+    match event {
+        // Lecture seule : accueil, photo pour le suivi, annonce de l'hôte.
+        Event::Opened { .. } | Event::Status { .. } | Event::Announce { .. } | Event::Stop => false,
+        // Le statut du slot peut repasser à « inconnu ».
+        Event::Closed { .. } => true,
+        Event::Frame { items, .. } => items.iter().any(|item| match item {
+            Incoming::Packet(packet) => !matches!(
+                **packet,
+                ClientPacket::Bounce(_)
+                    | ClientPacket::Get(_)
+                    | ClientPacket::SetNotify(_)
+                    | ClientPacket::Sync
+                    | ClientPacket::GetDataPackage(_)
+            ),
+            // Lu champ par champ (`CreateHints`…) : peut créer des indices.
+            Incoming::BadArguments { .. } => true,
+            // Refusés sans rien changer.
+            Incoming::CmdNotText(_) | Incoming::NoCmd(_) => false,
+        }),
+    }
+}
+
 /// Au-delà de ce nombre de deltas, le fichier est réécrit en un seul
 /// instantané (ADR 0014 : « au-delà d'environ 10 000 lignes »).
 const COMPACT_AFTER_LINES: usize = 10_000;
@@ -279,6 +305,9 @@ impl RoomTask {
             countdown_next: None,
             admin_client: None,
             save,
+            // Vrai au départ : l'état de départ doit être écrit dans un fichier neuf.
+            dirty: true,
+            pending_events: RefCell::new(Vec::new()),
         }
     }
 }
@@ -308,6 +337,13 @@ struct RoomTask {
     admin_client: Option<ClientId>,
     /// Sauvegarde `.raftup` ; `None` avec `--disable_save`.
     save: Option<Saver>,
+    /// Vrai si un événement a pu changer l'état sauvegardé depuis le dernier
+    /// `commit` : sinon, `commit` saute la photo et la comparaison.
+    dirty: bool,
+    /// Événements du suivi en attente : envoyés au launcher dans `commit`,
+    /// après l'écriture sur le disque, comme les messages aux clients.
+    /// `RefCell` : `emit` ne reçoit qu'une référence partagée (`&self`).
+    pending_events: RefCell<Vec<GameEvent>>,
 }
 
 /// Le fichier de sauvegarde et l'état qu'il contient déjà.
@@ -357,7 +393,7 @@ impl RoomTask {
     /// rien envoyer, car un client ne doit jamais recevoir de réponse pour un
     /// changement qui n'est pas sur le disque.
     fn commit(&mut self) -> bool {
-        if self.save.is_some() {
+        if self.save.is_some() && self.dirty {
             let now = self.snapshot();
             // `as_mut` : on modifie le `Saver` sur place, sans le sortir de l'`Option`.
             if let Some(saver) = self.save.as_mut() {
@@ -376,8 +412,14 @@ impl RoomTask {
         if too_long && !self.compact() {
             return false;
         }
+        self.dirty = false;
         for client in self.clients.values() {
             client.flush();
+        }
+        // `take` vide la file et rend son contenu. Envoyer dans le fil ne
+        // bloque jamais, même sans abonné.
+        for event in self.pending_events.take() {
+            let _ = self.monitor.send(event);
         }
         true
     }
@@ -399,6 +441,9 @@ impl RoomTask {
     }
 
     fn handle(&mut self, event: Event) {
+        if may_change_state(&event) {
+            self.dirty = true;
+        }
         match event {
             Event::Opened { id, outbox, kill } => {
                 self.clients.insert(id, Client::new(outbox, kill));
@@ -520,6 +565,10 @@ impl RoomTask {
         let Some(client) = self.clients.get(&id) else {
             return;
         };
+        // Comme `broadcast` et `send_to` : rien après la demande de fermeture.
+        if client.closing {
+            return;
+        }
         if let Some(frame) = encode(&packets) {
             // Échec = connexion déjà finie ; son événement `Closed` va arriver.
             client.push(Outgoing::Frame(frame));
