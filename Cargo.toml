@@ -20,6 +20,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order", "arbitrary_precision"] }
 indexmap = { version = "2.14", features = ["serde"] }
 thiserror = "2"
+# Empreinte SHA-256 de la seed dans les sauvegardes .raftup (MIT/Apache-2.0).
+sha2 = "0.11"
 tracing = "0.1.44"
 # Décompression zlib du fichier .archipelago (moteur en Rust pur par défaut).
 flate2 = "1"
