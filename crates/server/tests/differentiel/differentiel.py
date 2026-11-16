@@ -122,7 +122,8 @@ class Servers:
             cwd=archipelago, env=env, stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT)
         log = open(self.logs / f"raftup-{self.starts}.log", "w", encoding="utf-8")
         raftup = subprocess.Popen(
-            [str(self.raftup_exe), str(SEED), "--no-tls", "--host", "127.0.0.1", "--port", str(raftup_port)],
+            [str(self.raftup_exe), str(SEED), "--no-tls", "--disable_save",
+             "--host", "127.0.0.1", "--port", str(raftup_port)],
             stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
         self.processes = [official, raftup]
         wait_port(official_port, official, "le serveur officiel")

@@ -126,7 +126,12 @@ async fn ecrit_avant_de_repondre_puis_reprend() {
     .await;
     drain(&mut alice).await;
     drop(alice);
+    // Pendant la partie : en-tête, instantané, puis des deltas.
+    let lines = |p: &Path| std::fs::read_to_string(p).unwrap().lines().count();
+    assert!(lines(&path) > 2);
     server.stop().await;
+    // Arrêt propre : compacté en en-tête + un seul instantané.
+    assert_eq!(lines(&path), 2);
 
     // Reprise : même fichier, nouvel état de départ lu dedans.
     let (file, snapshot) = SaveFile::open(&path, &sha()).unwrap();

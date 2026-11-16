@@ -231,8 +231,9 @@ pub(crate) async fn run(
         save,
     };
     // Écrit tout de suite ce que l'état de départ ajoute à un fichier neuf
-    // (statuts des groupes, indices de départ).
-    if !task.commit() {
+    // (statuts des groupes, indices de départ), puis compacte (ADR 0014 :
+    // compactage au démarrage).
+    if !task.commit() || !task.compact() {
         return;
     }
     loop {
@@ -260,7 +261,14 @@ pub(crate) async fn run(
             return;
         }
     }
+    // Arrêt propre : un dernier compactage. En cas d'échec, le fichier garde
+    // son instantané et ses deltas, toujours lisibles : rien n'est perdu.
+    task.compact();
 }
+
+/// Au-delà de ce nombre de deltas, le fichier est réécrit en un seul
+/// instantané (ADR 0014 : « au-delà d'environ 10 000 lignes »).
+const COMPACT_AFTER_LINES: usize = 10_000;
 
 struct RoomTask {
     room: Room,
@@ -348,10 +356,33 @@ impl RoomTask {
                 saver.last = now;
             }
         }
+        let too_long = self
+            .save
+            .as_ref()
+            .is_some_and(|s| s.file.lines_since_compact() > COMPACT_AFTER_LINES);
+        if too_long && !self.compact() {
+            return false;
+        }
         for client in self.clients.values() {
             client.flush();
         }
         true
+    }
+
+    /// Réécrit le fichier en un seul instantané (le dernier écrit). Atomique :
+    /// `SaveFile::compact` passe par un `.tmp` puis un renommage.
+    /// Renvoie `false` si l'écriture a échoué ; sans sauvegarde, `true`.
+    fn compact(&mut self) -> bool {
+        let Some(saver) = self.save.as_mut() else {
+            return true;
+        };
+        match saver.file.compact(&saver.last) {
+            Ok(()) => true,
+            Err(error) => {
+                error!("compactage de la sauvegarde impossible : {error}");
+                false
+            }
+        }
     }
 
     fn handle(&mut self, event: Event) {
