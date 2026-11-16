@@ -220,8 +220,54 @@ COMMANDES = [
     ("b", say("!admin")),
 ]
 
+
+# Indices (T6) : LocationScouts avec create_as_hint, CreateHints, UpdateHint. Alice (1) trouve
+# 81001 pour Bob (2) ; Bob a 81018 pour Alice. À capturer sur le serveur officiel, puis
+# comparer (ordre LocationInfo / messages d'indices, textes d'erreur exacts).
+def create_hints(locations, **fields):
+    return [{"cmd": "CreateHints", "locations": locations, **fields}]
+
+
+def update_hint(player, location, status):
+    return [{"cmd": "UpdateHint", "player": player, "location": location, "status": status}]
+
+
+INDICES = [
+    ("a", connect("Alice", "ChecksFinder")),
+    ("b", connect("Bob", "ChecksFinder")),
+    ("t", connect("Bob", "", tags=["TextOnly", "NoText"])),
+    ("a", [{"cmd": "SetNotify", "keys": ["_read_hints_0_1", "_read_hints_0_2"]}]),
+    ("b", [{"cmd": "SetNotify", "keys": ["_read_hints_0_1", "_read_hints_0_2"]}]),
+    ("a", [{"cmd": "LocationScouts", "locations": [81001], "create_as_hint": 0}]),
+    ("a", [{"cmd": "LocationScouts", "locations": [81001], "create_as_hint": 1}]),
+    ("a", [{"cmd": "LocationScouts", "locations": [81001], "create_as_hint": 2}]),
+    ("a", [{"cmd": "LocationScouts", "locations": [81001, 81002], "create_as_hint": 2}]),
+    ("a", create_hints([81018], player=2, status=30)),
+    ("a", create_hints([81018], player=2, status=10)),
+    ("a", create_hints([81002])),
+    ("a", create_hints([])),
+    ("a", create_hints([81000], status=7)),
+    ("a", create_hints([81000], status=300)),
+    ("a", create_hints([81000], status=30)),
+    ("a", create_hints([99999], player=2)),
+    ("a", create_hints([81002], player=2)),
+    ("a", create_hints([81000], player=9)),
+    ("b", update_hint(1, 81001, 30)),
+    ("b", update_hint(1, 81001, 30)),
+    ("b", update_hint(1, 81002, 30)),
+    ("b", update_hint(1, 81001, None)),
+    ("b", update_hint(1, 81001, 7)),
+    ("b", update_hint(1, 81001, 40)),
+    ("b", update_hint("1", 81001, 30)),
+    ("a", update_hint(1, 81001, 20)),
+    ("a", checks([81001])),
+    ("a", [{"cmd": "Get", "keys": ["_read_hints_0_1", "_read_hints_0_2"]}]),
+    ("a", [{"cmd": "CreateHints", "locations": [81000], "player": 9}]),
+]
+
 PARTIES = {"partie": PARTIE, "objectif": OBJECTIF, "echanges": ECHANGES, "stockage": STOCKAGE,
-           "malformes": MALFORMES, "refus_connecte": REFUS_CONNECTE, "commandes": COMMANDES}
+           "malformes": MALFORMES, "refus_connecte": REFUS_CONNECTE, "commandes": COMMANDES,
+           "indices": INDICES}
 
 
 def all_fixed():

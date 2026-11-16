@@ -219,12 +219,4 @@ impl RoomTask {
             }
         }
     }
-
-    /// Points d'indice : gagnés en visitant des lieux.
-    /// Les indices achetés (qui en coûtent) arriveront avec les indices, en J2.
-    pub(super) fn hint_points(&self, team: TeamId, slot: SlotId) -> i64 {
-        let per_check = self.room.data().server_options.location_check_points;
-        let checked = i64::try_from(self.game.checked_count(team, slot)).unwrap_or(i64::MAX);
-        per_check.saturating_mul(checked)
-    }
 }
