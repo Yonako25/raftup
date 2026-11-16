@@ -6,9 +6,6 @@
 //! Le découpeur est écrit d'après la documentation de `shlex` (automate à états),
 //! sans reprise de code de CPython.
 
-// Briques pures pas encore branchées dans la salle : retirer cet `allow` au branchement.
-#![allow(dead_code)]
-
 /// Espaces reconnus par `shlex` (seulement ces quatre, pas les espaces Unicode).
 fn is_shlex_space(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\r' | '\n')
@@ -154,12 +151,16 @@ pub(crate) fn raw_argument(raw: &str) -> Option<String> {
 
 /// Approximation de `str.isnumeric()` : non vide et tous les caractères numériques
 /// Unicode (`char::is_numeric` couvre les catégories Nd, Nl et No, comme Python).
+// Pour `!hint` (T7b).
+#[allow(dead_code)]
 pub(crate) fn py_isnumeric(s: &str) -> bool {
     !s.is_empty() && s.chars().all(char::is_numeric)
 }
 
 /// Les `n` premiers caractères de `s` (`s[:n]` de Python : on compte des
 /// caractères, pas des octets, pour ne jamais couper un caractère en deux).
+// Pour `!alias` (T7b).
+#[allow(dead_code)]
 pub(crate) fn truncate_chars(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }

@@ -1,0 +1,188 @@
+//! Commandes du chat : un message qui commence par `!` (`ClientMessageProcessor`
+//! et `CommandProcessor.__call__` du serveur officiel, `MultiServer.py`).
+//!
+//! Ce module fait le cadre : découpage de la ligne, choix de la commande,
+//! réponses `CommandResult`. Les commandes d'information sont dans `info`.
+
+use super::*;
+use crate::command_line::{raw_argument, split_command};
+
+mod info;
+
+/// Commandes connues, dans l'ordre du serveur officiel (celui de `commands`,
+/// affiché par « Known commands »).
+const COMMANDS: [&str; 16] = [
+    "help",
+    "license",
+    "options",
+    "admin",
+    "players",
+    "status",
+    "release",
+    "collect",
+    "countdown",
+    "remaining",
+    "missing",
+    "checked",
+    "alias",
+    "getitem",
+    "hint",
+    "hint_location",
+];
+
+/// Commandes qui reçoivent le texte brut après le premier mot (`@mark_raw`).
+fn is_raw(command: &str) -> bool {
+    matches!(
+        command,
+        "admin" | "missing" | "checked" | "alias" | "getitem" | "hint" | "hint_location"
+    )
+}
+
+/// Étoiles qui cachent un mot de passe. Le serveur officiel en tire entre 4 et
+/// 16 au hasard ; on en met toujours 8 pour que la réponse soit reproductible.
+pub(super) const MASK: &str = "********";
+
+impl RoomTask {
+    /// Réponse à une commande, visible du seul demandeur (`output`).
+    pub(super) fn output(&self, id: ClientId, text: impl Into<String>) {
+        self.notify(id, command_result(text.into()));
+    }
+
+    /// Plusieurs réponses envoyées dans une seule trame (`output_multiple`).
+    pub(super) fn output_multiple(&self, id: ClientId, texts: Vec<String>) {
+        if self.player(id).is_some_and(|p| !p.no_text) {
+            let packets = texts
+                .into_iter()
+                .map(|text| ServerPacket::PrintJson(command_result(text)))
+                .collect();
+            self.send(id, packets);
+        }
+    }
+
+    /// Le serveur officiel plante sur des arguments qui ne conviennent pas et
+    /// renvoie la trace d'erreur Python ; nous répondons un texte court (écart connu).
+    pub(super) fn invalid_arguments(&self, id: ClientId, command: &str) {
+        self.output(id, format!("Invalid arguments for !{command}."));
+    }
+
+    /// Exécute la ligne d'un `Say` si c'est une commande (`CommandProcessor.__call__`).
+    /// Appelé après la diffusion du chat, comme le serveur officiel.
+    pub(super) fn on_command_line(&mut self, id: ClientId, raw: &str) {
+        if raw.is_empty() {
+            return;
+        }
+        let words = split_command(raw);
+        // Ligne faite d'espaces : le serveur officiel plante (IndexError) et
+        // renvoie une trace ; nous ne répondons rien (écart connu).
+        let Some(first) = words.first() else {
+            return;
+        };
+        // Un message sans `!` en tête est du chat simple, sans réponse.
+        let Some(name) = first.strip_prefix('!') else {
+            return;
+        };
+        // `.lower()` de Python.
+        let command = name.to_lowercase();
+        if !COMMANDS.contains(&command.as_str()) {
+            let text = format!(
+                "Could not find command {name}. Known commands: {}",
+                COMMANDS.join(", ")
+            );
+            self.output(id, text);
+            return;
+        }
+        if is_raw(&command) {
+            let argument = raw_argument(raw);
+            self.run_raw_command(id, &command, argument);
+        } else {
+            let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
+            self.run_command(id, &command, &args);
+        }
+    }
+
+    /// Commandes à arguments découpés mot à mot.
+    fn run_command(&mut self, id: ClientId, command: &str, args: &[&str]) {
+        // Python refuse un nombre d'arguments que la méthode n'accepte pas.
+        let max_args = match command {
+            "status" | "countdown" => 1,
+            _ => 0,
+        };
+        if args.len() > max_args {
+            self.invalid_arguments(id, command);
+            return;
+        }
+        match command {
+            "help" => self.cmd_help(id),
+            "license" => self.cmd_license(id),
+            "options" => self.cmd_options(id),
+            "players" => self.cmd_players(id),
+            "status" => self.cmd_status(id, args.first().copied().unwrap_or("")),
+            "remaining" => self.cmd_remaining(id),
+            _ => self.todo_command(id, command),
+        }
+    }
+
+    /// Commandes qui lisent le texte brut (`@mark_raw`).
+    fn run_raw_command(&mut self, id: ClientId, command: &str, argument: Option<String>) {
+        let text = argument.unwrap_or_default();
+        match command {
+            "admin" => self.cmd_admin(id, &text),
+            "missing" => self.cmd_missing(id, &text),
+            "checked" => self.cmd_checked(id, &text),
+            _ => self.todo_command(id, command),
+        }
+    }
+
+    /// Bouchon des commandes pas encore faites : `release`, `collect`,
+    /// `countdown`, `alias`, `getitem`, `hint`, `hint_location`.
+    /// T7b/T8 : elles ne répondent rien pour l'instant.
+    fn todo_command(&mut self, id: ClientId, command: &str) {
+        debug!(id, command, "commande pas encore gérée (T7b/T8)");
+    }
+
+    /// `!admin` : diffuse la ligne avec les mots de passe masqués, puis répond.
+    /// Le reste de l'administration à distance arrive avec T7b.
+    fn cmd_admin(&mut self, id: ClientId, command: &str) {
+        let Some(player) = self.player(id).cloned() else {
+            return;
+        };
+        let mut line = format!("!admin {command}");
+        let lowered = line.to_lowercase();
+        if lowered.starts_with("!admin login") {
+            line = format!("!admin login {MASK}");
+        } else if lowered.starts_with("!admin /option server_password") {
+            line = format!("!admin /option server_password {MASK}");
+        }
+        let name = self.slot_name(player.slot);
+        self.emit(GameEvent::Chat {
+            time: now(),
+            slot: player.slot,
+            name: name.clone(),
+            text: line.clone(),
+        });
+        let mut message = slot_message(format!("{name}: {line}"), "Chat", player.team, player.slot);
+        message.message = Some(line);
+        self.broadcast_text_all(message);
+
+        let has_password = self
+            .room
+            .data()
+            .server_options
+            .server_password
+            .as_ref()
+            .is_some_and(|p| !p.is_empty());
+        if !has_password {
+            self.output(id, "Sorry, Remote administration is disabled");
+            return;
+        }
+        // T7b : connexion et commandes d'administration.
+        debug!(id, "!admin avec mot de passe pas encore géré (T7b)");
+    }
+}
+
+/// `PrintJSON` de genre `CommandResult`.
+fn command_result(text: String) -> PrintJson {
+    let mut message = text_message(text);
+    message.kind = Some("CommandResult".to_string());
+    message
+}

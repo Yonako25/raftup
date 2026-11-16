@@ -193,8 +193,35 @@ REFUS_CONNECTE = [
     ("c", [{"cmd": "Sync"}]),
 ]
 
+
+def say(text):
+    return [{"cmd": "Say", "text": text}]
+
+
+# Commandes du chat (cadre et commandes d'information) ; pas de `!options` :
+# l'officiel tire le nombre d'étoiles du mot de passe au hasard.
+COMMANDES = [
+    ("a", connect("Alice", "ChecksFinder", tags=["DeathLink"])),
+    ("b", connect("Bob", "ChecksFinder")),
+    ("a", say("!help")),
+    ("a", say("!Inconnue x")),
+    ("a", say("!")),
+    ("a", say("bonjour")),
+    ("a", say("\"!PLAYERS\"")),
+    ("a", say("!status")),
+    ("a", say("!status DeathLink")),
+    ("a", say("!remaining")),
+    ("a", checks([81000, 81001])),
+    ("a", say("!checked")),
+    ("a", say("!checked 1")),
+    ("a", say("!missing")),
+    ("a", say("!missing zzz")),
+    ("b", say("!admin login secret")),
+    ("b", say("!admin")),
+]
+
 PARTIES = {"partie": PARTIE, "objectif": OBJECTIF, "echanges": ECHANGES, "stockage": STOCKAGE,
-           "malformes": MALFORMES, "refus_connecte": REFUS_CONNECTE}
+           "malformes": MALFORMES, "refus_connecte": REFUS_CONNECTE, "commandes": COMMANDES}
 
 
 def all_fixed():

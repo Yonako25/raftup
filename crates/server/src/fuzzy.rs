@@ -5,7 +5,7 @@
 //! avec exactement les mêmes seuils et les mêmes messages que le serveur
 //! officiel (les clients affichent ces messages tels quels).
 
-// Brique pure pas encore branchée dans la salle : retirer cet `allow` au branchement.
+// Pas encore branchée : servira à `!getitem` et `!hint` (T7b), puis on retirera cet `allow`.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
