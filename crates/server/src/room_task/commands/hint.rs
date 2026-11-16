@@ -10,7 +10,7 @@
 //!    en tirant d'abord les lieux non locaux de la sphère la plus basse.
 //!
 //! Écarts déclarés (ADR 0012, 0013) : tirage déterministe à la place du
-//! Mersenne Twister ; liste des objets non indiçables encore vide (T4) ;
+//! Mersenne Twister ; liste des non indiçables limitée aux mondes de base ;
 //! erreur d'arguments courte à la place d'une trace Python.
 
 use multidata::MultiData;
@@ -19,12 +19,14 @@ use super::*;
 use crate::command_line::py_isnumeric;
 use crate::fuzzy::intended_text;
 use crate::game::hint_cost;
-use crate::hints::deterministic_shuffle;
+use crate::hints::{deterministic_shuffle, is_non_hintable};
 
 /// Indices trouvés pour la demande, et le nom reconnu (pour les messages).
 struct Lookup {
     hints: Vec<Hint>,
     name: String,
+    /// Nom non indiçable : `hints` est vide et on prévient le joueur.
+    blocked: bool,
 }
 
 /// Sphère d'un lieu (`get_sphere`) ; -1 si la seed n'a pas de sphères.
@@ -97,6 +99,13 @@ impl RoomTask {
             }
         };
 
+        // Comme Python : le refus, PUIS la réponse d'une recherche vide.
+        if lookup.blocked {
+            self.output(
+                id,
+                format!("Sorry, \"{}\" is marked as non-hintable.", lookup.name),
+            );
+        }
         if lookup.hints.is_empty() {
             let text = if points >= cost {
                 let what = if for_location { "location" } else { "item" };
@@ -137,12 +146,11 @@ impl RoomTask {
             return Some(Lookup {
                 hints: Vec::new(),
                 name: "None".to_string(),
+                blocked: false,
             });
         };
-        let package = data
-            .slots
-            .get(&slot)
-            .and_then(|info| data.datapackage.get(&info.game));
+        let game = self.slot_game(slot);
+        let package = data.datapackage.get(&game);
         // Le dictionnaire Python id -> nom garde le dernier nom d'un même id.
         let name = package.and_then(|p| {
             let names = if for_location {
@@ -156,6 +164,14 @@ impl RoomTask {
                 .find(|(_, id)| **id == number)
                 .map(|(name, _)| name.clone())
         });
+        let name = name.unwrap_or_else(|| "None".to_string());
+        if is_non_hintable(&game, &name) {
+            return Some(Lookup {
+                hints: Vec::new(),
+                name,
+                blocked: true,
+            });
+        }
         let hints = if for_location {
             self.game.collect_hint_location_id(
                 data,
@@ -169,7 +185,8 @@ impl RoomTask {
         };
         Some(Lookup {
             hints,
-            name: name.unwrap_or_else(|| "None".to_string()),
+            name,
+            blocked: false,
         })
     }
 
@@ -183,11 +200,8 @@ impl RoomTask {
         for_location: bool,
     ) -> Result<Lookup, Option<String>> {
         let data = self.room.data();
-        let package = data
-            .slots
-            .get(&slot)
-            .and_then(|info| data.datapackage.get(&info.game));
-        let Some(package) = package else {
+        let game = self.slot_game(slot);
+        let Some(package) = data.datapackage.get(&game) else {
             return Err(Some(
                 "Can't look up item/location for unknown game. Hint for ID instead.".to_string(),
             ));
@@ -209,7 +223,13 @@ impl RoomTask {
         if !usable {
             return Err(Some(response));
         }
-        // T4 : la liste des objets non indiçables est encore vide.
+        if is_non_hintable(&game, &name) {
+            return Ok(Lookup {
+                hints: Vec::new(),
+                name,
+                blocked: true,
+            });
+        }
         let status = Some(HintStatus::UNSPECIFIED);
         let mut hints = Vec::new();
         if !for_location && package.item_name_groups.contains_key(&name) {
@@ -236,7 +256,11 @@ impl RoomTask {
                 .game
                 .collect_hint_location_id(data, team, slot, *location, status);
         }
-        Ok(Lookup { hints, name })
+        Ok(Lookup {
+            hints,
+            name,
+            blocked: false,
+        })
     }
 
     /// Fin de `get_hints` : indices déjà connus gratuits, un seul nouvel

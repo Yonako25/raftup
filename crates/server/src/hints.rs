@@ -150,6 +150,29 @@ mod tests {
     }
 }
 
+/// Noms qu'on ne peut pas demander avec `!hint` / `!hint_location`
+/// (`hint_blacklist` des mondes, `non_hintable_names` du serveur officiel).
+///
+/// Dans Archipelago 0.6.8, seuls deux mondes en définissent :
+/// - `worlds/alttp/__init__.py` : l'objet « Triforce » ;
+/// - `worlds/cvcotm/__init__.py` : le lieu `lname.ba24`, défini dans
+///   `worlds/cvcotm/data/lname.py`.
+///
+/// Les mondes installés à part (`.apworld`, comme Slime Rancher) peuvent en
+/// avoir une : elle n'est pas connue ici (écart déclaré).
+const NON_HINTABLE: [(&str, &str); 2] = [
+    ("A Link to the Past", "Triforce"),
+    (
+        "Castlevania - Circle of the Moon",
+        "Battle Arena: End reward",
+    ),
+];
+
+/// Vrai si `name` (objet, lieu ou groupe) de ce jeu est non indiçable.
+pub(crate) fn is_non_hintable(game: &str, name: &str) -> bool {
+    NON_HINTABLE.iter().any(|(g, n)| *g == game && *n == name)
+}
+
 /// Mélange déterministe pour le tirage de `!hint` (ADR 0012) : même `seed_text`,
 /// même ordre, à chaque fois.
 ///
@@ -204,5 +227,22 @@ mod shuffle_tests {
         deterministic_shuffle(&mut a, "seed|0|1|0");
         deterministic_shuffle(&mut b, "seed|0|1|1");
         assert_ne!(a, b);
+    }
+}
+
+#[cfg(test)]
+mod non_hintable_tests {
+    use super::is_non_hintable;
+
+    #[test]
+    fn only_the_two_base_worlds() {
+        assert!(is_non_hintable("A Link to the Past", "Triforce"));
+        assert!(is_non_hintable(
+            "Castlevania - Circle of the Moon",
+            "Battle Arena: End reward"
+        ));
+        // Le nom compte avec sa casse, et seulement pour son jeu.
+        assert!(!is_non_hintable("A Link to the Past", "triforce"));
+        assert!(!is_non_hintable("ChecksFinder", "Triforce"));
     }
 }

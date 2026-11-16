@@ -24,7 +24,7 @@ L'utilisatrice est apprentie, débutante en Rust : réponses courtes, en frança
 
 ## Ce qui reste à faire
 
-1. **T4** : liste des objets non indiçables (`hint_blacklist`), générée depuis le Python d'Archipelago 0.6.8. Aujourd'hui vide (`is_non_hintable`).
+1. ~~T4~~ : fait. Liste fixe dans `server/src/hints.rs` (`is_non_hintable`) : seuls deux mondes de base de 0.6.8 en ont une.
 2. **Captures et différentiel** des scénarios `COMMANDES` et `INDICES` (`crates/server/tests/data/scripts/scenarios.py`). Il faut un Python avec les dépendances d'Archipelago : **demander à l'utilisatrice avant tout téléchargement**. Source officielle 0.6.8 dans `target/reference/` (ignorée par git). Le pilote lance maintenant Raftup avec `--disable_save`.
 3. **Trancher les écarts relevés par la relecture** : textes « Unknown item (ID:x) » de `!missing` / `!checked` / `!remaining`, ordre des lieux, cas limites de `UpdateHint` / `CreateHints` (voir `etat-du-projet.md`).
 4. **Relire** `room_task/connect.rs`, `messages.rs`, `monitor.rs`, `launcher-core` et `launcher-ui` (pas couverts par la relecture).

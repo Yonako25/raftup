@@ -791,3 +791,28 @@ async fn hint_paye_un_seul_et_toujours_le_meme() {
     let (again, _) = hint_paye().await;
     assert_eq!(item, again);
 }
+
+#[tokio::test]
+async fn hint_non_indicable() {
+    // Alice joue à « A Link to the Past », dont « Triforce » est non indiçable.
+    let mut data = seed();
+    data.server_options.hint_cost = 0;
+    data.slots.get_mut(&1).unwrap().game = "A Link to the Past".to_string();
+    let mut package = multidata::GamePackage::default();
+    package.item_name_to_id.insert("Triforce".to_string(), 1);
+    data.datapackage
+        .insert("A Link to the Past".to_string(), package);
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "A Link to the Past", "[]").await;
+
+    let expected = [
+        "Sorry, \"Triforce\" is marked as non-hintable.",
+        "Nothing found for recognized item name \"Triforce\". \
+         Item appears to not exist in this multiworld.",
+    ];
+    // Par nom, et par numéro.
+    let packets = run(&mut alice, "!hint Triforce").await;
+    assert_eq!(results(&packets), expected);
+    let packets = run(&mut alice, "!hint 1").await;
+    assert_eq!(results(&packets), expected);
+}

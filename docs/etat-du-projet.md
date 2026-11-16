@@ -2,7 +2,7 @@
 
 > [!IMPORTANT]
 > - **J1 : étapes 1 à 8 faites** sur 9 : protocole complet, limites, tests différentiels, wss
-> - **J2 presque fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise. Reste T4 et les captures différentielles
+> - **J2 presque fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise. Restent les captures différentielles
 > - **J3 commencé** : le launcher egui héberge une partie (rendu jamais contrôlé à l'œil)
 > - **202 tests** passent, dont un arrêt brutal du vrai binaire sans perte
 > - Différentiel : **0 écart** sur 22 scénarios fixes et 150 au hasard, mesuré **avant J2**. Les scénarios `COMMANDES` et `INDICES` ne sont pas encore capturés
@@ -11,7 +11,6 @@ Mis à jour le **16 novembre 2026**.
 
 ## À faire
 
-- [ ] **T4** : liste des objets non indiçables (`hint_blacklist`), à générer depuis le Python d'Archipelago 0.6.8
 - [ ] **Captures** des scénarios `COMMANDES` et `INDICES` sur le serveur officiel (il faut un Python avec les dépendances d'Archipelago)
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
@@ -25,7 +24,7 @@ Mis à jour le **16 novembre 2026**.
 | `ap-protocol` | Types des paquets, dans les deux sens | **Complet** |
 | `client-core` | Client Archipelago (ws/wss) | **Complet** pour J0 |
 | `multidata` | Lecture sûre du `.archipelago`, modèle de partie, format `.raftup` | **Complet** pour J2 |
-| `server` | Serveur WebSocket + binaire `raftup-server` | **Complet** pour J2, sauf T4 |
+| `server` | Serveur WebSocket + binaire `raftup-server` | **Complet** pour J2 |
 | `launcher-core` | Héberger une partie, résumé de seed, journal | Commencé (J3) |
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
 | `py-bridge` | Générateur officiel en Python | Pas commencé |
@@ -147,7 +146,7 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - Erreurs d'arguments : texte court à la place d'une trace Python
 - `!hint` : tirage déterministe entre ex æquo, au lieu du Mersenne Twister
 - `!hint` : noms candidats dans l'ordre du datapackage (un ensemble, donc au hasard, en Python)
-- `!hint` : liste des objets non indiçables vide en attendant T4
+- `!hint` : non indiçables connus seulement pour les mondes de base de 0.6.8 (« Triforce » d'A Link to the Past, « Battle Arena: End reward » de Circle of the Moon) ; ceux d'un `.apworld` installé à part ne sont pas connus
 - `!missing`, `!checked` : ordre des lieux croissant (ordre du multidata en Python), à confirmer par capture
 - `!missing`, `!checked`, `!remaining` : « Invalid arguments » sur un id sans nom, au lieu de « Unknown item (ID:x) »
 - `!countdown` au-delà d'une heure : message court au lieu d'une trace
