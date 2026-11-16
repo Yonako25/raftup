@@ -205,7 +205,9 @@ impl RoomTask {
     }
 
     /// Noms des objets des lieux pas encore visités, triés par (destinataire, objet),
-    /// avec les noms du jeu du destinataire. `None` si Python planterait.
+    /// avec les noms du jeu du destinataire (« Unknown item (ID:x) » pour un
+    /// numéro sans nom, comme Python). `None` si Python planterait : slot
+    /// sans lieux, ou destinataire inconnu.
     fn remaining_names(&self, team: TeamId, slot: SlotId) -> Option<Vec<String>> {
         let data = self.room.data();
         let locations = data.locations.get(&slot)?;
@@ -219,15 +221,7 @@ impl RoomTask {
         rest.iter()
             .map(|(receiver, item)| {
                 let game = data.slots.get(receiver)?.game.as_str();
-                let package = data.datapackage.get(game)?;
-                // Le dictionnaire Python id -> nom garde le dernier nom d'un même id.
-                let name = package
-                    .item_name_to_id
-                    .iter()
-                    .rev()
-                    .find(|(_, id)| *id == item)
-                    .map(|(name, _)| name.clone())?;
-                Some(name)
+                Some(self.names.python_item(game, *item))
             })
             .collect()
     }
@@ -269,26 +263,20 @@ impl RoomTask {
             return self.output(id, text);
         }
         let game = self.slot_game(player.slot);
-        let Some(package) = data.datapackage.get(&game) else {
-            return self.invalid_arguments(id, command);
-        };
-        // Python : dictionnaire id -> nom, le dernier nom d'un même id l'emporte.
-        let lookup: BTreeMap<LocationId, &str> = package
-            .location_name_to_id
+        // Numéro sans nom : « Unknown location (ID:x) », comme Python.
+        let mut names: Vec<String> = locations
             .iter()
-            .map(|(name, id)| (*id, name.as_str()))
+            .map(|location| self.names.python_location(&game, *location))
             .collect();
-        let mut names = Vec::new();
-        for location in &locations {
-            match lookup.get(location) {
-                Some(name) => names.push(*name),
-                None => return self.invalid_arguments(id, command),
-            }
-        }
         if !filter.is_empty() {
+            // Jeu absent du datapackage : `location_name_groups[jeu]` lève
+            // `KeyError` en Python, seulement quand il y a un filtre.
+            let Some(package) = data.datapackage.get(&game) else {
+                return self.invalid_arguments(id, command);
+            };
             // Un nom de groupe de lieux exact, sinon une sous-chaîne (casse comprise).
             match package.location_name_groups.get(filter) {
-                Some(group) => names.retain(|name| group.iter().any(|g| g.as_str() == *name)),
+                Some(group) => names.retain(|name| group.contains(name)),
                 None => names.retain(|name| name.contains(filter)),
             }
         }

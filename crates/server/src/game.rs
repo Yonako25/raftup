@@ -273,8 +273,9 @@ impl GameState {
 
     /// Indices pour un objet (`collect_hints`) : tous les lieux, dans tous les
     /// mondes, qui contiennent cet objet pour le slot ou pour un groupe dont il
-    /// fait partie. Ordre : monde croissant, puis lieu croissant (le serveur
-    /// officiel suit l'ordre d'insertion du multidata : à vérifier).
+    /// fait partie. Ordre : monde croissant, puis lieu croissant, comme
+    /// `LocationStore.find_item` de `_speedups.pyx`, qui range ses entrées
+    /// triées par (monde, lieu).
     pub fn collect_hints(
         &self,
         data: &MultiData,

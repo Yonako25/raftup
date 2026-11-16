@@ -26,7 +26,7 @@ L'utilisatrice est apprentie, débutante en Rust : réponses courtes, en frança
 
 1. ~~T4~~ : fait. Liste fixe dans `server/src/hints.rs` (`is_non_hintable`) : seuls deux mondes de base de 0.6.8 en ont une.
 2. **Captures et différentiel** des scénarios `COMMANDES` et `INDICES` (`crates/server/tests/data/scripts/scenarios.py`). Il faut un Python avec les dépendances d'Archipelago : **demander à l'utilisatrice avant tout téléchargement**. Source officielle 0.6.8 dans `target/reference/` (ignorée par git). Le pilote lance maintenant Raftup avec `--disable_save`.
-3. **Trancher les écarts relevés par la relecture** : textes « Unknown item (ID:x) » de `!missing` / `!checked` / `!remaining`, ordre des lieux, cas limites de `UpdateHint` / `CreateHints` (voir `etat-du-projet.md`).
+3. ~~Écarts relevés par la relecture~~ : faits. « Unknown item/location (ID:x) » (`Names::python_item` / `python_location`) ; ordre des lieux identique à `_speedups` ; `CreateHints` / `UpdateHint` lus comme Python pour `null`, champ absent, texte, flottant, booléen (`connection::needs_raw_reading`, `hints::py_hint_status`).
 4. **Relire** `room_task/connect.rs`, `messages.rs`, `monitor.rs`, `launcher-core` et `launcher-ui` (pas couverts par la relecture).
 5. **Contrôle visuel du launcher** avec l'utilisatrice, et vrai gras (Inter SemiBold en famille séparée). Le launcher ne sauvegarde pas encore la partie hébergée (`Server::with_save` à brancher dans `launcher-core::host`).
 6. **J1, étape 9** : une vraie partie de Slime Rancher sur `raftup-server`. C'est l'utilisatrice qui la joue ; elle veut tout tester à la fin.

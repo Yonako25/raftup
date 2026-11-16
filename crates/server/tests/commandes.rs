@@ -816,3 +816,23 @@ async fn hint_non_indicable() {
     let packets = run(&mut alice, "!hint 1").await;
     assert_eq!(results(&packets), expected);
 }
+
+#[tokio::test]
+async fn noms_inconnus_comme_python() {
+    // Datapackage incomplet : le lieu 81000 et l'objet 80001 n'ont plus de nom.
+    let mut data = seed();
+    data.server_options.remaining_mode = "enabled".to_string();
+    let package = data.datapackage.get_mut("ChecksFinder").unwrap();
+    package.location_name_to_id.retain(|_, id| *id != 81000);
+    package.item_name_to_id.retain(|_, id| *id != 80001);
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+
+    let packets = run(&mut alice, "!missing").await;
+    let texts = results(&packets);
+    assert!(texts.contains(&"Missing: Unknown location (ID:81000)".to_string()));
+    let packets = run(&mut alice, "!remaining").await;
+    let texts = results(&packets);
+    assert_eq!(texts.len(), 1);
+    assert!(texts[0].contains("Unknown item (ID:80001)"), "{}", texts[0]);
+}

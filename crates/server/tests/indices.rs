@@ -513,3 +513,65 @@ async fn update_hint_erreurs() {
     .await;
     assert_closed(&mut bob).await;
 }
+
+#[tokio::test]
+async fn create_hints_statut_de_tout_type() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", json!([])).await;
+    // `HintStatus(valeur)` de Python : le message montre le `repr()` de la valeur.
+    for (status, shown) in [
+        (json!(null), "None"),
+        (json!("30"), "'30'"),
+        (json!(30.5), "30.5"),
+        (json!([]), "[]"),
+        (json!(true), "True"),
+    ] {
+        send(
+            &mut alice,
+            json!({"cmd":"CreateHints","locations":[81000],"status":status}),
+        )
+        .await;
+        let text = format!("Unknown Status: {shown} is not a valid HintStatus");
+        expect_invalid(&mut alice, "CreateHints", &text).await;
+    }
+    // `0.0` et `false` valent 0 en Python : statut « non précisé », accepté.
+    for status in [json!(0.0), json!(false)] {
+        send(
+            &mut alice,
+            json!({"cmd":"CreateHints","locations":[81001],"status":status}),
+        )
+        .await;
+        let got = packets(&mut alice).await;
+        assert!(
+            !cmds(&got).contains(&"InvalidPacket"),
+            "{status} refusé : {got:?}"
+        );
+    }
+    // `player` à `null` : le serveur officiel plante, connexion fermée.
+    send(
+        &mut alice,
+        json!({"cmd":"CreateHints","locations":[81000],"player":null}),
+    )
+    .await;
+    assert_closed(&mut alice).await;
+}
+
+#[tokio::test]
+async fn update_hint_statut_absent_ou_booleen() {
+    let (_server, url) = start().await;
+    let (_alice, mut bob) = alice_hints_bob(&url).await;
+    // `True` est l'entier 1 en Python : statut invalide, pas un mauvais type.
+    send(
+        &mut bob,
+        json!({"cmd":"UpdateHint","player":1,"location":81001,"status":true}),
+    )
+    .await;
+    expect_invalid(&mut bob, "UpdateHint", "UpdateHint: Invalid Status").await;
+    // `status` absent (et non `null`) : `KeyError` en Python, connexion fermée.
+    send(
+        &mut bob,
+        json!({"cmd":"UpdateHint","player":1,"location":81001}),
+    )
+    .await;
+    assert_closed(&mut bob).await;
+}

@@ -295,6 +295,25 @@ pub(crate) fn read_frame(text: &str) -> Result<Vec<Incoming>, ConnectionError> {
     Ok(items.into_iter().map(read_packet).collect())
 }
 
+/// Raison de lire le paquet brut, pour les cas où Python distingue ce que
+/// `serde` confond :
+/// - `UpdateHint` sans `status` : Python plante (`KeyError`) ; avec `null`,
+///   il ignore la demande ;
+/// - `CreateHints` avec `status` à `null` (« None is not a valid HintStatus »)
+///   ou `player` à `null` (Python plante) ; absents, ils ont une valeur par défaut.
+fn needs_raw_reading(value: &Value) -> Option<&'static str> {
+    match value["cmd"].as_str() {
+        Some("UpdateHint") if value.get("status").is_none() => Some("status absent"),
+        Some("CreateHints") if value.get("status").is_some_and(Value::is_null) => {
+            Some("status à null")
+        }
+        Some("CreateHints") if value.get("player").is_some_and(Value::is_null) => {
+            Some("player à null")
+        }
+        _ => None,
+    }
+}
+
 fn read_packet(value: Value) -> Incoming {
     match value.get("cmd") {
         None => return Incoming::NoCmd(value),
@@ -307,6 +326,16 @@ fn read_packet(value: Value) -> Incoming {
         Some("Bounce" | "CreateHints" | "UpdateHint")
     );
     let raw = keep_raw.then(|| value.clone());
+    // Cas que `serde` lit sans erreur mais que Python traite autrement : un
+    // champ absent et un champ `null` donnent tous deux `None` chez nous.
+    // On les envoie vers la lecture du paquet brut (`BadArguments`).
+    if let Some(reason) = needs_raw_reading(&value) {
+        return Incoming::BadArguments {
+            cmd: value["cmd"].as_str().unwrap_or_default().to_string(),
+            error: <serde_json::Error as serde::de::Error>::custom(reason),
+            raw,
+        };
+    }
     match ClientPacket::from_value(value) {
         Ok(packet) => Incoming::Packet(Box::new(packet)),
         Err(ProtocolError::InvalidPacket { cmd, source }) => Incoming::BadArguments {

@@ -132,4 +132,25 @@ impl Names {
             .cloned()
             .unwrap_or_else(|| format!("lieu {id}"))
     }
+
+    /// Nom d'un objet comme `ctx.item_names[game][id]` du serveur officiel :
+    /// les noms du jeu « Archipelago » sont ajoutés à chaque jeu et passent
+    /// devant (`update`), et un numéro inconnu donne `Unknown item (ID:x)`
+    /// (`KeyedDefaultDict`).
+    pub fn python_item(&self, game: &str, id: ItemId) -> String {
+        let find = |g: &str| self.items.get(&(g.to_string(), id));
+        find("Archipelago")
+            .or_else(|| find(game))
+            .cloned()
+            .unwrap_or_else(|| format!("Unknown item (ID:{id})"))
+    }
+
+    /// Comme [`Names::python_item`], pour un lieu : `Unknown location (ID:x)`.
+    pub fn python_location(&self, game: &str, id: LocationId) -> String {
+        let find = |g: &str| self.locations.get(&(g.to_string(), id));
+        find("Archipelago")
+            .or_else(|| find(game))
+            .cloned()
+            .unwrap_or_else(|| format!("Unknown location (ID:{id})"))
+    }
 }

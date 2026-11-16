@@ -137,7 +137,6 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - `Bounce` dont `data` n'est pas un objet : refusé chez Raftup, accepté par le serveur officiel
 - Paquet sans `cmd` : les caractères Unicode « non imprimables » ne sont pas échappés comme en Python dans la réponse
 - Plantages du serveur officiel reproduits par une fermeture de connexion : changement de slot, connexion d'un groupe, lieu inconnu dans `LocationScouts`
-- Cas limites de `UpdateHint` / `CreateHints` (champ `status` absent ou `null`, statut en texte ou en flottant, `player` à `null`) : comportement différent, relevé par la relecture, pas encore tranché
 
 **Commandes et indices** (ADR 0012, 0013)
 
@@ -147,8 +146,7 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - `!hint` : tirage déterministe entre ex æquo, au lieu du Mersenne Twister
 - `!hint` : noms candidats dans l'ordre du datapackage (un ensemble, donc au hasard, en Python)
 - `!hint` : non indiçables connus seulement pour les mondes de base de 0.6.8 (« Triforce » d'A Link to the Past, « Battle Arena: End reward » de Circle of the Moon) ; ceux d'un `.apworld` installé à part ne sont pas connus
-- `!missing`, `!checked` : ordre des lieux croissant (ordre du multidata en Python), à confirmer par capture
-- `!missing`, `!checked`, `!remaining` : « Invalid arguments » sur un id sans nom, au lieu de « Unknown item (ID:x) »
+- `!missing`, `!checked`, indices d'un objet : lieux par numéro croissant, comme `_speedups` (le serveur officiel compilé) ; seul son repli en pur Python, qui affiche un avertissement, suit l'ordre du multidata
 - `!countdown` au-delà d'une heure : message court au lieu d'une trace
 - `!release` : pas d'autorisation par joueur depuis la console (`/allow_release`)
 - `!admin` : après connexion, les commandes serveur répondent « Server commands are not available yet. » (J3)

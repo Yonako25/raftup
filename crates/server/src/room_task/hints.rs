@@ -21,6 +21,34 @@ fn valid_status(value: i64) -> Option<HintStatus> {
     .find(|s| i64::from(s.0) == value)
 }
 
+/// Entier au sens de Python (`isinstance(x, int)`) : un nombre entier, ou un
+/// booléen (`True` vaut 1 et `False` 0 en Python).
+fn py_int(value: &Value) -> Option<i64> {
+    match value {
+        Value::Bool(b) => Some(i64::from(*b)),
+        Value::Number(n) => n.as_i64(),
+        _ => None,
+    }
+}
+
+/// `HintStatus(valeur)` de Python pour une valeur JSON quelconque.
+///
+/// La recherche se fait par égalité : `30.0` et `True` (== 1) sont cherchés
+/// comme `30` et `1`. Échec : `Err(repr(valeur))`, pour le message
+/// « Unknown Status: {repr} is not a valid HintStatus ».
+fn py_hint_status(value: &Value) -> Result<HintStatus, String> {
+    let number = py_int(value).or_else(|| {
+        value
+            .as_f64()
+            // Un flottant rond est égal à l'entier ; borné pour la conversion.
+            .filter(|f| f.fract() == 0.0 && f.abs() < 1e15)
+            .map(|f| f as i64)
+    });
+    number
+        .and_then(valid_status)
+        .ok_or_else(|| python::repr(value))
+}
+
 impl RoomTask {
     /// Points d'indice d'un slot (`get_slot_points`).
     pub(super) fn hint_points(&self, team: TeamId, slot: SlotId) -> i64 {
@@ -57,39 +85,50 @@ impl RoomTask {
 
     /// `CreateHints` bien formé.
     pub(super) fn on_create_hints(&mut self, id: ClientId, request: CreateHints) {
-        let status = request.status.map(|s| i64::from(s.0));
+        let status = match request.status {
+            None => Ok(HintStatus::UNSPECIFIED),
+            Some(s) => valid_status(i64::from(s.0)).ok_or_else(|| s.0.to_string()),
+        };
         self.create_hints(id, &request.locations, request.player, status);
     }
 
-    /// `CreateHints` dont un champ n'a pas le bon type. Le serveur officiel
-    /// accepte un statut hors de 0..255 (puis le refuse comme inconnu) et plante
-    /// (fermeture) pour tout le reste.
+    /// `CreateHints` lu champ par champ, comme Python lit son dictionnaire :
+    /// statut de n'importe quel type (`HintStatus(valeur)`), `player` à `null`
+    /// ou d'un autre type (plantage au premier lieu : fermeture). Sans liste
+    /// de lieux lisible, le serveur officiel plante aussi.
     pub(super) fn on_bad_create_hints(&mut self, id: ClientId, raw: Option<&Value>) {
-        let status = raw
-            .and_then(|r| r.get("status"))
-            .and_then(Value::as_i64)
-            .filter(|s| u8::try_from(*s).is_err());
-        let mut fixed = raw.cloned();
-        if let (Some(_), Some(Value::Object(map))) = (status, fixed.as_mut()) {
-            map.remove("status");
-        }
-        let parsed = fixed
-            .and_then(|v| serde_json::from_value::<CreateHints>(v).ok())
-            .filter(|_| status.is_some());
-        match parsed {
-            Some(request) => self.create_hints(id, &request.locations, request.player, status),
-            None => self.close(id, "CreateHints : paquet mal formé"),
-        }
+        let Some(Value::Object(map)) = raw else {
+            return self.close(id, "CreateHints : paquet mal formé");
+        };
+        let locations = map
+            .get("locations")
+            .and_then(|v| serde_json::from_value::<Vec<LocationId>>(v.clone()).ok());
+        let Some(locations) = locations else {
+            return self.close(id, "CreateHints : lieux illisibles");
+        };
+        // Un joueur qui n'est pas un numéro de slot ne correspond à aucun
+        // monde : `u32::MAX` n'existe pas, `create_hints` fermera la connexion
+        // au premier lieu, comme le `KeyError` de Python.
+        let player = map.get("player").map(|v| {
+            py_int(v)
+                .and_then(|p| SlotId::try_from(p).ok())
+                .unwrap_or(SlotId::MAX)
+        });
+        let status = match map.get("status") {
+            None => Ok(HintStatus::UNSPECIFIED),
+            Some(value) => py_hint_status(value),
+        };
+        self.create_hints(id, &locations, player, status);
     }
 
     /// Cœur de `CreateHints` (MultiServer.py, `elif cmd == 'CreateHints'`).
-    /// `status` : le nombre reçu, `None` = absent (statut non précisé).
+    /// `status` : le statut lu, ou `Err(repr)` d'une valeur que Python refuse.
     fn create_hints(
         &mut self,
         id: ClientId,
         locations: &[LocationId],
         player: Option<SlotId>,
-        status: Option<i64>,
+        status: Result<HintStatus, String>,
     ) {
         let Some(client) = self.player(id).cloned() else {
             return;
@@ -101,10 +140,12 @@ impl RoomTask {
         if locations.is_empty() {
             return refuse(self, "CreateHints: No locations specified.");
         }
-        let status_value = status.unwrap_or(0);
-        let Some(status) = valid_status(status_value) else {
-            let text = format!("Unknown Status: {status_value} is not a valid HintStatus");
-            return refuse(self, &text);
+        let status = match status {
+            Ok(status) => status,
+            Err(shown) => {
+                let text = format!("Unknown Status: {shown} is not a valid HintStatus");
+                return refuse(self, &text);
+            }
         };
 
         let data = self.room.data();
@@ -169,7 +210,8 @@ impl RoomTask {
         else {
             return self.close(id, "UpdateHint : champ absent");
         };
-        let is_int = |v: &Value| v.is_i64() || v.is_u64();
+        // `isinstance(x, int)` : un booléen compte comme un entier en Python.
+        let is_int = |v: &Value| v.is_i64() || v.is_u64() || v.is_boolean();
         if !is_int(player) || !is_int(location) || !(status.is_null() || is_int(status)) {
             self.send(
                 id,
@@ -179,12 +221,12 @@ impl RoomTask {
         }
         // Entiers valides mais hors plage (négatifs, énormes) : aucun indice ne
         // correspond ; un statut hors plage est refusé s'il y a un indice.
-        let player = player.as_i64().unwrap_or(-1);
-        let location = location.as_i64().unwrap_or(-1);
+        let player = py_int(player).unwrap_or(-1);
+        let location = py_int(location).unwrap_or(-1);
         let status = if status.is_null() {
             None
         } else {
-            Some(status.as_i64().unwrap_or(-1))
+            Some(py_int(status).unwrap_or(-1))
         };
         self.update_hint(id, player, location, status);
     }
