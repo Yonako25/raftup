@@ -412,6 +412,33 @@ fn write_base(path: &Path, header: &SaveHeader, snapshot: &Snapshot) -> Result<(
     f.sync_all().map_err(io_err(path))
 }
 
+/// Remplace `path` par en-tête + instantané sans jamais laisser un fichier à
+/// moitié écrit : écriture dans `.tmp`, synchronisation, puis renommage.
+fn replace_base(path: &Path, header: &SaveHeader, snapshot: &Snapshot) -> Result<(), SaveError> {
+    let tmp = tmp_path(path);
+    write_base(&tmp, header, snapshot)?;
+    std::fs::rename(&tmp, path).map_err(io_err(path))?;
+    sync_parent_dir(path)
+}
+
+/// Sous Unix, le renommage n'est durable qu'une fois le dossier synchronisé.
+/// Windows n'expose pas cette opération : rien à faire.
+#[cfg(unix)]
+fn sync_parent_dir(path: &Path) -> Result<(), SaveError> {
+    let parent = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => Path::new("."),
+    };
+    File::open(parent)
+        .and_then(|dir| dir.sync_all())
+        .map_err(io_err(parent))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_dir(_path: &Path) -> Result<(), SaveError> {
+    Ok(())
+}
+
 fn open_append(path: &Path) -> Result<File, SaveError> {
     OpenOptions::new()
         .append(true)
@@ -421,8 +448,11 @@ fn open_append(path: &Path) -> Result<File, SaveError> {
 
 impl SaveFile {
     /// Crée (ou écrase) une sauvegarde avec un instantané vide.
+    ///
+    /// Atomique, comme `compact` : une coupure pendant l'écriture laisse
+    /// l'ancien fichier intact au lieu d'un fichier vide.
     pub fn create(path: &Path, header: SaveHeader) -> Result<SaveFile, SaveError> {
-        write_base(path, &header, &Snapshot::default())?;
+        replace_base(path, &header, &Snapshot::default())?;
         Ok(SaveFile {
             path: path.to_path_buf(),
             header,
@@ -437,14 +467,18 @@ impl SaveFile {
         path: &Path,
         expected_seed_sha256: &str,
     ) -> Result<(SaveFile, Snapshot), SaveError> {
-        let text = std::fs::read_to_string(path).map_err(io_err(path))?;
+        // Lu en octets et non en `String` : une écriture interrompue peut couper
+        // un caractère UTF-8 en deux (« é » = 2 octets). `read_to_string`
+        // refuserait alors tout le fichier ; ici seule la dernière ligne est
+        // invalide, et elle est ignorée comme toute ligne tronquée.
+        let bytes = std::fs::read(path).map_err(io_err(path))?;
         // `split_inclusive` garde le `\n` : on peut ainsi calculer l'offset exact
         // de la fin de la dernière bonne ligne.
-        let lines: Vec<&str> = text.split_inclusive('\n').collect();
+        let lines: Vec<&[u8]> = bytes.split_inclusive(|b| *b == b'\n').collect();
 
         let first = lines.first().ok_or(SaveError::NotASave)?;
         let value: serde_json::Value =
-            serde_json::from_str(first.trim()).map_err(|_| SaveError::NotASave)?;
+            serde_json::from_slice(first.trim_ascii()).map_err(|_| SaveError::NotASave)?;
         if value.get("kind").and_then(|k| k.as_str()) != Some(SAVE_KIND) {
             return Err(SaveError::NotASave);
         }
@@ -454,7 +488,8 @@ impl SaveFile {
             .get("format_version")
             .and_then(|v| v.as_u64())
             .ok_or(SaveError::NotASave)?;
-        if version > u64::from(FORMAT_VERSION) {
+        // 0 n'a jamais existé : inconnu, donc refusé comme une version future.
+        if version == 0 || version > u64::from(FORMAT_VERSION) {
             return Err(SaveError::UnsupportedVersion {
                 found: u32::try_from(version).unwrap_or(u32::MAX),
                 supported: FORMAT_VERSION,
@@ -467,19 +502,19 @@ impl SaveFile {
         }
 
         let second = lines.get(1).ok_or(SaveError::Corrupted { line: 2 })?;
-        let mut snapshot: Snapshot =
-            serde_json::from_str(second.trim()).map_err(|_| SaveError::Corrupted { line: 2 })?;
+        let mut snapshot: Snapshot = serde_json::from_slice(second.trim_ascii())
+            .map_err(|_| SaveError::Corrupted { line: 2 })?;
 
         let mut good_len: usize = lines[0].len() + lines[1].len();
         let mut count = 0usize;
         let mut ignored_tail = false;
         for (i, raw) in lines.iter().enumerate().skip(2) {
-            let line = raw.trim();
+            let line = raw.trim_ascii();
             if line.is_empty() {
                 good_len += raw.len();
                 continue;
             }
-            match serde_json::from_str::<Record>(line) {
+            match serde_json::from_slice::<Record>(line) {
                 Ok(record) => {
                     snapshot.apply(&record);
                     count += 1;
@@ -503,7 +538,7 @@ impl SaveFile {
         }
         drop(file);
         let mut file = open_append(path)?;
-        if !ignored_tail && !text.ends_with('\n') {
+        if !ignored_tail && !bytes.ends_with(b"\n") {
             file.write_all(b"\n").map_err(io_err(path))?;
         }
 
@@ -541,9 +576,7 @@ impl SaveFile {
 
     /// Remplace le fichier par en-tête + `snapshot` (atomique : fichier temporaire puis renommage).
     pub fn compact(&mut self, snapshot: &Snapshot) -> Result<(), SaveError> {
-        let tmp = tmp_path(&self.path);
-        write_base(&tmp, &self.header, snapshot)?;
-        std::fs::rename(&tmp, &self.path).map_err(io_err(&self.path))?;
+        replace_base(&self.path, &self.header, snapshot)?;
         self.file = open_append(&self.path)?;
         self.lines_since_compact = 0;
         Ok(())

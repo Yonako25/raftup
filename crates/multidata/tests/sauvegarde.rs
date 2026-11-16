@@ -325,3 +325,54 @@ fn leftover_tmp_does_not_prevent_opening() {
     let (_, snap) = SaveFile::open(&p, &seed_sha256(b"seed")).unwrap();
     assert_eq!(snap.location_checks[0].locations, vec![1, 3]);
 }
+
+#[test]
+fn truncated_line_cutting_a_utf8_char_is_ignored() {
+    let p = path("utf8-cut");
+    let mut f = SaveFile::create(&p, header()).unwrap();
+    f.append(&sample_records()).unwrap();
+    drop(f);
+    // Dernière ligne coupée entre les deux octets du « é » de « Zoé ».
+    let mut bytes = std::fs::read(&p).unwrap();
+    let line = "{\"type\":\"alias\",\"team\":0,\"slot\":1,\"alias\":\"Zoé\"}\n";
+    let cut = line.find('é').unwrap() + 1;
+    bytes.extend_from_slice(&line.as_bytes()[..cut]);
+    std::fs::write(&p, bytes).unwrap();
+
+    let (f, snap) = SaveFile::open(&p, &seed_sha256(b"seed")).unwrap();
+    assert!(f.ignored_tail());
+    assert_eq!(f.lines_since_compact(), 5);
+    assert_eq!(snap.location_checks[0].locations, vec![1, 3]);
+}
+
+#[test]
+fn format_version_zero_is_rejected() {
+    let p = path("v0");
+    drop(SaveFile::create(&p, header()).unwrap());
+    let text = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(
+        &p,
+        text.replacen("\"format_version\":1", "\"format_version\":0", 1),
+    )
+    .unwrap();
+    assert!(matches!(
+        SaveFile::open(&p, &seed_sha256(b"seed")),
+        Err(SaveError::UnsupportedVersion { found: 0, .. })
+    ));
+}
+
+#[test]
+fn failed_create_keeps_the_previous_save() {
+    let p = path("create-keeps-old");
+    let mut f = SaveFile::create(&p, header()).unwrap();
+    f.append(&sample_records()).unwrap();
+    drop(f);
+    let before = std::fs::read(&p).unwrap();
+    // Un dossier à la place du `.tmp` fait échouer l'écriture.
+    let tmp = PathBuf::from(format!("{}.tmp", p.display()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let result = SaveFile::create(&p, header());
+    std::fs::remove_dir(&tmp).unwrap();
+    assert!(result.is_err());
+    assert_eq!(std::fs::read(&p).unwrap(), before);
+}

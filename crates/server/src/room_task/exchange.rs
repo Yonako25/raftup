@@ -187,8 +187,10 @@ impl RoomTask {
             return;
         }
         // Comme le serveur officiel : même une commande est montrée à tous,
-        // sauf `!admin`, qui peut contenir un mot de passe.
-        if !text.starts_with("!admin") {
+        // sauf `!admin`, qui peut contenir un mot de passe. On reconnaît la
+        // commande comme `on_command_line` (premier mot, casse ignorée) : sinon
+        // `!Admin login secret` partirait en clair.
+        if !commands::is_admin_command(text) {
             self.emit(GameEvent::Chat {
                 time: now(),
                 slot: player.slot,

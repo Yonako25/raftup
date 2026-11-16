@@ -366,6 +366,33 @@ async fn admin_masque_le_mot_de_passe() {
     let seen = drain(&mut bob).await;
     assert_eq!(seen[0]["data"][0]["text"], "Alice: !admin login ********");
 
+    // Variantes de casse, d'espaces et de guillemets : jamais de mot de passe en clair.
+    for line in [
+        "!Admin login secret",
+        " !admin login secret",
+        "!ADMIN LOGIN secret",
+        "!admin \"login\" secret",
+        "!admin /option server_password secret",
+        "!admin /OPTION Server_Password secret",
+    ] {
+        // Salle neuve à chaque fois : le chat est limité à 5 messages / 10 s.
+        let mut data = seed();
+        data.server_options.server_password = Some("admin".to_string());
+        let (_server, url) = start_with(data).await;
+        let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+        let mut bob = join(&url, "Bob", "ChecksFinder", "[]").await;
+        drain(&mut alice).await;
+        let packets = run(&mut alice, line).await;
+        let seen = drain(&mut bob).await;
+        for packet in packets.iter().chain(seen.iter()) {
+            assert!(
+                !packet.to_string().contains("secret"),
+                "fuite pour {line:?} : {packet}"
+            );
+        }
+        assert_eq!(packets.iter().filter(|p| p["type"] == "Chat").count(), 1);
+    }
+
     // Sans mot de passe d'administration : désactivé.
     let (_server, url) = start().await;
     let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;

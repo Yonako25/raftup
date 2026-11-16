@@ -147,10 +147,17 @@ impl RoomTask {
             return;
         };
         let mut line = format!("!admin {command}");
-        let lowered = line.to_lowercase();
-        if lowered.starts_with("!admin login") {
+        // Masquage décidé sur les mots découpés (casse ignorée), pas sur le
+        // texte brut : `!admin "login" secret` doit aussi être masqué.
+        let words: Vec<String> = split_command(command)
+            .iter()
+            .map(|w| w.to_lowercase())
+            .collect();
+        let first = words.first().map(String::as_str);
+        let second = words.get(1).map(String::as_str);
+        if first == Some("login") {
             line = format!("!admin login {MASK}");
-        } else if lowered.starts_with("!admin /option server_password") {
+        } else if first == Some("/option") && second == Some("server_password") {
             line = format!("!admin /option server_password {MASK}");
         }
         let name = self.slot_name(player.slot);
@@ -178,6 +185,14 @@ impl RoomTask {
         // T7b : connexion et commandes d'administration.
         debug!(id, "!admin avec mot de passe pas encore géré (T7b)");
     }
+}
+
+/// Vrai si la ligne de chat est une commande `!admin`, reconnue comme dans
+/// `on_command_line` : premier mot découpé, casse ignorée.
+pub(super) fn is_admin_command(raw: &str) -> bool {
+    split_command(raw)
+        .first()
+        .is_some_and(|w| w.to_lowercase() == "!admin")
 }
 
 /// `PrintJSON` de genre `CommandResult`.
