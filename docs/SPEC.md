@@ -43,7 +43,7 @@ Launcher (egui)  ──► launcher-core ──► installe mods / profils, lanc
 | --- | --- | --- |
 | `ap-protocol` | Types serde de tous les paquets du protocole, dans les deux sens ; seule source de vérité (ADR 0004) | J0 |
 | `client-core` | Client Archipelago maison (tokio + `ap-protocol`) : connexion, objets reçus, progression | J0 |
-| `multidata` | Modèle de partie ; lecture sécurisée du `.archipelago` (pickle en liste blanche, quotas) ; format natif `.raftup` (MessagePack + zstd, versionné) | J1 |
+| `multidata` | Modèle de partie ; lecture sécurisée du `.archipelago` (pickle en liste blanche, quotas) ; format natif `.raftup` (JSON lignes, versionné, ADR 0014) | J1 |
 | `server` | Serveur WebSocket maison (tokio + `ap-protocol`) | J1 |
 | `py-bridge` | Lance et pilote le générateur officiel dans un process Python séparé | J3 |
 | `launcher-core` | Catalogue, profils, installation, détection des jeux, lancement | J3 |

@@ -67,6 +67,11 @@ Mis à jour le **16 novembre 2026**.
 - **0007** : limites des connexions et files bornées
 - **0008** : tests différentiels contre le serveur officiel
 - **0009** : wss par certificat PEM
+- **0010** : architecture du launcher (la partie interface est remplacée par 0011)
+- **0011** : interface du launcher en egui, à la place de Tauri
+- **0012** : indices (hints) comme le serveur officiel
+- **0013** : commandes `!` du chat
+- **0014** : sauvegarde `.raftup` en JSON lignes
 
 ## Reporté à J2
 
