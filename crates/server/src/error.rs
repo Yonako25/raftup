@@ -45,6 +45,42 @@ pub enum ConnectionError {
     /// Rien reçu du client depuis trop longtemps (NF05).
     #[error("aucune réponse du client")]
     Silent,
+
+    /// Poignée de main TLS ratée (client en `ws://`, certificat refusé…).
+    #[error("TLS : {0}")]
+    Tls(std::io::Error),
+
+    /// Poignée de main TLS ou WebSocket trop longue.
+    #[error("poignée de main trop longue")]
+    HandshakeTimeout,
+}
+
+/// Configuration TLS impossible à charger (ADR 0009).
+#[derive(Debug, thiserror::Error)]
+pub enum TlsError {
+    /// Fichier absent ou illisible.
+    #[error("lecture de {path} : {source}")]
+    Read {
+        path: String,
+        source: std::io::Error,
+    },
+
+    /// Pas de certificat PEM (`BEGIN CERTIFICATE`) dans le fichier.
+    #[error("aucun certificat PEM dans {path}")]
+    NoCertificate { path: String },
+
+    /// Pas de clé privée PEM (`BEGIN PRIVATE KEY`…) dans le fichier.
+    #[error("aucune clé privée PEM dans {path}")]
+    NoKey { path: String },
+
+    /// PEM mal formé.
+    #[error("PEM illisible dans {path} : {message}")]
+    BadPem { path: String, message: String },
+
+    /// rustls refuse la paire : clé qui ne va pas avec le certificat, type de
+    /// clé non géré…
+    #[error("certificat ou clé refusés : {0}")]
+    Rejected(#[from] rustls::Error),
 }
 
 // Écrit à la main (pas de `#[from]`) pour ranger l'erreur dans une `Box`.

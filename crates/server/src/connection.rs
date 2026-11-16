@@ -8,6 +8,9 @@
 //! Elle applique aussi les limites réseau (ADR 0007) : taille des messages,
 //! débit de paquets, ping et fermeture d'une connexion muette.
 //!
+//! Le même code sert en clair (`ws`) et chiffré (`wss`, ADR 0009) : il est
+//! générique sur le flux réseau.
+//!
 //! Une trame qui n'est pas un tableau JSON ferme la connexion, comme sur le
 //! serveur officiel (`MultiServer.server`).
 
@@ -18,10 +21,11 @@ use std::time::{Duration, Instant};
 use ap_protocol::{ClientPacket, ProtocolError};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::Notify;
+use tokio_rustls::TlsAcceptor;
 use tokio_tungstenite::tungstenite::error::{CapacityError, Error as WsError};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
@@ -61,9 +65,21 @@ pub(crate) async fn handle(
     id: ClientId,
     events: Sender<Event>,
     limits: Limits,
+    tls: Option<TlsAcceptor>,
 ) {
     info!(%peer, id, "connexion entrante");
-    let result = serve_client(stream, id, &events, &limits).await;
+    let result = match tls {
+        None => serve_client(stream, id, &events, &limits).await,
+        Some(acceptor) => {
+            // Poignée de main TLS, bornée dans le temps : un client qui ouvre
+            // le port sans rien dire ne doit pas garder la connexion.
+            match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
+                Ok(Ok(stream)) => serve_client(stream, id, &events, &limits).await,
+                Ok(Err(error)) => Err(ConnectionError::Tls(error)),
+                Err(_) => Err(ConnectionError::HandshakeTimeout),
+            }
+        }
+    };
     // Toujours prévenir la salle, même après une erreur. Si la salle est déjà
     // arrêtée, il n'y a plus personne à prévenir : on ignore l'échec.
     let _ = events.send(Event::Closed { id }).await;
@@ -73,11 +89,26 @@ pub(crate) async fn handle(
     }
 }
 
-/// Socket WebSocket d'un client (sans chiffrement pour l'instant).
-type Socket = WebSocketStream<TcpStream>;
+/// Temps maximal pour les poignées de main TLS et WebSocket.
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
-async fn serve_client(
-    stream: TcpStream,
+/// Ce qu'il faut à un flux réseau pour porter une connexion : lire, écrire,
+/// et pouvoir passer d'une tâche à l'autre (`Send + 'static`, demandé par
+/// `tokio::spawn`). `TcpStream` (clair) et `TlsStream` (chiffré) le sont.
+///
+/// Un « trait » décrit des capacités, un peu comme une interface en Java ;
+/// celui-ci regroupe les quatre dont on a besoin sous un seul nom.
+pub(crate) trait Stream: AsyncRead + AsyncWrite + Unpin + Send + 'static {}
+
+// Tout type qui a les quatre capacités est un `Stream`, sans rien écrire de plus.
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> Stream for T {}
+
+/// Sert un client sur un flux déjà ouvert (en clair ou chiffré).
+///
+/// `S: Stream` : la fonction est « générique » ; le compilateur en fait une
+/// copie pour chaque type de flux utilisé, sans coût à l'exécution.
+async fn serve_client<S: Stream>(
+    stream: S,
     id: ClientId,
     events: &Sender<Event>,
     limits: &Limits,
@@ -86,7 +117,11 @@ async fn serve_client(
     let config = WebSocketConfig::default()
         .max_message_size(Some(limits.max_message_size))
         .max_frame_size(Some(limits.max_message_size));
-    let mut socket = tokio_tungstenite::accept_async_with_config(stream, Some(config)).await?;
+    let accept = tokio_tungstenite::accept_async_with_config(stream, Some(config));
+    let mut socket = match tokio::time::timeout(HANDSHAKE_TIMEOUT, accept).await {
+        Ok(socket) => socket?,
+        Err(_) => return Err(ConnectionError::HandshakeTimeout),
+    };
 
     // Canal propre à ce client : la salle y dépose les trames à envoyer.
     // Il est borné ; si la salle le trouve plein, elle sonne `kill` (ADR 0007).
@@ -192,8 +227,8 @@ async fn serve_client(
 /// pleins. Pendant ce temps, on surveille donc aussi le signal `kill` de la
 /// salle et le délai de silence : sinon la connexion resterait bloquée ici.
 /// On abandonne alors l'envoi en cours ; la socket est fermée en sortant.
-async fn send_watched(
-    socket: &mut Socket,
+async fn send_watched<S: Stream>(
+    socket: &mut WebSocketStream<S>,
     message: Message,
     kill: &Notify,
     deadline: tokio::time::Instant,
@@ -218,7 +253,7 @@ const CLOSE_GRACE: Duration = Duration::from_secs(1);
 /// L'attente se fait dans une tâche à part, qui prend la socket (`move`) : la
 /// connexion peut ainsi prévenir la salle tout de suite, et les autres joueurs
 /// apprennent le départ sans délai, comme sur le serveur officiel.
-fn close_with(mut socket: Socket, code: CloseCode, reason: &'static str) {
+fn close_with<S: Stream>(mut socket: WebSocketStream<S>, code: CloseCode, reason: &'static str) {
     tokio::spawn(async move {
         let frame = CloseFrame {
             code,

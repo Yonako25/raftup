@@ -2,15 +2,14 @@
 
 > [!IMPORTANT]
 > - **J0 atteint** : client connecté à une vraie salle archipelago.gg
-> - **J1 : étapes 1 à 7 faites** sur 9 — protocole complet, limites en place, tests différentiels
-> - **106 tests** passent, dont **8 scénarios** identiques au serveur officiel 0.6.8
+> - **J1 : étapes 1 à 8 faites** sur 9 — protocole complet, limites, tests différentiels, wss
+> - **114 tests** passent, dont **8 scénarios** identiques au serveur officiel 0.6.8
 > - **0 écart** avec le serveur officiel sur 22 scénarios fixes et 150 tirés au hasard
 
-Mis à jour le **15 novembre 2026**.
+Mis à jour le **16 novembre 2026**.
 
 ## À faire (J1)
 
-- [ ] Étape 8 : chiffrement wss / TLS (NF06)
 - [ ] Étape 9 : partie réelle de Slime Rancher sur le serveur Raftup
 - [ ] Demander à l'auteur de Slimipelago l'autorisation d'installation automatique
 
@@ -21,7 +20,7 @@ Mis à jour le **15 novembre 2026**.
 | `ap-protocol` | Types des paquets, dans les deux sens | **Complet** |
 | `client-core` | Client Archipelago (ws/wss) | **Complet** pour J0 |
 | `multidata` | Lecture sûre du `.archipelago`, modèle de partie | **Complet** pour J1 |
-| `server` | Serveur WebSocket + binaire `raftup-server` | **Jeu complet**, limites en place |
+| `server` | Serveur WebSocket + binaire `raftup-server` | **Complet** pour J1 (reste la partie réelle) |
 | `py-bridge`, `launcher-core`, `launcher-ui` | Générateur, launcher | Pas commencé |
 
 ## Ce que fait chaque crate
@@ -53,7 +52,8 @@ Mis à jour le **15 novembre 2026**.
 - Échanges : `LocationScouts`, chat `Say`, `Bounce` (DeathLink)
 - Stockage : `Get`, `Set` (18 opérations), `SetNotify`, clés `_read_…`
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
-- Binaire : `raftup-server <seed> --no-tls` (wss exigé par défaut, pas encore codé)
+- Chiffrement (ADR 0009) : `wss` avec `--cert` et `--cert_key` (fichiers PEM) ; clair seulement avec `--no-tls`
+- Binaire : `raftup-server <seed> --cert fullchain.pem --cert_key privkey.pem`
 - Tests différentiels (ADR 0008) : `tests/differentiel/`, lancés à la main, hors CI
 
 ## Décisions (ADR)
@@ -66,6 +66,7 @@ Mis à jour le **15 novembre 2026**.
 - **0006** : serveur organisé autour d'une tâche « salle »
 - **0007** : limites des connexions et files bornées
 - **0008** : tests différentiels contre le serveur officiel
+- **0009** : wss par certificat PEM
 
 ## Reporté à J2
 
@@ -73,6 +74,10 @@ Mis à jour le **15 novembre 2026**.
 - Création d'indices (`create_as_hint`, `CreateHints`, `UpdateHint`)
 - Coût des indices dans les points d'indice
 - Sauvegarde et reprise (NF07), format `.raftup`
+
+## Reporté à J3
+
+- Certificat automatique (Let's Encrypt) et rechargement sans redémarrage (ADR 0009)
 
 ## Vérifier
 

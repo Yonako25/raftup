@@ -1,21 +1,24 @@
 //! `raftup-server` : sert une seed `.archipelago` aux clients compatibles avec Archipelago.
 //!
 //! ```text
-//! raftup-server <seed.archipelago> --no-tls [--host 0.0.0.0] [--port 38281] [--password X] [--verbose]
+//! raftup-server <seed.archipelago> --cert fullchain.pem --cert_key privkey.pem
+//!               [--host 0.0.0.0] [--port 38281] [--password X] [--verbose]
+//! raftup-server <seed.archipelago> --no-tls [...]
 //! ```
 //!
-//! Pour l'instant, seul le WebSocket en clair (`ws://`) est disponible : le
-//! chiffrement (`wss://`) arrive à l'étape 8 de J1. Comme la spec impose wss
-//! par défaut (NF06), il faut demander le clair explicitement avec `--no-tls`.
+//! Par défaut, le serveur parle `wss://` (NF06, ADR 0009) : il lui faut un
+//! certificat et sa clé privée, au format PEM. Le clair (`ws://`) se demande
+//! explicitement avec `--no-tls`.
 
 use std::path::PathBuf;
 
 use anyhow::{bail, Context};
 use multidata::{load_archipelago, ArchiveLimits};
-use server::{Room, Server, DEFAULT_PORT};
-use tracing::{info, Level};
+use server::{Room, Server, TlsConfig, DEFAULT_PORT};
+use tracing::{info, warn, Level};
 
-const USAGE: &str = "usage : raftup-server <seed.archipelago> --no-tls \
+const USAGE: &str = "usage : raftup-server <seed.archipelago> \
+(--cert CERTIFICAT.pem --cert_key CLE.pem | --no-tls) \
 [--host 0.0.0.0] [--port 38281] [--password MOT_DE_PASSE] [--verbose]";
 
 /// Options de la ligne de commande.
@@ -24,6 +27,8 @@ struct Options {
     host: String,
     port: u16,
     password: Option<String>,
+    cert: Option<PathBuf>,
+    cert_key: Option<PathBuf>,
     no_tls: bool,
     verbose: bool,
 }
@@ -36,6 +41,8 @@ fn parse_args() -> anyhow::Result<Options> {
         host: "0.0.0.0".to_string(),
         port: DEFAULT_PORT,
         password: None,
+        cert: None,
+        cert_key: None,
         no_tls: false,
         verbose: false,
     };
@@ -49,6 +56,15 @@ fn parse_args() -> anyhow::Result<Options> {
                 options.port = port.parse().context("numéro de port invalide")?;
             }
             "--password" => options.password = args.next(),
+            // Mêmes noms que le serveur officiel (`MultiServer.py`).
+            "--cert" => {
+                let path = args.next().context("--cert attend un fichier PEM")?;
+                options.cert = Some(PathBuf::from(path));
+            }
+            "--cert_key" => {
+                let path = args.next().context("--cert_key attend un fichier PEM")?;
+                options.cert_key = Some(PathBuf::from(path));
+            }
             "--no-tls" => options.no_tls = true,
             "--verbose" => options.verbose = true,
             "-h" | "--help" => bail!("{USAGE}"),
@@ -59,6 +75,29 @@ fn parse_args() -> anyhow::Result<Options> {
     }
     options.seed = seed.context(USAGE)?;
     Ok(options)
+}
+
+/// Charge le certificat, ou `None` avec `--no-tls`. Refuse les mélanges.
+fn tls_config(options: &Options) -> anyhow::Result<Option<TlsConfig>> {
+    match (&options.cert, &options.cert_key, options.no_tls) {
+        (None, None, true) => Ok(None),
+        (Some(_), _, true) | (_, Some(_), true) => {
+            bail!("--no-tls ne va pas avec --cert ou --cert_key : choisissez l'un ou l'autre")
+        }
+        (Some(cert), Some(key), false) => {
+            let config = TlsConfig::from_pem_files(cert, key)
+                .context("impossible de préparer le chiffrement (wss)")?;
+            Ok(Some(config))
+        }
+        (Some(_), None, false) => bail!("--cert demande aussi --cert_key (la clé privée)"),
+        (None, Some(_), false) => bail!("--cert_key demande aussi --cert (le certificat)"),
+        (None, None, false) => bail!(
+            "le serveur chiffre ses connexions (wss) par défaut : donnez un certificat \
+             avec --cert et --cert_key (fichiers PEM).\n\
+             Pour servir en clair (ws), ajoutez --no-tls : le mot de passe de la salle \
+             passera alors en clair.\n{USAGE}"
+        ),
+    }
 }
 
 #[tokio::main]
@@ -72,12 +111,9 @@ async fn main() -> anyhow::Result<()> {
         })
         .init();
 
-    if !options.no_tls {
-        bail!(
-            "le chiffrement (wss) n'est pas encore disponible (J1, étape 8).\n\
-             Pour servir en clair (ws), ajoutez --no-tls.\n{USAGE}"
-        );
-    }
+    // Le certificat d'abord : une erreur de configuration se voit tout de suite,
+    // avant de lire la seed.
+    let tls = tls_config(&options)?;
 
     let bytes = std::fs::read(&options.seed)
         .with_context(|| format!("lecture de {}", options.seed.display()))?;
@@ -93,11 +129,15 @@ async fn main() -> anyhow::Result<()> {
     if options.password.is_some() {
         room = room.with_password(options.password);
     }
-    let server = Server::bind((options.host.as_str(), options.port), room).await?;
-    info!(
-        "en écoute sur ws://{} (sans chiffrement)",
-        server.local_addr()?
-    );
+    let mut server = Server::bind((options.host.as_str(), options.port), room).await?;
+    let address = server.local_addr()?;
+    match tls {
+        Some(tls) => {
+            server = server.with_tls(tls);
+            info!("en écoute sur wss://{address}");
+        }
+        None => warn!("en écoute sur ws://{address}, sans chiffrement (--no-tls)"),
+    }
 
     // `select!` : on attend le premier des deux, le serveur ou Ctrl+C.
     tokio::select! {

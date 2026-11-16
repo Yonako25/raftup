@@ -6,8 +6,7 @@
 //!
 //! Avancement (jalon J1) : accueil (`RoomInfo`), connexion des joueurs
 //! (`Connect`), noms des objets et des lieux (`GetDataPackage`), partie
-//! complète, limites des connexions (ADR 0007). En clair (`ws`) seulement pour
-//! l'instant.
+//! complète, limites des connexions (ADR 0007), chiffrement `wss` (ADR 0009).
 
 mod connection;
 mod datastore;
@@ -17,6 +16,7 @@ pub mod limits;
 mod python;
 pub mod room;
 mod room_task;
+pub mod tls;
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -25,9 +25,10 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 use tokio::sync::mpsc;
 use tracing::warn;
 
-pub use error::{ConnectionError, ServerError};
+pub use error::{ConnectionError, ServerError, TlsError};
 pub use limits::Limits;
 pub use room::Room;
+pub use tls::TlsConfig;
 
 /// Port par défaut du serveur officiel.
 pub const DEFAULT_PORT: u16 = 38281;
@@ -37,6 +38,8 @@ pub struct Server {
     listener: TcpListener,
     room: Room,
     limits: Limits,
+    /// `None` : en clair (`ws`), seulement sur demande explicite (NF06).
+    tls: Option<TlsConfig>,
 }
 
 impl Server {
@@ -48,12 +51,19 @@ impl Server {
             listener,
             room,
             limits: Limits::default(),
+            tls: None,
         })
     }
 
     /// Remplace les limites par défaut (celles de la spec) ; utile aux tests.
     pub fn with_limits(mut self, limits: Limits) -> Server {
         self.limits = limits;
+        self
+    }
+
+    /// Sert les clients en `wss` avec ce certificat (ADR 0009).
+    pub fn with_tls(mut self, tls: TlsConfig) -> Server {
+        self.tls = Some(tls);
         self
     }
 
@@ -82,6 +92,7 @@ impl Server {
                         next_id,
                         events.clone(),
                         self.limits,
+                        self.tls.as_ref().map(TlsConfig::acceptor),
                     ));
                 }
                 Err(error) => {

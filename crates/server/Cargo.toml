@@ -25,12 +25,18 @@ thiserror.workspace = true
 # sync : canaux entre les connexions et la tâche salle (ADR 0006).
 tokio = { workspace = true, features = ["rt-multi-thread", "signal", "sync"] }
 tokio-tungstenite.workspace = true
+# wss (ADR 0009).
+tokio-rustls.workspace = true
+rustls.workspace = true
 tracing.workspace = true
 # Binaire raftup-server seulement.
 anyhow.workspace = true
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 futures-util.workspace = true
 indexmap.workspace = true
 serde_json.workspace = true

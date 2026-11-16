@@ -29,6 +29,11 @@ tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 # Moteur de chiffrement de rustls : `ring`. Sans moteur, la première connexion wss
 # planterait ; avec un seul moteur activé, rustls l'installe tout seul.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+# Côté serveur, le TLS passe par tokio-rustls (ADR 0009), déjà tiré par
+# tokio-tungstenite ; même moteur `ring` que rustls, pas d'aws-lc.
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+# Tests seulement : certificats auto-signés créés à la volée (ADR 0009).
+rcgen = "0.13"
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 # Binaires et exemples seulement (les bibliothèques utilisent thiserror).
 anyhow = "1.0.104"
