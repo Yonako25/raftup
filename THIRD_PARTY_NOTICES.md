@@ -65,3 +65,15 @@ directory.
 - Fichiers de Raftup concernés : _aucun pour l'instant_
 
 Notice : _à recopier depuis le `LICENSE` du dépôt amont au premier portage._
+
+---
+
+## Polices intégrées au launcher (Chakra Petch et Inter)
+
+- Fichiers : `crates/launcher-ui/fonts/` (TTF copiés depuis le dépôt https://github.com/google/fonts, dossier `ofl/`)
+- Licence : SIL Open Font License 1.1 (les textes complets sont dans `crates/launcher-ui/fonts/OFL-ChakraPetch.txt` et `OFL-Inter.txt`)
+- Chakra Petch (SemiBold et Bold) : Copyright 2018 The Chakra Petch Project Authors (https://github.com/m4rc1e/Chakra-Petch.git)
+- Inter (police variable) : Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+- Fichiers de Raftup concernés : `crates/launcher-ui/src/theme.rs` (les polices sont intégrées au binaire par `include_bytes!`)
+
+Les polices ne sont pas modifiées ; elles ne sont pas vendues seules.

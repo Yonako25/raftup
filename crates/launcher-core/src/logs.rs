@@ -108,6 +108,12 @@ impl<S: Subscriber> Layer<S> for LogLayer {
         if level > Level::INFO {
             return; // DEBUG et TRACE : trop bavards pour l'interface.
         }
+        // Seulement le serveur et le launcher : pas les messages internes des
+        // bibliothèques (carte graphique, fenêtre…).
+        let target = event.metadata().target();
+        if !(target.starts_with("server") || target.starts_with("launcher")) {
+            return;
+        }
         let mut visitor = TextVisitor::default();
         event.record(&mut visitor);
         let fields = visitor.fields.trim_start().to_string();
@@ -160,6 +166,8 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             tracing::info!(id = 3, name = "Alice", "joueur connecté");
             tracing::debug!("trop bavard");
+            // Message d'une bibliothèque : écarté du journal de l'interface.
+            tracing::info!(target: "wgpu_hal::vulkan", "bruit de la carte graphique");
             tracing::warn!("fermeture");
         });
         let lines = buffer.since(0);

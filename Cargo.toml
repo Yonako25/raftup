@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core"]
+members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -24,6 +24,12 @@ tracing = "0.1.44"
 # Décompression zlib du fichier .archipelago (moteur en Rust pur par défaut).
 flate2 = "1"
 tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
+# Interface du launcher (ADR 0011) : egui via eframe, rendu wgpu, boîtes de fichiers natives.
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
+egui = "0.37"
+rfd = { version = "0.18", default-features = false }
+# Heures locales (HH:MM) pour l'activité et le journal.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # WebSocket et TLS en Rust pur, certificats racine intégrés (ADR 0005).
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 # Moteur de chiffrement de rustls : `ring`. Sans moteur, la première connexion wss

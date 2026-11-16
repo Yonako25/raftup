@@ -1,0 +1,29 @@
+[package]
+name = "launcher-ui"
+description = "Launcher de bureau Raftup (egui), compatible avec Archipelago"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+# Le binaire s'appelle `raftup` : c'est le programme que lance le joueur.
+default-run = "raftup"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "raftup"
+path = "src/main.rs"
+
+[dependencies]
+# CLAUDE.md : l'interface ne dépend que de launcher-core (ADR 0011 : egui à la place de Tauri).
+launcher-core.workspace = true
+eframe.workspace = true
+egui.workspace = true
+rfd.workspace = true
+chrono.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["registry", "fmt"] }
+anyhow.workspace = true

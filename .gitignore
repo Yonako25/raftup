@@ -1,12 +1,10 @@
 # Compilation Rust
 /target/
 
-# Interface Tauri (dépendances et build front)
-node_modules/
-dist/
-
 # Réglages locaux de Claude Code (propres à chaque poste)
 .claude/settings.local.json
+# Copies de travail isolées des agents (worktrees)
+.claude/worktrees/
 
 # Éditeurs et systèmes
 .idea/
@@ -26,6 +24,3 @@ Thumbs.db
 
 # Python (scripts de test)
 __pycache__/
-
-# Tauri : schémas générés à la compilation
-/crates/launcher-ui/gen/
