@@ -120,7 +120,7 @@ impl RoomTask {
     pub(super) fn on_goal_achieved(&mut self, team: TeamId, slot: SlotId) {
         let text = format!(
             "{} (Team #{}) has completed their goal.",
-            self.slot_name(slot),
+            self.aliased_name(team, slot),
             team + 1
         );
         info!(team, slot, "objectif atteint");

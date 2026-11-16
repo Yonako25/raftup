@@ -5,8 +5,9 @@
 //! réponses `CommandResult`. Les commandes d'information sont dans `info`.
 
 use super::*;
-use crate::command_line::{raw_argument, split_command};
+use crate::command_line::{raw_argument, split_command, truncate_chars};
 
+mod actions;
 mod info;
 
 /// Commandes connues, dans l'ordre du serveur officiel (celui de `commands`,
@@ -118,23 +119,34 @@ impl RoomTask {
             "players" => self.cmd_players(id),
             "status" => self.cmd_status(id, args.first().copied().unwrap_or("")),
             "remaining" => self.cmd_remaining(id),
+            "release" => self.cmd_release(id),
+            "collect" => self.cmd_collect(id),
+            "countdown" => self.cmd_countdown(id, args.first().copied().unwrap_or("10")),
             _ => self.todo_command(id, command),
         }
     }
 
     /// Commandes qui lisent le texte brut (`@mark_raw`).
     fn run_raw_command(&mut self, id: ClientId, command: &str, argument: Option<String>) {
+        // `_cmd_getitem(self, item_name)` n'a pas de valeur par défaut :
+        // sans argument, Python lève une erreur.
+        if command == "getitem" && argument.is_none() {
+            self.invalid_arguments(id, command);
+            return;
+        }
         let text = argument.unwrap_or_default();
         match command {
             "admin" => self.cmd_admin(id, &text),
             "missing" => self.cmd_missing(id, &text),
             "checked" => self.cmd_checked(id, &text),
+            "alias" => self.cmd_alias(id, &text),
+            "getitem" => self.cmd_getitem(id, &text),
             _ => self.todo_command(id, command),
         }
     }
 
-    /// Bouchon des commandes pas encore faites : `release`, `collect`,
-    /// `countdown`, `alias`, `getitem`, `hint`, `hint_location`.
+    /// Bouchon des commandes pas encore faites :
+    /// `hint`, `hint_location`.
     /// T7b/T8 : elles ne répondent rien pour l'instant.
     fn todo_command(&mut self, id: ClientId, command: &str) {
         debug!(id, command, "commande pas encore gérée (T7b/T8)");
@@ -164,10 +176,12 @@ impl RoomTask {
         self.emit(GameEvent::Chat {
             time: now(),
             slot: player.slot,
-            name: name.clone(),
+            name,
             text: line.clone(),
         });
-        let mut message = slot_message(format!("{name}: {line}"), "Chat", player.team, player.slot);
+        let shown = self.aliased_name(player.team, player.slot);
+        let mut message =
+            slot_message(format!("{shown}: {line}"), "Chat", player.team, player.slot);
         message.message = Some(line);
         self.broadcast_text_all(message);
 

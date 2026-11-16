@@ -166,7 +166,7 @@ impl RoomTask {
             };
             text.push_str(&format!(
                 "\n{} has {connected} connection{plural}{tag_text}{status_text} ({}/{})",
-                self.slot_name(*slot),
+                self.aliased_name(team, *slot),
                 self.game.checked_count(team, *slot),
                 locations.len()
             ));

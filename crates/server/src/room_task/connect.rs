@@ -247,7 +247,8 @@ impl RoomTask {
         });
         let verb = non_game_verb(&player.tags).unwrap_or("playing");
         let text = format!(
-            "{name} (Team #{}) {verb} {game} has joined. Client({}), {}.",
+            "{} (Team #{}) {verb} {game} has joined. Client({}), {}.",
+            self.aliased_name(player.team, player.slot),
             player.team + 1,
             version_text(&player.version),
             python::list_repr(&player.tags),
@@ -295,7 +296,8 @@ impl RoomTask {
             None => "left".to_string(),
         };
         let text = format!(
-            "{name} (Team #{}) has {verb} the game. Client({}), {}.",
+            "{} (Team #{}) has {verb} the game. Client({}), {}.",
+            self.aliased_name(player.team, player.slot),
             player.team + 1,
             version_text(&player.version),
             python::list_repr(&player.tags),
@@ -348,7 +350,7 @@ impl RoomTask {
             if changed {
                 let text = format!(
                     "{} (Team #{}) has changed tags from {} to {}.",
-                    self.slot_name(player.slot),
+                    self.aliased_name(player.team, player.slot),
                     player.team + 1,
                     python::list_repr(&old_tags),
                     python::list_repr(&player.tags),
@@ -443,7 +445,7 @@ impl RoomTask {
             .map(|(slot, info)| NetworkPlayer {
                 team: 0,
                 slot: *slot,
-                alias: info.name.clone(),
+                alias: self.aliased_name(0, *slot),
                 name: info.name.clone(),
             })
             .collect()

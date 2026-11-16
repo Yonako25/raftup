@@ -197,7 +197,7 @@ impl RoomTask {
                 name: self.slot_name(player.slot),
                 text: text.to_string(),
             });
-            let line = format!("{}: {text}", self.slot_name(player.slot));
+            let line = format!("{}: {text}", self.aliased_name(player.team, player.slot));
             let mut message = slot_message(line, "Chat", player.team, player.slot);
             message.message = Some(text.to_string());
             self.broadcast_text_all(message);

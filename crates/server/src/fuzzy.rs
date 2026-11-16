@@ -5,9 +5,6 @@
 //! avec exactement les mêmes seuils et les mêmes messages que le serveur
 //! officiel (les clients affichent ces messages tels quels).
 
-// Pas encore branchée : servira à `!getitem` et `!hint` (T7b), puis on retirera cet `allow`.
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 
 /// Distance de Damerau-Levenshtein NON restreinte (algorithme de Lowrance-Wagner),

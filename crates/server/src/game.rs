@@ -42,6 +42,8 @@ pub(crate) struct GameState {
     hints: BTreeMap<(TeamId, SlotId), Vec<Hint>>,
     /// Nombre d'indices payés par (équipe, slot) (`hints_used` du serveur officiel).
     hints_used: BTreeMap<(TeamId, SlotId), u32>,
+    /// Surnom choisi avec `!alias` (`name_aliases` du serveur officiel).
+    aliases: BTreeMap<(TeamId, SlotId), String>,
 }
 
 /// Ce que `notify_hints` demande d'envoyer, une fois l'état mis à jour.
@@ -83,6 +85,21 @@ impl GameState {
 
     pub fn set_status(&mut self, team: TeamId, slot: SlotId, status: ClientStatus) {
         self.client_status.insert((team, slot), status);
+    }
+
+    /// Surnom du slot, s'il en a un.
+    pub fn alias(&self, team: TeamId, slot: SlotId) -> Option<&str> {
+        // `String::as_str` : on prête le texte (`&str`) au lieu de le copier.
+        self.aliases.get(&(team, slot)).map(String::as_str)
+    }
+
+    pub fn set_alias(&mut self, team: TeamId, slot: SlotId, alias: String) {
+        self.aliases.insert((team, slot), alias);
+    }
+
+    /// Retire le surnom ; vrai s'il y en avait un.
+    pub fn remove_alias(&mut self, team: TeamId, slot: SlotId) -> bool {
+        self.aliases.remove(&(team, slot)).is_some()
     }
 
     /// Note qu'un membre de groupe a fait `collect` ; vrai si tous l'ont fait.
@@ -375,7 +392,6 @@ impl GameState {
         changed
     }
 
-    #[allow(dead_code)] // pour `!getitem`, pas encore branché
     /// Objet donné par `!getitem` : ajouté aux deux listes du slot.
     pub fn add_cheat_item(&mut self, team: TeamId, slot: SlotId, item: NetworkItem) {
         for remote_items in [false, true] {

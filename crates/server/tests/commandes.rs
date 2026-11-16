@@ -403,3 +403,216 @@ async fn admin_masque_le_mot_de_passe() {
     );
     assert_eq!(packets.iter().filter(|p| p["type"] == "Chat").count(), 1);
 }
+
+#[tokio::test]
+async fn release_et_collect_selon_le_mode() {
+    // Mode « auto » (celui de la seed) : il faut avoir atteint son but.
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut alice, "!release").await;
+    assert_eq!(
+        results(&packets),
+        [
+            "Sorry, client item releasing requires you to have beaten the game on this server. \
+          You can ask the server admin for a /release"
+        ]
+    );
+    let packets = run(&mut alice, "!collect").await;
+    assert_eq!(
+        results(&packets),
+        [
+            "Sorry, client collecting requires you to have beaten the game on this server. \
+          You can ask the server admin for a /collect"
+        ]
+    );
+
+    // `release_mode = enabled` : relâche tout de suite ; `collect_mode = disabled` : refuse.
+    let mut data = seed();
+    data.server_options.release_mode = "enabled".to_string();
+    data.server_options.collect_mode = "disabled".to_string();
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let mut bob = join(&url, "Bob", "ChecksFinder", "[]").await;
+    drain(&mut alice).await; // son message « Join »
+    let packets = run(&mut alice, "!release").await;
+    let release: Vec<&Value> = packets.iter().filter(|p| p["type"] == "Release").collect();
+    assert_eq!(release.len(), 1);
+    assert_eq!(
+        release[0]["data"][0]["text"],
+        "Alice (Team #1) has released all remaining items from their world."
+    );
+    assert!(results(&packets).is_empty());
+    // Bob voit l'annonce aussi.
+    let seen = drain(&mut bob).await;
+    assert!(seen.iter().any(|p| p["type"] == "Release"));
+    let packets = run(&mut alice, "!collect").await;
+    assert_eq!(
+        results(&packets),
+        [
+            "Sorry, client collecting has been disabled on this server. \
+          You can ask the server admin for a /collect"
+        ]
+    );
+}
+
+/// Surnom du slot `slot` dans le `RoomUpdate` des joueurs, s'il y en a un.
+fn alias_in_update(packets: &[Value], slot: u64) -> Option<String> {
+    let update = packets
+        .iter()
+        .find(|p| p["cmd"] == "RoomUpdate" && p.get("players").is_some())?;
+    let players = update["players"].as_array()?;
+    let player = players.iter().find(|p| p["slot"] == slot)?;
+    Some(player["alias"].as_str()?.to_string())
+}
+
+#[tokio::test]
+async fn alias_change_le_nom_affiche() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let mut bob = join(&url, "Bob", "ChecksFinder", "[]").await;
+    drain(&mut alice).await; // son message « Join »
+
+    let packets = run(&mut alice, "!alias Zoé").await;
+    assert_eq!(results(&packets), ["Hello, Zoé"]);
+    assert_eq!(alias_in_update(&packets, 1).as_deref(), Some("Zoé (Alice)"));
+    // Bob reçoit aussi la nouvelle liste des joueurs.
+    let seen = drain(&mut bob).await;
+    assert_eq!(alias_in_update(&seen, 1).as_deref(), Some("Zoé (Alice)"));
+
+    // Le chat affiche le surnom.
+    let packets = run(&mut alice, "salut").await;
+    assert_eq!(packets[0]["data"][0]["text"], "Zoé (Alice): salut");
+    drain(&mut bob).await;
+
+    // Sans argument : retire le surnom.
+    let packets = run(&mut alice, "!alias").await;
+    assert_eq!(results(&packets), ["Removed Alias"]);
+    assert_eq!(alias_in_update(&packets, 1).as_deref(), Some("Alice"));
+    // Plus rien à retirer : pas de réponse ni de RoomUpdate.
+    let packets = run(&mut alice, "!alias").await;
+    assert!(results(&packets).is_empty());
+    assert_eq!(alias_in_update(&packets, 1), None);
+
+    // 16 caractères au plus, espaces retirés après la coupe.
+    let packets = run(&mut alice, "!alias abcdefghijklmno pqrs").await;
+    assert_eq!(results(&packets), ["Hello, abcdefghijklmno"]);
+}
+
+#[tokio::test]
+async fn getitem_donne_un_objet() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+
+    // Nom approché : l'objet le plus proche est donné.
+    let packets = run(&mut alice, "!getitem map widht").await;
+    let cheat: Vec<&Value> = packets
+        .iter()
+        .filter(|p| p["type"] == "ItemCheat")
+        .collect();
+    assert_eq!(cheat.len(), 1);
+    assert_eq!(
+        cheat[0]["data"][0]["text"],
+        "Cheat console: sending \"Map Width\" to Alice"
+    );
+    assert_eq!(cheat[0]["receiving"], 1);
+    let given = &cheat[0]["item"];
+    assert_eq!(given["location"], -1);
+    assert_eq!(given["player"], 1);
+    // Puis l'objet arrive par `ReceivedItems`.
+    let received = packets
+        .iter()
+        .find(|p| p["cmd"] == "ReceivedItems")
+        .unwrap();
+    assert_eq!(
+        received["items"].as_array().unwrap().last().unwrap()["item"],
+        given["item"]
+    );
+
+    // Sans argument : erreur ; nom inconnu : la réponse de la recherche floue.
+    let packets = run(&mut alice, "!getitem").await;
+    assert_eq!(results(&packets), ["Invalid arguments for !getitem."]);
+    let packets = run(&mut alice, "!getitem zzzzzzzzzzzz").await;
+    let texts = results(&packets);
+    assert_eq!(texts.len(), 1);
+    assert!(texts[0].starts_with("Didn't find something that closely matches 'zzzzzzzzzzzz'"));
+    assert!(!packets.iter().any(|p| p["type"] == "ItemCheat"));
+
+    // Triche interdite par la salle.
+    let mut data = seed();
+    data.server_options.disable_item_cheat = true;
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut alice, "!getitem Map Width").await;
+    assert_eq!(results(&packets), ["Cheating is disabled."]);
+}
+
+/// Textes des messages `Countdown` reçus jusqu'à « GO » (au plus 10 s).
+async fn countdown_until_go(client: &mut Client) -> Vec<String> {
+    let mut texts = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while let Ok(Some(Ok(message))) = tokio::time::timeout_at(deadline, client.next()).await {
+        let packets: Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+        for p in packets.as_array().unwrap() {
+            if p["type"] == "Countdown" {
+                let text = p["data"][0]["text"].as_str().unwrap().to_string();
+                let done = text == "[Server]: GO";
+                texts.push(text);
+                if done {
+                    return texts;
+                }
+            }
+        }
+    }
+    texts
+}
+
+#[tokio::test]
+async fn countdown_annonce_puis_go() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    say(&mut alice, "!countdown 2").await;
+    assert_eq!(
+        countdown_until_go(&mut alice).await,
+        [
+            "[Server]: Starting countdown of 2s",
+            "[Server]: 2",
+            "[Server]: 1",
+            "[Server]: GO"
+        ]
+    );
+
+    // Un second `!countdown` pendant le premier le relance, sans doubler les annonces.
+    say(&mut alice, "!countdown 3").await;
+    say(&mut alice, "!countdown 1").await;
+    assert_eq!(
+        countdown_until_go(&mut alice).await,
+        [
+            "[Server]: Starting countdown of 3s",
+            "[Server]: 3",
+            "[Server]: Starting countdown of 1s",
+            "[Server]: 1",
+            "[Server]: GO"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn countdown_refuse() {
+    let (_server, url) = start().await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut alice, "!countdown 3601").await;
+    assert_eq!(results(&packets), ["3601 is invalid. Maximum is 1 hour."]);
+
+    let mut data = seed();
+    data.server_options.countdown_mode = "disabled".to_string();
+    let (_server, url) = start_with(data).await;
+    let mut alice = join(&url, "Alice", "ChecksFinder", "[]").await;
+    let packets = run(&mut alice, "!countdown").await;
+    assert_eq!(
+        results(&packets),
+        [
+            "Sorry, client countdowns have been disabled on this server. \
+          You can ask the server admin for a /countdown"
+        ]
+    );
+}

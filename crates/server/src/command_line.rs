@@ -159,8 +159,6 @@ pub(crate) fn py_isnumeric(s: &str) -> bool {
 
 /// Les `n` premiers caractères de `s` (`s[:n]` de Python : on compte des
 /// caractères, pas des octets, pour ne jamais couper un caractère en deux).
-// Pour `!alias` (T7b).
-#[allow(dead_code)]
 pub(crate) fn truncate_chars(s: &str, n: usize) -> String {
     s.chars().take(n).collect()
 }

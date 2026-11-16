@@ -165,9 +165,27 @@ pub(crate) async fn run(
         names,
         monitor,
         activity: BTreeMap::new(),
+        countdown_timer: 0,
+        countdown_next: None,
     };
-    while let Some(event) = events.recv().await {
-        task.handle(event);
+    loop {
+        // Sans compte à rebours, on attend seulement le prochain événement.
+        // Avec, `select!` attend le premier des deux : un événement, ou
+        // l'heure de la prochaine annonce (la tâche ne bloque jamais).
+        let event = match task.countdown_next {
+            None => events.recv().await,
+            Some(next) => tokio::select! {
+                event = events.recv() => event,
+                _ = tokio::time::sleep_until(next) => {
+                    task.countdown_step();
+                    continue;
+                }
+            },
+        };
+        match event {
+            Some(event) => task.handle(event),
+            None => break,
+        }
     }
 }
 
@@ -187,6 +205,11 @@ struct RoomTask {
     monitor: broadcast::Sender<GameEvent>,
     /// Heure du dernier paquet reçu de chaque slot.
     activity: BTreeMap<(TeamId, SlotId), f64>,
+    /// Compte à rebours en cours (`countdown_timer` du serveur officiel) :
+    /// secondes restantes à annoncer.
+    countdown_timer: i64,
+    /// Heure de la prochaine annonce ; `None` si aucun compte à rebours ne tourne.
+    countdown_next: Option<tokio::time::Instant>,
 }
 
 impl RoomTask {
@@ -295,6 +318,16 @@ impl RoomTask {
     fn slot_name(&self, slot: SlotId) -> String {
         let slots = &self.room.data().slots;
         slots.get(&slot).map(|s| s.name.clone()).unwrap_or_default()
+    }
+
+    /// Nom affiché dans les messages : « Surnom (Nom) » si le slot a un
+    /// surnom, sinon le nom (`get_aliased_name` du serveur officiel).
+    fn aliased_name(&self, team: TeamId, slot: SlotId) -> String {
+        let name = self.slot_name(slot);
+        match self.game.alias(team, slot) {
+            Some(alias) => format!("{alias} ({name})"),
+            None => name,
+        }
     }
 
     fn slot_game(&self, slot: SlotId) -> String {
