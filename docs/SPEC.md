@@ -26,7 +26,7 @@ Positionnement : « implémentation alternative compatible », pas concurrent. U
 ## 3. Architecture
 
 ```
-Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lance le jeu avec les identifiants
+Launcher (egui)  ──► launcher-core ──► installe mods / profils, lance le jeu avec les identifiants
       │                    │
       │                    ├──► py-bridge ──► générateur Archipelago officiel (process séparé, MVP)
       │                    │                    └─► fichier .archipelago
@@ -47,7 +47,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 | `server` | Serveur WebSocket maison (tokio + `ap-protocol`) | J1 |
 | `py-bridge` | Lance et pilote le générateur officiel dans un process Python séparé | J3 |
 | `launcher-core` | Catalogue, profils, installation, détection des jeux, lancement | J3 |
-| `launcher-ui` | Interface Tauri | J3 |
+| `launcher-ui` | Interface egui (ADR 0011) | J3 |
 | `logic`, `fill`, `generate` | Générateur Rust | V2 |
 | `worlds-native` | Format de world natif déclaratif | V3 |
 | `hub` | Service `raftup-hub` : comptes, amis, présence (AGPL) | V2 |
@@ -62,6 +62,7 @@ Launcher (Tauri) ──► launcher-core ──► installe mods / profils, lanc
 - **Catalogue public** : le catalogue entier (profils d'installation) vit dans le dépôt, sous `profiles/`, sans base de données privée, embarqué dans chaque version du launcher ; contributions par pull request (ADR 0001).
 - **Comptes et amis** : service séparé `raftup-hub` (PostgreSQL), vrai compte avec connexion par e-mail + mot de passe ou Discord (d'autres fournisseurs plus tard), pseudo unique (sans code ami), après le MVP (ADR 0002). Code public, base de l'instance officielle privée, sur le modèle de Modrinth.
 - **Licences** : MIT / Apache-2.0 partout, sauf `raftup-hub` en AGPL-3.0-or-later (ADR 0003).
+- **Interface du launcher** : egui / eframe, 100 % Rust, sans webview ; remplace Tauri (ADR 0011).
 
 ## 4. Périmètre par jalon
 
@@ -122,7 +123,7 @@ Slime Rancher passe par une world communautaire, pas une world intégrée à Arc
 | F09 | Héberger la partie en un clic (serveur intégré) avec une adresse stable |
 | F10 | Afficher joueurs, progression et dernière activité ; poster les événements clés sur un webhook Discord |
 | F11 | Désinstaller proprement un mod et remettre le jeu dans son état d'origine |
-| F12 | Se mettre à jour automatiquement (updater Tauri, signature minisign) |
+| F12 | Se mettre à jour automatiquement (signature minisign) |
 
 ### Exemple de profil d'installation (illustratif, valeurs à vérifier)
 

@@ -15,7 +15,7 @@ Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâch
 
 - Rust (workspace Cargo), édition 2021, toolchain stable.
 - Async : `tokio`. Sérialisation : `serde` / `serde_json`. Erreurs : `thiserror` dans les bibliothèques, `anyhow` dans les binaires. Logs : `tracing`.
-- Launcher : Tauri v2, interface en HTML/CSS/TypeScript sans framework lourd.
+- Launcher : egui / eframe (rendu wgpu), interface 100 % Rust, sans webview (ADR 0011).
 - Protocole, serveur et client : écrits par Raftup (ADR 0004), sur `tokio` et `ap-protocol`. Pas de dépendance à pahoa ni à `archipelago_rs` : ce sont des références, avec le serveur Python officiel comme oracle des tests différentiels.
 - Génération au MVP : générateur Archipelago officiel, version épinglée, lancé dans un process Python séparé (python-build-standalone), dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
 
@@ -29,7 +29,7 @@ crates/
   client-core/     client Archipelago maison, utilisé par le launcher et les tests
   py-bridge/       pilote le process Python du générateur officiel
   launcher-core/   catalogue, profils d'installation, installation des mods, lancement des jeux
-  launcher-ui/     application Tauri (ne dépend que de launcher-core)
+  launcher-ui/     application egui (ne dépend que de launcher-core)
   logic/  fill/  worlds-native/  generate/   → V2 et V3, ne pas créer avant
   hub/             service raftup-hub : comptes, amis, présence (AGPL, après le MVP, ne pas créer avant)
 profiles/          profils d'installation déclaratifs, un fichier TOML par jeu
@@ -43,7 +43,7 @@ cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
-cargo tauri dev        # depuis crates/launcher-ui
+cargo run -p launcher-ui   # lance le launcher
 ```
 
 ## Conventions de code

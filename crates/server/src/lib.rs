@@ -177,6 +177,14 @@ impl RunningServer {
         answer.await.ok()
     }
 
+    /// Envoie un message de l'hôte à tous les joueurs connectés.
+    pub async fn announce(&self, text: String) -> Result<(), ServerError> {
+        self.events
+            .send(Event::Announce { text })
+            .await
+            .map_err(|_| ServerError::Task("la salle est arrêtée".to_string()))
+    }
+
     /// Abonnement au fil d'événements : ce qui se passe à partir de maintenant.
     pub fn subscribe(&self) -> broadcast::Receiver<GameEvent> {
         self.monitor.subscribe()

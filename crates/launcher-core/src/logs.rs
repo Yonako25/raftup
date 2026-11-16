@@ -27,8 +27,10 @@ pub struct LogLine {
     pub time: f64,
     /// `INFO`, `WARN`, `ERROR`, `DEBUG`.
     pub level: String,
-    /// Le message et ses champs : `joueur connecté id=1 slot=1`.
+    /// Le message : `joueur connecté`.
     pub text: String,
+    /// Ses champs, pour la case « Détails » : `id=1 slot=1` (vide s'il n'y en a pas).
+    pub fields: String,
 }
 
 #[derive(Debug, Default)]
@@ -60,6 +62,10 @@ impl LogBuffer {
 
     /// Ajoute une ligne (utile aussi pour les messages du launcher lui-même).
     pub fn push(&self, level: &str, text: String) {
+        self.push_with_fields(level, text, String::new());
+    }
+
+    fn push_with_fields(&self, level: &str, text: String, fields: String) {
         // Un `Mutex` « empoisonné » (une tâche a paniqué en le tenant) garde des
         // données valables ici : on les reprend.
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -70,6 +76,7 @@ impl LogBuffer {
             time: now(),
             level: level.to_string(),
             text,
+            fields,
         });
         while inner.lines.len() > CAPACITY {
             inner.lines.pop_front();
@@ -103,9 +110,9 @@ impl<S: Subscriber> Layer<S> for LogLayer {
         }
         let mut visitor = TextVisitor::default();
         event.record(&mut visitor);
-        let mut text = visitor.message;
-        text.push_str(&visitor.fields);
-        self.buffer.push(level.as_str(), text);
+        let fields = visitor.fields.trim_start().to_string();
+        self.buffer
+            .push_with_fields(level.as_str(), visitor.message, fields);
     }
 }
 
@@ -158,7 +165,8 @@ mod tests {
         let lines = buffer.since(0);
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].level, "INFO");
-        assert_eq!(lines[0].text, "joueur connecté id=3 name=Alice");
+        assert_eq!(lines[0].text, "joueur connecté");
+        assert_eq!(lines[0].fields, "id=3 name=Alice");
         assert_eq!(lines[1].level, "WARN");
         assert_eq!(buffer.since(1).len(), 1);
     }

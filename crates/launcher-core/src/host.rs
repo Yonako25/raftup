@@ -196,6 +196,16 @@ impl Host {
             .collect()
     }
 
+    /// Message de l'hôte à tous les joueurs.
+    pub async fn announce(&self, text: String) -> Result<(), LauncherError> {
+        let hosted = self.hosted.as_ref().ok_or(LauncherError::NotRunning)?;
+        let text = text.trim().to_string();
+        if !text.is_empty() {
+            hosted.running.announce(text).await?;
+        }
+        Ok(())
+    }
+
     /// Arrête la partie hébergée ; le port est libre au retour.
     pub async fn stop(&mut self) -> Result<(), LauncherError> {
         let hosted = self.hosted.take().ok_or(LauncherError::NotRunning)?;

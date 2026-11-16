@@ -60,6 +60,8 @@ pub(crate) enum Event {
     Status {
         reply: oneshot::Sender<ServerStatus>,
     },
+    /// Message de l'hôte à tous les joueurs.
+    Announce { text: String },
 }
 
 /// Ce que la tâche salle demande à une connexion.
@@ -272,6 +274,7 @@ impl RoomTask {
                 // Le demandeur a pu abandonner : on ignore l'échec.
                 let _ = reply.send(self.status());
             }
+            Event::Announce { text } => self.announce(text),
         }
     }
 
@@ -1288,6 +1291,17 @@ impl RoomTask {
     }
 
     // ----- Suivi (ADR 0010) ----------------------------------------------
+
+    /// Message de l'hôte à tous, comme la console du serveur officiel :
+    /// `[Server]: texte`, de type `ServerChat`.
+    fn announce(&mut self, text: String) {
+        info!("message de l'hôte : {text}");
+        let mut message = text_message(format!("[Server]: {text}"));
+        message.kind = Some("ServerChat".to_string());
+        message.message = Some(text.clone());
+        self.broadcast_text_all(message);
+        self.emit(GameEvent::ServerChat { time: now(), text });
+    }
 
     /// Publie un événement ; sans abonné, il est simplement perdu.
     fn emit(&self, event: GameEvent) {

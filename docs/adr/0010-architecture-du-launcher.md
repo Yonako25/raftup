@@ -1,6 +1,6 @@
 # 0010 — Architecture du launcher (hébergement d'une partie)
 
-- Statut : accepté
+- Statut : accepté ; la partie « interface » (Tauri, HTML/TypeScript) est remplacée par l'ADR 0011
 - Date : 2026-11-16
 
 ## Contexte

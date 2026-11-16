@@ -26,3 +26,6 @@ Thumbs.db
 
 # Python (scripts de test)
 __pycache__/
+
+# Tauri : schémas générés à la compilation
+/crates/launcher-ui/gen/

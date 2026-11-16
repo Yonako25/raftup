@@ -139,6 +139,20 @@ async fn evenements_de_la_partie() {
     let goal = next_matching(&mut events, |e| matches!(e, GameEvent::Goal { .. })).await;
     assert!(matches!(goal, GameEvent::Goal { ref name, .. } if name == "Alice"));
 
+    server.announce("bienvenue".to_string()).await.unwrap();
+    let announced = next_matching(&mut events, |e| matches!(e, GameEvent::ServerChat { .. })).await;
+    assert!(matches!(announced, GameEvent::ServerChat { ref text, .. } if text == "bienvenue"));
+    // Le joueur reçoit le message, comme ceux de la console du serveur officiel.
+    let frame = loop {
+        let Some(Ok(Message::Text(text))) = alice.next().await else {
+            panic!("connexion fermée");
+        };
+        if text.contains("ServerChat") {
+            break text.to_string();
+        }
+    };
+    assert!(frame.contains("[Server]: bienvenue"), "{frame}");
+
     alice.close(None).await.unwrap();
     let left = next_matching(&mut events, |e| matches!(e, GameEvent::Left { .. })).await;
     assert!(matches!(left, GameEvent::Left { ref name, .. } if name == "Alice"));

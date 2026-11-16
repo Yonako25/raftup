@@ -85,6 +85,8 @@ pub enum GameEvent {
         name: String,
         text: String,
     },
+    /// Message de l'hôte à tous les joueurs.
+    ServerChat { time: f64, text: String },
     /// Un slot a atteint son objectif.
     Goal {
         time: f64,
