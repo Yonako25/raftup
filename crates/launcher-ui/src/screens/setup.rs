@@ -271,6 +271,7 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
         password,
         encryption,
         public_host,
+        disable_save: false,
     })
 }
 

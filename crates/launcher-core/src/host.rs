@@ -9,7 +9,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use multidata::{load_archipelago, ArchiveLimits};
 use serde::{Deserialize, Serialize};
+use server::save::{default_save_path, open_or_create};
 use server::{GameEvent, Room, RunningServer, Server, ServerStatus, TlsConfig};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
@@ -44,6 +46,11 @@ pub struct HostOptions {
     /// Nom à donner aux joueurs dans l'adresse (nom de domaine, IP…).
     #[serde(default = "default_public_host")]
     pub public_host: String,
+    /// Vrai : pas de sauvegarde (la partie est perdue à l'arrêt). Par défaut,
+    /// la partie est sauvegardée dans un `.raftup` à côté de la seed, et
+    /// reprend si ce fichier existe déjà (ADR 0014).
+    #[serde(default)]
+    pub disable_save: bool,
 }
 
 fn default_public_host() -> String {
@@ -60,6 +67,10 @@ pub struct HostStatus {
     pub has_password: bool,
     /// Heure du démarrage, en secondes depuis 1970.
     pub started_at: f64,
+    /// Fichier de sauvegarde ; `None` si la sauvegarde est désactivée.
+    pub save: Option<PathBuf>,
+    /// Vrai si la partie a repris depuis une sauvegarde existante.
+    pub resumed: bool,
     pub server: ServerStatus,
 }
 
@@ -89,6 +100,8 @@ struct Hosted {
     encrypted: bool,
     has_password: bool,
     started_at: f64,
+    save: Option<PathBuf>,
+    resumed: bool,
     /// Partagé avec la tâche qui recopie le fil d'événements du serveur.
     events: Arc<Mutex<EventLog>>,
     forwarder: JoinHandle<()>,
@@ -114,7 +127,21 @@ impl Host {
             Encryption::Wss { cert, key } => Some(TlsConfig::from_pem_files(cert, key)?),
             Encryption::Plain => None,
         };
-        let (seed, data) = SeedSummary::load(&options.seed)?;
+        // Les octets de la seed servent deux fois : la lecture, et l'empreinte
+        // qui lie la sauvegarde à cette seed.
+        let bytes = std::fs::read(&options.seed).map_err(|source| LauncherError::Read {
+            path: options.seed.display().to_string(),
+            source,
+        })?;
+        let data = load_archipelago(&bytes, &ArchiveLimits::default())?;
+        let seed = SeedSummary::of(&data);
+        let save = if options.disable_save {
+            None
+        } else {
+            let path = default_save_path(&options.seed);
+            let opened = open_or_create(&path, &bytes, &data.seed_name)?;
+            Some((path, opened))
+        };
         let mut room = Room::new(data);
         let password = options.password.clone().filter(|p| !p.is_empty());
         if password.is_some() {
@@ -127,6 +154,13 @@ impl Host {
         if let Some(tls) = tls {
             server = server.with_tls(tls);
         }
+        let (save, resumed) = match save {
+            Some((path, opened)) => {
+                server = server.with_save(opened.file, opened.snapshot);
+                (Some(path), opened.resumed)
+            }
+            None => (None, false),
+        };
         let running = server.start()?;
         let port = running.local_addr().port();
         let scheme = if encrypted { "wss" } else { "ws" };
@@ -163,10 +197,20 @@ impl Host {
             encrypted,
             has_password,
             started_at: now(),
+            save,
+            resumed,
             events,
             forwarder,
         });
-        self.status().await.ok_or(LauncherError::NotRunning)
+        match self.status().await {
+            Some(status) => Ok(status),
+            // La salle ne répond pas (arrêtée aussitôt) : on libère le port
+            // au lieu de laisser un serveur à moitié lancé.
+            None => {
+                let _ = self.stop().await;
+                Err(LauncherError::NotRunning)
+            }
+        }
     }
 
     /// Photo de la partie hébergée ; `None` s'il n'y en a pas.
@@ -179,6 +223,8 @@ impl Host {
             encrypted: hosted.encrypted,
             has_password: hosted.has_password,
             started_at: hosted.started_at,
+            save: hosted.save.clone(),
+            resumed: hosted.resumed,
             server,
         })
     }

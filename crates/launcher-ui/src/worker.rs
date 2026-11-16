@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use launcher_core::{Host, HostOptions, HostStatus, LogBuffer, LogLine, NumberedEvent};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 /// Nombre maximal d'événements et de lignes de journal gardés pour l'affichage.
 const KEEP: usize = 2000;
@@ -21,6 +21,8 @@ pub enum Command {
     Start(HostOptions),
     Stop,
     Announce(String),
+    /// La fenêtre se ferme : arrêter proprement la partie, puis le worker.
+    Shutdown,
 }
 
 /// L'état lu par l'interface.
@@ -48,10 +50,18 @@ pub struct Worker {
 
 impl Worker {
     /// Lance la tâche du worker sur le runtime `tokio`.
-    pub fn spawn(runtime: &tokio::runtime::Handle, ctx: egui::Context, logs: LogBuffer) -> Worker {
+    ///
+    /// `done` est prévenu quand le worker a fini, partie arrêtée : `main`
+    /// l'attend avant de détruire le runtime.
+    pub fn spawn(
+        runtime: &tokio::runtime::Handle,
+        ctx: egui::Context,
+        logs: LogBuffer,
+        done: oneshot::Sender<()>,
+    ) -> Worker {
         let (commands, receiver) = mpsc::unbounded_channel();
         let shared = Arc::new(Mutex::new(Shared::default()));
-        runtime.spawn(run(receiver, Arc::clone(&shared), ctx, logs));
+        runtime.spawn(run(receiver, Arc::clone(&shared), ctx, logs, done));
         Worker { commands, shared }
     }
 
@@ -79,6 +89,7 @@ async fn run(
     shared: Arc<Mutex<Shared>>,
     ctx: egui::Context,
     logs: LogBuffer,
+    done: oneshot::Sender<()>,
 ) {
     let mut host = Host::new();
     let mut next_event = 0u64;
@@ -90,7 +101,11 @@ async fn run(
         // `select!` attend la première des deux : une commande ou le tic de la seconde.
         tokio::select! {
             command = commands.recv() => {
-                let Some(command) = command else { break };
+                // Canal fermé (l'interface est détruite) ou fermeture demandée.
+                let command = match command {
+                    None | Some(Command::Shutdown) => break,
+                    Some(command) => command,
+                };
                 handle(command, &mut host, &shared, &mut next_event).await;
             }
             _ = tick.tick() => {}
@@ -98,6 +113,13 @@ async fn run(
         refresh(&host, &shared, &logs, &mut next_event, &mut next_log).await;
         ctx.request_repaint();
     }
+    // Arrêt propre : la salle reçoit `Stop`, compacte sa sauvegarde et ferme
+    // les connexions, au lieu d'être coupée net avec le runtime.
+    if host.is_running() {
+        let _ = host.stop().await;
+    }
+    // `main` attend peut-être ce signal ; s'il ne l'attend plus, tant pis.
+    let _ = done.send(());
 }
 
 fn with_shared<R>(shared: &Mutex<Shared>, f: impl FnOnce(&mut Shared) -> R) -> R {
@@ -140,6 +162,8 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
                 with_shared(shared, |s| s.error = Some(e.to_string()));
             }
         }
+        // Traitée dans la boucle de `run`, qui s'arrête avant d'appeler `handle`.
+        Command::Shutdown => {}
     }
 }
 

@@ -21,6 +21,7 @@ pub mod monitor;
 mod python;
 pub mod room;
 mod room_task;
+pub mod save;
 pub mod tls;
 
 use std::net::SocketAddr;

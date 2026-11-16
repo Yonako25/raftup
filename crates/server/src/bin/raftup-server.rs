@@ -15,12 +15,11 @@
 //! ou dans `--savefile`. S'il existe déjà, la partie reprend là où elle
 //! s'était arrêtée. `--disable_save` désactive la sauvegarde.
 
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
 
 use anyhow::{bail, Context};
-use multidata::raftup::{seed_sha256, SaveFile, SaveHeader, Snapshot};
 use multidata::{load_archipelago, ArchiveLimits};
+use server::save::{default_save_path, open_or_create};
 use server::{Room, Server, TlsConfig, DEFAULT_PORT};
 use tracing::{info, warn, Level};
 
@@ -99,40 +98,6 @@ fn parse_args() -> anyhow::Result<Options> {
     Ok(options)
 }
 
-/// Ouvre la sauvegarde existante, ou en crée une neuve.
-///
-/// Une sauvegarde d'une autre seed, d'un format inconnu ou corrompue au
-/// milieu fait échouer le démarrage (ADR 0014) : on ne repart jamais d'une
-/// partie vide par erreur.
-fn open_save(
-    path: &Path,
-    seed_bytes: &[u8],
-    seed_name: &str,
-) -> anyhow::Result<(SaveFile, Snapshot)> {
-    let sha = seed_sha256(seed_bytes);
-    if path.exists() {
-        let (file, snapshot) = SaveFile::open(path, &sha)
-            .with_context(|| format!("reprise impossible de {}", path.display()))?;
-        if file.ignored_tail() {
-            warn!("dernière ligne de la sauvegarde tronquée (coupure ?) : ignorée");
-        }
-        info!(save = %path.display(), "partie reprise");
-        Ok((file, snapshot))
-    } else {
-        // Secondes depuis 1970, comme `time.time()` en Python. Une horloge
-        // avant 1970 donne 0 : sans gravité, c'est seulement informatif.
-        let created = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
-        let header = SaveHeader::new(env!("CARGO_PKG_VERSION"), seed_name, &sha, created);
-        let file = SaveFile::create(path, header)
-            .with_context(|| format!("création de {}", path.display()))?;
-        info!(save = %path.display(), "nouvelle sauvegarde");
-        Ok((file, Snapshot::default()))
-    }
-}
-
 /// Charge le certificat, ou `None` avec `--no-tls`. Refuse les mélanges.
 fn tls_config(options: &Options) -> anyhow::Result<Option<TlsConfig>> {
     match (&options.cert, &options.cert_key, options.no_tls) {
@@ -189,8 +154,8 @@ async fn main() -> anyhow::Result<()> {
         let path = options
             .savefile
             .clone()
-            .unwrap_or_else(|| options.seed.with_extension("raftup"));
-        Some(open_save(&path, &bytes, &data.seed_name)?)
+            .unwrap_or_else(|| default_save_path(&options.seed));
+        Some(open_or_create(&path, &bytes, &data.seed_name)?)
     };
 
     let mut room = Room::new(data);
@@ -206,8 +171,8 @@ async fn main() -> anyhow::Result<()> {
         }
         None => warn!("en écoute sur ws://{address}, sans chiffrement (--no-tls)"),
     }
-    if let Some((file, snapshot)) = save {
-        server = server.with_save(file, snapshot);
+    if let Some(save) = save {
+        server = server.with_save(save.file, save.snapshot);
     }
 
     // Le serveur tourne en arrière-plan jusqu'à Ctrl+C ; `stop` laisse alors

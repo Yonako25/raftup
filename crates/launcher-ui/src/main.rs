@@ -13,6 +13,7 @@ mod widgets;
 mod worker;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use launcher_core::LogBuffer;
 use tracing_subscriber::filter::LevelFilter;
@@ -52,18 +53,26 @@ fn main() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    // Le worker prévient par `done` quand il a arrêté la partie.
+    let (done, worker_done) = tokio::sync::oneshot::channel();
+    let result = eframe::run_native(
         "Raftup",
         options,
         Box::new(move |cc| {
             theme::install(&cc.egui_ctx);
             // `Context` est un pointeur partagé : on le clone pour que le worker
             // puisse demander un nouveau dessin depuis un autre thread.
-            let worker = worker::Worker::spawn(&handle, cc.egui_ctx.clone(), logs.clone());
+            let worker = worker::Worker::spawn(&handle, cc.egui_ctx.clone(), logs.clone(), done);
             Ok(Box::new(app::App::new(worker)))
         }),
-    )
-    .map_err(|e| anyhow::anyhow!("fenêtre : {e}"))?;
+    );
+    // Fenêtre fermée : on laisse au worker le temps d'arrêter la partie
+    // (sauvegarde compactée, joueurs prévenus), au plus 5 secondes, avant de
+    // détruire le runtime. Même si la fenêtre a échoué.
+    runtime.block_on(async {
+        let _ = tokio::time::timeout(Duration::from_secs(5), worker_done).await;
+    });
     drop(runtime);
+    result.map_err(|e| anyhow::anyhow!("fenêtre : {e}"))?;
     Ok(())
 }

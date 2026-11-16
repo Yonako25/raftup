@@ -77,7 +77,8 @@ Mis à jour le **16 novembre 2026**.
 - Écrans « Héberger une partie », « Partie en cours » et « Bientôt », d'après la maquette
 - Polices Chakra Petch et Inter intégrées (OFL)
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
-- Ne sauvegarde pas encore la partie qu'il héberge
+- Sauvegarde la partie hébergée dans un `.raftup` à côté de la seed, et la reprend au prochain hébergement (`HostOptions::disable_save` pour s'en passer, pas encore dans l'interface)
+- Fermer la fenêtre arrête la partie proprement (sauvegarde compactée), 5 s au plus
 
 ## Décisions (ADR)
 
@@ -99,7 +100,6 @@ Mis à jour le **16 novembre 2026**.
 ## Reporté à J3
 
 - Commandes serveur après `!admin login` (`/players`, `/send`…)
-- Sauvegarde de la partie hébergée par le launcher
 - Certificat automatique (Let's Encrypt) et rechargement sans redémarrage (ADR 0009)
 - `py-bridge`, catalogue et profils, installation des mods, détection des jeux, rejoindre par lien, salon, webhook Discord
 

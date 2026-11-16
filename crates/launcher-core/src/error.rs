@@ -18,6 +18,10 @@ pub enum LauncherError {
     #[error("chiffrement : {0}")]
     Tls(#[from] server::TlsError),
 
+    /// Sauvegarde `.raftup` illisible (autre seed, corrompue…) ou impossible à créer.
+    #[error("sauvegarde : {0}")]
+    Save(#[from] server::save::SaveSetupError),
+
     /// Le serveur ne démarre pas (port déjà pris…).
     #[error("serveur : {0}")]
     Server(#[from] server::ServerError),

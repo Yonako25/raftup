@@ -5,7 +5,7 @@ use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke
 use crate::screens::{running, setup, soon};
 use crate::theme;
 use crate::widgets;
-use crate::worker::Worker;
+use crate::worker::{Command, Worker};
 
 /// L'écran affiché.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,6 +40,11 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// Fermeture de la fenêtre : le worker arrête la partie proprement.
+    fn on_exit(&mut self) {
+        self.worker.send(Command::Shutdown);
+    }
+
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         theme::BG.to_normalized_gamma_f32()
     }

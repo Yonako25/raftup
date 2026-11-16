@@ -22,6 +22,8 @@ fn plain(port: u16) -> HostOptions {
         password: None,
         encryption: Encryption::Plain,
         public_host: "localhost".to_string(),
+        // Pas de `.raftup` écrit à côté de la seed du dépôt.
+        disable_save: true,
     }
 }
 
@@ -111,4 +113,56 @@ async fn mot_de_passe_et_certificat_absent() {
     let error = host.start(options).await.unwrap_err();
     assert!(matches!(error, LauncherError::Tls(_)), "{error}");
     assert!(!host.is_running());
+}
+
+#[tokio::test]
+async fn sauvegarde_puis_reprise() {
+    // Copie de la seed dans un dossier neuf : le `.raftup` se crée à côté.
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("launcher-reprise");
+    std::fs::create_dir_all(&dir).unwrap();
+    let seed = dir.join("seed-mit.archipelago");
+    let _ = std::fs::remove_file(dir.join("seed-mit.raftup"));
+    std::fs::copy(seed_path(), &seed).unwrap();
+    let options = HostOptions {
+        seed: seed.clone(),
+        disable_save: false,
+        ..plain(0)
+    };
+
+    let mut host = Host::new();
+    let status = host.start(options.clone()).await.unwrap();
+    assert_eq!(status.save, Some(dir.join("seed-mit.raftup")));
+    assert!(!status.resumed);
+    let port: u16 = status.address.rsplit(':').next().unwrap().parse().unwrap();
+
+    // Alice visite deux lieux ; une réponse reçue = écrit sur le disque.
+    let (mut alice, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .unwrap();
+    alice.next().await.unwrap().unwrap();
+    let connect = r#"[{"cmd":"Connect","password":null,"game":"ChecksFinder","name":"Alice",
+        "uuid":"u","version":{"major":0,"minor":6,"build":8,"class":"Version"},
+        "items_handling":7,"tags":[]}]"#;
+    alice.send(Message::text(connect)).await.unwrap();
+    alice.next().await.unwrap().unwrap(); // Connected
+    let checks = r#"[{"cmd":"LocationChecks","locations":[81003,81006]}]"#;
+    alice.send(Message::text(checks)).await.unwrap();
+    let mut done = false;
+    for _ in 0..100 {
+        let status = host.status().await.unwrap();
+        if status.server.slots[0].checked == 2 {
+            done = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(done, "lieux non visités");
+    drop(alice);
+    host.stop().await.unwrap();
+
+    // Même seed, nouvel hébergement : la partie reprend.
+    let status = host.start(options).await.unwrap();
+    assert!(status.resumed);
+    assert_eq!(status.server.slots[0].checked, 2);
+    host.stop().await.unwrap();
 }
