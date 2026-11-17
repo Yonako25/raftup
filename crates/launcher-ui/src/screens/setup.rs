@@ -68,6 +68,9 @@ pub fn show(
             "Parties › Nouvelle partie",
             "Héberger une partie",
             |ui| {
+                if widgets::ghost_button(ui, "Créer depuis des YAML") {
+                    goto = Some(Page::Create);
+                }
                 // Ces deux écrans arrivent plus tard.
                 if widgets::ghost_button(ui, "Créer un salon") {
                     goto = Some(Page::Soon("Créer un salon"));

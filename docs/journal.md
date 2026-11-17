@@ -50,3 +50,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : test réel de génération avec le nouveau défaut (déjà passé avec `RAFTUP_BLOCK_NETWORK=1`, ADR 0017) ; `cargo test --workspace` non relancé.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : coder l'écran « Créer une partie » d'après `docs/contrat-ui-generation.md`, dans une nouvelle session.
+
+### 2026-11-17 · Écran « Créer une partie », étape 1
+- **Fait** : état « Préparation » (`screens/create.rs`) : YAML par sélecteur (ajout sans doublon, retrait), apworlds derrière l'avertissement et « J'ai compris », réglages du serveur, `build_request` qui donne `GenerateRequest` + `PartyHostOptions` ou un message du contrat ; accès par « Créer depuis des YAML » et `RAFTUP_DEV_PAGE=creer`. 8 tests ; `cargo test -p launcher-ui` (31) et clippy passent. Pas de commit encore.
+- **Pas vérifié** : rendu à l'œil (accès à la fenêtre refusé) ; boîtes de fichiers ; `cargo test --workspace` non relancé. Le bouton « Générer » ne fait que vérifier le formulaire.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 2, runtime absent : consentement au téléchargement (≈ 72 Mo), progression, annulation.

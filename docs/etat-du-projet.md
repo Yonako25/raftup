@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **Interface de génération** : écran « Créer une partie » (YAML, consentement de téléchargement d'environ 72 Mo, progression, annulation, avertissement « un apworld est du code arbitraire ») ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
+- [ ] **Interface de génération** : écran « Créer une partie », étape 1 (préparation) faite ; reste le runtime (consentement au téléchargement d'environ 72 Mo), la génération (progression, annulation), l'hébergement et les erreurs ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
@@ -81,7 +81,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 **launcher-ui** (ADR 0011)
 
 - egui / eframe (wgpu), binaire `raftup`
-- Écrans « Héberger une partie », « Partie en cours » et « Bientôt », d'après la maquette
+- Écrans « Héberger une partie », « Créer une partie » (préparation seule), « Partie en cours » et « Bientôt », d'après la maquette
 - Polices Chakra Petch et Inter intégrées (OFL)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**

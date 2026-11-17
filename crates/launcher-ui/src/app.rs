@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{library, matches, running, setup, soon};
+use crate::screens::{create, library, matches, running, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -16,6 +16,8 @@ pub enum Page {
     Library,
     /// La partie hébergée par ce PC, ou le formulaire d'hébergement s'il n'y en a pas.
     Hosted,
+    /// « Créer une partie » : générer une partie à partir des YAML des joueurs.
+    Create,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
     /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
     Soon(&'static str),
@@ -25,6 +27,7 @@ pub struct App {
     page: Page,
     worker: Worker,
     setup: setup::SetupForm,
+    create: create::CreateForm,
     running: running::RunningState,
     library: library::LibraryState,
     /// Erreur à montrer en rouge en haut de l'écran.
@@ -38,6 +41,7 @@ impl App {
             page: start_page(),
             worker,
             setup: setup::SetupForm::default(),
+            create: create::CreateForm::default(),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
             error: None,
@@ -47,7 +51,7 @@ impl App {
 
 /// Page d'ouverture. En debug, `RAFTUP_DEV_PAGE` choisit l'écran affiché au démarrage
 /// (captures d'écran pour les comparaisons avec la maquette) : `bibliotheque`,
-/// `partie`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
+/// `partie`, `creer`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
 fn start_page() -> Page {
     // `cfg!(debug_assertions)` vaut faux en `--release` : le binaire livré ignore la variable.
     if !cfg!(debug_assertions) {
@@ -56,6 +60,7 @@ fn start_page() -> Page {
     match std::env::var("RAFTUP_DEV_PAGE").ok().as_deref() {
         Some("bibliotheque") => Page::Library,
         Some("partie") => Page::Hosted,
+        Some("creer") => Page::Create,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
         Some("catalogue") => Page::Soon("Catalogue"),
@@ -142,6 +147,7 @@ impl eframe::App for App {
                 Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)
                 }
+                Page::Create => create::show(ui, &mut self.create, &mut self.error),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
@@ -152,6 +158,7 @@ impl eframe::App for App {
         drop(shared);
         // Verrou relâché : on peut ouvrir une boîte de dialogue (elle bloque).
         setup::open_pending_dialog(&mut self.setup, &self.worker);
+        create::open_pending_dialog(&mut self.create);
         library::open_pending_dialog(&mut self.library, &ctx);
         if let Some(page) = goto {
             self.page = page;
@@ -194,7 +201,7 @@ fn sidebar(
 
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
     let hosted = usize::from(shared.status.is_some());
-    let in_progress = matches!(current, Page::InProgress | Page::Hosted);
+    let in_progress = matches!(current, Page::InProgress | Page::Hosted | Page::Create);
     let sections: [(&str, Vec<NavLink>); 3] = [
         (
             "JEUX",
