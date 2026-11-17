@@ -2,11 +2,11 @@
 
 > [!IMPORTANT]
 > - **J1 : étapes 1 à 8 faites** sur 9 : protocole complet, limites, tests différentiels, wss
-> - **J2 presque fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise. Restent les captures différentielles
+> - **J2 fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise, captures différentielles comprises
 > - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
 > - **J3 côté interface** : hébergement et habillage faits, écran Bibliothèque en cours (autre session) ; rendu jamais contrôlé à l'œil
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
-> - Différentiel : **0 écart** sur 22 scénarios fixes et 150 au hasard, mesuré **avant J2**. Les scénarios `COMMANDES` et `INDICES` ne sont pas encore capturés
+> - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 150 au hasard, mesuré le 17 novembre 2026. Le tirage au hasard ne joue ni commandes ni indices
 
 Mis à jour le **17 novembre 2026**.
 
@@ -19,7 +19,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
 - [ ] **Rejoindre par lien d'invitation**, salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
-- [ ] **Captures** des scénarios `COMMANDES` et `INDICES` sur le serveur officiel : un Python avec les dépendances d'Archipelago existe maintenant (runtime installé par `setup_generator`)
+- [ ] **Commandes `!` et indices dans le générateur au hasard** (`hasard.py`) ; les scénarios fixes sont capturés et sans écart
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [ ] Relire le code de `launcher-ui` (le serveur, `launcher-core` et `py-bridge` ont été relus)

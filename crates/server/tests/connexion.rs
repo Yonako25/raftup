@@ -14,7 +14,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use multidata::{load_archipelago, ArchiveLimits};
 use serde_json::Value;
-use server::{Room, Server};
+use server::{Limits, Room, Server};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
@@ -29,9 +29,18 @@ fn data_path(name: &str) -> std::path::PathBuf {
 }
 
 async fn start() -> String {
+    start_with(Limits::default()).await
+}
+
+/// Comme `start`, avec d'autres limites (ADR 0007) : le serveur officiel n'en a
+/// pas, et une capture peut envoyer plus de chats que Raftup n'en accepte.
+async fn start_with(limits: Limits) -> String {
     let path = data_path("../multidata/tests/data/seed-mit.archipelago");
     let data = load_archipelago(&std::fs::read(path).unwrap(), &ArchiveLimits::default()).unwrap();
-    let server = Server::bind("127.0.0.1:0", Room::new(data)).await.unwrap();
+    let server = Server::bind("127.0.0.1:0", Room::new(data))
+        .await
+        .unwrap()
+        .with_limits(limits);
     let address = server.local_addr().unwrap();
     tokio::spawn(server.run());
     format!("ws://{address}")
@@ -60,7 +69,8 @@ fn normalize(frame: &str) -> Value {
     if frame == CLOSED {
         return Value::String(CLOSED.to_string());
     }
-    let mut value: Value = serde_json::from_str(frame).unwrap();
+    let frame = fixed_password_mask(frame);
+    let mut value: Value = serde_json::from_str(&frame).unwrap();
     for packet in value.as_array_mut().unwrap() {
         if let Some(Value::Array(errors)) = packet.get_mut("errors") {
             errors.sort_by_key(|e| e.to_string());
@@ -86,6 +96,28 @@ fn normalize(frame: &str) -> Value {
         }
     }
     value
+}
+
+/// Mot de passe masqué après `!admin login ` : le serveur officiel tire 4 à 16
+/// étoiles au hasard, Raftup en met toujours 8. On ramène chaque suite d'étoiles
+/// à 8 pour comparer.
+fn fixed_password_mask(frame: &str) -> String {
+    const PREFIX: &str = "!admin login ";
+    let mut out = String::new();
+    let mut rest = frame;
+    // `find` renvoie la position du préfixe ; on recopie ce qui le précède, puis
+    // on saute les étoiles qui le suivent.
+    while let Some(start) = rest.find(PREFIX) {
+        let after = start + PREFIX.len();
+        out.push_str(&rest[..after]);
+        let stars = rest[after..].len() - rest[after..].trim_start_matches('*').len();
+        if stars > 0 {
+            out.push_str("********");
+        }
+        rest = &rest[after + stars..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn is_hints_key(key: &Value) -> bool {
@@ -114,18 +146,27 @@ async fn replay(url: &str, name: &str, steps: &[Value]) {
         clients.push(client);
     }
 
+    // `closed[i]` : le serveur a fermé la connexion du client `i` ; comme dans la
+    // capture, il n'envoie plus rien et chaque étape note de nouveau `<fermé>`.
+    let mut closed = vec![false; names.len()];
     for (number, step) in steps.iter().enumerate() {
         let sender = step["client"].as_str().unwrap();
         let index = names.iter().position(|n| *n == sender).unwrap();
         let packets = serde_json::to_string(&step["envoi"]).unwrap();
-        clients[index].send(Message::text(packets)).await.unwrap();
+        if !closed[index] {
+            clients[index].send(Message::text(packets)).await.unwrap();
+        }
 
         for (i, client_name) in names.iter().enumerate() {
-            let ours: Vec<Value> = drain(&mut clients[i])
-                .await
-                .iter()
-                .map(|f| normalize(f))
-                .collect();
+            let frames = if closed[i] {
+                vec![CLOSED.to_string()]
+            } else {
+                drain(&mut clients[i]).await
+            };
+            if frames.last().is_some_and(|f| f == CLOSED) {
+                closed[i] = true;
+            }
+            let ours: Vec<Value> = frames.iter().map(|f| normalize(f)).collect();
             let theirs: Vec<Value> = step["recu"][client_name]
                 .as_array()
                 .unwrap()
@@ -290,6 +331,37 @@ async fn malformes_comme_python() {
 async fn refus_connecte_comme_python() {
     let text =
         std::fs::read_to_string(data_path("tests/data/refus-connecte-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    for (name, steps) in &scenarios {
+        let url = start().await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}
+
+/// Commandes `!` du chat (aide, statut, lieux restants ou visités, `!admin`) :
+/// `tests/data/commandes-seed-mit.json`, capturé sur le serveur officiel.
+#[tokio::test]
+async fn commandes_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/commandes-seed-mit.json")).unwrap();
+    let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
+    // Plus de 5 chats en 10 s : la limite de Raftup les refuserait.
+    let limits = Limits {
+        chat_messages: 100,
+        ..Limits::default()
+    };
+    for (name, steps) in &scenarios {
+        // `Limits` est `Copy` : chaque appel reçoit sa propre copie.
+        let url = start_with(limits).await;
+        replay(&url, name, steps.as_array().unwrap()).await;
+    }
+}
+
+/// Indices (`LocationScouts` avec `create_as_hint`, `CreateHints`, `UpdateHint`) :
+/// `tests/data/indices-seed-mit.json`, capturé sur le serveur officiel. Le
+/// serveur officiel y ferme une connexion, que le rejeu suit.
+#[tokio::test]
+async fn indices_comme_python() {
+    let text = std::fs::read_to_string(data_path("tests/data/indices-seed-mit.json")).unwrap();
     let scenarios: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
     for (name, steps) in &scenarios {
         let url = start().await;

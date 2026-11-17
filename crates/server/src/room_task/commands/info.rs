@@ -16,7 +16,7 @@ const HELP_TEXT: &str = concat!(
     "    Once logged in, you can then use \"!admin <command>\" to issue commands.\n",
     "    If you need further help once logged in.  use \"!admin /help\" \n",
     "!players \n    Get information about connected and missing players.\n",
-    "!status [tag] \n    Get information about your team.\n",
+    "!status [tag] \n    Get status information about your team.\n",
     "    Optionally mention a Tag name and get information on who has that Tag.\n",
     "    For example: DeathLink or EnergyLink.\n",
     "!release \n    Sends remaining items in your world to their recipients.\n",

@@ -1,0 +1,632 @@
+{
+ "indices": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[]}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":2,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":3781797212,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Bob\",\"player_id\":2,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "t",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "TextOnly",
+      "NoText"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) viewing ChecksFinder has joined. Client(0.6.8), ['TextOnly', 'NoText'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[\"TextOnly\",\"NoText\"]}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) viewing ChecksFinder has joined. Client(0.6.8), ['TextOnly', 'NoText'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[\"TextOnly\",\"NoText\"]}]"
+    ],
+    "t": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":2,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":3781797212,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Bob\",\"player_id\":2,\"client_version\":7,\"race\":false}}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "SetNotify",
+     "keys": [
+      "_read_hints_0_1",
+      "_read_hints_0_2"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "SetNotify",
+     "keys": [
+      "_read_hints_0_1",
+      "_read_hints_0_2"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationScouts",
+     "locations": [
+      81001
+     ],
+     "create_as_hint": 0
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"LocationInfo\",\"locations\":[{\"item\":80001,\"location\":81001,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"}]}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationScouts",
+     "locations": [
+      81001
+     ],
+     "create_as_hint": 1
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"LocationInfo\",\"locations\":[{\"item\":80001,\"location\":81001,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"}]}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_2\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"[Hint]: \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\"'s \"},{\"text\":\"80001\",\"player\":2,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" is at \"},{\"text\":\"81001\",\"player\":1,\"type\":\"location_id\"},{\"text\":\" in \"},{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\"'s World\"},{\"text\":\". \"},{\"text\":\"(unspecified)\",\"hint_status\":0,\"type\":\"hint_status\"}],\"type\":\"Hint\",\"receiving\":2,\"item\":{\"item\":80001,\"location\":81001,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"},\"found\":false}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_2\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"[Hint]: \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\"'s \"},{\"text\":\"80001\",\"player\":2,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" is at \"},{\"text\":\"81001\",\"player\":1,\"type\":\"location_id\"},{\"text\":\" in \"},{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\"'s World\"},{\"text\":\". \"},{\"text\":\"(unspecified)\",\"hint_status\":0,\"type\":\"hint_status\"}],\"type\":\"Hint\",\"receiving\":2,\"item\":{\"item\":80001,\"location\":81001,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"},\"found\":false}]"
+    ],
+    "t": [
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationScouts",
+     "locations": [
+      81001
+     ],
+     "create_as_hint": 2
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"LocationInfo\",\"locations\":[{\"item\":80001,\"location\":81001,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"}]}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationScouts",
+     "locations": [
+      81001,
+      81002
+     ],
+     "create_as_hint": 2
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"LocationInfo\",\"locations\":[{\"item\":80001,\"location\":81001,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"},{\"item\":16871244000,\"location\":81002,\"player\":3,\"flags\":3,\"class\":\"NetworkItem\"}]}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":3,\"finding_player\":1,\"location\":81002,\"item\":16871244000,\"found\":false,\"entrance\":\"\",\"item_flags\":3,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"[Hint]: \"},{\"text\":\"3\",\"type\":\"player_id\"},{\"text\":\"'s \"},{\"text\":\"16871244000\",\"player\":3,\"flags\":3,\"type\":\"item_id\"},{\"text\":\" is at \"},{\"text\":\"81002\",\"player\":1,\"type\":\"location_id\"},{\"text\":\" in \"},{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\"'s World\"},{\"text\":\". \"},{\"text\":\"(unspecified)\",\"hint_status\":0,\"type\":\"hint_status\"}],\"type\":\"Hint\",\"receiving\":3,\"item\":{\"item\":16871244000,\"location\":81002,\"player\":1,\"flags\":3,\"class\":\"NetworkItem\"},\"found\":false}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":3,\"finding_player\":1,\"location\":81002,\"item\":16871244000,\"found\":false,\"entrance\":\"\",\"item_flags\":3,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81018
+     ],
+     "player": 2,
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":3,\"finding_player\":1,\"location\":81002,\"item\":16871244000,\"found\":false,\"entrance\":\"\",\"item_flags\":3,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_2\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"[Hint]: \"},{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\"'s \"},{\"text\":\"80001\",\"player\":1,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" is at \"},{\"text\":\"81018\",\"player\":2,\"type\":\"location_id\"},{\"text\":\" in \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\"'s World\"},{\"text\":\". \"},{\"text\":\"(priority)\",\"hint_status\":30,\"type\":\"hint_status\"}],\"type\":\"Hint\",\"receiving\":1,\"item\":{\"item\":80001,\"location\":81018,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"},\"found\":false}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":3,\"finding_player\":1,\"location\":81002,\"item\":16871244000,\"found\":false,\"entrance\":\"\",\"item_flags\":3,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_2\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"[Hint]: \"},{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\"'s \"},{\"text\":\"80001\",\"player\":1,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" is at \"},{\"text\":\"81018\",\"player\":2,\"type\":\"location_id\"},{\"text\":\" in \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\"'s World\"},{\"text\":\". \"},{\"text\":\"(priority)\",\"hint_status\":30,\"type\":\"hint_status\"}],\"type\":\"Hint\",\"receiving\":1,\"item\":{\"item\":80001,\"location\":81018,\"player\":2,\"flags\":1,\"class\":\"NetworkItem\"},\"found\":false}]"
+    ],
+    "t": [
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":0}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81018
+     ],
+     "player": 2,
+     "status": 10
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81002
+     ]
+    }
+   ],
+   "recu": {
+    "a": [],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"CreateHints: No locations specified.\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81000
+     ],
+     "status": 7
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"Unknown Status: 7 is not a valid HintStatus\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81000
+     ],
+     "status": 300
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"Unknown Status: 300 is not a valid HintStatus\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81000
+     ],
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"CreateHints: Must use \\\"unspecified\\\"/None status for items from other players.\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      99999
+     ],
+     "player": 2
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"CreateHints: One or more of the locations do not exist for the specified off-world player. Please refrain from hinting other slot's locations that you don't know contain your items.\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81002
+     ],
+     "player": 2
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"CreateHints: Can only create hints for own items or own locations.\",\"original_cmd\":\"CreateHints\"}]"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81000
+     ],
+     "player": 9
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) has left the game. Client(0.6.8), [].\"}],\"type\":\"Part\",\"team\":0,\"slot\":1}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_1\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244507,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244549,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244844,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":3,\"location\":16871244935,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":3,\"finding_player\":1,\"location\":81002,\"item\":16871244000,\"found\":false,\"entrance\":\"\",\"item_flags\":3,\"status\":0,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81003,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81009,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":1,\"location\":81006,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]",
+     "[{\"cmd\":\"SetReply\",\"key\":\"_read_hints_0_2\",\"value\":[{\"receiving_player\":1,\"finding_player\":2,\"location\":81008,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81021,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":2,\"finding_player\":1,\"location\":81001,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81019,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81004,\"item\":80000,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"},{\"receiving_player\":1,\"finding_player\":2,\"location\":81018,\"item\":80001,\"found\":false,\"entrance\":\"\",\"item_flags\":1,\"status\":30,\"class\":\"Hint\"}]}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81002,
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"UpdateHint: No Permission\",\"original_cmd\":\"UpdateHint\"}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": null
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": 7
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"UpdateHint: Invalid Status\",\"original_cmd\":\"UpdateHint\"}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": 40
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"UpdateHint: Cannot manually update status to \\\"HINT_FOUND\\\"\",\"original_cmd\":\"UpdateHint\"}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": "1",
+     "location": 81001,
+     "status": 30
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [
+     "[{\"cmd\":\"InvalidPacket\",\"type\":\"arguments\",\"text\":\"UpdateHint\",\"original_cmd\":\"UpdateHint\"}]"
+    ],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "UpdateHint",
+     "player": 1,
+     "location": 81001,
+     "status": 20
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationChecks",
+     "locations": [
+      81001
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Get",
+     "keys": [
+      "_read_hints_0_1",
+      "_read_hints_0_2"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "CreateHints",
+     "locations": [
+      81000
+     ],
+     "player": 9
+    }
+   ],
+   "recu": {
+    "a": [
+     "<fermé>"
+    ],
+    "b": [],
+    "t": []
+   }
+  }
+ ]
+}

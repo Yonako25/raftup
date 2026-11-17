@@ -153,7 +153,7 @@ async fn aide_et_licence() {
     let packets = run(&mut alice, "!help").await;
     let text = &results(&packets)[0];
     assert!(text.starts_with("!help \n    Returns the help listing\n!license \n"));
-    assert!(text.contains("!status [tag] \n    Get information about your team.\n"));
+    assert!(text.contains("!status [tag] \n    Get status information about your team.\n"));
     assert!(text.contains("!countdown seconds=10 \n"));
     assert!(text.ends_with("to get a spoiler peek for that location.\n"));
     // Le résultat n'est que pour le demandeur.

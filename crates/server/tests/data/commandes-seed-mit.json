@@ -1,0 +1,338 @@
+{
+ "commandes": [
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Alice",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": [
+      "DeathLink"
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":1,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":1321676462,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Alice\",\"player_id\":1,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice (Team #1) playing ChecksFinder has joined. Client(0.6.8), ['DeathLink'].\"}],\"type\":\"Join\",\"team\":0,\"slot\":1,\"tags\":[\"DeathLink\"]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ],
+    "b": []
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "Connect",
+     "password": null,
+     "game": "ChecksFinder",
+     "name": "Bob",
+     "uuid": "raftup-test",
+     "version": {
+      "major": 0,
+      "minor": 6,
+      "build": 8,
+      "class": "Version"
+     },
+     "items_handling": 7,
+     "tags": []
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[]}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"Connected\",\"team\":0,\"slot\":2,\"players\":[{\"team\":0,\"slot\":1,\"alias\":\"Alice\",\"name\":\"Alice\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":2,\"alias\":\"Bob\",\"name\":\"Bob\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":3,\"alias\":\"Chloé\",\"name\":\"Chloé\",\"class\":\"NetworkPlayer\"},{\"team\":0,\"slot\":4,\"alias\":\"Lien\",\"name\":\"Lien\",\"class\":\"NetworkPlayer\"}],\"missing_locations\":[81000,81001,81002,81003,81004,81005,81006,81007,81008,81009,81010,81011,81012,81013,81014,81015,81016,81017,81018,81019,81020,81021,81022,81023,81024],\"checked_locations\":[],\"slot_info\":{\"1\":{\"name\":\"Alice\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"2\":{\"name\":\"Bob\",\"game\":\"ChecksFinder\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"3\":{\"name\":\"Chloé\",\"game\":\"Yacht Dice\",\"type\":1,\"group_members\":[],\"class\":\"NetworkSlot\"},\"4\":{\"name\":\"Lien\",\"game\":\"ChecksFinder\",\"type\":2,\"group_members\":[1,2],\"class\":\"NetworkSlot\"}},\"hint_points\":0,\"slot_data\":{\"world_seed\":3781797212,\"seed_name\":\"72844992796894532502\",\"player_name\":\"Bob\",\"player_id\":2,\"client_version\":7,\"race\":false}}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob (Team #1) playing ChecksFinder has joined. Client(0.6.8), [].\"}],\"type\":\"Join\",\"team\":0,\"slot\":2,\"tags\":[]}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Now that you are connected, you can use !help to list commands to run via the server. If your client supports it, you may have additional local commands you can list with /help.\"}],\"type\":\"Tutorial\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!help"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !help\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!help\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"!help \\n    Returns the help listing\\n!license \\n    Returns the licensing information\\n!options \\n    List all current options. Warning: lists password.\\n!admin [command] \\n    Allow remote administration of the multiworld server\\n    Usage: \\\"!admin login <password>\\\" in order to log in to the remote interface.\\n    Once logged in, you can then use \\\"!admin <command>\\\" to issue commands.\\n    If you need further help once logged in.  use \\\"!admin /help\\\" \\n!players \\n    Get information about connected and missing players.\\n!status [tag] \\n    Get status information about your team.\\n    Optionally mention a Tag name and get information on who has that Tag.\\n    For example: DeathLink or EnergyLink.\\n!release \\n    Sends remaining items in your world to their recipients.\\n!collect \\n    Send your remaining items to yourself\\n!countdown seconds=10 \\n    Start a countdown in seconds\\n!remaining \\n    List remaining items in your game, but not their location or recipient\\n!missing [filter_text] \\n    List all missing location checks from the server's perspective.\\n    Can be given text, which will be used as filter.\\n!checked [filter_text] \\n    List all done location checks from the server's perspective.\\n    Can be given text, which will be used as filter.\\n!alias [alias_name] \\n    Set your alias to the passed name.\\n!getitem item_name \\n    Cheat in an item, if it is enabled on this server\\n!hint [item_name] \\n    Use !hint {item_name},\\n    for example !hint Lamp to get a spoiler peek for that item.\\n    If hint costs are on, this will only give you one new result,\\n    you can rerun the command to get more in that case.\\n!hint_location [location] \\n    Use !hint_location {location_name},\\n    for example !hint_location atomic-bomb to get a spoiler peek for that location.\\n\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !help\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!help\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!Inconnue x"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !Inconnue x\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!Inconnue x\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Could not find command Inconnue. Known commands: help, license, options, admin, players, status, release, collect, countdown, remaining, missing, checked, alias, getitem, hint, hint_location\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !Inconnue x\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!Inconnue x\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Could not find command . Known commands: help, license, options, admin, players, status, release, collect, countdown, remaining, missing, checked, alias, getitem, hint, hint_location\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "bonjour"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: bonjour\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"bonjour\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: bonjour\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"bonjour\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "\"!PLAYERS\""
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: \\\"!PLAYERS\\\"\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"\\\"!PLAYERS\\\"\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"2 players of 3 connected :: Team #1: Alice Bob (Chloé)\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: \\\"!PLAYERS\\\"\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"\\\"!PLAYERS\\\"\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"2 players of 3 connected :: Team #1: Alice Bob (Chloé)\"}],\"type\":\"CommandResult\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!status"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !status\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!status\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Player Status on team 0:\\nAlice has 1 connection. (0/25)\\nBob has 1 connection. (0/25)\\nChloé has 0 connections. (0/88)\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !status\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!status\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!status DeathLink"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !status DeathLink\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!status DeathLink\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Player Status on team 0:\\nAlice has 1 connection 1 of which are tagged DeathLink. (0/25)\\nBob has 1 connection 0 of which are tagged DeathLink. (0/25)\\nChloé has 0 connections. (0/88)\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !status DeathLink\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!status DeathLink\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!remaining"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !remaining\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!remaining\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Sorry, !remaining requires you to have beaten the game on this server\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !remaining\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!remaining\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "LocationChecks",
+     "locations": [
+      81000,
+      81001
+     ]
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\" sent \"},{\"text\":\"80001\",\"player\":2,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" to \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\" (\"},{\"text\":\"81001\",\"player\":1,\"type\":\"location_id\"},{\"text\":\")\"}],\"type\":\"ItemSend\",\"receiving\":2,\"item\":{\"item\":80001,\"location\":81001,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"}},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\" sent \"},{\"text\":\"16871244104\",\"player\":3,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" to \"},{\"text\":\"3\",\"type\":\"player_id\"},{\"text\":\" (\"},{\"text\":\"81000\",\"player\":1,\"type\":\"location_id\"},{\"text\":\")\"}],\"type\":\"ItemSend\",\"receiving\":3,\"item\":{\"item\":16871244104,\"location\":81000,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"}}]",
+     "[{\"cmd\":\"RoomUpdate\",\"hint_points\":2,\"checked_locations\":[81000,81001]}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\" sent \"},{\"text\":\"80001\",\"player\":2,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" to \"},{\"text\":\"2\",\"type\":\"player_id\"},{\"text\":\" (\"},{\"text\":\"81001\",\"player\":1,\"type\":\"location_id\"},{\"text\":\")\"}],\"type\":\"ItemSend\",\"receiving\":2,\"item\":{\"item\":80001,\"location\":81001,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"}},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"1\",\"type\":\"player_id\"},{\"text\":\" sent \"},{\"text\":\"16871244104\",\"player\":3,\"flags\":1,\"type\":\"item_id\"},{\"text\":\" to \"},{\"text\":\"3\",\"type\":\"player_id\"},{\"text\":\" (\"},{\"text\":\"81000\",\"player\":1,\"type\":\"location_id\"},{\"text\":\")\"}],\"type\":\"ItemSend\",\"receiving\":3,\"item\":{\"item\":16871244104,\"location\":81000,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"}}]",
+     "[{\"cmd\":\"ReceivedItems\",\"index\":0,\"items\":[{\"item\":80001,\"location\":81001,\"player\":1,\"flags\":1,\"class\":\"NetworkItem\"}]}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!checked"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !checked\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!checked\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Checked: Tile 1\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Checked: Tile 2\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Found 2 done location checks\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !checked\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!checked\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!checked 1"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !checked 1\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!checked 1\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Checked: Tile 1\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Found 2 done location checks, displaying 1 of them.\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !checked 1\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!checked 1\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!missing"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !missing\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!missing\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 3\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 4\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 5\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 6\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 7\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 8\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 9\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 10\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 11\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 12\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 13\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 14\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 15\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 16\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 17\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 18\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 19\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 20\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 21\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 22\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 23\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 24\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Missing: Tile 25\"}],\"type\":\"CommandResult\"},{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Found 23 missing location checks\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !missing\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!missing\"}]"
+    ]
+   }
+  },
+  {
+   "client": "a",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!missing zzz"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !missing zzz\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!missing zzz\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Found 23 missing location checks, displaying 0 of them.\"}],\"type\":\"CommandResult\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Alice: !missing zzz\"}],\"type\":\"Chat\",\"team\":0,\"slot\":1,\"message\":\"!missing zzz\"}]"
+    ]
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!admin login secret"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob: !admin login *****\"}],\"type\":\"Chat\",\"team\":0,\"slot\":2,\"message\":\"!admin login *****\"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob: !admin login *****\"}],\"type\":\"Chat\",\"team\":0,\"slot\":2,\"message\":\"!admin login *****\"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Sorry, Remote administration is disabled\"}],\"type\":\"CommandResult\"}]"
+    ]
+   }
+  },
+  {
+   "client": "b",
+   "envoi": [
+    {
+     "cmd": "Say",
+     "text": "!admin"
+    }
+   ],
+   "recu": {
+    "a": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob: !admin \"}],\"type\":\"Chat\",\"team\":0,\"slot\":2,\"message\":\"!admin \"}]"
+    ],
+    "b": [
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Bob: !admin \"}],\"type\":\"Chat\",\"team\":0,\"slot\":2,\"message\":\"!admin \"}]",
+     "[{\"cmd\":\"PrintJSON\",\"data\":[{\"text\":\"Sorry, Remote administration is disabled\"}],\"type\":\"CommandResult\"}]"
+    ]
+   }
+  }
+ ]
+}

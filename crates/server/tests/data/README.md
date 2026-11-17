@@ -29,7 +29,16 @@
 
 - Même méthode (script `game_vectors.py echanges`, serveur officiel neuf), le 15 novembre 2026.
 - Couvre : `LocationScouts` (lieux valides, mauvais type, lieu inconnu qui ferme la connexion), chat (`Say`, texte non imprimable, client non connecté), `Bounce` avec chaque opérateur (`legacy`, `or`, `and`), par tags, slots, jeux et équipes, liste mal formée, `Bounce` sans `data`.
-- Les commandes `!` ne sont pas capturées : elles arrivent en J2.
+- Les commandes `!` sont dans `commandes-seed-mit.json`.
+
+## `commandes-seed-mit.json` et `indices-seed-mit.json`
+
+- Même méthode (scripts `game_vectors.py commandes` et `game_vectors.py indices`, serveur officiel neuf), le 17 novembre 2026.
+- `commandes` : `!help`, commande inconnue, `!` seul, texte ordinaire, `!status` (avec un tag), `!remaining`, `!checked`, `!missing` (avec un filtre), `!admin login` puis `!admin`. Pas de `!options` : l'officiel y tire le nombre d'étoiles au hasard.
+- `indices` : `LocationScouts` avec `create_as_hint` 0, 1 et 2, `CreateHints` (statuts valides ou non, lieu inconnu, joueur inconnu), `UpdateHint` (statuts, mauvais types), indice qui passe à « trouvé », clés `_read_hints_…`. Le serveur officiel y ferme une connexion.
+- Le masque de `!admin login` (4 à 16 étoiles au hasard chez l'officiel, toujours 8 chez Raftup) est ramené à 8 étoiles avant la comparaison.
+- Après une fermeture, `game_vectors.py` n'envoie plus rien sur cette connexion et note `<fermé>` à chaque étape, comme les captures précédentes.
+- Le rejeu de `commandes` relève la limite de chat de Raftup (5 messages / 10 s, ADR 0007) : le scénario en envoie davantage.
 
 ## `stockage-seed-mit.json`
 
@@ -48,7 +57,7 @@ python -I scripts/connect_vectors.py connexion-seed-mit.json
 python -I scripts/game_vectors.py partie partie-seed-mit.json
 ```
 
-`game_vectors.py` modifie l'état de la partie : relancer un serveur neuf avant chaque scénario (`partie`, `objectif`, `echanges`, `stockage`).
+`game_vectors.py` modifie l'état de la partie : relancer un serveur neuf avant chaque scénario (`partie`, `objectif`, `echanges`, `stockage`, `commandes`, `indices`…).
 
 ## `malformes-seed-mit.json` et `refus-connecte-seed-mit.json`
 

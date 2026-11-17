@@ -13,7 +13,7 @@ Sans option, joue les scénarios fixes puis 50 scénarios tirés au hasard.
 Chaque écart est écrit dans le dossier de sortie, au format des vecteurs de
 `tests/data/` (« recu » : trames du serveur officiel ; « recu_raftup » : les nôtres).
 """
-import argparse, asyncio, json, os, random, socket, subprocess, sys, time, zlib
+import argparse, asyncio, json, os, random, re, socket, subprocess, sys, time, zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -35,6 +35,8 @@ BARRIER_ROUNDS = 3
 # Rythme minimal d'une étape : chaque client y envoie jusqu'à 3 barrières, et
 # Raftup ferme une connexion au-delà de 50 paquets/s (ADR 0007).
 STEP_SECONDS = 0.1
+# Écart minimal entre deux `Say` d'un même client (5 messages / 10 s chez Raftup).
+SAY_SECONDS = 2.1
 TIMEOUT = 10
 
 
@@ -54,6 +56,8 @@ def normalize(frame):
     """Même normalisation que `tests/connexion.rs`, plus l'heure de `RoomInfo`."""
     if frame == CLOSED:
         return CLOSED
+    # Mot de passe masqué : l'officiel tire 4 à 16 étoiles au hasard, Raftup en met 8.
+    frame = re.sub(r"(!admin login )\*+", r"\1********", frame)
     packets = json.loads(frame)
     for packet in packets:
         if isinstance(packet.get("errors"), list):
@@ -146,6 +150,7 @@ class Player:
         self.ws = ws
         self.closed = False
         self.bytes = 0
+        self.last_say = float("-inf")  # heure du dernier `Say` envoyé
 
     async def one_barrier(self, frames):
         """Envoie une barrière ; ajoute à `frames` ce qui arrive avant sa réponse.
@@ -198,6 +203,13 @@ async def play(url, steps):
     for client, packets in steps:
         started = time.monotonic()
         sender = players[client]
+        # Chat : au plus un `Say` toutes les SAY_SECONDS par client, pour rester
+        # sous la limite de Raftup (5 messages / 10 s, ADR 0007).
+        if any(p.get("cmd") == "Say" for p in packets if isinstance(p, dict)):
+            wait = sender.last_say + SAY_SECONDS - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            sender.last_say = time.monotonic()
         if not sender.closed:
             try:
                 await sender.ws.send(json.dumps(packets, ensure_ascii=False))

@@ -31,15 +31,24 @@ async def drain(ws, wait):
 async def run(steps):
     sockets, result = {}, []
     names = sorted({c for c, _ in steps})
+    closed = set()  # clients dont le serveur a fermé la connexion
     for c in names:
         sockets[c] = await websockets.connect(URL, max_size=None)
         await drain(sockets[c], 0.5)  # RoomInfo
     for c, packets in steps:
-        await sockets[c].send(json.dumps(packets, ensure_ascii=False))
+        # Un client fermé n'envoie plus rien ; chaque étape note de nouveau
+        # `<fermé>`, comme les captures précédentes.
+        if c not in closed:
+            try:
+                await sockets[c].send(json.dumps(packets, ensure_ascii=False))
+            except websockets.ConnectionClosed:
+                closed.add(c)
         await asyncio.sleep(0.3)
         recu = {}
         for n in names:
-            recu[n] = await drain(sockets[n], 0.7)
+            recu[n] = ["<fermé>"] if n in closed else await drain(sockets[n], 0.7)
+            if recu[n][-1:] == ["<fermé>"]:
+                closed.add(n)
         result.append({"client": c, "envoi": packets, "recu": recu})
     for ws in sockets.values():
         await ws.close()

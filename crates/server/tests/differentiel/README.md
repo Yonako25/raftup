@@ -48,10 +48,12 @@ Pour corriger :
 Après chaque étape, chaque client envoie un `GetDataPackage` vide, la « barrière ». Sa réponse prouve que le serveur a traité tout ce qui précède ; elle est retirée avant la comparaison.
 Le serveur officiel envoie certains messages par des tâches à part (`Join`, `SetReply`…) : le pilote fait donc au moins deux barrières, et continue tant qu'une barrière apporte encore des trames.
 Une étape dure au moins 0,1 s : Raftup ferme une connexion au-delà de 50 paquets/s (ADR 0007).
+Deux `Say` d'un même client sont espacés d'au moins 2,1 s : Raftup refuse plus de 5 messages de chat en 10 s.
 
 ## Ce qui n'est pas comparé
 
 - Les écarts connus et acceptés (`docs/etat-du-projet.md`) : le générateur les évite.
-- Ce qui arrive en J2 : commandes `!` du chat, indices.
+- Le nombre d'étoiles du masque de `!admin login` : tiré au hasard par l'officiel, ramené à 8 des deux côtés.
+- Les commandes `!` et les indices ne sont joués que dans les scénarios fixes (`commandes`, `indices`), pas par le générateur au hasard.
 - Les limites propres à Raftup (ADR 0007) : le serveur officiel n'en a pas.
 - Le code de fermeture WebSocket : seule la fermeture elle-même compte (`<fermé>`).
