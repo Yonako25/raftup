@@ -155,13 +155,8 @@ impl Host {
         })?;
         let data = load_archipelago(&bytes, &ArchiveLimits::default())?;
         let seed = SeedSummary::of(&data);
-        let save = if options.disable_save {
-            None
-        } else {
-            let path = default_save_path(&options.seed);
-            let opened = open_or_create(&path, &bytes, &data.seed_name)?;
-            Some((path, opened))
-        };
+        // Le nom de la seed est copié avant que `data` parte dans la salle.
+        let seed_name = data.seed_name.clone();
         let mut room = Room::new(data);
         let password = options.password.clone().filter(|p| !p.is_empty());
         if password.is_some() {
@@ -174,12 +169,15 @@ impl Host {
         if let Some(tls) = tls {
             server = server.with_tls(tls);
         }
-        let (save, resumed) = match save {
-            Some((path, opened)) => {
-                server = server.with_save(opened.file, opened.snapshot);
-                (Some(path), opened.resumed)
-            }
-            None => (None, false),
+        // La sauvegarde est ouverte APRÈS le bind : si le port est pris, aucun
+        // `.raftup` n'est créé, et un réessai ne « reprend » pas une sauvegarde vide.
+        let (save, resumed) = if options.disable_save {
+            (None, false)
+        } else {
+            let path = default_save_path(&options.seed);
+            let opened = open_or_create(&path, &bytes, &seed_name)?;
+            server = server.with_save(opened.file, opened.snapshot);
+            (Some(path), opened.resumed)
         };
         let running = server.start()?;
         let port = running.local_addr().port();

@@ -7,6 +7,7 @@
 //! - [`detect`] : trouver les jeux déjà installés (Steam, GOG, Epic, dossier choisi) ;
 //! - [`install`], [`uninstall`] : poser et retirer les mods, avec reçu et sauvegardes ;
 //! - [`lockfile`] : comparer les mods attendus par une seed à ceux installés ;
+//! - [`party`] : générer une seed à partir de YAML puis l'héberger ;
 //! - [`launch`] : préparer et lancer le jeu ;
 //! - [`diagnose`] : expliquer en clair un échec de connexion ;
 //! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup.
@@ -27,6 +28,7 @@ pub mod install;
 pub mod launch;
 pub mod lockfile;
 pub mod logs;
+pub mod party;
 pub mod paths;
 pub mod profile;
 pub mod record;
@@ -48,6 +50,10 @@ pub use install::{install, status, InstallError, InstallOptions, InstallReport, 
 pub use launch::{launch, plan_launch, Credentials, LaunchError, LaunchPlan};
 pub use lockfile::{LockReport, Lockfile, Mismatch};
 pub use logs::{LogBuffer, LogLine};
+pub use party::{
+    generate_and_host, generate_blocking, host_generated, PartyError, PartyHostOptions,
+    PartyStarted,
+};
 pub use paths::Paths;
 pub use profile::{Profile, ProfileError};
 pub use record::{InstallRecord, RecordState};
