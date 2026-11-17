@@ -103,7 +103,7 @@ pub(crate) struct Names {
 }
 
 impl Names {
-    /// Retourne le dictionnaire de chaque jeu de la seed (nom → numéro).
+    /// Construit les dictionnaires inverses (numéro → nom) de chaque jeu de la seed.
     pub fn new(data: &MultiData) -> Names {
         let mut names = Names::default();
         for (game, package) in &data.datapackage {

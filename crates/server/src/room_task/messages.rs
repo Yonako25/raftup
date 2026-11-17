@@ -55,7 +55,11 @@ pub(super) fn is_printable(text: &str) -> bool {
         let format = matches!(code,
             0xAD | 0x600..=0x605 | 0x61C | 0x6DD | 0x70F | 0x180E
             | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F
-            | 0xFEFF | 0xFFF9..=0xFFFB);
+            | 0xFEFF | 0xFFF9..=0xFFFB
+            // Caractères de format hors du plan de base (catégorie Cf) : sans eux,
+            // les « caractères d'étiquette » invisibles passeraient dans le chat.
+            | 0x8E2 | 0x110BD | 0x110CD | 0x13430..=0x1343F | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A | 0xE0001 | 0xE0020..=0xE007F);
         let private = matches!(code, 0xE000..=0xF8FF | 0xF0000..=0x10FFFF);
         !(c.is_control() || separator || format || private)
     })
@@ -199,5 +203,8 @@ mod tests {
         assert!(!is_printable("tab\t"));
         assert!(!is_printable("espace\u{a0}insécable"));
         assert!(!is_printable("zéro\u{200b}largeur"));
+        // Caractères d'étiquette (Cf) : invisibles, donc refusés comme par Python.
+        assert!(!is_printable("caché\u{e0041}"));
+        assert!(!is_printable("\u{e0001}"));
     }
 }
