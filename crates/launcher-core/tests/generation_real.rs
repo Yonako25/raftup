@@ -42,7 +42,7 @@ fn runtime_root() -> Option<PathBuf> {
 fn backend(root: &Path) -> PythonBackend {
     let status = runtime_status(&Paths::under(root), &pins().expect("pins"));
     match status {
-        RuntimeStatus::Ready(runtime) => PythonBackend { runtime },
+        RuntimeStatus::Ready(runtime) => PythonBackend::new(runtime),
         other => panic!("runtime non prêt dans {} : {other:?}", root.display()),
     }
 }

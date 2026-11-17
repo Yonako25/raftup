@@ -570,7 +570,7 @@ async fn partie_reelle_apquest() {
         RuntimeStatus::Ready(runtime) => runtime,
         other => panic!("runtime non prêt dans {} : {other:?}", root.display()),
     };
-    let mut backend = PythonBackend { runtime };
+    let mut backend = PythonBackend::new(runtime);
 
     let work = tempfile::tempdir().unwrap();
     let paths = Paths::under(work.path());

@@ -125,6 +125,19 @@ impl Runtime {
 #[derive(Debug, Clone)]
 pub struct PythonBackend {
     pub runtime: Runtime,
+    /// Refuse toute connexion réseau sortante du worker (`RAFTUP_BLOCK_NETWORK=1`).
+    /// Activé par défaut (ADR 0019, décision 3) ; ce n'est pas un bac à sable.
+    pub block_network: bool,
+}
+
+impl PythonBackend {
+    /// Backend avec les réglages par défaut : réseau bloqué.
+    pub fn new(runtime: Runtime) -> PythonBackend {
+        PythonBackend {
+            runtime,
+            block_network: true,
+        }
+    }
 }
 
 impl GeneratorBackend for PythonBackend {
@@ -145,6 +158,11 @@ impl GeneratorBackend for PythonBackend {
         options
             .env
             .insert("SKIP_REQUIREMENTS_UPDATE".to_string(), "1".to_string());
+        if self.block_network {
+            options
+                .env
+                .insert("RAFTUP_BLOCK_NETWORK".to_string(), "1".to_string());
+        }
         options.stderr_lines = Some(log);
 
         let mut bridge = PyBridge::start(options)?;

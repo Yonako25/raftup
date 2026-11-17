@@ -703,9 +703,8 @@ fn bout_en_bout_avec_faux_archipelago() {
             std::fs::copy(&path, e.ap_dir.join(path.file_name().expect("nom"))).expect("copie");
         }
     }
-    let mut backend = PythonBackend {
-        runtime: Runtime::from_local(python, &e.ap_dir, None, "0.0.0-fake"),
-    };
+    let mut backend =
+        PythonBackend::new(Runtime::from_local(python, &e.ap_dir, None, "0.0.0-fake"));
     let (tx, rx) = channel();
     let result = generate(
         &e.paths,
@@ -728,4 +727,12 @@ fn bout_en_bout_avec_faux_archipelago() {
     );
     // L'échec a nettoyé le dossier de la génération.
     assert!(generation_dirs(&e).is_empty());
+}
+
+/// ADR 0019, décision 3 : le backend Python bloque le réseau par défaut.
+#[test]
+fn python_backend_blocks_network_by_default() {
+    use launcher_core::generation::{PythonBackend, Runtime};
+    let backend = PythonBackend::new(Runtime::from_local("python", "ap", None, "0.6.8"));
+    assert!(backend.block_network);
 }

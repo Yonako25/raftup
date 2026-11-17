@@ -14,8 +14,8 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **Interface de génération** : écran « Créer une partie » (YAML, consentement de téléchargement d'environ 72 Mo, progression, annulation, avertissement « un apworld est du code arbitraire ») ; contrat dans `docs/contrat-ui-generation.md`
-- [ ] **Règle de conservation de `generations/`** : aucun nettoyage après une partie réussie (la sauvegarde `.raftup` y vit) ; à décider
+- [ ] **Interface de génération** : écran « Créer une partie » (YAML, consentement de téléchargement d'environ 72 Mo, progression, annulation, avertissement « un apworld est du code arbitraire ») ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
+- [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
 - [ ] **Rejoindre par lien d'invitation**, salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
@@ -108,6 +108,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0016** : `py-bridge`, pont JSON-RPC vers le worker Python
 - **0017** : étape `generate` (Python embarqué, générateur officiel épinglé)
 - **0018** : ordre des indices comme un `set` Python (module `pyset`)
+- **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
 
 ## Reporté à J3
 

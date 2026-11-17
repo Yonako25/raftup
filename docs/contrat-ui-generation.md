@@ -47,8 +47,8 @@ Règles d'appel :
 - **Apworld** : « Un apworld est du code qui s'exécute sur votre PC, sans bac à sable. N'ajoutez que ceux que vous jugez sûrs. » (avant toute copie d'un apworld)
 - **Premier téléchargement** : sources et taille affichées (Python, Archipelago, bibliothèques), vérifiées par hash.
 
-## Décisions à prendre
+## Décisions prises (ADR 0019)
 
-1. Conservation de `generations/` : purge manuelle dans l'interface, ou garder les N dernières parties (N = ?).
-2. Où choisir les YAML : sélecteur de fichiers seul, ou aussi un dossier surveillé.
-3. Le durcissement réseau du worker (`RAFTUP_BLOCK_NETWORK=1`) est-il activé par défaut ? (le test réel passe avec)
+1. Conservation de `generations/` : **purge manuelle** (bouton « Supprimer » par partie, avec confirmation) ; rien d'automatique.
+2. YAML : **sélecteur de fichiers seul**, pas de dossier surveillé.
+3. Durcissement réseau du worker : **activé par défaut** (`PythonBackend::new` → `RAFTUP_BLOCK_NETWORK=1`).

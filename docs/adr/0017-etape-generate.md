@@ -23,7 +23,7 @@
 | 9 | Valeurs par défaut | une génération à la fois (verrou partagé avec l'installation du runtime, valable pour un seul process), délai de 15 min (`DEFAULT_TIMEOUT`), spoiler 3 (`DEFAULT_SPOILER`) ; `GenerateRequest::default()` les applique ; le dossier `generations/<horodatage>/` est supprimé après un échec ou une annulation, gardé après un succès |
 | 10 | Consentement | la taille du téléchargement est montrée avant le premier usage |
 | 11 | `compileall` | pas au départ ; à mesurer |
-| 12 | Durcissement réseau | `RAFTUP_BLOCK_NETWORK=1` (variable lue par le worker, héritée du process parent) refuse toute connexion sortante et toute résolution de nom avant l'import d'Archipelago ; boucle locale permise (asyncio en a besoin sous Windows). **Implémentée, désactivée par défaut** ; le test réel passe avec et sans. Ce n'est pas un bac à sable (ctypes ou un sous-process la contournent) |
+| 12 | Durcissement réseau | `RAFTUP_BLOCK_NETWORK=1` (variable lue par le worker, héritée du process parent) refuse toute connexion sortante et toute résolution de nom avant l'import d'Archipelago ; boucle locale permise (asyncio en a besoin sous Windows). **Implémentée, activée par défaut depuis l'ADR 0019** ; le test réel passe avec et sans. Ce n'est pas un bac à sable (ctypes ou un sous-process la contournent) |
 
 Fichier d'épinglage : `crates/launcher-core/generator-pins.toml` (URL HTTPS, hôtes autorisés, sha256 réels relevés sur les fichiers téléchargés, jamais inventés).
 
