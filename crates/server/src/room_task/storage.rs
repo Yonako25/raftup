@@ -38,7 +38,7 @@ impl RoomTask {
                 return None;
             }
             self.game.recheck_hints(self.room.data(), team, slot);
-            return Some(hints_value(self.game.hints(team, slot)));
+            return Some(hints_value(&self.game.hints(team, slot)));
         }
         if let Some(rest) = name.strip_prefix("client_status_") {
             let (team, slot) = parse_team_slot(rest)?;

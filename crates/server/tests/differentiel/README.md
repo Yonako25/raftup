@@ -54,6 +54,7 @@ Deux `Say` d'un même client sont espacés d'au moins 2,1 s : Raftup refuse plus
 
 - Les écarts connus et acceptés (`docs/etat-du-projet.md`) : le générateur les évite.
 - Le nombre d'étoiles du masque de `!admin login` : tiré au hasard par l'officiel, ramené à 8 des deux côtés.
-- Les commandes `!` et les indices ne sont joués que dans les scénarios fixes (`commandes`, `indices`), pas par le générateur au hasard.
+- Une partie des commandes `!` : le générateur au hasard ne joue ni `!options`, ni `!license`, ni `!admin`, ni `!countdown`, ni `!hint <objet>` (tirage entre ex æquo, ADR 0012), ni de nom approché (ordre des suggestions au hasard en Python). Les indices (`create_as_hint`, `CreateHints`, `UpdateHint`, `!hint_location`, `!hint` sans argument) sont joués.
+- Les indices ne sont **pas** triés : Raftup suit l'ordre du `set` Python (ADR 0018). Le pilote lance l'officiel avec `PYTHONHASHSEED=0`, le hachage des textes que Raftup imite.
 - Les limites propres à Raftup (ADR 0007) : le serveur officiel n'en a pas.
 - Le code de fermeture WebSocket : seule la fermeture elle-même compte (`<fermé>`).

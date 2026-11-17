@@ -18,6 +18,7 @@ mod game;
 mod hints;
 pub mod limits;
 pub mod monitor;
+mod pyset;
 mod python;
 pub mod room;
 mod room_task;

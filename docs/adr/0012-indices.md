@@ -57,7 +57,7 @@ La diffusion suit `notify_hints` du serveur officiel, dans cet ordre :
 1. Si la diffusion ne concerne que les nouveaux indices, on retire ceux que le joueur connaît déjà.
 2. Tri stable : les indices `found` passent après les autres.
 3. On enregistre les indices nouveaux (pas ceux déjà trouvés, sauf si `persist_even_if_found`) chez le joueur qui trouve et chez chaque membre du slot qui reçoit.
-4. Pour chaque slot touché, dans l'ordre croissant :
+4. Pour chaque slot touché, dans l'ordre du `set` Python `new_hint_events` (ADR 0018, qui remplace « l'ordre croissant ») :
    - `SetReply` sur la clé `_read_hints_<équipe>_<slot>` avec la liste complète (sans `original_value` ni `slot`) ;
    - `RoomUpdate` avec les nouveaux `hint_points` aux clients de ce slot.
 5. Ensuite, pour chaque slot concerné, aux clients qui n'ont pas `NoText` : une trame `PrintJSON` de type `Hint`. Les indices du slot concerné passent en premier.

@@ -20,6 +20,7 @@ use crate::command_line::py_isnumeric;
 use crate::fuzzy::intended_text;
 use crate::game::hint_cost;
 use crate::hints::{deterministic_shuffle, is_non_hintable};
+use crate::pyset::PySet;
 
 /// Indices trouvés pour la demande, et le nom reconnu (pour les messages).
 struct Lookup {
@@ -36,17 +37,6 @@ fn sphere_of(data: &MultiData, player: SlotId, location: LocationId) -> i64 {
         .iter()
         .position(|sphere| sphere.get(&player).is_some_and(|l| l.contains(&location)))
         .map_or(-1, |i| i as i64)
-}
-
-/// Garde la première occurrence de chaque indice (un ensemble en Python).
-fn dedup(hints: Vec<Hint>) -> Vec<Hint> {
-    let mut unique: Vec<Hint> = Vec::new();
-    for hint in hints {
-        if !unique.contains(&hint) {
-            unique.push(hint);
-        }
-    }
-    unique
 }
 
 impl RoomTask {
@@ -274,9 +264,17 @@ impl RoomTask {
         cost: i64,
         hints: Vec<Hint>,
     ) {
-        let own: Vec<Hint> = self.game.hints(team, slot).to_vec();
-        let (old_hints, new_hints): (Vec<Hint>, Vec<Hint>) =
-            dedup(hints).into_iter().partition(|h| own.contains(h));
+        // Comme le serveur officiel, avec des `set` Python (ADR 0018) :
+        // `new_hints = set(hints) - own` puis `old_hints = list(set(hints) - new_hints)`.
+        // Leur ordre de parcours fixe celui des messages.
+        let own = self.game.hint_set(team, slot);
+        let new_set = PySet::from_ordered(hints.iter().cloned()).difference(&own);
+        let old_hints: Vec<Hint> = PySet::from_ordered(hints)
+            .difference(&new_set)
+            .iter()
+            .cloned()
+            .collect();
+        let new_hints: Vec<Hint> = new_set.iter().cloned().collect();
 
         if new_hints.is_empty() {
             let effects =

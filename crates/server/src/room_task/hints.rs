@@ -66,7 +66,7 @@ impl RoomTask {
     ///    par indice, aux clients qui acceptent le texte.
     pub(super) fn apply_hint_effects(&self, team: TeamId, effects: HintEffects) {
         for (hint_team, slot) in effects.new_hint_slots {
-            let value = hints_value(self.game.hints(hint_team, slot));
+            let value = hints_value(&self.game.hints(hint_team, slot));
             self.notify_read_key(format!("_read_hints_{hint_team}_{slot}"), value);
             let update = RoomUpdate {
                 hint_points: Some(self.hint_points(hint_team, slot)),
@@ -270,7 +270,7 @@ impl RoomTask {
             self.game
                 .update_hint(self.room.data(), client.team, finding, location, status);
         for (team, slot) in changed {
-            let value = hints_value(self.game.hints(team, slot));
+            let value = hints_value(&self.game.hints(team, slot));
             self.notify_read_key(format!("_read_hints_{team}_{slot}"), value);
         }
     }

@@ -6,12 +6,18 @@
 - Capturée le 15 novembre 2026 avec un petit client Python `websockets` (script [`scripts/roominfo.py`](scripts/roominfo.py)).
 - `tests/socle.rs` vérifie que Raftup envoie les mêmes valeurs. Seule l'heure (`time`) change d'un lancement à l'autre ; le test reprend celle de la capture.
 
+## `pyset-vectors.json`
+
+- Ordre de parcours d'un `set` Python d'indices, noté par CPython 3.12.10 avec `PYTHONHASHSEED=0`, le 17 novembre 2026 (script [`scripts/pyset_vectors.py`](scripts/pyset_vectors.py), graine 18).
+- 31 suites d'opérations tirées au hasard (`add`, `discard`, reconstruction, `copy`, `update`, `-`, `set(liste)`), avec l'ordre après chaque opération et le `hash()` de chaque indice. Textes vides, latin-1, UCS-2 et UCS-4 ; indices de même hachage mais différents.
+- `src/pyset.rs` (test `matches_cpython_vectors`) rejoue les opérations et compare (ADR 0018).
+
 ## `connexion-seed-mit.json`
 
 - 16 scénarios de connexion rejoués sur le serveur officiel 0.6.8 avec la même seed, le 15 novembre 2026 (script [`scripts/connect_vectors.py`](scripts/connect_vectors.py)).
 - Pour chaque étape : le client qui envoie, les paquets envoyés (`envoi`) et les trames brutes reçues par chaque client (`recu`). `<fermé>` signale une connexion fermée par le serveur.
 - Couvre : connexion acceptée, inventaire de départ, `slot_data` refusé, `items_handling`, outil `TextOnly`, chaque refus de `ConnectionRefused`, `Connect` incomplet, reconnexion, changement de slot et groupe (le serveur officiel ferme la connexion), `GetDataPackage`.
-- `tests/connexion.rs` rejoue les scénarios sur Raftup et compare les trames, sans tenir compte de l'ordre des clés ni de l'ordre des erreurs de `ConnectionRefused` (un ensemble en Python).
+- `tests/connexion.rs` rejoue les scénarios sur Raftup et compare les trames, sans tenir compte de l'ordre des clés ni de l'ordre des erreurs de `ConnectionRefused` (un ensemble en Python). L'ordre des indices `_read_hints_…`, lui, est comparé (ADR 0018).
 
 ## `partie-seed-mit.json`
 

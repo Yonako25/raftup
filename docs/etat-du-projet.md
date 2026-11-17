@@ -6,7 +6,7 @@
 > - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
 > - **J3 côté interface** : hébergement et habillage faits, écran Bibliothèque en cours (autre session) ; rendu jamais contrôlé à l'œil
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
-> - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 150 au hasard, mesuré le 17 novembre 2026. Le tirage au hasard ne joue ni commandes ni indices
+> - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
 Mis à jour le **17 novembre 2026**.
 
@@ -19,7 +19,6 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
 - [ ] **Rejoindre par lien d'invitation**, salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
-- [ ] **Commandes `!` et indices dans le générateur au hasard** (`hasard.py`) ; les scénarios fixes sont capturés et sans écart
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [ ] Relire le code de `launcher-ui` (le serveur, `launcher-core` et `py-bridge` ont été relus)
@@ -66,7 +65,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Fin : `StatusUpdate`, objectif, `collect` / `release` automatiques
 - Échanges : `LocationScouts`, chat `Say`, `Bounce` (DeathLink)
 - Stockage : `Get`, `Set` (18 opérations), `SetNotify`, clés `_read_…`
-- **Indices** (ADR 0012) : `create_as_hint`, `CreateHints`, `UpdateHint`, points et coût des indices
+- **Indices** (ADR 0012, 0018) : `create_as_hint`, `CreateHints`, `UpdateHint`, points et coût des indices ; rangés et parcourus comme le `set` Python de l'officiel
 - **Commandes `!`** (ADR 0013) : `help`, `license`, `options`, `players`, `status`, `remaining`, `missing`, `checked`, `release`, `collect`, `alias`, `getitem`, `countdown`, `hint`, `hint_location`, `admin login` / `logout`
 - **Sauvegarde** (ADR 0014, NF07) : écrite et synchronisée sur le disque **avant** chaque réponse ; reprise au démarrage ; compactage au démarrage, à 10 000 deltas et à l'arrêt
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
@@ -107,6 +106,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0015** : profils d'installation, installation, lockfile et lancement
 - **0016** : `py-bridge`, pont JSON-RPC vers le worker Python
 - **0017** : étape `generate` (Python embarqué, générateur officiel épinglé)
+- **0018** : ordre des indices comme un `set` Python (module `pyset`)
 
 ## Reporté à J3
 
@@ -160,6 +160,7 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - `!hint` : noms candidats dans l'ordre du datapackage (un ensemble, donc au hasard, en Python)
 - `!hint` : non indiçables connus seulement pour les mondes de base de 0.6.8 (« Triforce » d'A Link to the Past, « Battle Arena: End reward » de Circle of the Moon) ; ceux d'un `.apworld` installé à part ne sont pas connus
 - `!missing`, `!checked`, indices d'un objet : lieux par numéro croissant, comme `_speedups` (le serveur officiel compilé) ; seul son repli en pur Python, qui affiche un avertissement, suit l'ordre du multidata
+- Ordre des indices (ADR 0018) : exact si `entrance` est vide, ou si l'officiel tourne avec `PYTHONHASHSEED=0` ; la sauvegarde automatique de l'officiel (toutes les 60 s) peut, rarement, changer son ordre
 - `!countdown` au-delà d'une heure : message court au lieu d'une trace
 - `!release` : pas d'autorisation par joueur depuis la console (`/allow_release`)
 - `!admin` : après connexion, les commandes serveur répondent « Server commands are not available yet. » (J3)

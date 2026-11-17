@@ -16,6 +16,8 @@ use multidata::raftup::{
 };
 use multidata::{MultiData, PlacedItem};
 
+use crate::pyset::PySet;
+
 /// Un objet trouvé dans un lieu, et le slot qui le reçoit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Sent {
@@ -41,9 +43,9 @@ pub(crate) struct GameState {
     client_status: BTreeMap<(TeamId, SlotId), ClientStatus>,
     /// Pour chaque groupe, les membres qui ont déjà fait `collect`.
     group_collected: BTreeMap<SlotId, BTreeSet<SlotId>>,
-    /// Indices connus de chaque (équipe, slot). Un ensemble en Python : pas de
-    /// doublon, mais l'ordre ne compte pas.
-    hints: BTreeMap<(TeamId, SlotId), Vec<Hint>>,
+    /// Indices connus de chaque (équipe, slot). Un `set` en Python : on
+    /// l'imite pour les parcourir dans le même ordre (ADR 0018).
+    hints: BTreeMap<(TeamId, SlotId), PySet<Hint>>,
     /// Nombre d'indices payés par (équipe, slot) (`hints_used` du serveur officiel).
     hints_used: BTreeMap<(TeamId, SlotId), u32>,
     /// Surnom choisi avec `!alias` (`name_aliases` du serveur officiel).
@@ -55,7 +57,8 @@ pub(crate) struct GameState {
 pub(crate) struct HintEffects {
     /// Slots dont la liste d'indices a reçu un nouvel indice : pour chacun, un
     /// `SetReply` de `_read_hints_<équipe>_<slot>` puis un `RoomUpdate` `hint_points`.
-    pub new_hint_slots: BTreeSet<(TeamId, SlotId)>,
+    /// Dans l'ordre du `set` Python `new_hint_events`.
+    pub new_hint_slots: Vec<(TeamId, SlotId)>,
     /// Messages `PrintJSON` de type `Hint`, par slot concerné (ordre croissant).
     /// Les indices de ce slot (où il est celui qui trouve) viennent en premier.
     pub messages: Vec<(SlotId, Vec<Hint>)>,
@@ -71,13 +74,11 @@ impl GameState {
                 game.client_status.insert((0, *slot), ClientStatus::GOAL);
             }
         }
+        // `self.hints[0, slot].update(hints)` : `hints` est le `set` lu dans le
+        // pickle, rempli dans l'ordre du fichier.
         for (slot, hints) in &data.precollected_hints {
-            let list = game.hints.entry((0, *slot)).or_default();
-            for hint in hints {
-                if !list.contains(hint) {
-                    list.push(hint.clone());
-                }
-            }
+            let from_file = PySet::from_ordered(hints.iter().cloned());
+            game.hints.entry((0, *slot)).or_default().update(&from_file);
         }
         game
     }
@@ -119,63 +120,77 @@ impl GameState {
         *collected == members
     }
 
-    /// Indices d'un slot, tels quels (sans les relire).
-    pub fn hints(&self, team: TeamId, slot: SlotId) -> &[Hint] {
+    /// Indices d'un slot, tels quels (sans les relire), dans l'ordre où le
+    /// serveur officiel parcourt son `set`.
+    pub fn hints(&self, team: TeamId, slot: SlotId) -> Vec<Hint> {
         match self.hints.get(&(team, slot)) {
-            Some(hints) => hints,
-            None => &[],
+            Some(hints) => hints.iter().cloned().collect(),
+            None => Vec::new(),
         }
+    }
+
+    /// Le `set` d'indices d'un slot (vide s'il n'en a pas).
+    pub fn hint_set(&self, team: TeamId, slot: SlotId) -> PySet<Hint> {
+        self.hints.get(&(team, slot)).cloned().unwrap_or_default()
+    }
+
+    /// Vrai si le slot connaît déjà cet indice (`hint in self.hints[...]`).
+    fn knows_hint(&self, team: TeamId, slot: SlotId, hint: &Hint) -> bool {
+        self.hints
+            .get(&(team, slot))
+            .is_some_and(|hints| hints.contains(hint))
     }
 
     /// Relit les indices d'un slot : ceux dont le lieu a été visité passent à
     /// « trouvé » (`recheck_hints` du serveur officiel). Chaque indice changé
     /// est aussi remplacé chez les autres slots concernés.
     ///
-    /// Renvoie les (équipe, slot) dont un indice a changé.
+    /// Renvoie les (équipe, slot) dont un indice a changé, dans l'ordre du
+    /// `set` Python `updated_slots`.
     pub fn recheck_hints(
         &mut self,
         data: &MultiData,
         team: TeamId,
         slot: SlotId,
-    ) -> BTreeSet<(TeamId, SlotId)> {
-        let mut changed = BTreeSet::new();
-        let Some(hints) = self.hints.get(&(team, slot)).cloned() else {
-            return changed;
-        };
-        let mut new_hints: Vec<Hint> = Vec::new();
+    ) -> Vec<(TeamId, SlotId)> {
+        let mut changed: PySet<(TeamId, SlotId)> = PySet::new();
+        // On copie la liste : la boucle modifie `self.hints` des autres slots.
+        let hints = self.hints(team, slot);
+        if !self.hints.contains_key(&(team, slot)) {
+            return Vec::new();
+        }
+        let mut new_hints: PySet<Hint> = PySet::new();
         for hint in hints {
             let new_hint = self.re_check(team, &hint);
-            if !new_hints.contains(&new_hint) {
-                new_hints.push(new_hint.clone());
-            }
+            new_hints.add(new_hint.clone());
             if new_hint == hint {
                 continue;
             }
-            let mut concerned = slot_set(data, hint.receiving_player);
-            concerned.push(hint.finding_player);
-            for player in concerned {
-                changed.insert((team, player));
+            for player in concerning_slots(data, hint.receiving_player, hint.finding_player) {
+                changed.add((team, player));
                 if player != slot {
                     self.replace_hint(team, player, &hint, &new_hint);
                 }
             }
         }
         self.hints.insert((team, slot), new_hints);
-        changed
+        changed.iter().copied().collect()
     }
 
     /// `!hint` sans argument : relit seulement les indices de ce slot (sans
-    /// toucher aux autres slots, comme le serveur officiel) et les renvoie.
+    /// toucher aux autres slots, comme le serveur officiel) et les renvoie,
+    /// dans l'ordre du nouveau `set`.
     pub fn recheck_own_hints(&mut self, team: TeamId, slot: SlotId) -> Vec<Hint> {
-        let mut rechecked: Vec<Hint> = Vec::new();
-        for hint in self.hints(team, slot) {
-            let new_hint = self.re_check(team, hint);
-            if !rechecked.contains(&new_hint) {
-                rechecked.push(new_hint);
-            }
-        }
-        self.hints.insert((team, slot), rechecked.clone());
-        rechecked
+        // `{hint.re_check(...) for hint in hints}` : un `set` neuf, rempli dans
+        // l'ordre de l'ancien.
+        let rechecked = PySet::from_ordered(
+            self.hints(team, slot)
+                .iter()
+                .map(|hint| self.re_check(team, hint)),
+        );
+        let list = rechecked.iter().cloned().collect();
+        self.hints.insert((team, slot), rechecked);
+        list
     }
 }
 
@@ -215,9 +230,11 @@ impl GameState {
         location_check_points * checked - cost * used
     }
 
-    /// L'indice déjà connu pour ce lieu de ce slot (`get_hint`).
+    /// L'indice déjà connu pour ce lieu de ce slot (`get_hint`) : le premier
+    /// dans l'ordre du `set`.
     pub fn get_hint(&self, team: TeamId, finding: SlotId, location: LocationId) -> Option<&Hint> {
-        self.hints(team, finding)
+        self.hints
+            .get(&(team, finding))?
             .iter()
             .find(|h| h.location == location && h.finding_player == finding)
     }
@@ -329,7 +346,7 @@ impl GameState {
         // valables tant que `hints` (emprunté par l'appelant) existe.
         let mut hints: Vec<&Hint> = hints.iter().collect();
         if only_new {
-            hints.retain(|h| !self.hints(team, h.finding_player).contains(h));
+            hints.retain(|h| !self.knows_hint(team, h.finding_player, h));
         }
         if hints.is_empty() {
             return effects;
@@ -339,6 +356,9 @@ impl GameState {
         hints.sort_by_key(|h| std::cmp::Reverse(h.found));
 
         let mut concerns: BTreeMap<SlotId, Vec<&Hint>> = BTreeMap::new();
+        // `new_hint_events` : un `set` d'entiers en Python ; son ordre fixe
+        // celui des `SetReply`.
+        let mut new_hint_events: PySet<SlotId> = PySet::new();
         for hint in hints {
             for player in slot_set(data, hint.receiving_player) {
                 concerns.entry(player).or_default().push(hint);
@@ -349,16 +369,17 @@ impl GameState {
                 list.push(hint);
             }
             if (!hint.found || persist_even_if_found)
-                && !self.hints(team, hint.finding_player).contains(hint)
+                && !self.knows_hint(team, hint.finding_player, hint)
             {
                 self.add_hint(team, hint.finding_player, hint);
-                effects.new_hint_slots.insert((team, hint.finding_player));
+                new_hint_events.add(hint.finding_player);
                 for player in slot_set(data, hint.receiving_player) {
                     self.add_hint(team, player, hint);
-                    effects.new_hint_slots.insert((team, player));
+                    new_hint_events.add(player);
                 }
             }
         }
+        effects.new_hint_slots = new_hint_events.iter().map(|slot| (team, *slot)).collect();
         for (slot, list) in concerns {
             if recipients.is_some_and(|r| !r.contains(&slot)) {
                 continue;
@@ -371,19 +392,20 @@ impl GameState {
         effects
     }
 
-    /// Ajoute un indice à un slot, sans doublon (un ensemble en Python).
+    /// Ajoute un indice au `set` d'un slot.
     fn add_hint(&mut self, team: TeamId, slot: SlotId, hint: &Hint) {
-        let list = self.hints.entry((team, slot)).or_default();
-        if !list.contains(hint) {
-            list.push(hint.clone());
-        }
+        self.hints
+            .entry((team, slot))
+            .or_default()
+            .add(hint.clone());
     }
 
     /// Change le statut d'un indice (`UpdateHint`) chez tous les slots concernés.
     /// Les contrôles du paquet (droits, statut valide) restent à l'appelant.
     ///
-    /// Renvoie les (équipe, slot) dont la clé `_read_hints` change ; vide si
-    /// l'indice est inconnu ou inchangé.
+    /// Renvoie les (équipe, slot) dont la clé `_read_hints` change, dans
+    /// l'ordre du `set` Python `concerning_slots` ; vide si l'indice est
+    /// inconnu ou inchangé.
     pub fn update_hint(
         &mut self,
         data: &MultiData,
@@ -391,22 +413,19 @@ impl GameState {
         finding: SlotId,
         location: LocationId,
         status: HintStatus,
-    ) -> BTreeSet<(TeamId, SlotId)> {
-        let mut changed = BTreeSet::new();
+    ) -> Vec<(TeamId, SlotId)> {
         let Some(hint) = self.get_hint(team, finding, location).cloned() else {
-            return changed;
+            return Vec::new();
         };
         let new_hint = re_prioritize(&hint, status);
         if new_hint == hint {
-            return changed;
+            return Vec::new();
         }
-        let mut concerned = slot_set(data, hint.receiving_player);
-        concerned.push(hint.finding_player);
-        for player in concerned {
-            self.replace_hint(team, player, &hint, &new_hint);
-            changed.insert((team, player));
+        let concerned = concerning_slots(data, hint.receiving_player, hint.finding_player);
+        for player in &concerned {
+            self.replace_hint(team, *player, &hint, &new_hint);
         }
-        changed
+        concerned.into_iter().map(|player| (team, player)).collect()
     }
 
     /// Objet donné par `!getitem` : ajouté aux deux listes du slot.
@@ -436,14 +455,12 @@ impl GameState {
         hint.clone()
     }
 
-    /// Remplace un indice, seulement s'il est présent chez ce slot.
+    /// Remplace un indice, seulement s'il est présent chez ce slot
+    /// (`remove` puis `add`).
     fn replace_hint(&mut self, team: TeamId, slot: SlotId, old: &Hint, new: &Hint) {
         if let Some(hints) = self.hints.get_mut(&(team, slot)) {
-            if let Some(position) = hints.iter().position(|h| h == old) {
-                hints.remove(position);
-                if !hints.contains(new) {
-                    hints.push(new.clone());
-                }
+            if hints.discard(old) {
+                hints.add(new.clone());
             }
         }
     }
@@ -612,10 +629,30 @@ fn make_hint(
 
 /// Les slots concernés par un slot : les membres pour un groupe, lui-même sinon.
 pub(crate) fn slot_set(data: &MultiData, slot: SlotId) -> Vec<SlotId> {
+    py_slot_set(data, slot).iter().copied().collect()
+}
+
+/// `slot_set` comme le `set` Python : `set(group_members)` pour un groupe,
+/// `{slot}` sinon. Son ordre de parcours suit la table de hachage.
+fn py_slot_set(data: &MultiData, slot: SlotId) -> PySet<SlotId> {
     match data.slots.get(&slot) {
-        Some(info) if info.slot_type == SlotType::GROUP => info.group_members.clone(),
-        _ => vec![slot],
+        Some(info) if info.slot_type == SlotType::GROUP => {
+            PySet::from_ordered(info.group_members.iter().copied())
+        }
+        _ => PySet::from_ordered([slot]),
     }
+}
+
+/// `slot_set(receiving) | {finding}` : les slots concernés par un indice,
+/// dans l'ordre du `set` Python obtenu (copie, puis fusion avec `{finding}`).
+pub(crate) fn concerning_slots(
+    data: &MultiData,
+    receiving: SlotId,
+    finding: SlotId,
+) -> Vec<SlotId> {
+    let mut union = py_slot_set(data, receiving).copy();
+    union.update(&PySet::from_ordered([finding]));
+    union.iter().copied().collect()
 }
 
 /// Lieux qui contiennent un objet pour ce slot, groupés par monde d'origine,
@@ -674,7 +711,8 @@ impl GameState {
             .map(|((team, slot), hints)| SlotHints {
                 team: *team,
                 slot: *slot,
-                hints: hints.clone(),
+                // Dans l'ordre de parcours, comme le pickle de l'officiel.
+                hints: hints.iter().cloned().collect(),
             })
             .collect();
         snapshot.hints_used = self
@@ -724,7 +762,12 @@ impl GameState {
                 .insert((e.team, e.slot), ClientStatus(e.status));
         }
         for e in &snapshot.hints {
-            game.hints.insert((e.team, e.slot), e.hints.clone());
+            // Comme le serveur officiel qui relit son pickle : un `set` neuf,
+            // rempli dans l'ordre enregistré.
+            game.hints.insert(
+                (e.team, e.slot),
+                PySet::from_ordered(e.hints.iter().cloned()),
+            );
         }
         for e in &snapshot.hints_used {
             game.hints_used.insert((e.team, e.slot), e.count);
@@ -913,12 +956,12 @@ mod tests {
         // Alice (1) trouve, Bob (2) recevra.
         let hint = hint_for(2, 1, 10, false);
         let effects = game.notify_hints(&data, 0, std::slice::from_ref(&hint), false, false, None);
-        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(effects.new_hint_slots, vec![(0, 1), (0, 2)]);
         assert_eq!(effects.messages.len(), 2);
         assert_eq!(effects.messages[0], (1, vec![hint.clone()]));
         assert_eq!(effects.messages[1], (2, vec![hint.clone()]));
-        assert_eq!(game.hints(0, 1), std::slice::from_ref(&hint));
-        assert_eq!(game.hints(0, 2), std::slice::from_ref(&hint));
+        assert_eq!(game.hints(0, 1), vec![hint.clone()]);
+        assert_eq!(game.hints(0, 2), vec![hint.clone()]);
 
         // only_new : déjà connu, rien à faire du tout.
         let effects = game.notify_hints(&data, 0, std::slice::from_ref(&hint), true, false, None);
@@ -941,7 +984,7 @@ mod tests {
         let local = hint_for(1, 1, 11, false);
         let effects = game.notify_hints(&data, 0, std::slice::from_ref(&local), false, false, None);
         assert_eq!(effects.messages, [(1, vec![local.clone()])]);
-        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1)]));
+        assert_eq!(effects.new_hint_slots, vec![(0, 1)]);
         // Groupe 3 = {1, 2} reçoit, Alice trouve : le groupe lui-même n'a pas de
         // client, mais ses membres 1 et 2 sont prévenus ; Alice une seule fois.
         let grouped = hint_for(3, 1, 12, false);
@@ -966,7 +1009,7 @@ mod tests {
         assert!(game.hints(0, 1).is_empty());
         // Avec persist (LocationScouts) : mémorisé.
         let effects = game.notify_hints(&data, 0, std::slice::from_ref(&found), false, true, None);
-        assert_eq!(effects.new_hint_slots, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(effects.new_hint_slots, vec![(0, 1), (0, 2)]);
         assert_eq!(game.hints(0, 1), [found]);
     }
 
@@ -999,7 +1042,7 @@ mod tests {
         let hint = hint_for(3, 1, 12, false);
         game.notify_hints(&data, 0, std::slice::from_ref(&hint), false, false, None);
         let changed = game.update_hint(&data, 0, 1, 12, HintStatus::AVOID);
-        assert_eq!(changed, BTreeSet::from([(0, 1), (0, 2)]));
+        assert_eq!(changed, vec![(0, 1), (0, 2)]);
         assert_eq!(game.hints(0, 1)[0].status, HintStatus::AVOID);
         assert_eq!(game.hints(0, 2)[0].status, HintStatus::AVOID);
         // Même statut ou indice inconnu : rien ne change.

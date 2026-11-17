@@ -56,7 +56,7 @@ impl RoomTask {
         // 4. Les indices dont le lieu vient d'être visité passent à « trouvé ».
         let changed = self.game.recheck_hints(self.room.data(), team, slot);
         for (hint_team, hint_slot) in changed {
-            let value = hints_value(self.game.hints(hint_team, hint_slot));
+            let value = hints_value(&self.game.hints(hint_team, hint_slot));
             self.notify_read_key(format!("_read_hints_{hint_team}_{hint_slot}"), value);
         }
     }

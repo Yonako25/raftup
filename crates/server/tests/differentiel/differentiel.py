@@ -64,13 +64,8 @@ def normalize(frame):
             packet["errors"].sort(key=text)
         if packet.get("cmd") == "RoomUpdate" and isinstance(packet.get("checked_locations"), list):
             packet["checked_locations"].sort()
-        if packet.get("cmd") == "SetReply" and str(packet.get("key", "")).startswith("_read_hints_"):
-            if isinstance(packet.get("value"), list):
-                packet["value"].sort(key=text)
-        if packet.get("cmd") == "Retrieved":
-            for key, value in packet.get("keys", {}).items():
-                if key.startswith("_read_hints_") and isinstance(value, list):
-                    value.sort(key=text)
+        # Les indices (`_read_hints_…`) ne sont plus triés : Raftup suit l'ordre
+        # du `set` Python (ADR 0018).
         if packet.get("cmd") == "RoomInfo":
             packet.pop("time", None)
     return text(packets)
@@ -119,7 +114,9 @@ class Servers:
         # stdin reste ouvert : le serveur officiel y lit ses commandes de console.
         # SKIP_REQUIREMENTS_UPDATE : sinon il propose d'installer des paquets
         # et attend une réponse au clavier.
-        env = dict(os.environ, SKIP_REQUIREMENTS_UPDATE="1", PYTHONUTF8="1")
+        # PYTHONHASHSEED=0 : hachage des textes fixe, celui que Raftup imite
+        # pour ranger les indices dans le même ordre (ADR 0018).
+        env = dict(os.environ, SKIP_REQUIREMENTS_UPDATE="1", PYTHONUTF8="1", PYTHONHASHSEED="0")
         official = subprocess.Popen(
             [python, "MultiServer.py", "--host", "127.0.0.1", "--port", str(official_port),
              "--disable_save", "--use_embedded_options", str(SEED)],

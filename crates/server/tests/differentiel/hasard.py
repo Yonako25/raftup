@@ -8,10 +8,15 @@ Le générateur évite ce qui ne doit pas être comparé :
   `docs/etat-du-projet.md`) : entiers plus grands qu'un i64, `mul` géant,
   changement de slot sur une même connexion, connexion à un groupe, lieu
   inconnu dans `LocationScouts` (le serveur officiel plante) ;
-- ce qui n'est pas encore fait (J2) : commandes `!` du chat, indices
-  (`create_as_hint`, `CreateHints`, `UpdateHint`) ;
+- les écarts connus des commandes `!` et des indices (ADR 0012, 0013) :
+  `!options` (mot de passe), `!license`, `!admin` (commandes serveur pas
+  faites), `!countdown` (messages en différé), `!hint <objet>` (tirage entre
+  ex æquo), noms approchés (l'ordre des suggestions est au hasard en Python),
+  arguments qui font planter le serveur officiel ;
 - les limites propres à Raftup (ADR 0007) : plus de 5 messages de chat par
   connexion, messages de plus de 2 000 caractères.
+
+Les commandes `!` comptent comme des messages de chat (même limite de 5).
 """
 
 from scenarios import CF, V, YD, bounce, checks, connect, setp, status, update
@@ -27,6 +32,15 @@ SLOTS = {
 OLD_VERSION = {"major": 0, "minor": 4, "build": 9, "class": "Version"}
 TEXTS = ["Bonjour", "ça va ?", "ligne\nsuite", "🎉", "", "  espaces  ", "a" * 300, "x;y=z"]
 MAX_SAY = 5
+# Numéro de slot de chaque nom (seed MIT).
+SLOT_NUMBERS = {"Alice": 1, "Bob": 2, "Chloé": 3}
+# Noms exacts seulement : un nom approché fait proposer des suggestions dont
+# l'ordre est tiré au hasard par le serveur officiel.
+CF_ITEMS = ["Map Width", "Map Height", "Map Bombs"]
+CF_LOCATION_NAMES = [f"Tile {n}" for n in range(1, 26)]
+ALIASES = ["Lulu", "Zed", "Mi ka"]
+STATUS_TAGS = ["DeathLink", "Tracker", "AP", "Inconnu"]
+HINT_STATUSES = [0, 10, 20, 30]
 
 
 class Generator:
@@ -106,6 +120,87 @@ class Generator:
         self.says[client] += 1
         return [{"cmd": "Say", "text": self.pick(TEXTS)}]
 
+    def command(self, client):
+        """Une commande `!` du chat, parmi celles qui se comparent (voir en tête)."""
+        self.says[client] += 1
+        return [{"cmd": "Say", "text": self.command_text(client)}]
+
+    def command_text(self, client):
+        name = self.slot.get(client)
+        # Noms d'objets et de lieux : seulement pour ChecksFinder, dont on
+        # connaît les noms exacts ; pour Yacht Dice, des numéros.
+        on_cf = name in ("Alice", "Bob")
+        variant = self.rng.randint(0, 14)
+        if variant == 0:
+            return "!help"
+        if variant == 1:
+            return "!players"
+        if variant == 2:
+            return self.pick(["!status", "!status " + self.pick(STATUS_TAGS)])
+        if variant == 3:
+            return "!remaining"
+        if variant == 4:
+            return self.pick(["!missing", "!missing 3", "!missing Tile 1", "!missing zzz"])
+        if variant == 5:
+            return self.pick(["!checked", "!checked 2", "!checked Tile"])
+        if variant in (6, 7, 8):
+            # Un lieu donne un seul indice : pas de tirage entre ex æquo.
+            if on_cf and self.rng.random() < 0.7:
+                return "!hint_location " + self.pick(CF_LOCATION_NAMES)
+            known = SLOTS.get(name, ("", CF))[1]
+            return f"!hint_location {self.pick(known)}"
+        if variant == 9:
+            return self.pick(["!alias " + self.pick(ALIASES), "!alias"])
+        if variant == 10:
+            # Sans argument, le serveur officiel plante (écart connu).
+            if on_cf:
+                return "!getitem " + self.pick(CF_ITEMS)
+            return "!players"
+        if variant == 11:
+            # Rares : changent beaucoup l'état de la partie.
+            if self.rng.random() < 0.3:
+                return self.pick(["!release", "!collect"])
+            return "!remaining"
+        if variant == 12:
+            return self.pick(["!Inconnue", "!", "\"!players\""])
+        if variant == 13:
+            # Ordre du `set` Python des indices, reproduit par Raftup (ADR 0018).
+            return "!hint"
+        return "!hint_location 99999"
+
+    # ----- Indices (ADR 0012) -----
+
+    def other_slot(self):
+        """Un slot au hasard et un de ses lieux connus."""
+        name = self.pick(list(SLOTS))
+        return SLOT_NUMBERS[name], self.pick(SLOTS[name][1])
+
+    def hint_scouts(self, client):
+        if client not in self.slot:
+            return [{"cmd": "LocationScouts", "locations": [], "create_as_hint": 1}]
+        known = SLOTS[self.slot[client]][1]
+        return [{"cmd": "LocationScouts", "locations": self.sample(known, 1, 3),
+                 "create_as_hint": self.pick([1, 2])}]
+
+    def create_hints(self, client):
+        packet = {"cmd": "CreateHints"}
+        if self.rng.random() < 0.5 or client not in self.slot:
+            # Lieux de son propre slot (champ `player` absent).
+            known = SLOTS.get(self.slot.get(client), ("", CF))[1]
+            packet["locations"] = self.sample(known, 1, 3)
+        else:
+            player, location = self.other_slot()
+            packet["player"] = player
+            packet["locations"] = [location]
+        if self.rng.random() < 0.6:
+            packet["status"] = self.pick(HINT_STATUSES)
+        return [packet]
+
+    def update_hint(self):
+        player, location = self.other_slot()
+        return [{"cmd": "UpdateHint", "player": player, "location": location,
+                 "status": self.pick(HINT_STATUSES + [40, 7])}]
+
     def bounce(self):
         data = {"n": self.rng.randint(0, 99)}
         variant = self.rng.randint(0, 6)
@@ -181,6 +276,10 @@ class Generator:
             (3, lambda: self.scouts(client)),
             (3, lambda: status(self.pick([0, 5, 10, 20, 30]))),
             (3 if self.says[client] < MAX_SAY else 0, lambda: self.say(client)),
+            (4 if self.says[client] < MAX_SAY else 0, lambda: self.command(client)),
+            (2, lambda: self.hint_scouts(client)),
+            (2, lambda: self.create_hints(client)),
+            (2, self.update_hint),
             (3, self.bounce),
             (5, self.set),
             (3, lambda: self.get(client)),
