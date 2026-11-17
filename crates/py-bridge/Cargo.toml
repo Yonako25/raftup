@@ -1,0 +1,24 @@
+[package]
+name = "py-bridge"
+description = "Pont vers le générateur Archipelago : pilote un process Python en JSON-RPC sur stdin/stdout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Faux worker pour les tests sans Python (ADR 0016) : à exclure d'un futur paquet.
+[[bin]]
+name = "fake-worker"
+path = "src/bin/fake-worker.rs"
+test = false
+doc = false
