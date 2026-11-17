@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command '$j = git log -1 --format=%H -- docs/journal.md; $h = git rev-parse HEAD; $m = git status --porcelain docs/journal.md; if (-not $m -and $j -ne $h) { @{systemMessage=\"Le dernier commit ne touche pas docs/journal.md : lancez /cloture.\"} | ConvertTo-Json -Compress }'"
+          }
+        ]
+      }
+    ]
+  }
+}

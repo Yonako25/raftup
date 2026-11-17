@@ -68,6 +68,13 @@ cargo run -p launcher-ui   # lance le launcher
 
 Les règles communes, les vérifications et le découpage d'une étape sont dans `docs/regles-agents.md` : un prompt d'agent y renvoie au lieu de les recopier. L'état à jour du projet est dans `docs/etat-du-projet.md`.
 
+## Suivi entre les sessions
+
+- **Au démarrage** : lire `docs/etat-du-projet.md` et les **5 dernières entrées** de `docs/journal.md` (pas les anciennes, pas les transcripts d'autres sessions). Respecter la ligne « Ne pas toucher » des entrées et la section « En cours ».
+- **À la fin d'une tâche ou d'une étape** : lancer la compétence `/cloture` (`.claude/skills/cloture/`) : entrée de 5 lignes dans le journal, état du projet mis à jour si besoin, proposition de commit.
+- Une tâche = une session courte : après une étape commitée, repartir d'une session neuve plutôt que de prolonger celle-ci.
+- Un hook de fin de tour (`.claude/settings.json`) rappelle `/cloture` quand le dernier commit ne touche pas le journal.
+
 ## Design de l'interface
 
 Voir `docs/SPEC.md` § « Identité visuelle » : palette acier + bleu électrique, angles de 2 px maximum, fonds d'ambiance dégradés avec panneaux semi-transparents, police Chakra Petch pour les titres et Inter pour l'interface.
