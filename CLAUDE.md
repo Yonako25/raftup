@@ -64,6 +64,10 @@ cargo run -p launcher-ui   # lance le launcher
 - Avant une décision d'architecture qui n'est pas dans `docs/SPEC.md`, propose-la et attends ma validation ; une fois validée, consigne-la dans `docs/adr/`.
 - Ne lance pas de commande qui supprime des fichiers en dehors de `target/` sans me demander.
 
+## Travail avec des agents
+
+Les règles communes, les vérifications et le découpage d'une étape sont dans `docs/regles-agents.md` : un prompt d'agent y renvoie au lieu de les recopier. L'état à jour du projet est dans `docs/etat-du-projet.md`.
+
 ## Design de l'interface
 
 Voir `docs/SPEC.md` § « Identité visuelle » : palette acier + bleu électrique, angles de 2 px maximum, fonds d'ambiance dégradés avec panneaux semi-transparents, police Chakra Petch pour les titres et Inter pour l'interface.

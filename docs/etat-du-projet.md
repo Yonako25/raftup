@@ -3,19 +3,27 @@
 > [!IMPORTANT]
 > - **J1 : étapes 1 à 8 faites** sur 9 : protocole complet, limites, tests différentiels, wss
 > - **J2 presque fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise. Restent les captures différentielles
-> - **J3 commencé** : le launcher egui héberge une partie (rendu jamais contrôlé à l'œil)
-> - **202 tests** passent, dont un arrêt brutal du vrai binaire sans perte
+> - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
+> - **J3 côté interface** : hébergement et habillage faits, écran Bibliothèque en cours (autre session) ; rendu jamais contrôlé à l'œil
+> - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 22 scénarios fixes et 150 au hasard, mesuré **avant J2**. Les scénarios `COMMANDES` et `INDICES` ne sont pas encore capturés
 
-Mis à jour le **16 novembre 2026**.
+Mis à jour le **17 novembre 2026**.
+
+Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **Captures** des scénarios `COMMANDES` et `INDICES` sur le serveur officiel (il faut un Python avec les dépendances d'Archipelago)
+- [ ] **Interface de génération** : écran « Créer une partie » (YAML, consentement de téléchargement d'environ 72 Mo, progression, annulation, avertissement « un apworld est du code arbitraire ») ; contrat dans `docs/contrat-ui-generation.md`
+- [ ] **Règle de conservation de `generations/`** : aucun nettoyage après une partie réussie (la sauvegarde `.raftup` y vit) ; à décider
+- [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
+- [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
+- [ ] **Rejoindre par lien d'invitation**, salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
+- [ ] **Captures** des scénarios `COMMANDES` et `INDICES` sur le serveur officiel : un Python avec les dépendances d'Archipelago existe maintenant (runtime installé par `setup_generator`)
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
-- [ ] Demander à l'auteur de Slimipelago l'autorisation d'installation automatique
-- [ ] Relire `connect.rs`, `messages.rs`, `monitor.rs` et le launcher (pas couverts par la relecture de J2)
+- [ ] Relire le code de `launcher-ui` (le serveur, `launcher-core` et `py-bridge` ont été relus)
+- [ ] Test sur une VM Windows propre (critère de fin de J3)
 
 ## Crates
 
@@ -25,9 +33,9 @@ Mis à jour le **16 novembre 2026**.
 | `client-core` | Client Archipelago (ws/wss) | **Complet** pour J0 |
 | `multidata` | Lecture sûre du `.archipelago`, modèle de partie, format `.raftup` | **Complet** pour J2 |
 | `server` | Serveur WebSocket + binaire `raftup-server` | **Complet** pour J2 |
-| `launcher-core` | Héberger une partie, résumé de seed, journal | Commencé (J3) |
+| `launcher-core` | Héberger, profils et installation, détection, lancement, runtime Python, `generate`, `generate_and_host` | **Logique complète** pour J3 (reste le catalogue réel) |
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
-| `py-bridge` | Générateur officiel en Python | Pas commencé |
+| `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
 
 ## Ce que fait chaque crate
 
@@ -96,6 +104,9 @@ Mis à jour le **16 novembre 2026**.
 - **0012** : indices (hints) comme le serveur officiel, tirage déterministe
 - **0013** : commandes `!` du chat
 - **0014** : sauvegarde `.raftup` en JSON lignes
+- **0015** : profils d'installation, installation, lockfile et lancement
+- **0016** : `py-bridge`, pont JSON-RPC vers le worker Python
+- **0017** : étape `generate` (Python embarqué, générateur officiel épinglé)
 
 ## Reporté à J3
 
