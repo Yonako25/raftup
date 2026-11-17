@@ -4,7 +4,7 @@
 > - **J1 : étapes 1 à 8 faites** sur 9 : protocole complet, limites, tests différentiels, wss
 > - **J2 fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise, captures différentielles comprises
 > - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
-> - **J3 côté interface** : hébergement et habillage faits, écran Bibliothèque en cours (autre session) ; rendu jamais contrôlé à l'œil
+> - **J3 côté interface** : hébergement, habillage et écran Bibliothèque faits ; Bibliothèque regardée à l'œil (vide et avec un profil de démo), le reste jamais contrôlé
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
@@ -83,6 +83,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - egui / eframe (wgpu), binaire `raftup`
 - Écrans « Héberger une partie », « Partie en cours » et « Bientôt », d'après la maquette
 - Polices Chakra Petch et Inter intégrées (OFL)
+- Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
 - Sauvegarde la partie hébergée dans un `.raftup` à côté de la seed, et la reprend au prochain hébergement (`HostOptions::disable_save` pour s'en passer, pas encore dans l'interface)
 - Fermer la fenêtre arrête la partie proprement (sauvegarde compactée), 5 s au plus

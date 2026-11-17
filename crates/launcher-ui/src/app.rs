@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{matches, running, setup, soon};
+use crate::screens::{library, matches, running, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -12,6 +12,8 @@ use crate::worker::{Command, Worker};
 pub enum Page {
     /// « En cours » : la liste des parties lancées.
     InProgress,
+    /// « Bibliothèque » : les jeux du catalogue, leurs mods, le bouton « Lancer ».
+    Library,
     /// La partie hébergée par ce PC, ou le formulaire d'hébergement s'il n'y en a pas.
     Hosted,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
@@ -24,20 +26,62 @@ pub struct App {
     worker: Worker,
     setup: setup::SetupForm,
     running: running::RunningState,
+    library: library::LibraryState,
     /// Erreur à montrer en rouge en haut de l'écran.
     error: Option<String>,
 }
 
 impl App {
     pub fn new(worker: Worker) -> App {
+        dev_host(&worker);
         App {
-            page: Page::InProgress,
+            page: start_page(),
             worker,
             setup: setup::SetupForm::default(),
             running: running::RunningState::default(),
+            library: library::LibraryState::new(),
             error: None,
         }
     }
+}
+
+/// Page d'ouverture. En debug, `RAFTUP_DEV_PAGE` choisit l'écran affiché au démarrage
+/// (captures d'écran pour les comparaisons avec la maquette) : `bibliotheque`,
+/// `partie`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
+fn start_page() -> Page {
+    // `cfg!(debug_assertions)` vaut faux en `--release` : le binaire livré ignore la variable.
+    if !cfg!(debug_assertions) {
+        return Page::InProgress;
+    }
+    match std::env::var("RAFTUP_DEV_PAGE").ok().as_deref() {
+        Some("bibliotheque") => Page::Library,
+        Some("partie") => Page::Hosted,
+        Some("telechargements") => Page::Soon("Téléchargements"),
+        Some("salons") => Page::Soon("Salons"),
+        Some("catalogue") => Page::Soon("Catalogue"),
+        Some("mises-a-jour") => Page::Soon("Mises à jour"),
+        Some("profil") => Page::Soon("Mon profil"),
+        _ => Page::InProgress,
+    }
+}
+
+/// En debug, `RAFTUP_DEV_SEED=<fichier .archipelago>` héberge cette seed dès l'ouverture
+/// (en `ws`, port 38299, sans sauvegarde) : sert aux captures des écrans de partie.
+fn dev_host(worker: &Worker) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let Some(seed) = std::env::var_os("RAFTUP_DEV_SEED") else {
+        return;
+    };
+    worker.send(Command::Start(launcher_core::HostOptions {
+        seed: seed.into(),
+        port: 38299,
+        password: None,
+        encryption: launcher_core::Encryption::Plain,
+        public_host: "localhost".to_string(),
+        disable_save: true,
+    }));
 }
 
 impl eframe::App for App {
@@ -81,12 +125,13 @@ impl eframe::App for App {
                     .inner_margin(Margin::symmetric(0, 18)),
             )
             .show(ui, |ui| {
-                goto = sidebar(ui, &self.page, &shared);
+                goto = sidebar(ui, &self.page, &shared, self.library.game_count());
             });
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let next = match &self.page {
                 Page::InProgress => matches::show(ui, &shared),
+                Page::Library => library::show(ui, &mut self.library, &shared),
                 Page::Hosted if hosting => running::show(
                     ui,
                     &mut self.running,
@@ -107,6 +152,7 @@ impl eframe::App for App {
         drop(shared);
         // Verrou relâché : on peut ouvrir une boîte de dialogue (elle bloque).
         setup::open_pending_dialog(&mut self.setup, &self.worker);
+        library::open_pending_dialog(&mut self.library, &ctx);
         if let Some(page) = goto {
             self.page = page;
         }
@@ -122,7 +168,12 @@ const CARD_GAP: f32 = 14.0;
 type NavLink = (&'static str, usize, Page);
 
 /// Barre latérale : logo, liens rangés par section, cartes du bas. Renvoie la page demandée.
-fn sidebar(ui: &mut Ui, current: &Page, shared: &crate::worker::Shared) -> Option<Page> {
+fn sidebar(
+    ui: &mut Ui,
+    current: &Page,
+    shared: &crate::worker::Shared,
+    games: usize,
+) -> Option<Page> {
     let mut goto = None;
     ui.set_width(SIDEBAR_WIDTH);
     ui.spacing_mut().item_spacing.y = 2.0;
@@ -141,7 +192,7 @@ fn sidebar(ui: &mut Ui, current: &Page, shared: &crate::worker::Shared) -> Optio
     });
     ui.add_space(10.0);
 
-    // Les compteurs à 0 ne s'affichent pas : seules les parties hébergées existent déjà.
+    // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
     let hosted = usize::from(shared.status.is_some());
     let in_progress = matches!(current, Page::InProgress | Page::Hosted);
     let sections: [(&str, Vec<NavLink>); 3] = [
@@ -149,7 +200,7 @@ fn sidebar(ui: &mut Ui, current: &Page, shared: &crate::worker::Shared) -> Optio
             "JEUX",
             vec![
                 ("Accueil", 0, Page::Soon("Accueil")),
-                ("Bibliothèque", 0, Page::Soon("Bibliothèque")),
+                ("Bibliothèque", games, Page::Library),
                 ("Téléchargements", 0, Page::Soon("Téléchargements")),
             ],
         ),
