@@ -9,6 +9,7 @@ mod app;
 mod format;
 mod screens;
 mod theme;
+mod titlebar;
 mod widgets;
 mod worker;
 
@@ -42,6 +43,8 @@ fn main() -> anyhow::Result<()> {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Raftup")
+        // Sans barre de titre Windows : `titlebar.rs` dessine la nôtre.
+        .with_decorations(false)
         .with_inner_size([1280.0, 820.0])
         .with_min_inner_size([900.0, 600.0]);
     // Une icône illisible ne doit pas empêcher de démarrer : on s'en passe.

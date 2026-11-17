@@ -153,6 +153,64 @@ pub fn choice_card<R>(
     clicked
 }
 
+/// Petit titre en capitales espacées (« FIL D'ACTIVITÉ »), comme sur la maquette.
+pub fn caps(text: &str) -> RichText {
+    RichText::new(text.to_uppercase())
+        .size(11.0)
+        .extra_letter_spacing(1.5)
+        .color(theme::TEXT_DIM)
+}
+
+/// Barre de progression fine : fond gris, partie remplie de la couleur donnée.
+pub fn bar(ui: &mut Ui, width: f32, fraction: f32, color: Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 4.0), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, theme::BORDER);
+    let mut filled = rect;
+    filled.set_width(rect.width() * fraction.clamp(0.0, 1.0));
+    painter.rect_filled(filled, 0.0, color);
+}
+
+/// Onglets soulignés. `tabs` donne le texte et le compteur de chaque onglet ;
+/// `current` est l'indice de l'onglet ouvert, modifié au clic.
+pub fn tabs(ui: &mut Ui, tabs: &[(&str, Option<usize>)], current: &mut usize) {
+    let row = ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        for (index, (label, count)) in tabs.iter().enumerate() {
+            let active = index == *current;
+            let mut text = label.to_string();
+            if let Some(n) = count {
+                text.push_str(&format!("  {n}"));
+            }
+            let color = if active { theme::TEXT } else { theme::TEXT_DIM };
+            let response = ui.add(
+                egui::Button::new(RichText::new(text).size(15.0).color(color))
+                    .fill(Color32::TRANSPARENT)
+                    .stroke(Stroke::NONE)
+                    .min_size(egui::vec2(0.0, 38.0)),
+            );
+            if active {
+                // Le soulignement bleu de l'onglet ouvert.
+                let rect = response.rect;
+                let line = egui::Rect::from_min_max(
+                    egui::pos2(rect.left(), rect.bottom() - 2.0),
+                    rect.right_bottom(),
+                );
+                ui.painter().rect_filled(line, 0.0, theme::ACCENT);
+            }
+            if response.clicked() {
+                *current = index;
+            }
+        }
+    });
+    // Trait fin sous toute la rangée d'onglets.
+    ui.painter().hline(
+        ui.max_rect().x_range(),
+        row.response.rect.bottom(),
+        Stroke::new(1.0, theme::BORDER),
+    );
+}
+
 /// Texte en police monospace de la taille voulue.
 pub fn mono(text: impl Into<String>, size: f32) -> RichText {
     RichText::new(text.into()).font(FontId::monospace(size))

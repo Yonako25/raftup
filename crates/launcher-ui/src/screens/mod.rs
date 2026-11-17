@@ -1,6 +1,7 @@
 //! Les écrans du launcher. Chaque écran dessine dans un `Ui` et renvoie,
 //! s'il y en a une, la page vers laquelle l'utilisateur veut aller.
 
+pub mod matches;
 pub mod running;
 pub mod setup;
 pub mod soon;

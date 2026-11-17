@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{running, setup, soon};
+use crate::screens::{matches, running, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -10,11 +10,12 @@ use crate::worker::{Command, Worker};
 /// L'écran affiché.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Page {
-    Games,
-    /// « Parties » : l'écran d'hébergement, ou la partie en cours si le serveur tourne.
-    Matches,
-    Catalog,
-    /// Écran « Bientôt » ouvert par un bouton (nom de la fonction à venir).
+    /// « En cours » : la liste des parties lancées.
+    InProgress,
+    /// La partie hébergée par ce PC, ou le formulaire d'hébergement s'il n'y en a pas.
+    Hosted,
+    /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
+    /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
     Soon(&'static str),
 }
 
@@ -30,7 +31,7 @@ pub struct App {
 impl App {
     pub fn new(worker: Worker) -> App {
         App {
-            page: Page::Matches,
+            page: Page::InProgress,
             worker,
             setup: setup::SetupForm::default(),
             running: running::RunningState::default(),
@@ -65,6 +66,12 @@ impl eframe::App for App {
         let hosting = shared.status.is_some();
 
         let mut goto: Option<Page> = None;
+        // La barre de titre est déclarée avant la barre latérale : elle prend toute la largeur.
+        egui::Panel::top("titlebar")
+            .exact_size(crate::titlebar::HEIGHT)
+            .resizable(false)
+            .frame(Frame::new().fill(theme::sidebar_fill()))
+            .show(ui, crate::titlebar::show);
         egui::Panel::left("sidebar")
             .exact_size(220.0)
             .resizable(false)
@@ -79,18 +86,17 @@ impl eframe::App for App {
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let next = match &self.page {
-                Page::Matches if hosting => running::show(
+                Page::InProgress => matches::show(ui, &shared),
+                Page::Hosted if hosting => running::show(
                     ui,
                     &mut self.running,
                     &mut self.error,
                     &self.worker,
                     &shared,
                 ),
-                Page::Matches => {
+                Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)
                 }
-                Page::Games => soon::show(ui, "Jeux"),
-                Page::Catalog => soon::show(ui, "Catalogue"),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
@@ -107,17 +113,25 @@ impl eframe::App for App {
     }
 }
 
-/// Barre latérale : logo, liens, état du serveur. Renvoie la page demandée.
+/// Largeur de la barre latérale.
+const SIDEBAR_WIDTH: f32 = 220.0;
+/// Marge gauche des cartes du bas de la barre.
+const CARD_GAP: f32 = 14.0;
+
+/// Un lien de la barre latérale : texte, compteur, page ouverte au clic.
+type NavLink = (&'static str, usize, Page);
+
+/// Barre latérale : logo, liens rangés par section, cartes du bas. Renvoie la page demandée.
 fn sidebar(ui: &mut Ui, current: &Page, shared: &crate::worker::Shared) -> Option<Page> {
     let mut goto = None;
-    ui.set_width(220.0);
-    ui.spacing_mut().item_spacing.y = 4.0;
+    ui.set_width(SIDEBAR_WIDTH);
+    ui.spacing_mut().item_spacing.y = 2.0;
 
     // Logo + nom.
     ui.horizontal(|ui| {
         ui.add_space(18.0);
-        logo(ui);
-        ui.add_space(4.0);
+        logo(ui, 34.0);
+        ui.add_space(2.0);
         ui.label(
             RichText::new("RAFTUP")
                 .font(egui::FontId::new(22.0, theme::title_bold_family()))
@@ -125,69 +139,211 @@ fn sidebar(ui: &mut Ui, current: &Page, shared: &crate::worker::Shared) -> Optio
                 .color(theme::TEXT),
         );
     });
-    ui.add_space(18.0);
+    ui.add_space(10.0);
 
-    let matches = usize::from(shared.status.is_some());
-    let links = [
-        ("Jeux", 0, Page::Games),
-        ("Parties", matches, Page::Matches),
-        ("Catalogue", 5, Page::Catalog),
+    // Les compteurs à 0 ne s'affichent pas : seules les parties hébergées existent déjà.
+    let hosted = usize::from(shared.status.is_some());
+    let in_progress = matches!(current, Page::InProgress | Page::Hosted);
+    let sections: [(&str, Vec<NavLink>); 3] = [
+        (
+            "JEUX",
+            vec![
+                ("Accueil", 0, Page::Soon("Accueil")),
+                ("Bibliothèque", 0, Page::Soon("Bibliothèque")),
+                ("Téléchargements", 0, Page::Soon("Téléchargements")),
+            ],
+        ),
+        (
+            "PARTIES",
+            vec![
+                ("En cours", hosted, Page::InProgress),
+                ("Salons", 0, Page::Soon("Salons")),
+                ("Invitations", 0, Page::Soon("Invitations")),
+            ],
+        ),
+        (
+            "CATALOGUE",
+            vec![
+                ("Parcourir", 0, Page::Soon("Catalogue")),
+                ("Mises à jour", 0, Page::Soon("Mises à jour")),
+            ],
+        ),
     ];
-    for (label, count, page) in links {
-        if nav_link(ui, label, count, *current == page) {
-            goto = Some(page);
+    for (heading, links) in sections {
+        section_heading(ui, heading);
+        for (label, count, page) in links {
+            // « En cours » reste actif quand on ouvre la partie hébergée.
+            let active = *current == page || (page == Page::InProgress && in_progress);
+            if nav_link(ui, label, count, active) {
+                goto = Some(page);
+            }
         }
     }
 
-    // Le bas de la barre : carte du serveur et mention de compatibilité.
-    ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.add_space(18.0);
-            ui.label(widgets::dim("Compatible avec Archipelago 0.6.8").size(12.0));
-        });
-        ui.add_space(8.0);
-        if let Some(status) = &shared.status {
-            ui.horizontal(|ui| {
-                ui.add_space(14.0);
-                Frame::new()
-                    .fill(theme::FIELD)
-                    .stroke(Stroke::new(1.0, theme::BORDER))
-                    .corner_radius(CornerRadius::same(theme::RADIUS))
-                    .inner_margin(Margin::same(10))
-                    .show(ui, |ui| {
-                        ui.set_width(170.0);
-                        ui.label(RichText::new("● Serveur en ligne").color(theme::GREEN));
-                        let connected = status
-                            .server
-                            .slots
-                            .iter()
-                            .filter(|s| !s.is_group && s.connections > 0)
-                            .count();
-                        let name: String = status.seed.seed_name.chars().take(10).collect();
-                        let dots = if status.seed.seed_name.chars().count() > 10 {
-                            "…"
-                        } else {
-                            ""
-                        };
-                        let plural = if connected > 1 { "s" } else { "" };
-                        ui.label(
-                            widgets::dim(format!(
-                                "seed {name}{dots} · {connected} joueur{plural} connecté{plural}"
-                            ))
-                            .size(12.0),
-                        );
-                    });
-            });
-        }
+    // Le bas de la barre : amis, profil, serveur, mention de compatibilité.
+    // Pour le coller en bas, on saute l'espace libre. Sa hauteur n'est connue qu'après
+    // l'avoir dessiné : on la garde dans la mémoire d'egui pour l'image suivante.
+    let memory_id = ui.scope_id().with("sidebar_bottom");
+    let bottom_height: f32 = ui
+        .ctx()
+        .data(|data| data.get_temp(memory_id))
+        .unwrap_or(0.0);
+    let free = ui.available_height() - bottom_height;
+    if free > 0.0 {
+        ui.add_space(free);
+    }
+    let top = ui.cursor().top();
+    ui.spacing_mut().item_spacing.y = 10.0;
+    if side_card(ui, friends_card) {
+        goto = Some(Page::Soon("Amis"));
+    }
+    if side_card(ui, profile_card) {
+        goto = Some(Page::Soon("Mon profil"));
+    }
+    if side_card(ui, |ui| server_card(ui, shared)) {
+        goto = Some(Page::Hosted);
+    }
+    ui.horizontal(|ui| {
+        ui.add_space(18.0);
+        ui.label(widgets::dim("Compatible avec Archipelago 0.6.8").size(11.0));
     });
+    let height = ui.cursor().top() - top;
+    if (height - bottom_height).abs() > 0.5 {
+        ui.ctx()
+            .data_mut(|data| data.insert_temp(memory_id, height));
+        // La hauteur a changé (première image, carte du serveur qui grandit) : redessiner.
+        ui.ctx().request_repaint();
+    }
     goto
 }
 
+/// Titre de section en petites capitales espacées (« JEUX », « PARTIES »…).
+fn section_heading(ui: &mut Ui, text: &str) {
+    ui.add_space(14.0);
+    ui.horizontal(|ui| {
+        ui.add_space(18.0);
+        ui.label(
+            RichText::new(text)
+                .size(11.0)
+                .extra_letter_spacing(1.5)
+                .color(theme::TEXT_DIM),
+        );
+    });
+    ui.add_space(2.0);
+}
+
+/// Une carte du bas de la barre latérale, cliquable en entier. Renvoie vrai au clic.
+fn side_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> bool {
+    let mut clicked = false;
+    ui.horizontal(|ui| {
+        ui.add_space(CARD_GAP);
+        let response = Frame::new()
+            .fill(theme::FIELD)
+            .stroke(Stroke::new(1.0, theme::BORDER))
+            .corner_radius(CornerRadius::same(theme::RADIUS))
+            .inner_margin(Margin::same(12))
+            .show(ui, |ui| {
+                // Largeur intérieure : la barre, moins les deux marges et le cadre.
+                ui.set_width(SIDEBAR_WIDTH - 2.0 * CARD_GAP - 26.0);
+                // Le cadre est dans une ligne (`horizontal`) : sans `vertical`, son
+                // contenu se mettrait en ligne lui aussi.
+                ui.vertical(add_contents);
+            })
+            .response;
+        // `interact` rend toute la surface de la carte cliquable, pas seulement son texte.
+        let response = response.interact(Sense::click());
+        if response.hovered() {
+            ui.painter().rect_stroke(
+                response.rect,
+                CornerRadius::same(theme::RADIUS),
+                Stroke::new(1.0, theme::ACCENT),
+                egui::StrokeKind::Inside,
+            );
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        clicked = response.clicked();
+    });
+    clicked
+}
+
+/// Carte « Amis » : les comptes et la présence arrivent avec le hub, après le MVP.
+fn friends_card(ui: &mut Ui) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Amis").strong().color(theme::TEXT));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(widgets::dim("bientôt").size(12.0));
+        });
+    });
+}
+
+/// Carte du profil : pas encore de compte, on montre un joueur local.
+fn profile_card(ui: &mut Ui) {
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), Sense::hover());
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(theme::RADIUS), theme::ITEM);
+        ui.painter().text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            "?",
+            theme::title_font(16.0),
+            theme::FIELD,
+        );
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            ui.label(RichText::new("Joueur").strong().color(theme::TEXT));
+            ui.label(widgets::dim("Mon profil").size(12.0));
+        });
+    });
+}
+
+/// Carte « Serveur intégré » : ce que le serveur du launcher héberge.
+fn server_card(ui: &mut Ui, shared: &crate::worker::Shared) {
+    ui.spacing_mut().item_spacing.y = 4.0;
+    ui.horizontal(|ui| {
+        logo(ui, 16.0);
+        ui.label(
+            RichText::new("SERVEUR INTÉGRÉ")
+                .size(11.0)
+                .extra_letter_spacing(1.5)
+                .color(theme::TEXT_DIM),
+        );
+    });
+    match &shared.status {
+        Some(status) => {
+            let name: String = status.seed.seed_name.chars().take(8).collect();
+            let dots = if status.seed.seed_name.chars().count() > 8 {
+                "…"
+            } else {
+                ""
+            };
+            ui.label(RichText::new("● En ligne").color(theme::GREEN));
+            ui.label(widgets::dim(format!("seed {name}{dots}")).size(12.0));
+            let connected = status
+                .server
+                .slots
+                .iter()
+                .filter(|s| !s.is_group && s.connections > 0)
+                .count();
+            let plural = if connected > 1 { "s" } else { "" };
+            ui.label(
+                widgets::dim(format!("{connected} joueur{plural} connecté{plural}")).size(12.0),
+            );
+        }
+        None if shared.starting => {
+            ui.label(RichText::new("Démarrage…").color(theme::AMBER));
+        }
+        None => {
+            ui.label(widgets::dim("Arrêté · aucune partie hébergée"));
+        }
+    }
+}
+
 /// Un lien de navigation : le lien actif a un fond bleu sombre et un bord gauche bleu.
+/// Le compteur n'apparaît que s'il vaut plus de 0.
 fn nav_link(ui: &mut Ui, label: &str, count: usize, active: bool) -> bool {
     let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 38.0), Sense::click());
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 34.0), Sense::click());
     let painter = ui.painter();
     if active {
         painter.rect_filled(rect, 0.0, theme::ACCENT_BG);
@@ -204,26 +360,52 @@ fn nav_link(ui: &mut Ui, label: &str, count: usize, active: bool) -> bool {
         egui::FontId::proportional(15.0),
         color,
     );
-    painter.text(
-        rect.right_center() - egui::vec2(18.0, 0.0),
-        Align2::RIGHT_CENTER,
-        count.to_string(),
-        egui::FontId::proportional(13.0),
-        theme::TEXT_DIM,
-    );
+    if count > 0 {
+        painter.text(
+            rect.right_center() - egui::vec2(18.0, 0.0),
+            Align2::RIGHT_CENTER,
+            count.to_string(),
+            egui::FontId::proportional(13.0),
+            theme::TEXT_DIM,
+        );
+    }
     response.clicked()
 }
 
-/// Le logo dessiné : deux traits horizontaux, deux verticaux et un petit carré central.
-fn logo(ui: &mut Ui) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), Sense::hover());
-    let painter = ui.painter();
-    let stroke = Stroke::new(2.5, theme::ACCENT);
-    let at = |fx: f32, fy: f32| rect.min + egui::vec2(rect.width() * fx, rect.height() * fy);
-    for f in [0.33, 0.67] {
-        painter.line_segment([at(0.04, f), at(0.96, f)], stroke);
-        painter.line_segment([at(f, 0.04), at(f, 0.96)], stroke);
+/// Le logo, découpé tel quel dans la maquette (`docs/maquette`), fond transparent.
+const LOGO_PNG: &[u8] = include_bytes!("../icons/logo.png");
+
+/// Affiche le logo dans un carré de `size` points.
+///
+/// L'image n'est envoyée à la carte graphique qu'une fois : la « texture » est gardée
+/// dans la mémoire d'egui (`ctx.data`) et réutilisée à chaque image suivante.
+fn logo(ui: &mut Ui, size: f32) {
+    let ctx = ui.ctx().clone();
+    let id = egui::Id::unique("raftup_logo");
+    // `TextureHandle` est une poignée partagée : la cloner ne copie pas l'image.
+    let mut texture: Option<egui::TextureHandle> = ctx.data(|data| data.get_temp(id));
+    if texture.is_none() {
+        // Même décodeur PNG que l'icône de la fenêtre (main.rs) : pas de dépendance en plus.
+        if let Ok(icon) = eframe::icon_data::from_png_bytes(LOGO_PNG) {
+            let image = egui::ColorImage::from_rgba_unmultiplied(
+                [icon.width as usize, icon.height as usize],
+                &icon.rgba,
+            );
+            let handle = ctx.load_texture("raftup_logo", image, egui::TextureOptions::LINEAR);
+            ctx.data_mut(|data| data.insert_temp(id, handle.clone()));
+            texture = Some(handle);
+        }
     }
-    let square = egui::Rect::from_center_size(rect.center(), egui::vec2(6.0, 6.0));
-    painter.rect_filled(square, 0.0, theme::ACCENT);
+    // Le logo est presque carré (156 × 159) : on garde ses proportions, `size` est sa hauteur.
+    let size = egui::vec2(size * 156.0 / 159.0, size);
+    match texture {
+        Some(texture) => {
+            ui.add(egui::Image::new((texture.id(), size)));
+        }
+        // PNG illisible (ne devrait pas arriver, il est compilé dans le programme) :
+        // on garde juste la place.
+        None => {
+            ui.allocate_exact_size(size, Sense::hover());
+        }
+    }
 }

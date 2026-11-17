@@ -153,6 +153,27 @@ pub fn slot_status(slot: &SlotStatus) -> (&'static str, StatusKind) {
     }
 }
 
+/// Part de la progression, entre 0 et 1 ; 0 s'il n'y a aucun emplacement.
+pub fn progress(checked: usize, total: usize) -> f32 {
+    if total == 0 {
+        0.0
+    } else {
+        (checked as f32 / total as f32).min(1.0)
+    }
+}
+
+/// Présence d'un joueur : `en ligne`, `vu il y a 3 min` ou `pas encore venu`.
+pub fn presence(slot: &SlotStatus, now: f64) -> String {
+    if slot.connections > 0 {
+        "en ligne".to_string()
+    } else {
+        match slot.last_activity {
+            Some(t) => format!("vu il y a {}", short_duration(now - t)),
+            None => "pas encore venu".to_string(),
+        }
+    }
+}
+
 /// Jeu et tags d'un slot, sans le tag `AP` (inutile à montrer) : `ChecksFinder · DeathLink`.
 pub fn game_with_tags(slot: &SlotStatus) -> String {
     let mut text = slot.game.clone();
@@ -318,6 +339,24 @@ mod tests {
             status,
             last_activity: None,
         }
+    }
+
+    #[test]
+    fn progression() {
+        assert_eq!(progress(0, 0), 0.0);
+        assert_eq!(progress(5, 20), 0.25);
+        // Plus d'emplacements visités que prévu (ne devrait pas arriver) : la barre reste pleine.
+        assert_eq!(progress(30, 20), 1.0);
+    }
+
+    #[test]
+    fn presences() {
+        let mut s = slot("Alice", 20, 1);
+        assert_eq!(presence(&s, 1000.0), "en ligne");
+        s.connections = 0;
+        assert_eq!(presence(&s, 1000.0), "pas encore venu");
+        s.last_activity = Some(820.0);
+        assert_eq!(presence(&s, 1000.0), "vu il y a 3 min");
     }
 
     #[test]
