@@ -33,4 +33,36 @@ pub enum LauncherError {
     /// Aucune partie hébergée.
     #[error("aucune partie hébergée")]
     NotRunning,
+
+    // Erreurs des modules du launcher : `transparent` reprend leur message tel quel,
+    // et `#[from]` permet d'écrire `?` pour convertir l'erreur du module en LauncherError.
+    #[error(transparent)]
+    Paths(#[from] crate::paths::PathsError),
+
+    #[error(transparent)]
+    Template(#[from] crate::template::TemplateError),
+
+    #[error(transparent)]
+    Profile(#[from] crate::profile::ProfileError),
+
+    #[error(transparent)]
+    Download(#[from] crate::download::DownloadError),
+
+    #[error(transparent)]
+    Archive(#[from] crate::archive::ArchiveError),
+
+    #[error(transparent)]
+    Record(#[from] crate::record::RecordError),
+
+    #[error(transparent)]
+    Install(#[from] crate::install::InstallError),
+
+    #[error(transparent)]
+    Lock(#[from] crate::lockfile::LockError),
+
+    #[error(transparent)]
+    Config(#[from] crate::config::ConfigError),
+
+    #[error(transparent)]
+    Launch(#[from] crate::launch::LaunchError),
 }

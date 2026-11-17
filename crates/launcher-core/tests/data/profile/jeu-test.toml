@@ -1,0 +1,46 @@
+format_version = 1
+
+[game]
+id = "jeu-test"
+name = "Jeu de test"
+ap_game = "Test Game"
+status = "available"
+
+[game.detect]
+steam_appid = 433340
+expected_exe = "JeuTest.exe"
+
+[credits]
+authors = ["Quelqu'un"]
+license = "permission"
+permission_url = "https://exemple.test/autorisation"
+
+[[steps]]
+id = "melonloader"
+kind = "mod_loader"
+name = "MelonLoader"
+version = "0.7.3"
+source = { url = "https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/MelonLoader.x64.zip" }
+sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+max_bytes = 50000000
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "le-mod"
+kind = "mod"
+name = "Le mod"
+version = "1.2.0"
+source = { thunderstore = "Auteur-Le_Mod" }
+sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+install = { copy_to = "{game_dir}/Mods/LeMod.dll" }
+
+[preserve]
+paths = ["{game_dir}/UserData/LeMod.cfg"]
+
+[cleanup]
+paths = ["{game_dir}/UserData/cache.bin"]
+
+[launch]
+exe = "{game_dir}/JeuTest.exe"
+args = ["--melonloader.hideconsole"]
+connect = { method = "manual", instructions = "Entrez {address} et {slot} dans le menu." }

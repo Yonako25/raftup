@@ -19,8 +19,24 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 tracing.workspace = true
 # Couche qui garde le journal du serveur en mémoire pour l'afficher.
 tracing-subscriber = { workspace = true, features = ["registry"] }
+toml.workspace = true
+zip.workspace = true
+ureq.workspace = true
+directories.workspace = true
+keyvalues-parser.workspace = true
+client-core.workspace = true
+sha2.workspace = true
+# Lire les manifestes Epic (JSON) et fusionner les fichiers de config des mods.
+serde_json.workspace = true
+
+# Registre Windows : seulement compilé sous Windows.
+[target.'cfg(windows)'.dependencies]
+winreg.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
+# Certificat auto-signé pour le test du diagnostic TLS (diagnose.rs).
+rcgen.workspace = true
 futures-util.workspace = true
 serde_json.workspace = true
 tokio-tungstenite.workspace = true
