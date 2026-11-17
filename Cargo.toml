@@ -24,6 +24,8 @@ thiserror = "2"
 # Empreinte SHA-256 de la seed dans les sauvegardes .raftup (MIT/Apache-2.0).
 sha2 = "0.11"
 tracing = "0.1.44"
+# Job Object Windows (KILL_ON_JOB_CLOSE), API sûre, MIT OR Apache-2.0 (ADR 0016).
+win32job = "2"
 # Décompression zlib du fichier .archipelago (moteur en Rust pur par défaut).
 flate2 = "1"
 tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
@@ -52,6 +54,9 @@ toml = "1.2"
 # Extraction des zips de mods : décompression deflate seule (pas de chiffrement,
 # bzip2, zstd, lzma ni zopfli ; licence MIT).
 zip = { version = "9.6", default-features = false, features = ["deflate-flate2"] }
+# Extraction des .tar.gz (Python autonome) : lecture des entrées seulement, jamais `unpack`
+# (licence MIT OR Apache-2.0). Décompression gzip par `flate2`.
+tar = "0.4.46"
 # Client HTTP bloquant pour les téléchargements ; TLS par `ring` (pas d'aws-lc).
 ureq = { version = "3.5", default-features = false, features = ["rustls", "gzip"] }
 # Dossiers de config, données et cache propres à chaque système.

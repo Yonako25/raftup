@@ -4,12 +4,20 @@
 //! simplifié, une ligne JSON par message, sur stdin/stdout.
 
 pub mod bridge;
+pub mod cancel;
 pub mod error;
+pub mod generate;
+mod job;
 pub mod line;
 pub mod protocol;
 
 pub use bridge::{BridgeOptions, PyBridge, WorkerVersion};
+pub use cancel::CancelToken;
 pub use error::{BridgeError, RpcError};
+pub use generate::{
+    GenerateParams, GenerateResult, GeneratedPlayer, ERR_ALREADY_USED, ERR_GENERATION_FAILED,
+    ERR_IMPORT_FAILED,
+};
 pub use line::{read_bounded_bytes, read_bounded_line, LineError};
 pub use protocol::{decode_response, encode_request};
 

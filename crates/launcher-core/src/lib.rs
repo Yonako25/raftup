@@ -20,6 +20,7 @@ pub mod detect;
 pub mod diagnose;
 pub mod download;
 pub mod error;
+pub mod generation;
 pub mod hash;
 pub mod host;
 pub mod install;
@@ -41,6 +42,7 @@ pub use detect::{
 pub use diagnose::{explain, ConnectionProblem};
 pub use download::{DirFetcher, Downloader, HttpFetcher};
 pub use error::LauncherError;
+pub use generation::{GenerationError, GeneratorPins, PinnedArchive, PinnedWheel};
 pub use host::{Encryption, Host, HostOptions, HostStatus, NumberedEvent};
 pub use install::{install, status, InstallError, InstallOptions, InstallReport, InstallStatus};
 pub use launch::{launch, plan_launch, Credentials, LaunchError, LaunchPlan};

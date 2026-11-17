@@ -8,7 +8,7 @@ use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 
 use launcher_core::archive::{
-    extract_zip, plan_zip, safe_relative_path, ArchiveError, ArchiveLimits,
+    extract_tar_gz, extract_zip, plan_zip, safe_relative_path, ArchiveError, ArchiveLimits,
 };
 use launcher_core::hash::Sha256;
 use zip::write::SimpleFileOptions;
@@ -378,4 +378,220 @@ fn ecrase_un_fichier_normal_existant() {
     let zip = zip_of(tmp.path(), &[("a.txt", b"nouveau")]);
     extract(&zip, "", &root).unwrap();
     assert_eq!(fs::read(root.join("a.txt")).unwrap(), b"nouveau");
+}
+
+// ---------------------------------------------------------------------------
+// .tar.gz
+// ---------------------------------------------------------------------------
+
+/// Fabrique un .tar.gz : (nom, type, contenu, cible du lien). Le nom est écrit tel quel
+/// dans l'en-tête, sans les contrôles de `tar::Builder` (qui refuserait « ../x »).
+fn build_tar_gz(entries: &[(&str, tar::EntryType, &[u8], &str)]) -> Vec<u8> {
+    let mut builder = tar::Builder::new(Vec::new());
+    for (name, kind, data, link) in entries {
+        let mut header = tar::Header::new_gnu();
+        let old = header.as_old_mut();
+        old.name[..name.len()].copy_from_slice(name.as_bytes());
+        old.linkname[..link.len()].copy_from_slice(link.as_bytes());
+        header.set_entry_type(*kind);
+        header.set_mode(0o644);
+        header.set_size(data.len() as u64);
+        header.set_cksum();
+        builder.append(&header, *data).unwrap();
+    }
+    let tar_bytes = builder.into_inner().unwrap();
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    gz.write_all(&tar_bytes).unwrap();
+    gz.finish().unwrap()
+}
+
+fn files(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let list: Vec<_> = entries
+        .iter()
+        .map(|(n, d)| (*n, tar::EntryType::Regular, *d, ""))
+        .collect();
+    build_tar_gz(&list)
+}
+
+fn write_tgz(dir: &Path, bytes: &[u8]) -> PathBuf {
+    let path = dir.join("test.tar.gz");
+    fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn extract_tgz(file: &Path, strip: &str, root: &Path) -> Result<(), ArchiveError> {
+    extract_tar_gz(file, strip, root, &ArchiveLimits::default(), &mut |_, _| {})
+}
+
+#[test]
+fn tar_extraction_normale_avec_strip_prefix_et_hash() {
+    let tmp = tempfile::tempdir().unwrap();
+    let tgz = write_tgz(
+        tmp.path(),
+        &build_tar_gz(&[
+            ("python/", tar::EntryType::Directory, b"", ""),
+            ("python/lib/a.txt", tar::EntryType::Regular, b"AAA", ""),
+            ("python/b.txt", tar::EntryType::Regular, b"BBB", ""),
+            ("autre/c.txt", tar::EntryType::Regular, b"CCC", ""),
+        ]),
+    );
+    let root = tmp.path().join("root");
+
+    let mut seen: Vec<(PathBuf, Sha256)> = Vec::new();
+    extract_tar_gz(
+        &tgz,
+        "python",
+        &root,
+        &ArchiveLimits::default(),
+        &mut |path, hash| seen.push((path.to_path_buf(), hash)),
+    )
+    .unwrap();
+
+    assert_eq!(seen.len(), 2);
+    for (path, hash) in &seen {
+        assert_eq!(*hash, Sha256::of_bytes(&fs::read(root.join(path)).unwrap()));
+    }
+    assert_eq!(fs::read(root.join("lib").join("a.txt")).unwrap(), b"AAA");
+    assert_eq!(fs::read(root.join("b.txt")).unwrap(), b"BBB");
+    assert!(!root.join("autre").exists());
+    assert!(!root.join("python").exists());
+}
+
+#[test]
+fn tar_chemins_dangereux_refuses_sans_rien_ecrire() {
+    for bad in ["../x", "a/../../x", "/abs", "C:\\x", "CON", "fichier:flux"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let tgz = write_tgz(tmp.path(), &files(&[("ok.txt", b"ok"), (bad, b"mal")]));
+        let root = tmp.path().join("root");
+        assert!(is_unsafe(extract_tgz(&tgz, "", &root)), "{bad} non refusé");
+        assert!(!root.join("ok.txt").exists(), "{bad} : écriture partielle");
+        assert!(!tmp.path().join("x").exists());
+    }
+}
+
+#[test]
+fn tar_liens_refuses() {
+    for kind in [tar::EntryType::Symlink, tar::EntryType::Link] {
+        let tmp = tempfile::tempdir().unwrap();
+        let tgz = write_tgz(
+            tmp.path(),
+            &build_tar_gz(&[
+                ("ok.txt", tar::EntryType::Regular, b"ok", ""),
+                ("lien", kind, b"", "/etc/passwd"),
+            ]),
+        );
+        let root = tmp.path().join("root");
+        assert!(matches!(
+            extract_tgz(&tgz, "", &root),
+            Err(ArchiveError::Link(_))
+        ));
+        assert!(!root.join("lien").exists());
+        assert!(!root.join("ok.txt").exists());
+    }
+}
+
+#[test]
+fn tar_fichiers_speciaux_refuses() {
+    for kind in [
+        tar::EntryType::Fifo,
+        tar::EntryType::Char,
+        tar::EntryType::Block,
+    ] {
+        let tmp = tempfile::tempdir().unwrap();
+        let tgz = write_tgz(tmp.path(), &build_tar_gz(&[("dev", kind, b"", "")]));
+        assert!(matches!(
+            extract_tgz(&tgz, "", &tmp.path().join("root")),
+            Err(ArchiveError::SpecialFile(_))
+        ));
+    }
+}
+
+#[test]
+fn tar_bombe_refusee() {
+    let tmp = tempfile::tempdir().unwrap();
+    let big = vec![0u8; 4 * 1024 * 1024];
+    let tgz = write_tgz(tmp.path(), &files(&[("bombe.bin", &big)]));
+    let limits = ArchiveLimits {
+        max_total_bytes: 1024 * 1024,
+        ..ArchiveLimits::default()
+    };
+    let root = tmp.path().join("root");
+    assert!(matches!(
+        extract_tar_gz(&tgz, "", &root, &limits, &mut |_, _| {}),
+        Err(ArchiveError::TooLarge)
+    ));
+    assert!(!root.join("bombe.bin").exists());
+}
+
+#[test]
+fn tar_trop_d_entrees_refuse() {
+    let tmp = tempfile::tempdir().unwrap();
+    let names: Vec<String> = (0..11).map(|i| format!("f{i}.txt")).collect();
+    let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b"x"[..])).collect();
+    let tgz = write_tgz(tmp.path(), &files(&entries));
+    let limits = ArchiveLimits {
+        max_entries: 10,
+        ..ArchiveLimits::default()
+    };
+    let root = tmp.path().join("root");
+    assert!(matches!(
+        extract_tar_gz(&tgz, "", &root, &limits, &mut |_, _| {}),
+        Err(ArchiveError::TooManyEntries)
+    ));
+    assert!(!root.exists());
+}
+
+#[test]
+fn tar_doublon_insensible_a_la_casse_refuse() {
+    let tmp = tempfile::tempdir().unwrap();
+    let tgz = write_tgz(tmp.path(), &files(&[("a.txt", b"1"), ("A.TXT", b"2")]));
+    assert!(is_unsafe(extract_tgz(&tgz, "", &tmp.path().join("root"))));
+}
+
+#[test]
+fn tar_archive_tronquee_ou_corrompue() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Contenu peu compressible pour que la coupure tombe au milieu des données.
+    let noise: Vec<u8> = (0..200_000u32)
+        .map(|i| (i.wrapping_mul(2654435761) >> 13) as u8)
+        .collect();
+    let good = files(&[("a.bin", &noise)]);
+
+    let cut = write_tgz(tmp.path(), &good[..good.len() / 2]);
+    assert!(matches!(
+        extract_tgz(&cut, "", &tmp.path().join("r1")),
+        Err(ArchiveError::Tar(_))
+    ));
+    assert!(!tmp.path().join("r1").exists());
+
+    let junk = write_tgz(tmp.path(), b"ceci n'est pas un tar.gz");
+    assert!(matches!(
+        extract_tgz(&junk, "", &tmp.path().join("r2")),
+        Err(ArchiveError::Tar(_))
+    ));
+    assert!(matches!(
+        extract_tgz(
+            &tmp.path().join("absent.tar.gz"),
+            "",
+            &tmp.path().join("r3")
+        ),
+        Err(ArchiveError::Io { .. })
+    ));
+}
+
+#[test]
+fn tar_dossier_lien_deja_present_pas_suivi() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().join("root");
+    let outside = tmp.path().join("dehors");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    assert!(make_dir_link(&root.join("sub"), &outside));
+
+    let tgz = write_tgz(tmp.path(), &files(&[("sub/evil.txt", b"mal")]));
+    assert!(matches!(
+        extract_tgz(&tgz, "", &root),
+        Err(ArchiveError::Link(_))
+    ));
+    assert!(!outside.join("evil.txt").exists());
 }

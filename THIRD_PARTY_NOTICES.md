@@ -77,3 +77,32 @@ Notice : _à recopier depuis le `LICENSE` du dépôt amont au premier portage._
 - Fichiers de Raftup concernés : `crates/launcher-ui/src/theme.rs` (les polices sont intégrées au binaire par `include_bytes!`)
 
 Les polices ne sont pas modifiées ; elles ne sont pas vendues seules.
+
+---
+
+## Composants téléchargés au premier usage (non redistribués)
+
+Pour générer une seed, le launcher télécharge ces composants depuis leur source d'origine, vérifie leur sha256
+puis les installe sur le PC du joueur (ADR 0017). Raftup ne les héberge ni ne les distribue : ils ne figurent
+ni dans le dépôt ni dans le binaire. Adresses, tailles et hash : `crates/launcher-core/generator-pins.toml`.
+Les licences ci-dessous ont été lues dans les métadonnées et les fichiers de licence des archives téléchargées.
+
+| Composant | Version | Licence | Source |
+| --- | --- | --- | --- |
+| Python (python-build-standalone) | 3.12.16, build 20261110 | PSF-2.0 pour CPython ; le projet python-build-standalone est sous MPL-2.0 ; composants tiers : voir `python/LICENSE.txt` dans l'archive | https://github.com/astral-sh/python-build-standalone |
+| Archipelago | 0.6.8 (commit `54803be064fc7e80c4628777ed0b46a9390f255f`) | MIT (voir la notice de la section Archipelago ci-dessus) ; certains dossiers `worlds/*` ont leur propre licence | https://github.com/ArchipelagoMW/Archipelago |
+| colorama | 0.4.6 | BSD-3-Clause (texte : copyright Jonathan Hartley) | https://pypi.org/project/colorama/ |
+| websockets | 13.1 | BSD-3-Clause | https://pypi.org/project/websockets/ |
+| PyYAML | 6.0.3 | MIT | https://pypi.org/project/PyYAML/ |
+| jellyfish | 1.2.1 | MIT | https://pypi.org/project/jellyfish/ |
+| Jinja2 | 3.1.6 | BSD-3-Clause (texte : copyright Pallets) | https://pypi.org/project/Jinja2/ |
+| MarkupSafe | 3.0.3 | BSD-3-Clause | https://pypi.org/project/MarkupSafe/ |
+| schema | 0.7.8 | MIT | https://pypi.org/project/schema/ |
+| platformdirs | 4.10.1 | MIT | https://pypi.org/project/platformdirs/ |
+| certifi | 2026.2.25 | MPL-2.0 | https://pypi.org/project/certifi/ |
+| orjson | 3.11.7 | MPL-2.0 AND (Apache-2.0 OR MIT) | https://pypi.org/project/orjson/ |
+| typing_extensions | 4.15.0 | PSF-2.0 | https://pypi.org/project/typing-extensions/ |
+| pathspec | 1.0.4 | MPL-2.0 (texte du fichier `LICENSE` ; pas de champ de licence dans les métadonnées) | https://pypi.org/project/pathspec/ |
+| bsdiff4 | 1.2.6 | « BSD » d'après les métadonnées (copyright Ilan Schnell) | https://pypi.org/project/bsdiff4/ |
+
+Chaque wheel porte son propre fichier de licence dans son dossier `.dist-info`, qui reste installé avec elle.

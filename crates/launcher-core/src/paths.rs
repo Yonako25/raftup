@@ -72,6 +72,22 @@ impl Paths {
         self.cache_dir.join("downloads")
     }
 
+    /// Dossier des générations (un sous-dossier horodaté par génération).
+    pub fn generations_dir(&self) -> PathBuf {
+        self.data_dir.join("generations")
+    }
+
+    /// Python autonome du générateur, un dossier par version épinglée (`python.exe` dedans).
+    pub fn python_dir(&self, tag: &str) -> PathBuf {
+        self.data_dir.join("python").join(tag)
+    }
+
+    /// Générateur installé pour une version d'Archipelago : `archipelago/`, `site-packages/`
+    /// et le marqueur `runtime.json`.
+    pub fn generator_dir(&self, ap_version: &str) -> PathBuf {
+        self.data_dir.join("generator").join(ap_version)
+    }
+
     /// Apworlds pour une version d'Archipelago.
     pub fn worlds_dir(&self, ap_version: &str) -> PathBuf {
         self.data_dir.join("worlds").join(ap_version)

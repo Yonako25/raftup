@@ -13,6 +13,10 @@
 //! `noisy-stderr`, `noisy-crash`, `garbage`, `huge`, `silent`, `wrong-id`, `null`
 //! (`ping` renvoie `result: null`), `null-id-error` (`id: null` avec `error`),
 //! `bad-version` (`version` mal formée), `no-read` (ne lit plus stdin), `ignore-eof`.
+//! Modes pour l'annulation : `slow` (répond après 5 s aux appels suivant la poignée de main),
+//! `stderr-progress` (écrit « étape 1 », « étape 2 », « étape 3 » sur stderr, avec flush,
+//! puis répond), `spawn-grandchild` (lance un petit-fils qui hérite de stderr et dort 60 s,
+//! puis se comporte comme `slow`), `sleep-with-stderr` (le petit-fils lui-même).
 //! Binaire de test : volontairement simple, il travaille avec `serde_json::Value`.
 
 use std::io::{self, BufRead, Write};
@@ -28,6 +32,13 @@ fn main() -> io::Result<()> {
 
     if mode == "crash-on-start" {
         std::process::exit(4);
+    }
+    if mode == "sleep-with-stderr" {
+        // Petit-fils : il garde stderr ouvert (hérité) pendant 60 s. S'il survit à
+        // l'annulation, la fin de stderr n'arrive jamais côté pont.
+        eprintln!("petit-fils vivant");
+        std::thread::sleep(Duration::from_secs(60));
+        return Ok(());
     }
 
     let stdin = io::stdin();
@@ -46,6 +57,28 @@ fn main() -> io::Result<()> {
         let first = count == 1;
         // Le mode « défaillant » est actif selon le réglage de poignée de main.
         let active = !after_handshake || !first;
+
+        if first && mode == "spawn-grandchild" {
+            // On se relance nous-même avec un autre mode ; stdin/stdout coupés, stderr hérité.
+            // Le handle du petit-fils est volontairement perdu (on ne l'attend pas).
+            let _child = std::process::Command::new(std::env::current_exe()?)
+                .env("RAFTUP_FAKE_WORKER", "sleep-with-stderr")
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::inherit())
+                .spawn()?;
+        }
+        if active && (mode == "slow" || mode == "spawn-grandchild") {
+            std::thread::sleep(Duration::from_secs(5));
+        }
+        if active && mode == "stderr-progress" {
+            let err = io::stderr();
+            let mut err = err.lock();
+            for n in 1..=3 {
+                writeln!(err, "étape {n}")?;
+                err.flush()?;
+            }
+        }
 
         if first && (mode == "noisy-stderr" || mode == "noisy-crash") {
             // 2 Mio de bruit sur stderr, par blocs de 1 Kio.

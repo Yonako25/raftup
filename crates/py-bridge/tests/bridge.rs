@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use py_bridge::{BridgeError, BridgeOptions, PyBridge};
+use py_bridge::{BridgeError, BridgeOptions, CancelToken, PyBridge};
 use serde_json::{json, Value};
 
 fn options(mode: &str) -> BridgeOptions {
@@ -274,4 +274,95 @@ fn ignore_eof_shutdown_et_drop_rapides() {
     let b = start("ignore-eof");
     drop(b);
     assert!(t.elapsed() < Duration::from_secs(2));
+}
+
+/// Lance `cancel()` depuis un autre thread après `delay`.
+fn cancel_later(token: &CancelToken, delay: Duration) -> std::thread::JoinHandle<()> {
+    let token = token.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        token.cancel();
+    })
+}
+
+#[test]
+fn annulation_rapide_puis_pont_ferme() {
+    let mut b = start("slow");
+    let token = CancelToken::default();
+    let handle = cancel_later(&token, Duration::from_millis(300));
+    let t0 = Instant::now();
+    let r = b.call_cancellable("ping", Value::Null, Duration::from_secs(30), &token);
+    let elapsed = t0.elapsed();
+    handle.join().unwrap();
+    assert!(matches!(r, Err(BridgeError::Cancelled)), "{r:?}");
+    assert!(elapsed < Duration::from_secs(1), "trop lent : {elapsed:?}");
+    assert!(matches!(b.ping(), Err(BridgeError::Closed)));
+    assert!(!b.is_alive());
+}
+
+#[test]
+fn call_cancellable_timeout_comme_call_with_timeout() {
+    let mut b = start("slow");
+    let token = CancelToken::default();
+    let r = b.call_cancellable("ping", Value::Null, Duration::from_millis(250), &token);
+    assert!(matches!(r, Err(BridgeError::Timeout { .. })), "{r:?}");
+}
+
+#[test]
+fn stderr_lines_recoit_les_lignes_dans_l_ordre() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut o = options("stderr-progress");
+    o.stderr_lines = Some(tx);
+    let mut b = PyBridge::start(o).unwrap();
+    b.ping().unwrap();
+    let mut got = Vec::new();
+    for _ in 0..3 {
+        got.push(rx.recv_timeout(Duration::from_secs(2)).unwrap());
+    }
+    assert_eq!(got, ["étape 1", "étape 2", "étape 3"]);
+}
+
+#[test]
+fn stderr_lines_recepteur_disparu_ne_bloque_pas() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    drop(rx);
+    let mut o = options("stderr-progress");
+    o.stderr_lines = Some(tx);
+    let mut b = PyBridge::start(o).unwrap();
+    b.ping().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn annulation_tue_le_petit_fils() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut o = options("spawn-grandchild");
+    o.stderr_lines = Some(tx);
+    let mut b = PyBridge::start(o).unwrap();
+    let token = CancelToken::default();
+    let handle = cancel_later(&token, Duration::from_millis(500));
+    let r = b.call_cancellable("ping", Value::Null, Duration::from_secs(30), &token);
+    handle.join().unwrap();
+    assert!(matches!(r, Err(BridgeError::Cancelled)), "{r:?}");
+    // Le canal se ferme quand stderr atteint EOF, donc quand plus aucun process (worker
+    // comme petit-fils) ne tient le pipe ouvert.
+    let t0 = Instant::now();
+    loop {
+        match rx.recv_timeout(Duration::from_secs(2)) {
+            Ok(_) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                panic!("le petit-fils vit encore (pas d'EOF sur stderr)")
+            }
+        }
+        assert!(t0.elapsed() < Duration::from_secs(2), "EOF trop tardif");
+    }
+}
+
+#[test]
+fn drop_ne_bloque_pas() {
+    let b = start("spawn-grandchild");
+    let t0 = Instant::now();
+    drop(b);
+    assert!(t0.elapsed() < Duration::from_secs(2));
 }

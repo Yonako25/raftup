@@ -21,10 +21,14 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry"] }
 toml.workspace = true
 zip.workspace = true
+tar.workspace = true
+flate2.workspace = true
 ureq.workspace = true
 directories.workspace = true
 keyvalues-parser.workspace = true
 client-core.workspace = true
+# Pont vers le générateur Python officiel (ADR 0016, 0017).
+py-bridge.workspace = true
 sha2.workspace = true
 # Lire les manifestes Epic (JSON) et fusionner les fichiers de config des mods.
 serde_json.workspace = true

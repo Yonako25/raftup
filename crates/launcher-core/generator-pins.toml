@@ -1,0 +1,157 @@
+# Épinglage du générateur Archipelago (ADR 0017).
+#
+# Tout ce que le launcher télécharge au premier usage pour générer une seed est listé ici,
+# avec son adresse HTTPS, sa taille maximale et son sha256. Les valeurs ont été relevées
+# sur les fichiers réellement téléchargés (jamais écrites de mémoire) et les hash des wheels
+# ont été comparés à ceux publiés par PyPI, celui de Python à `SHA256SUMS` de la release.
+# Pour monter de version : changer ce fichier seul, puis lancer le test réel `#[ignore]`.
+# Rien de ce qui est téléchargé ici n'est redistribué par Raftup.
+
+format_version = 1
+
+# Python autonome (python-build-standalone, release du 10 novembre 2026), Windows x86_64.
+[python]
+version = "3.12.16+20261110"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.12.16%2B20261110-x86_64-pc-windows-msvc-install_only.tar.gz"
+sha256 = "e23fe5b16926de1d81661b1a97352e89fb167549c55a6825796ccd0f32ec7f1b"
+# Taille réelle relevée sur le fichier téléchargé ; plafond : 96 Mio.
+size = 47438699
+max_bytes = 100663296
+# Dossier racine de l'archive (3461 entrées relevées).
+strip_prefix = "python"
+max_entries = 6000
+
+# Code d'Archipelago 0.6.8, archive GitHub du commit épinglé.
+[archipelago]
+version = "0.6.8"
+url = "https://github.com/ArchipelagoMW/Archipelago/archive/54803be064fc7e80c4628777ed0b46a9390f255f.zip"
+sha256 = "3b9c408cd43b09ab27691d5a0b8d18686cd113ebdd06fdd9606c229010648ef8"
+# Taille réelle relevée sur le fichier téléchargé ; plafond : 64 Mio.
+size = 23193480
+max_bytes = 67108864
+strip_prefix = "Archipelago-54803be064fc7e80c4628777ed0b46a9390f255f"
+# 4050 entrées relevées.
+max_entries = 8000
+
+# Dépendances du générateur (requirements.txt du commit épinglé, sans kivy, cython, cymem,
+# pyshortcuts, kivymd ni Pymem, qui ne servent qu'aux clients graphiques).
+# Plafond de chaque wheel : 5 Mio (la plus grosse fait 213 Ko).
+
+[[wheels]]
+name = "colorama"
+version = "0.4.6"
+filename = "colorama-0.4.6-py2.py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"
+sha256 = "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"
+size = 25335
+max_bytes = 5242880
+
+[[wheels]]
+name = "websockets"
+version = "13.1"
+filename = "websockets-13.1-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/46/93/e19160db48b5581feac8468330aa11b7292880a94a37d7030478596cc14e/websockets-13.1-cp312-cp312-win_amd64.whl"
+sha256 = "38377f8b0cdeee97c552d20cf1865695fcd56aba155ad1b4ca8779a5b6ef4ac3"
+size = 159145
+max_bytes = 5242880
+
+[[wheels]]
+name = "PyYAML"
+version = "6.0.3"
+filename = "pyyaml-6.0.3-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/86/bf/899e81e4cce32febab4fb42bb97dcdf66bc135272882d1987881a4b519e9/pyyaml-6.0.3-cp312-cp312-win_amd64.whl"
+sha256 = "5fcd34e47f6e0b794d17de1b4ff496c00986e1c83f7ab2fb8fcfe9616ff7477b"
+size = 154003
+max_bytes = 5242880
+
+[[wheels]]
+name = "jellyfish"
+version = "1.2.1"
+filename = "jellyfish-1.2.1-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/0f/ff/ae991a96e8a370f41bbd91dbabdc94b404a164b0ab268388f43c2ab10d45/jellyfish-1.2.1-cp312-cp312-win_amd64.whl"
+sha256 = "15318c13070fe6d9caeb7e10f9cdf89ff47c9d20f05a9a2c0d3b5cb8062a7033"
+size = 213630
+max_bytes = 5242880
+
+[[wheels]]
+name = "Jinja2"
+version = "3.1.6"
+filename = "jinja2-3.1.6-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl"
+sha256 = "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"
+size = 134899
+max_bytes = 5242880
+
+# Dépendance de Jinja2 (absente de requirements.txt ; version de WebHostLib/requirements.txt).
+[[wheels]]
+name = "MarkupSafe"
+version = "3.0.3"
+filename = "markupsafe-3.0.3-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/aa/5b/bec5aa9bbbb2c946ca2733ef9c4ca91c91b6a24580193e891b5f7dbe8e1e/markupsafe-3.0.3-cp312-cp312-win_amd64.whl"
+sha256 = "26a5784ded40c9e318cfc2bdb30fe164bdb8665ded9cd64d500a34fb42067b1c"
+size = 15105
+max_bytes = 5242880
+
+# schema 0.7.8 ne demande contextlib2 que pour Python < 3.3 : rien à ajouter.
+[[wheels]]
+name = "schema"
+version = "0.7.8"
+filename = "schema-0.7.8-py2.py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/c9/75/aad85817266ac5285c93391711d231ca63e9ae7d42cd3ca37549e24ebe52/schema-0.7.8-py2.py3-none-any.whl"
+sha256 = "00bd977fadc7d9521bf289850cd8a8aa5f4948f575476b8daaa5c1b57af2dce1"
+size = 19108
+max_bytes = 5242880
+
+[[wheels]]
+name = "platformdirs"
+version = "4.10.1"
+filename = "platformdirs-4.10.1-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/ec/73/6fd0bb9ce84138c3857f12e9de63bc901852975a092d545f18087a204aa2/platformdirs-4.10.1-py3-none-any.whl"
+sha256 = "0e4eff26be2d75293977f7cddc153fd9b8eaa7fb0c7b64ffe4076cb443117443"
+size = 22906
+max_bytes = 5242880
+
+[[wheels]]
+name = "certifi"
+version = "2026.2.25"
+filename = "certifi-2026.2.25-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/9a/3c/c17fb3ca2d9c3acff52e30b309f538586f9f5b9c9cf454f3845fc9af4881/certifi-2026.2.25-py3-none-any.whl"
+sha256 = "027692e4402ad994f1c42e52a4997a9763c646b73e4096e4d5d6db8af1d6f0fa"
+size = 153684
+max_bytes = 5242880
+
+[[wheels]]
+name = "orjson"
+version = "3.11.7"
+filename = "orjson-3.11.7-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/34/70/2e0855361f76198a3965273048c8e50a9695d88cd75811a5b46444895845/orjson-3.11.7-cp312-cp312-win_amd64.whl"
+sha256 = "bf742e149121dc5648ba0a08ea0871e87b660467ef168a3a5e53bc1fbd64bb74"
+size = 125007
+max_bytes = 5242880
+
+[[wheels]]
+name = "typing_extensions"
+version = "4.15.0"
+filename = "typing_extensions-4.15.0-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl"
+sha256 = "f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"
+size = 44614
+max_bytes = 5242880
+
+[[wheels]]
+name = "pathspec"
+version = "1.0.4"
+filename = "pathspec-1.0.4-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/ef/3c/2c197d226f9ea224a9ab8d197933f9da0ae0aac5b6e0f884e2b8d9c8e9f7/pathspec-1.0.4-py3-none-any.whl"
+sha256 = "fb6ae2fd4e7c921a165808a552060e722767cfa526f99ca5156ed2ce45a5c723"
+size = 55206
+max_bytes = 5242880
+
+[[wheels]]
+name = "bsdiff4"
+version = "1.2.6"
+filename = "bsdiff4-1.2.6-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/9d/5d/31672172bb4566c1f1187fa28a1437125d4b5106bc55f9f7b9a75371094c/bsdiff4-1.2.6-cp312-cp312-win_amd64.whl"
+sha256 = "0b29568d1e33e32ea075c12a696b32e4d6cea344d0270a2292075254efd86014"
+size = 19553
+max_bytes = 5242880

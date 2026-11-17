@@ -22,3 +22,7 @@ name = "fake-worker"
 path = "src/bin/fake-worker.rs"
 test = false
 doc = false
+
+# Job Object Windows : tue le worker et sa descendance (ADR 0016). Rien ailleurs.
+[target.'cfg(windows)'.dependencies]
+win32job.workspace = true

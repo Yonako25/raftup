@@ -82,6 +82,10 @@ pub enum BridgeError {
     #[error("exécutable Python non supporté (un .exe est requis) : {}", path.display())]
     UnsupportedPython { path: PathBuf },
 
+    /// L'appel a été annulé via un `CancelToken` : le process est tué et le pont fermé.
+    #[error("appel annulé")]
+    Cancelled,
+
     #[error("le pont est fermé")]
     Closed,
 }

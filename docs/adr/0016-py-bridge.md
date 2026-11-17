@@ -27,7 +27,7 @@
 - Aucune dépendance externe nouvelle (`serde`, `serde_json`, `thiserror`, `tracing` du workspace).
 - Sous Windows : `CREATE_NO_WINDOW`, sans `unsafe`.
 - Le worker quitte à la fermeture de stdin, donc pas de process orphelin si le launcher plante. Réserve : c'est vrai seulement quand le worker lit stdin ; pendant un long `generate` (boucle bloquée dans le générateur), il ne voit pas la fermeture et peut survivre au launcher.
-- `child.kill()` ne tue pas les petits-enfants (process lancés par le générateur) sous Windows. À prévoir avec `generate` : un Job Object Windows (`KILL_ON_JOB_CLOSE`) qui regroupe le worker et sa descendance. À faire.
+- `child.kill()` ne tue pas les petits-enfants sous Windows : le worker est donc placé dans un Job Object `KILL_ON_JOB_CLOSE` (crate `win32job`, API sûre, MIT OR Apache-2.0, `crates/py-bridge/src/job.rs`). Le job est détenu par `PyBridge` et fermé à l'arrêt, à l'annulation et au Drop. Hors Windows : rien pour l'instant.
 - Sous Windows, `python` doit être un `.exe` : les `.bat`/`.cmd` sont refusés (`BridgeError::UnsupportedPython`, testé). Quand le pont sera branché sur python-build-standalone, utiliser un chemin absolu.
 - `-I` (mode isolé) ignore les variables `PYTHON*` (`PYTHONPATH`, `PYTHONHOME`...) passées via `BridgeOptions::env` ; les autres variables passent. Documenté sur le champ.
 - L'écriture des requêtes se fait depuis un thread dédié, avec le même délai que la lecture : un worker qui ne lit pas stdin donne `Timeout`, jamais un blocage. Une requête plus grande que `max_line_bytes` est refusée avant l'écriture (`RequestTooLarge`), sans fermer le pont.

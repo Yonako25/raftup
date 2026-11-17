@@ -17,7 +17,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::cancel::CancelToken;
 use crate::error::BridgeError;
+use crate::job::KillGuard;
 use crate::line::{read_bounded_bytes, read_bounded_line, LineError};
 use crate::protocol::{decode_response, encode_request};
 use crate::{DEFAULT_MAX_LINE_BYTES, WORKER_PROTOCOL_VERSION, WORKER_SCRIPT};
@@ -31,6 +33,8 @@ const DROP_GRACE: Duration = Duration::from_millis(200);
 const EXIT_WINDOW: Duration = Duration::from_secs(2);
 /// Pas d'attente quand on surveille la fin d'un process.
 const POLL_STEP: Duration = Duration::from_millis(10);
+/// Tranche maximale d'une attente de réponse : l'annulation est vérifiée à chaque tranche.
+const CANCEL_SLICE: Duration = Duration::from_millis(100);
 
 /// Réglages du pont.
 #[derive(Debug, Clone)]
@@ -48,6 +52,9 @@ pub struct BridgeOptions {
     pub call_timeout: Duration,
     pub shutdown_grace: Duration,
     pub max_line_bytes: usize,
+    /// Si présent, chaque ligne de stderr y est aussi envoyée (en plus du tail et de `tracing`).
+    /// Un récepteur disparu est ignoré : cela ne bloque jamais la lecture.
+    pub stderr_lines: Option<Sender<String>>,
 }
 
 impl BridgeOptions {
@@ -61,6 +68,7 @@ impl BridgeOptions {
             call_timeout: Duration::from_secs(10),
             shutdown_grace: Duration::from_secs(2),
             max_line_bytes: DEFAULT_MAX_LINE_BYTES,
+            stderr_lines: None,
         }
     }
 }
@@ -139,6 +147,8 @@ pub struct PyBridge {
     next_id: u64,
     closed: bool,
     options: BridgeOptions,
+    // Job Object Windows : le fermer tue le worker et sa descendance (voir `job.rs`).
+    job: Option<KillGuard>,
 }
 
 impl PyBridge {
@@ -162,7 +172,7 @@ impl PyBridge {
     }
 
     /// Lance le process sans vérifier la version (la poignée de main est faite par `start`).
-    fn spawn(options: BridgeOptions) -> Result<Self, BridgeError> {
+    fn spawn(mut options: BridgeOptions) -> Result<Self, BridgeError> {
         // Sous Windows, un `.bat`/`.cmd` passerait par `cmd.exe` et ses règles de guillemets :
         // on exige un vrai `.exe`.
         #[cfg(windows)]
@@ -203,6 +213,10 @@ impl PyBridge {
                 }
             }
         })?;
+
+        // Affectation au job tout de suite après le lancement, avant que le worker ait pu
+        // lancer des petits-enfants.
+        let job = KillGuard::attach(&child);
 
         let (stdin, stdout, stderr) =
             match (child.stdin.take(), child.stdout.take(), child.stderr.take()) {
@@ -256,6 +270,9 @@ impl PyBridge {
 
         let stderr_tail = Arc::new(Mutex::new(StderrTail::default()));
         let stderr_done = Arc::new(AtomicBool::new(false));
+        // `take()` sort l'émetteur des options : seul le thread stderr le garde, donc le canal
+        // se ferme (le récepteur voit la fin) quand stderr atteint EOF.
+        let stderr_lines = options.stderr_lines.take();
         {
             // `Arc::clone` copie le pointeur, pas les données : les deux côtés partagent le même `Mutex`.
             let tail = Arc::clone(&stderr_tail);
@@ -269,6 +286,11 @@ impl PyBridge {
                         Ok(Some(bytes)) => {
                             let line = String::from_utf8_lossy(&bytes).into_owned();
                             tracing::debug!(target: "py_bridge::stderr", "{line}");
+                            if let Some(tx) = &stderr_lines {
+                                // Canal non borné : `send` ne bloque jamais ; une erreur veut
+                                // dire que le récepteur a disparu, on l'ignore.
+                                let _ = tx.send(line.clone());
+                            }
                             tail.lock()
                                 .unwrap_or_else(PoisonError::into_inner)
                                 .push(line);
@@ -292,6 +314,7 @@ impl PyBridge {
             next_id: 1,
             closed: false,
             options,
+            job: Some(job),
         })
     }
 
@@ -309,10 +332,34 @@ impl PyBridge {
         params: Value,
         timeout: Duration,
     ) -> Result<Value, BridgeError> {
+        self.call_inner(method, params, timeout, None)
+    }
+
+    /// Comme `call_with_timeout`, mais annulable : l'attente est découpée en tranches de
+    /// 100 ms au plus. Si `cancel` est annulé, le process est tué (avec sa descendance),
+    /// le pont est fermé et l'appel renvoie `BridgeError::Cancelled` en moins d'une seconde.
+    pub fn call_cancellable(
+        &mut self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+        cancel: &CancelToken,
+    ) -> Result<Value, BridgeError> {
+        self.call_inner(method, params, timeout, Some(cancel))
+    }
+
+    /// Code commun aux appels avec ou sans annulation.
+    fn call_inner(
+        &mut self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+        cancel: Option<&CancelToken>,
+    ) -> Result<Value, BridgeError> {
         if self.closed {
             return Err(BridgeError::Closed);
         }
-        let result = self.exchange(method, &params, timeout);
+        let result = self.exchange(method, &params, timeout, cancel);
         // Une requête refusée AVANT l'écriture ne touche pas au flux : le pont reste ouvert.
         if !matches!(
             result,
@@ -357,6 +404,7 @@ impl PyBridge {
         method: &str,
         params: &Value,
         timeout: Duration,
+        cancel: Option<&CancelToken>,
     ) -> Result<Value, BridgeError> {
         let id = self.next_id;
         self.next_id += 1;
@@ -385,22 +433,18 @@ impl PyBridge {
         if writer.send(line.into_bytes()).is_err() {
             return Err(self.process_exited());
         }
-        match self
-            .write_acks
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-        {
+        match recv_sliced(&self.write_acks, deadline, cancel) {
             Ok(Ok(())) => {}
-            Ok(Err(_)) | Err(RecvTimeoutError::Disconnected) => return Err(self.process_exited()),
-            Err(RecvTimeoutError::Timeout) => return Err(timed_out()),
+            Ok(Err(_)) | Err(Wait::Disconnected) => return Err(self.process_exited()),
+            Err(Wait::Timeout) => return Err(timed_out()),
+            Err(Wait::Cancelled) => return Err(BridgeError::Cancelled),
         }
 
-        let event = match self
-            .events
-            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-        {
+        let event = match recv_sliced(&self.events, deadline, cancel) {
             Ok(event) => event,
-            Err(RecvTimeoutError::Timeout) => return Err(timed_out()),
-            Err(RecvTimeoutError::Disconnected) => Event::Eof,
+            Err(Wait::Timeout) => return Err(timed_out()),
+            Err(Wait::Cancelled) => return Err(BridgeError::Cancelled),
+            Err(Wait::Disconnected) => Event::Eof,
         };
         let text = match event {
             Event::Line(text) => text,
@@ -456,6 +500,8 @@ impl PyBridge {
     fn close(&mut self) {
         self.closed = true;
         self.writer = None;
+        // Fermer le job (Windows) tue toute la descendance ; puis on tue le worker lui-même.
+        self.job = None;
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -473,6 +519,36 @@ impl PyBridge {
         }
         let _ = self.child.kill();
         self.child.wait().map_err(wait_error)
+    }
+}
+
+/// Pourquoi une attente de message s'est arrêtée sans message.
+enum Wait {
+    Timeout,
+    Cancelled,
+    Disconnected,
+}
+
+/// Attend un message jusqu'à `deadline`, par tranches de `CANCEL_SLICE` au plus, en
+/// vérifiant l'annulation entre chaque tranche. Générique (`T`) : sert pour deux types de canaux.
+fn recv_sliced<T>(
+    rx: &Receiver<T>,
+    deadline: Instant,
+    cancel: Option<&CancelToken>,
+) -> Result<T, Wait> {
+    loop {
+        if cancel.is_some_and(CancelToken::is_cancelled) {
+            return Err(Wait::Cancelled);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match rx.recv_timeout(remaining.min(CANCEL_SLICE)) {
+            Ok(value) => return Ok(value),
+            Err(RecvTimeoutError::Disconnected) => return Err(Wait::Disconnected),
+            Err(RecvTimeoutError::Timeout) if remaining <= CANCEL_SLICE => {
+                return Err(Wait::Timeout)
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+        }
     }
 }
 
@@ -495,6 +571,8 @@ impl Drop for PyBridge {
             }
             thread::sleep(POLL_STEP);
         }
+        // Fermer le job tue aussi la descendance (Windows).
+        self.job = None;
         let _ = self.child.kill();
         let _ = self.child.wait();
     }

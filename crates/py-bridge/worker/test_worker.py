@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ICI = os.path.dirname(os.path.abspath(__file__))
@@ -146,6 +147,183 @@ class TestWorker(unittest.TestCase):
         sortie, code = echanger(b"")
         self.assertEqual(sortie, [])
         self.assertEqual(code, 0)
+
+
+FAUX_AP = os.path.join(ICI, "..", "tests", "fixtures", "fake_archipelago")
+
+
+class TestGenerate(unittest.TestCase):
+    """`generate` avec le faux Archipelago (tests/fixtures/fake_archipelago)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.joueurs = os.path.join(self.tmp.name, "joueurs")
+        self.sortie = os.path.join(self.tmp.name, "out")
+        os.makedirs(self.joueurs)
+
+    def yaml(self, nom, jeu="FakeGame", fichier="p1.yaml"):
+        with open(os.path.join(self.joueurs, fichier), "w", encoding="utf-8") as f:
+            f.write("name: %s\ngame: %s\n" % (nom, jeu))
+
+    def params(self, **extra):
+        p = {
+            "archipelago_dir": os.path.abspath(FAUX_AP),
+            "site_packages": None,
+            "player_files_dir": self.joueurs,
+            "output_dir": self.sortie,
+            "seed": 42,
+            "spoiler": 3,
+            "race": False,
+        }
+        p.update(extra)
+        return p
+
+    def gen(self, id_=1, **extra):
+        return req(id_, "generate", self.params(**extra))
+
+    def test_normal(self):
+        self.yaml("Alice")
+        sortie, code = echanger(self.gen() + req(2, "ping"))
+        self.assertEqual(code, 0)
+        r = sortie[0]["result"]
+        self.assertEqual(r["seed_name"], "42")
+        self.assertEqual(r["ap_version"], "0.0.0-fake")
+        self.assertEqual(r["players"], [{"slot": 1, "name": "Alice", "game": "FakeGame"}])
+        self.assertTrue(os.path.isfile(r["zip"]))
+        self.assertEqual(os.path.dirname(r["zip"]), os.path.realpath(self.sortie))
+        self.assertIsInstance(r["seconds"], float)
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})  # worker vivant
+
+    def test_seed_absente(self):
+        self.yaml("Alice")
+        sortie, _ = echanger(self.gen(seed=None))
+        self.assertEqual(sortie[0]["result"]["seed_name"], "12345")
+
+    def test_fill_error(self):
+        self.yaml("FillError")
+        sortie, code = echanger(self.gen() + req(2, "ping"))
+        e = sortie[0]["error"]
+        self.assertEqual(e["code"], -32010)
+        self.assertEqual(e["data"]["type"], "FillError")
+        self.assertIn("FillError", e["data"]["traceback"])
+        self.assertLessEqual(len(e["data"]["traceback"].encode("utf-8")), 64 * 1024)
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
+        self.assertEqual(code, 0)
+
+    def test_sys_exit(self):
+        self.yaml("Exit")
+        sortie, code = echanger(self.gen() + req(2, "ping"))
+        self.assertEqual(sortie[0]["error"]["code"], -32010)
+        self.assertEqual(sortie[0]["error"]["data"]["type"], "SystemExit")
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
+        self.assertEqual(code, 0)
+
+    def test_input_recoit_eof(self):
+        self.yaml("Input")
+        sortie, code = echanger(self.gen() + req(2, "ping"))  # communicate() a un delai : pas de blocage
+        self.assertEqual(sortie[0]["error"]["code"], -32010)
+        self.assertEqual(sortie[0]["error"]["data"]["type"], "EOFError")
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
+
+    def test_print_ne_casse_pas_le_protocole(self):
+        self.yaml("Print")
+        p = lancer()
+        out, err = p.communicate(self.gen(), timeout=30)
+        sortie = [json.loads(x) for x in out.decode("utf-8").splitlines()]
+        self.assertEqual(len(sortie), 1)
+        self.assertIn("result", sortie[0])
+        self.assertIn("ligne imprimee par le generateur", err.decode("utf-8"))
+        self.assertIn("faux generateur", err.decode("utf-8"))  # logging -> stderr
+
+    def test_import_impossible(self):
+        self.yaml("BadImport")
+        sortie, _ = echanger(self.gen())
+        self.assertEqual(sortie[0]["error"]["code"], -32011)
+
+    def test_archipelago_absent(self):
+        self.yaml("Alice")
+        vide = os.path.join(self.tmp.name, "vide")
+        os.makedirs(vide)
+        sortie, _ = echanger(self.gen(archipelago_dir=vide))
+        self.assertEqual(sortie[0]["error"]["code"], -32011)
+
+    def test_deuxieme_appel(self):
+        self.yaml("Alice")
+        sortie, code = echanger(self.gen(1) + self.gen(2) + req(3, "ping"))
+        self.assertIn("result", sortie[0])
+        self.assertEqual(sortie[1]["error"]["code"], -32012)
+        self.assertEqual(sortie[2], {"id": 3, "result": "pong"})
+        self.assertEqual(code, 0)
+
+    def test_params_invalides(self):
+        self.yaml("Alice")
+        mauvais = [
+            {"spoiler": 4},
+            {"spoiler": True},
+            {"spoiler": "3"},
+            {"race": 1},
+            {"seed": -1},
+            {"seed": "42"},
+            {"seed": True},
+            {"output_dir": ""},
+            {"site_packages": 5},
+            {"archipelago_dir": os.path.join(self.tmp.name, "nope")},
+            {"player_files_dir": os.path.join(self.tmp.name, "nope")},
+        ]
+        octets = b"".join(self.gen(i + 1, **m) for i, m in enumerate(mauvais))
+        octets += self.gen(99)  # un appel valide derriere : les refus ne consomment pas le generate
+        sortie, code = echanger(octets)
+        for i, m in enumerate(mauvais):
+            self.assertEqual(sortie[i]["error"]["code"], -32602, m)
+        self.assertIn("result", sortie[-1])
+        self.assertEqual(code, 0)
+
+    def test_site_packages_inexistant(self):
+        self.yaml("Alice")
+        absent = os.path.join(self.tmp.name, "pas-de-site-packages")
+        existant = os.path.join(self.tmp.name, "site-packages")
+        os.makedirs(existant)
+        octets = self.gen(1, site_packages=absent) + self.gen(2, site_packages=existant)
+        sortie, code = echanger(octets)
+        self.assertEqual(sortie[0]["error"]["code"], -32602)
+        self.assertIn("introuvable", sortie[0]["error"]["message"])
+        self.assertIn("result", sortie[1])  # le refus n'a pas consomme le generate
+        self.assertEqual(code, 0)
+
+    def test_params_manquants(self):
+        sortie, _ = echanger(req(1, "generate", {}))
+        self.assertEqual(sortie[0]["error"]["code"], -32602)
+
+    def test_zip_hors_output_dir(self):
+        self.yaml("Escape")
+        sortie, code = echanger(self.gen() + req(2, "ping"))
+        self.assertEqual(sortie[0]["error"]["code"], -32010)
+        self.assertIn("output_dir", sortie[0]["error"]["message"] + str(sortie[0]["error"]["data"]))
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
+
+
+class TestBlocageReseau(unittest.TestCase):
+    """block_network() (RAFTUP_BLOCK_NETWORK=1) : refuse le sortant, garde la boucle locale."""
+
+    def test_refus_sortant_et_boucle_locale(self):
+        chemin = os.path.join(ICI, "raftup_worker.py")
+        code = "\n".join([
+            "import re, socket, sys",
+            "src = open(%r, encoding='utf-8').read()" % chemin,
+            "exec(re.search(r'def block_network\\(\\):.*?(?=\\n\\ndef generate)', src, re.S).group(0))",
+            "block_network()",
+            "for f in (lambda: socket.gethostbyname('example.com'),",
+            "          lambda: socket.socket().connect(('93.184.216.34', 80))):",
+            "    try:",
+            "        f(); print('PAS BLOQUE')",
+            "    except OSError:",
+            "        print('bloque')",
+            "a, b = socket.socketpair()",
+            "a.send(b'x'); print(b.recv(1))",
+        ])
+        r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, timeout=30)
+        self.assertEqual(r.stdout.decode().split(), ["bloque", "bloque", "b'x'"], r.stderr)
 
 
 if __name__ == "__main__":

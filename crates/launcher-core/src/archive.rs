@@ -13,7 +13,7 @@
 
 use std::collections::BTreeSet;
 use std::fs::{self, File};
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Component, Path, PathBuf};
 
 use crate::hash::Sha256;
@@ -40,6 +40,14 @@ pub enum ArchiveError {
     /// Archive illisible ou corrompue.
     #[error("archive zip invalide : {0}")]
     Zip(String),
+
+    /// Archive .tar.gz illisible, tronquée ou corrompue.
+    #[error("archive tar.gz invalide : {0}")]
+    Tar(String),
+
+    /// Fichier spécial (périphérique, FIFO, fichier creux…) : jamais extrait.
+    #[error("fichier spécial refusé : {0}")]
+    SpecialFile(String),
 
     /// Lecture ou écriture impossible sur ce chemin.
     #[error("accès à {path} : {source}")]
@@ -151,6 +159,17 @@ struct Planned {
 const UNIX_TYPE_MASK: u32 = 0o170000;
 const UNIX_SYMLINK: u32 = 0o120000;
 
+/// Préfixe à retirer, déjà contrôlé comme un chemin (vide = rien à retirer).
+fn parse_prefix(strip_prefix: &str) -> Result<Vec<std::ffi::OsString>, ArchiveError> {
+    if strip_prefix.trim_matches(['/', '\\']).is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(safe_relative_path(strip_prefix)?
+        .components()
+        .map(|c| c.as_os_str().to_os_string())
+        .collect())
+}
+
 /// Ouvre l'archive et contrôle toutes les entrées sans rien écrire.
 fn read_plan(
     file: &Path,
@@ -168,15 +187,7 @@ fn read_plan(
         return Err(ArchiveError::TooManyEntries);
     }
 
-    // Préfixe à retirer, déjà contrôlé comme un chemin (vide = rien à retirer).
-    let prefix: Vec<std::ffi::OsString> = if strip_prefix.trim_matches(['/', '\\']).is_empty() {
-        Vec::new()
-    } else {
-        safe_relative_path(strip_prefix)?
-            .components()
-            .map(|c| c.as_os_str().to_os_string())
-            .collect()
-    };
+    let prefix = parse_prefix(strip_prefix)?;
 
     let mut planned = Vec::new();
     let mut announced_total: u64 = 0;
@@ -313,6 +324,189 @@ pub fn extract_zip(
         total_written += tee.written;
 
         on_file(&item.path, hash);
+    }
+    Ok(())
+}
+
+/// Contrôle les entrées d'un tar une par une (même règles que le zip).
+///
+/// Rust : un tar se lit en flux, sans index. On le parcourt donc deux fois avec deux
+/// `TarPlanner` neufs : la première passe ne fait que contrôler, la seconde écrit.
+struct TarPlanner {
+    prefix: Vec<std::ffi::OsString>,
+    max_entries: usize,
+    max_total_bytes: u64,
+    count: usize,
+    announced_total: u64,
+    seen: BTreeSet<String>,
+}
+
+impl TarPlanner {
+    fn new(strip_prefix: &str, limits: &ArchiveLimits) -> Result<Self, ArchiveError> {
+        Ok(TarPlanner {
+            prefix: parse_prefix(strip_prefix)?,
+            max_entries: limits.max_entries,
+            max_total_bytes: limits.max_total_bytes,
+            count: 0,
+            announced_total: 0,
+            seen: BTreeSet::new(),
+        })
+    }
+
+    /// `Ok(None)` : entrée à ignorer. `Ok(Some((chemin, est_dossier)))` : à extraire.
+    fn check<R: Read>(
+        &mut self,
+        entry: &tar::Entry<'_, R>,
+    ) -> Result<Option<(PathBuf, bool)>, ArchiveError> {
+        use tar::EntryType;
+
+        let name = String::from_utf8_lossy(&entry.path_bytes()).into_owned();
+        let kind = entry.header().entry_type();
+
+        // En-tête global PAX : métadonnées, pas un fichier.
+        if kind == EntryType::XGlobalHeader {
+            return Ok(None);
+        }
+
+        self.count += 1;
+        if self.count > self.max_entries {
+            return Err(ArchiveError::TooManyEntries);
+        }
+
+        // Liens symboliques et physiques : jamais suivis, jamais créés.
+        if kind == EntryType::Symlink || kind == EntryType::Link {
+            return Err(ArchiveError::Link(name));
+        }
+        let is_dir = kind == EntryType::Directory;
+        if !(is_dir || kind == EntryType::Regular || kind == EntryType::Continuous) {
+            // Périphériques, FIFO, fichiers creux GNU, types inconnus.
+            return Err(ArchiveError::SpecialFile(name));
+        }
+
+        // Le dossier racine « ./ » des tar créés par `tar -C dir .` : rien à faire.
+        if name == "." || name == "./" {
+            return Ok(None);
+        }
+        // Un nom non UTF-8 deviendrait des « � » : on le refuse plutôt que de le deviner.
+        if std::str::from_utf8(&entry.path_bytes()).is_err() {
+            return Err(ArchiveError::UnsafePath(name));
+        }
+        let full = safe_relative_path(&name)?;
+
+        let comps: Vec<std::ffi::OsString> = full
+            .components()
+            .map(|c| c.as_os_str().to_os_string())
+            .collect();
+        let prefix = &self.prefix;
+        if comps.len() <= prefix.len() || comps[..prefix.len()] != prefix[..] {
+            return Ok(None);
+        }
+        let relative: PathBuf = comps[prefix.len()..].iter().collect();
+
+        if !self.seen.insert(relative.to_string_lossy().to_lowercase()) {
+            return Err(ArchiveError::UnsafePath(format!("{name} (doublon)")));
+        }
+        if !is_dir {
+            self.announced_total = self.announced_total.saturating_add(entry.size());
+            if self.announced_total > self.max_total_bytes {
+                return Err(ArchiveError::TooLarge);
+            }
+        }
+        Ok(Some((relative, is_dir)))
+    }
+}
+
+/// Ouvre un `.tar.gz` en lecture.
+fn open_tar_gz(
+    file: &Path,
+) -> Result<tar::Archive<flate2::read::GzDecoder<BufReader<File>>>, ArchiveError> {
+    let handle = File::open(file).map_err(|source| io_error(file, source))?;
+    Ok(tar::Archive::new(flate2::read::GzDecoder::new(
+        BufReader::new(handle),
+    )))
+}
+
+/// Extrait un `.tar.gz` dans `root`, avec les mêmes garanties que [`extract_zip`].
+///
+/// Refuse en plus les liens physiques et les fichiers spéciaux. Une première passe
+/// contrôle tout (rien n'est écrit si une entrée est mauvaise), la seconde écrit en
+/// comptant les octets réellement décompressés. Sous Unix, le bit exécutable est conservé.
+pub fn extract_tar_gz(
+    file: &Path,
+    strip_prefix: &str,
+    root: &Path,
+    limits: &ArchiveLimits,
+    on_file: &mut dyn FnMut(&Path, Sha256),
+) -> Result<(), ArchiveError> {
+    let tar_error = |e: io::Error| ArchiveError::Tar(e.to_string());
+
+    // Passe 1 : contrôle seulement.
+    let mut planner = TarPlanner::new(strip_prefix, limits)?;
+    let mut archive = open_tar_gz(file)?;
+    for entry in archive.entries().map_err(tar_error)? {
+        let entry = entry.map_err(tar_error)?;
+        planner.check(&entry)?;
+    }
+
+    fs::create_dir_all(root).map_err(|source| io_error(root, source))?;
+
+    // Passe 2 : écriture. On ne se fie pas à la passe 1 : tout est recontrôlé.
+    let mut planner = TarPlanner::new(strip_prefix, limits)?;
+    let mut archive = open_tar_gz(file)?;
+    let mut total_written: u64 = 0;
+    for entry in archive.entries().map_err(tar_error)? {
+        let mut entry = entry.map_err(tar_error)?;
+        let Some((relative, is_dir)) = planner.check(&entry)? else {
+            continue;
+        };
+        let target = root.join(&relative);
+
+        if is_dir {
+            ensure_dir_chain(root, &relative)?;
+            continue;
+        }
+        if let Some(parent) = relative.parent() {
+            ensure_dir_chain(root, parent)?;
+        }
+        refuse_link_or_dir(&target)?;
+
+        let mode = entry.header().mode().unwrap_or(0o644);
+        let out = File::create(&target).map_err(|source| io_error(&target, source))?;
+        let mut tee = Tee {
+            input: &mut entry,
+            output: BufWriter::new(out),
+            written: 0,
+            budget: limits.max_total_bytes.saturating_sub(total_written),
+            failure: None,
+        };
+        let hash = match Sha256::of_reader(&mut tee) {
+            Ok(hash) => hash,
+            Err(error) => {
+                return Err(match tee.failure.take() {
+                    Some(Failure::TooLarge) => ArchiveError::TooLarge,
+                    Some(Failure::Write(source)) => io_error(&target, source),
+                    None => ArchiveError::Tar(error.to_string()),
+                });
+            }
+        };
+        tee.output
+            .flush()
+            .map_err(|source| io_error(&target, source))?;
+        total_written += tee.written;
+        drop(tee);
+
+        // Les exécutables (python, bin/…) doivent le rester ; rien d'autre n'est copié du mode.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let wanted = if mode & 0o111 != 0 { 0o755 } else { 0o644 };
+            fs::set_permissions(&target, fs::Permissions::from_mode(wanted))
+                .map_err(|source| io_error(&target, source))?;
+        }
+        #[cfg(not(unix))]
+        let _ = mode;
+
+        on_file(&relative, hash);
     }
     Ok(())
 }
