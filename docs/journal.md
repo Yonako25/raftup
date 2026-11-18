@@ -74,3 +74,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : enchaînement réel génération puis hébergement (générateur pas installé ici) ; rendu à l'œil ; port réellement occupé.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : faire tourner l'écran en vrai (installer le générateur, générer une partie APQuest, l'héberger) et le regarder à l'œil.
+
+### 2026-11-18 · Essai réel de « Créer une partie »
+- **Fait** : générateur installé pour de vrai dans un dossier de test (`Z:\raftup-test\runtime`, via `setup_generator`) ; tests réels de `launcher-core` passés (3 générations, génération + hébergement) ; nouveau test réel `reel_generer_puis_heberger` (`#[ignore]`) qui suit le chemin de l'écran sans fenêtre : 2 joueurs APQuest générés, port occupé refusé, « Réessayer » sur un autre port sans régénérer, deuxième hébergement refusé. Message lisible pour un port déjà utilisé. `cargo test -p launcher-ui -- --include-ignored` (52) et clippy passent. Pas de commit encore.
+- **Pas vérifié** : rendu à l'œil (accès à la fenêtre refusé, session à distance) ; installation par le panneau de consentement (faite par l'exemple) ; un ancien `raftup.exe` du 17 novembre tourne encore et bloque `target/debug` (compilé dans `target/essai`).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : regarder l'écran « Créer une partie » à l'œil, devant le PC (`RAFTUP_DEV_RACINE=Z:\raftup-test\runtime`, `RAFTUP_DEV_PAGE=creer`).

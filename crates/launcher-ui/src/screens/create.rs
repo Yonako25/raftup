@@ -549,4 +549,171 @@ mod tests {
             ]
         );
     }
+
+    /// Attend que `ready` rende `Some`, en la rappelant toutes les 100 ms, au plus `limit`.
+    fn wait_for<T>(limit: std::time::Duration, mut ready: impl FnMut() -> Option<T>) -> T {
+        let start = std::time::Instant::now();
+        loop {
+            if let Some(value) = ready() {
+                return value;
+            }
+            assert!(start.elapsed() < limit, "délai dépassé");
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+
+    /// Ce que fait `App` à chaque image : l'erreur du worker passe dans celle de l'écran.
+    fn take_worker_error(worker: &crate::worker::Worker, error: &mut Option<String>) {
+        if let Some(message) = worker.take_error() {
+            *error = Some(message);
+        }
+    }
+
+    /// Test RÉEL du chemin de l'écran, sans fenêtre : formulaire, générateur installé,
+    /// génération dans son thread, hébergement par le worker sur un port occupé, puis
+    /// « Réessayer » sur un port libre SANS régénérer.
+    ///
+    /// Il ne télécharge rien : il lui faut un runtime installé par
+    /// `cargo run -p launcher-core --example setup_generator -- <dossier>`, donné par
+    /// `RAFTUP_REAL_RUNTIME`. Ports utilisés : 38296 (occupé exprès) et 38297.
+    ///
+    /// `cargo test -p launcher-ui -- --ignored --nocapture`
+    #[test]
+    #[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+    fn reel_generer_puis_heberger() {
+        use crate::worker::{Command, Worker};
+        use std::time::Duration;
+
+        let Some(root) = std::env::var_os("RAFTUP_REAL_RUNTIME") else {
+            eprintln!("RAFTUP_REAL_RUNTIME absente : test réel sauté");
+            return;
+        };
+        // L'écran trouve ses dossiers par `load_paths`, qui lit cette variable en debug.
+        std::env::set_var("RAFTUP_DEV_RACINE", &root);
+        let yamls = tempfile::tempdir().unwrap();
+        let mut files = Vec::new();
+        for name in ["Alice", "Bob"] {
+            let file = yamls.path().join(format!("{name}.yaml"));
+            std::fs::write(
+                &file,
+                format!("name: {name}\ngame: APQuest\nAPQuest:\n  hard_mode: false\n"),
+            )
+            .unwrap();
+            files.push(file);
+        }
+
+        // Le worker, comme dans `main.rs` : un runtime tokio et un contexte egui sans fenêtre.
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let ctx = egui::Context::default();
+        let (done, done_receiver) = tokio::sync::oneshot::channel();
+        let worker = Worker::spawn(
+            runtime.handle(),
+            ctx.clone(),
+            launcher_core::LogBuffer::new(),
+            done,
+        );
+
+        // Port 38296 occupé exprès : le premier démarrage doit échouer.
+        let busy = std::net::TcpListener::bind(("0.0.0.0", 38296)).unwrap();
+        let mut form = CreateForm {
+            yamls: files,
+            encrypted: false,
+            port: "38296".into(),
+            ..CreateForm::default()
+        };
+        let mut error = None;
+
+        // 1. Clic sur « Générer la partie ».
+        on_generate(&ctx, &mut form, &mut error);
+        assert_eq!(error, None);
+        assert!(
+            matches!(form.setup, generator_setup::Setup::Ready),
+            "le générateur doit être installé dans RAFTUP_REAL_RUNTIME"
+        );
+        assert!(form.generation.is_busy());
+        // Le formulaire change pendant la génération : ce n'est pas ce port qui sert.
+        form.port = "1".into();
+
+        // 2. La génération va au bout.
+        let output = wait_for(Duration::from_secs(300), || {
+            generation::poll(&mut form.generation);
+            match &form.generation {
+                generation::Generation::Done { output, .. } => Some(output.clone()),
+                generation::Generation::Failed { failure, log } => {
+                    panic!("génération ratée : {failure:?}\n{log:?}")
+                }
+                _ => None,
+            }
+        });
+        eprintln!(
+            "seed {} : {}",
+            output.seed_name,
+            output.archipelago_file.display()
+        );
+        assert_eq!(output.players.len(), 2);
+
+        // 3. Hébergement avec les réglages du clic (port 38296, occupé).
+        let options = form.pending_host.take().unwrap();
+        assert_eq!(options.port, 38296);
+        form.hosting = hosting::start(&worker, &worker.lock(), (*output).clone(), options);
+        let message = wait_for(Duration::from_secs(10), || {
+            take_worker_error(&worker, &mut error);
+            let shared = worker.lock();
+            assert_ne!(
+                hosting::poll(&mut form.hosting, &shared, &mut error),
+                hosting::Outcome::Started
+            );
+            match &form.hosting {
+                hosting::Hosting::Failed { message, .. } => Some(message.clone()),
+                _ => None,
+            }
+        });
+        eprintln!("{message}");
+        assert!(
+            message
+                .starts_with("Impossible de démarrer le serveur : le port 38296 est déjà utilisé"),
+            "{message}"
+        );
+
+        // 4. « Réessayer » sur un port libre : même seed, pas de nouvelle génération.
+        form.port = "38297".into();
+        retry_hosting(&mut form, &mut error, &worker, &worker.lock());
+        assert_eq!(error, None);
+        wait_for(Duration::from_secs(10), || {
+            take_worker_error(&worker, &mut error);
+            let shared = worker.lock();
+            let outcome = hosting::poll(&mut form.hosting, &shared, &mut error);
+            assert_eq!(error, None);
+            (outcome == hosting::Outcome::Started).then_some(())
+        });
+        {
+            let shared = worker.lock();
+            let status = shared.status.as_ref().unwrap();
+            assert_eq!(status.seed.seed_name, output.summary.seed_name);
+            assert_eq!(status.seed.players, 2);
+            eprintln!("partie en ligne : {:?}", status.seed.seed_name);
+        }
+
+        // 5. Une partie tourne déjà : refus clair, rien n'est envoyé.
+        let again = hosting::start(
+            &worker,
+            &worker.lock(),
+            (*output).clone(),
+            build_request(&form).unwrap().1,
+        );
+        match again {
+            hosting::Hosting::Failed { message, .. } => {
+                assert_eq!(message, hosting::ALREADY_HOSTING)
+            }
+            _ => panic!("un deuxième hébergement devait être refusé"),
+        }
+
+        // Arrêt propre, comme à la fermeture de la fenêtre.
+        drop(busy);
+        worker.send(Command::Shutdown);
+        runtime.block_on(done_receiver).unwrap();
+    }
 }

@@ -93,6 +93,22 @@ fn start_failed(reason: &str) -> String {
     format!("Impossible de démarrer le serveur : {reason}.")
 }
 
+/// Raison lisible : « port déjà utilisé » au lieu du long texte du système.
+///
+/// Windows écrit « … (os error 10048) », Linux « … (os error 98) » et macOS
+/// « … (os error 48) » ; les deux derniers disent aussi « Address already in use ».
+fn readable_reason(reason: &str, port: u16) -> String {
+    let in_use = ["(os error 10048)", "(os error 98)", "(os error 48)"]
+        .iter()
+        .any(|code| reason.contains(code))
+        || reason.contains("Address already in use");
+    if in_use {
+        format!("le port {port} est déjà utilisé par un autre programme, choisissez-en un autre")
+    } else {
+        reason.to_string()
+    }
+}
+
 /// Demande au worker d'héberger la seed. Rend le nouvel état.
 pub fn start(
     worker: &Worker,
@@ -122,7 +138,7 @@ pub fn start(
 /// (port pris, certificat refusé…). Pendant un démarrage, on la reprend ici pour
 /// l'afficher dans le panneau, avec « Réessayer ».
 pub fn poll(hosting: &mut Hosting, shared: &Shared, error: &mut Option<String>) -> Outcome {
-    let Hosting::Starting { output, .. } = hosting else {
+    let Hosting::Starting { output, port } = hosting else {
         return Outcome::Nothing;
     };
     if shared.status.is_some() {
@@ -138,7 +154,7 @@ pub fn poll(hosting: &mut Hosting, shared: &Shared, error: &mut Option<String>) 
         let output = output.clone();
         *hosting = Hosting::Failed {
             output,
-            message: start_failed(&reason),
+            message: start_failed(&readable_reason(&reason, *port)),
         };
     }
     Outcome::Nothing
@@ -269,6 +285,22 @@ mod tests {
             start_failed("certificat refusé"),
             "Impossible de démarrer le serveur : certificat refusé."
         );
+    }
+
+    #[test]
+    fn port_deja_utilise_lisible() {
+        let windows = "serveur : erreur réseau : Une seule utilisation de chaque adresse de \
+                       socket (protocole/adresse réseau/port) est habituellement autorisée. \
+                       (os error 10048)";
+        assert_eq!(
+            start_failed(&readable_reason(windows, 38296)),
+            "Impossible de démarrer le serveur : le port 38296 est déjà utilisé par un autre \
+             programme, choisissez-en un autre."
+        );
+        let linux = "serveur : erreur réseau : Address already in use (os error 98)";
+        assert!(readable_reason(linux, 1).contains("le port 1 est déjà utilisé"));
+        // Une autre erreur reste telle quelle.
+        assert_eq!(readable_reason("certificat refusé", 1), "certificat refusé");
     }
 
     fn starting() -> Hosting {

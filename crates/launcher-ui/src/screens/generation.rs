@@ -138,7 +138,9 @@ fn push_log(log: &mut VecDeque<String>, line: String) {
 }
 
 /// Lit les messages du thread, sans jamais attendre.
-fn poll(generation: &mut Generation) {
+///
+/// `pub(super)` : appelé par `show`, et par le test réel de `create` (sans fenêtre).
+pub(super) fn poll(generation: &mut Generation) {
     let Generation::Running(task) = generation else {
         return;
     };
