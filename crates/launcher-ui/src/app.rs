@@ -33,6 +33,8 @@ pub struct App {
     running: running::RunningState,
     library: library::LibraryState,
     join: join::JoinState,
+    /// Vérification et installation de la mise à jour du launcher (F12).
+    update: crate::update_ui::UpdateState,
     /// Erreur à montrer en rouge en haut de l'écran.
     error: Option<String>,
     /// Boîte aux lettres de l'instance unique : les liens ouverts pendant que Raftup
@@ -69,6 +71,7 @@ impl App {
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
             join,
+            update: crate::update_ui::UpdateState::new(),
             error: None,
             instance_dir,
             inbox_checked: std::time::Instant::now(),
@@ -193,6 +196,7 @@ impl eframe::App for App {
             .resizable(false)
             .frame(Frame::new().fill(theme::sidebar_fill()))
             .show(ui, crate::titlebar::show);
+        crate::update_ui::banner(ui, &mut self.update);
         egui::Panel::left("sidebar")
             .exact_size(220.0)
             .resizable(false)

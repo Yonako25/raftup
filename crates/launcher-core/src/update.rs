@@ -15,7 +15,7 @@
 
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use minisign_verify::{PublicKey, Signature};
 use semver::Version;
@@ -38,10 +38,14 @@ pub const UPDATE_MAX_BYTES: u64 = 512 * 1024 * 1024;
 
 /// Clé publique minisign (ligne base64 commençant par « RW »).
 ///
-/// Vide tant que la clé de publication n'est pas générée (ADR 0022) : dans ce cas toute
-/// vérification échoue avec `UpdateError::PublicKeyNotConfigured` plutôt que d'accepter
-/// n'importe quoi. Les tests passent leur propre clé aux fonctions.
-pub const UPDATE_PUBLIC_KEY: &str = "";
+/// Clé PUBLIQUE de la paire générée par `examples/update_tool.rs keygen` (ADR 0022). Si elle
+/// était vide, toute vérification échouerait avec `UpdateError::PublicKeyNotConfigured`
+/// plutôt que d'accepter n'importe quoi. Les tests passent leur propre clé aux fonctions.
+pub const UPDATE_PUBLIC_KEY: &str = "RWSHF8KA5BK0tFqXIT/KzwchBvrGFmc3NqDbkAu4lLY9cNbv4XqiagdP";
+
+/// Adresse du manifeste (dernière release GitHub du dépôt, ADR 0022).
+pub const UPDATE_MANIFEST_URL: &str =
+    "https://github.com/Yonako25/raftup/releases/latest/download/update.json";
 
 /// Ce qui fait échouer la lecture, la vérification ou le téléchargement d'une mise à jour.
 #[derive(Debug, thiserror::Error)]
@@ -239,6 +243,60 @@ pub fn download_verified(
         return Err(UpdateError::SignatureMismatch);
     }
     Ok(path)
+}
+
+/// Chemin de l'ancien exécutable après une mise à jour : `raftup.exe` devient `raftup.exe.old`.
+pub fn old_path(exe: &Path) -> PathBuf {
+    let mut name = exe.as_os_str().to_owned();
+    name.push(".old");
+    PathBuf::from(name)
+}
+
+/// Remplace l'exécutable `exe` par le fichier déjà vérifié `new_file`.
+///
+/// Windows interdit d'écraser un `.exe` en cours d'exécution, mais autorise à le
+/// **renommer** : l'ancien devient `exe.old` (supprimé au démarrage suivant par
+/// [`cleanup_old`]) et le nouveau prend sa place. Si une étape échoue, l'ancien
+/// exécutable est remis en place. Rien n'est lancé ; `new_file` n'est pas supprimé.
+pub fn apply_update(exe: &Path, new_file: &Path) -> Result<(), UpdateError> {
+    let io = |path: &Path| {
+        let path = path.to_path_buf();
+        move |source: std::io::Error| UpdateError::Io { path, source }
+    };
+    let old = old_path(exe);
+    let staged = {
+        let mut name = exe.as_os_str().to_owned();
+        name.push(".new");
+        PathBuf::from(name)
+    };
+    // 1. Le nouveau fichier est copié à côté de l'exécutable (même disque).
+    fs::copy(new_file, &staged).map_err(io(&staged))?;
+    // 2. Un `.old` laissé par une mise à jour précédente est enlevé s'il le peut.
+    if old.exists() {
+        fs::remove_file(&old).map_err(io(&old)).inspect_err(|_| {
+            let _ = fs::remove_file(&staged);
+        })?;
+    }
+    // 3. L'exécutable en cours est renommé, puis le nouveau prend sa place.
+    fs::rename(exe, &old).map_err(io(exe)).inspect_err(|_| {
+        let _ = fs::remove_file(&staged);
+    })?;
+    if let Err(source) = fs::rename(&staged, exe) {
+        // Retour en arrière : sans exécutable, le launcher ne redémarrerait plus.
+        let _ = fs::rename(&old, exe);
+        let _ = fs::remove_file(&staged);
+        return Err(UpdateError::Io {
+            path: exe.to_path_buf(),
+            source,
+        });
+    }
+    Ok(())
+}
+
+/// Supprime l'ancien exécutable (`.old`) laissé par une mise à jour. Silencieux : s'il
+/// est encore verrouillé, on réessaiera au démarrage suivant.
+pub fn cleanup_old(exe: &Path) {
+    let _ = fs::remove_file(old_path(exe));
 }
 
 /// Lit la clé publique minisign (ligne base64).
@@ -494,7 +552,8 @@ mod tests {
         let dl = downloader(dir.path(), data);
         let manifest = manifest_for(data, &signature);
         assert!(matches!(
-            run(&manifest, UPDATE_PUBLIC_KEY, &dl),
+            // Clé vide passée explicitement : la vraie clé est compilée dans `UPDATE_PUBLIC_KEY`.
+            run(&manifest, "", &dl),
             Err(UpdateError::PublicKeyNotConfigured)
         ));
         assert!(matches!(
@@ -503,6 +562,38 @@ mod tests {
         ));
         // Rien n'a été téléchargé dans ces deux cas.
         assert!(!dl.dir.exists());
+    }
+
+    #[test]
+    fn remplace_l_executable_et_garde_l_ancien_en_old() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("raftup.exe");
+        let new_file = dir.path().join("nouveau.bin");
+        fs::write(&exe, b"ancien").unwrap();
+        fs::write(&new_file, b"nouveau").unwrap();
+        apply_update(&exe, &new_file).unwrap();
+        assert_eq!(fs::read(&exe).unwrap(), b"nouveau");
+        assert_eq!(fs::read(old_path(&exe)).unwrap(), b"ancien");
+        assert!(!dir.path().join("raftup.exe.new").exists());
+        // Au démarrage suivant, l'ancien est nettoyé.
+        cleanup_old(&exe);
+        assert!(!old_path(&exe).exists());
+        // Deuxième mise à jour avec un `.old` déjà là : ça passe aussi.
+        fs::write(old_path(&exe), b"reste").unwrap();
+        apply_update(&exe, &new_file).unwrap();
+        assert_eq!(fs::read(old_path(&exe)).unwrap(), b"nouveau");
+    }
+
+    #[test]
+    fn echec_de_mise_a_jour_laisse_l_executable_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("raftup.exe");
+        fs::write(&exe, b"ancien").unwrap();
+        // Fichier à installer introuvable : rien ne bouge.
+        let result = apply_update(&exe, &dir.path().join("absent.bin"));
+        assert!(matches!(result, Err(UpdateError::Io { .. })));
+        assert_eq!(fs::read(&exe).unwrap(), b"ancien");
+        assert!(!old_path(&exe).exists());
     }
 
     #[test]

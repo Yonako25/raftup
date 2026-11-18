@@ -18,6 +18,7 @@ mod screens;
 mod startup;
 mod theme;
 mod titlebar;
+mod update_ui;
 mod widgets;
 mod worker;
 
@@ -99,5 +100,9 @@ fn main() -> anyhow::Result<()> {
     });
     drop(runtime);
     result.map_err(|e| anyhow::anyhow!("fenêtre : {e}"))?;
+    // Mise à jour installée et « Redémarrer » cliqué : le verrou d'instance unique est
+    // relâché avant de lancer le nouvel exécutable, sinon il se prendrait pour un doublon.
+    drop(_guard);
+    update_ui::relaunch_if_requested();
     Ok(())
 }
