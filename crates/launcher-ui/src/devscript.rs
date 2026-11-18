@@ -5,7 +5,16 @@
 //! Elle s'active avec `RAFTUP_DEV_CAPTURE=<dossier>` :
 //! - `RAFTUP_DEV_YAML=<dossier>` : les fichiers `.yaml` à ajouter comme joueurs ;
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
-//!   occupé, « Réessayer » passe au port suivant.
+//!   occupé, « Réessayer » passe au port suivant ;
+//! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
+//!   `heberger`, `en-cours`, `generateur-absent` : une seule capture de l'écran,
+//!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
+//!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
+//!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`
+//!   a besoin de `RAFTUP_DEV_YAML` (sinon le formulaire est refusé avant la vérification
+//!   du générateur) et d'une `RAFTUP_DEV_RACINE` vide ;
+//! - `RAFTUP_DEV_SEEDFILE=<fichier>` : la seed du scénario `heberger`
+//!   (`crates/multidata/tests/data/seed-mit.archipelago` par défaut), port 38295.
 //!
 //! Pas de faux clics envoyés à Windows : la macro appelle directement les fonctions
 //! de l'écran, et la capture vient du rendu de la fenêtre elle-même (egui), donc
@@ -16,7 +25,56 @@ use std::time::{Duration, Instant};
 
 use crate::app::Page;
 use crate::screens::create::{self, CreateForm};
+use crate::screens::setup::{self, SetupForm};
 use crate::worker::Worker;
+
+/// Les formulaires que la macro remplit.
+pub struct Forms<'a> {
+    pub create: &'a mut CreateForm,
+    pub setup: &'a mut SetupForm,
+}
+
+/// Le scénario joué.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scenario {
+    /// « Créer une partie », de bout en bout (plusieurs captures).
+    Create,
+    /// « Héberger une partie » avec une seed choisie.
+    Host,
+    /// « Créer une partie » avec un générateur absent : le formulaire est rempli, on
+    /// clique « Générer la partie » et on capture le panneau de consentement. On ne
+    /// clique JAMAIS « Installer » : rien n'est téléchargé.
+    NoGenerator,
+    /// Un écran, une capture (Bibliothèque, En cours).
+    Screen(&'static str),
+}
+
+impl Scenario {
+    fn from_env() -> Scenario {
+        match std::env::var("RAFTUP_DEV_SCENARIO").ok().as_deref() {
+            Some("heberger") => Scenario::Host,
+            Some("bibliotheque") => Scenario::Screen("1-bibliotheque"),
+            Some("en-cours") => Scenario::Screen("1-en-cours"),
+            Some("generateur-absent") => Scenario::NoGenerator,
+            _ => Scenario::Create,
+        }
+    }
+
+    /// Vrai si le scénario part de l'écran « Créer une partie ».
+    fn on_create_screen(self) -> bool {
+        matches!(self, Scenario::Create | Scenario::NoGenerator)
+    }
+
+    /// Nom de la capture d'un scénario à une seule capture.
+    fn file_name(self) -> &'static str {
+        match self {
+            Scenario::Create => "1-preparation",
+            Scenario::Host => "1-heberger",
+            Scenario::NoGenerator => "1-generateur-absent",
+            Scenario::Screen(name) => name,
+        }
+    }
+}
 
 /// L'étape de la macro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +98,7 @@ enum Step {
 
 pub struct DevScript {
     dir: PathBuf,
+    scenario: Scenario,
     yamls: Vec<PathBuf>,
     port: u16,
     step: Step,
@@ -71,6 +130,7 @@ impl DevScript {
         );
         Some(DevScript {
             dir,
+            scenario: Scenario::from_env(),
             yamls,
             port,
             step: Step::Wait,
@@ -85,22 +145,60 @@ impl DevScript {
         &mut self,
         ctx: &egui::Context,
         page: &Page,
-        form: &mut CreateForm,
+        forms: &mut Forms,
         error: &mut Option<String>,
         worker: &Worker,
     ) {
+        let form = &mut *forms.create;
         self.frames += 1;
         // La macro attend des délais : on redessine régulièrement pour la faire avancer.
         ctx.request_repaint_after(Duration::from_millis(100));
         let elapsed = self.since.elapsed();
         match self.step {
-            Step::Wait if *page == Page::Create && self.frames > 5 => {
-                create::dev_prefill(form, self.yamls.clone(), self.port);
+            Step::Wait if self.scenario.on_create_screen() && self.frames > 5 => {
+                if *page == Page::Create {
+                    create::dev_prefill(form, self.yamls.clone(), self.port);
+                    self.next(Step::Prepared);
+                }
+            }
+            Step::Wait if self.frames > 5 => {
+                if self.scenario == Scenario::Host {
+                    let seed = std::env::var_os("RAFTUP_DEV_SEEDFILE")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| {
+                            PathBuf::from("crates/multidata/tests/data/seed-mit.archipelago")
+                        });
+                    setup::dev_prefill(forms.setup, worker, seed, 38295);
+                }
                 self.next(Step::Prepared);
+            }
+            Step::Prepared
+                if self.scenario == Scenario::NoGenerator
+                    && elapsed > Duration::from_millis(500) =>
+            {
+                create::dev_generate(ctx, form, error);
+                self.next(Step::Result);
+            }
+            Step::Result
+                if self.scenario == Scenario::NoGenerator
+                    && elapsed > Duration::from_millis(1500) =>
+            {
+                self.capture(ctx, self.scenario.file_name());
+                self.next(Step::Finished);
+            }
+            // Scénarios à une capture : 2,5 s pour le scan, la lecture de la seed ou le
+            // démarrage de la partie, puis on capture et on s'arrête.
+            Step::Prepared
+                if !self.scenario.on_create_screen() && elapsed > Duration::from_millis(2500) =>
+            {
+                self.capture(ctx, self.scenario.file_name());
+                self.next(Step::Finished);
             }
             // La capture montre l'image SUIVANTE : on capture, puis on agit à l'étape
             // d'après, sinon l'image montrerait déjà le résultat de l'action.
-            Step::Prepared if elapsed > Duration::from_secs(1) => {
+            Step::Prepared
+                if self.scenario == Scenario::Create && elapsed > Duration::from_secs(1) =>
+            {
                 self.capture(ctx, "1-preparation");
                 self.next(Step::Clicking);
             }

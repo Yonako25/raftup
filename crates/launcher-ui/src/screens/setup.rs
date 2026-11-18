@@ -227,6 +227,17 @@ fn config_panel(
     });
 }
 
+/// Macro de développement : choisit la seed sans boîte de fichiers, en clair, sur ce port.
+#[cfg(debug_assertions)]
+pub fn dev_prefill(form: &mut SetupForm, worker: &Worker, seed: PathBuf, port: u16) {
+    form.seed = None;
+    form.seed_loading = true;
+    form.seed_path = Some(seed.clone());
+    form.encrypted = false;
+    form.port = port.to_string();
+    worker.send(Command::LoadSeed(seed));
+}
+
 /// Ouvre la boîte de dialogue demandée pendant le dessin.
 ///
 /// Appelée par `App` APRÈS avoir relâché le verrou de l'état partagé : la

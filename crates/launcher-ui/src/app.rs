@@ -149,9 +149,17 @@ impl eframe::App for App {
             .show(ui, |ui| {
                 // `if let` : sans clic dans la barre, on garde la bascule déjà décidée
                 // (partie tout juste démarrée depuis « Créer une partie »).
-                if let Some(page) = sidebar(ui, &self.page, &shared, self.library.game_count()) {
-                    goto = Some(page);
-                }
+                // Défilement : si la fenêtre est très basse, le bas de la barre reste
+                // atteignable au lieu d'être coupé.
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        if let Some(page) =
+                            sidebar(ui, &self.page, &shared, self.library.game_count())
+                        {
+                            goto = Some(page);
+                        }
+                    });
             });
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
@@ -193,12 +201,17 @@ impl eframe::App for App {
             }
             self.page = page;
         }
+        // Poignées invisibles sur les bords de la fenêtre sans bordure.
+        crate::resize::handle(&ctx);
         #[cfg(debug_assertions)]
         if let Some(dev) = &mut self.dev {
             dev.step(
                 &ctx,
                 &self.page,
-                &mut self.create,
+                &mut crate::devscript::Forms {
+                    create: &mut self.create,
+                    setup: &mut self.setup,
+                },
                 &mut self.error,
                 &self.worker,
             );
@@ -317,7 +330,7 @@ fn sidebar(
 
 /// Titre de section en petites capitales espacées (« JEUX », « PARTIES »…).
 fn section_heading(ui: &mut Ui, text: &str) {
-    ui.add_space(14.0);
+    ui.add_space(10.0);
     ui.horizontal(|ui| {
         ui.add_space(18.0);
         ui.label(
@@ -441,7 +454,7 @@ fn server_card(ui: &mut Ui, shared: &crate::worker::Shared) {
 /// Le compteur n'apparaît que s'il vaut plus de 0.
 fn nav_link(ui: &mut Ui, label: &str, count: usize, active: bool) -> bool {
     let (rect, response) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 34.0), Sense::click());
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::click());
     let painter = ui.painter();
     if active {
         painter.rect_filled(rect, 0.0, theme::ACCENT_BG);

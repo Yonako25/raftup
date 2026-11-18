@@ -10,6 +10,7 @@ mod app;
 #[cfg(debug_assertions)]
 mod devscript;
 mod format;
+mod resize;
 mod screens;
 mod theme;
 mod titlebar;
