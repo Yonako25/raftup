@@ -43,11 +43,11 @@ Exemple : `!hint Épe` propose `Épée` avec un score de 75 %.
 - `!options` masque le mot de passe de la salle : il s'affiche en `*`, comme `server_password`. Ça répond à NF09 (aucun mot de passe dans les logs ni les réponses). Écart déclaré : le serveur officiel l'affiche en clair.
 - `!license` affiche la notice de Raftup (double licence MIT / Apache-2.0), et non celle d'Archipelago.
 - Erreur d'arguments qui fait planter le serveur officiel : Raftup répond par un texte court (par exemple « Argument manquant pour !hint ») et ne ferme pas la connexion.
-- Les commandes serveur qui suivent `!admin` sont reportées à J3. `!admin login`, `!admin logout` et les textes d'aide sont faits ; une fois connecté, toute autre commande reçoit pour l'instant « Server commands are not available yet. » (genre `AdminCommandResult`).
+- Les commandes serveur qui suivent `!admin` (`/players`, `/status`, `/send`, `/send_multiple`, `/send_location`, `/release`, `/collect`, `/allow_release`, `/forbid_release`, `/hint`, `/hint_location`, `/save`, `/countdown`) sont faites depuis le 18 novembre 2026, avec les textes de 0.6.8 (genre `AdminCommandResult`) ; les autres sont refusées avec un message clair (écarts dans `docs/etat-du-projet.md`).
 
 ## Conséquences
 
 - Un joueur qui tape `!help` ou `!hint` obtient la même réponse qu'avec le serveur officiel.
 - Le découpage et la recherche floue sont des fonctions pures : elles ont des tests avec des vecteurs tirés du code Python.
 - Écarts assumés : `!options` masqué, licence de Raftup, erreurs courtes à la place des tracebacks. Ils sont à reporter dans la section « Écarts connus » de `docs/etat-du-projet.md`.
-- `!admin` reste incomplet jusqu'à J3 : les autres commandes serveur ne sont pas encore disponibles par cette voie.
+- `!admin` : `/help`, `/license`, `/options`, `/exit`, `/alias`, `/option` et `/datastore` restent refusées.

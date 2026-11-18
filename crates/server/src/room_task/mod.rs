@@ -304,6 +304,7 @@ impl RoomTask {
             countdown_timer: 0,
             countdown_next: None,
             admin_client: None,
+            allow_releases: BTreeSet::new(),
             save,
             // Vrai au départ : l'état de départ doit être écrit dans un fichier neuf.
             dirty: true,
@@ -335,6 +336,9 @@ struct RoomTask {
     countdown_next: Option<tokio::time::Instant>,
     /// Client connecté en administrateur avec `!admin login` (un seul à la fois).
     admin_client: Option<ClientId>,
+    /// Joueurs autorisés à faire `!release` quel que soit le mode (`/allow_release`).
+    /// Pas sauvegardé, comme `allow_releases` du serveur officiel.
+    allow_releases: BTreeSet<(TeamId, SlotId)>,
     /// Sauvegarde `.raftup` ; `None` avec `--disable_save`.
     save: Option<Saver>,
     /// Vrai si un événement a pu changer l'état sauvegardé depuis le dernier

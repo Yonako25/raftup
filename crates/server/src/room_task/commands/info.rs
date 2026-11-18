@@ -90,6 +90,16 @@ impl RoomTask {
     /// `!players` (`get_players_string`). Avec moins de 10 noms, tout le monde
     /// voit la réponse ; sinon seulement le demandeur.
     pub(super) fn cmd_players(&self, id: ClientId) {
+        let (text, count) = self.players_text();
+        if count < 10 {
+            self.broadcast_text_all(command_result(text));
+        } else {
+            self.output(id, text);
+        }
+    }
+
+    /// `get_players_string` : le texte et le nombre de noms de la partie.
+    pub(super) fn players_text(&self) -> (String, usize) {
         // Tous les (équipe, slot) de la partie, triés.
         let names: BTreeSet<(TeamId, SlotId)> =
             self.room.data().connect_names.values().copied().collect();
@@ -127,11 +137,7 @@ impl RoomTask {
         // `text[:-1]` : on retire le dernier caractère (l'espace final).
         text.pop();
         let text = format!("{} players of {total} connected {text}", connected.len());
-        if names.len() < 10 {
-            self.broadcast_text_all(command_result(text));
-        } else {
-            self.output(id, text);
-        }
+        (text, names.len())
     }
 
     /// `!status [tag]` (`get_status_string`) : l'état de l'équipe du demandeur.
@@ -140,6 +146,12 @@ impl RoomTask {
             return;
         };
         let team = player.team;
+        let text = self.status_text(team, tag);
+        self.output(id, text);
+    }
+
+    /// `get_status_string` : l'état d'une équipe (partagé avec `/status` de l'admin).
+    pub(super) fn status_text(&self, team: TeamId, tag: &str) -> String {
         let data = self.room.data();
         let mut text = format!("Player Status on team {team}:");
         for (slot, locations) in &data.locations {
@@ -171,7 +183,7 @@ impl RoomTask {
                 locations.len()
             ));
         }
-        self.output(id, text);
+        text
     }
 
     /// `!remaining` : les objets pas encore trouvés dans le monde du demandeur.

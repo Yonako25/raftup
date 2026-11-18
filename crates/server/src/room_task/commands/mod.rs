@@ -10,6 +10,7 @@ use crate::command_line::{raw_argument, split_command, truncate_chars};
 mod actions;
 mod hint;
 mod info;
+mod server;
 
 /// Commandes connues, dans l'ordre du serveur officiel (celui de `commands`,
 /// affiché par « Known commands »).
@@ -156,7 +157,7 @@ impl RoomTask {
     }
 
     /// `!admin` : diffuse la ligne avec les mots de passe masqués, puis gère
-    /// `login` / `logout`. Les commandes serveur elles-mêmes arrivent en J3.
+    /// `login` / `logout`, puis relaie les commandes serveur (`server.rs`).
     fn cmd_admin(&mut self, id: ClientId, command: &str) {
         let Some(player) = self.player(id).cloned() else {
             return;
@@ -240,11 +241,8 @@ impl RoomTask {
             self.admin_client = None;
             return;
         }
-        // Commandes serveur : reportées à J3 (ADR 0013). Réponse du genre
-        // `AdminCommandResult`, comme celles de la console officielle.
-        let mut message = text_message("Server commands are not available yet.".to_string());
-        message.kind = Some("AdminCommandResult".to_string());
-        self.notify(id, message);
+        // Commandes serveur : `ServerCommandProcessor`, dans `server.rs`.
+        self.run_server_command(id, command);
     }
 }
 

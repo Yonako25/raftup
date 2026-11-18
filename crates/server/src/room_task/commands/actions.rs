@@ -32,7 +32,7 @@ fn permission(mode: &str, has_goal: bool) -> Permission {
 
 /// Durée de `!countdown`, lue comme `int(seconds, 10)` en Python : un texte qui
 /// n'est pas un nombre donne 10 ; plus d'une heure est refusé.
-fn parse_countdown(seconds: &str) -> Result<i64, String> {
+pub(super) fn parse_countdown(seconds: &str) -> Result<i64, String> {
     let text = seconds.trim();
     let invalid = |shown: &str| format!("{shown} is invalid. Maximum is 1 hour.");
     match text.parse::<i64>() {
@@ -62,8 +62,11 @@ impl RoomTask {
         let Some(player) = self.player(id).cloned() else {
             return;
         };
-        // `allow_releases` (autorisation donnée par la console du serveur)
-        // n'existe pas encore dans Raftup : la liste est toujours vide.
+        // `/allow_release` (console admin) autorise ce joueur quel que soit le mode.
+        if self.allow_releases.contains(&(player.team, player.slot)) {
+            self.release_player(player.team, player.slot);
+            return;
+        }
         let mode = self.room.data().server_options.release_mode.clone();
         match permission(&mode, self.has_goal(player.team, player.slot)) {
             Permission::Allowed => self.release_player(player.team, player.slot),

@@ -656,7 +656,7 @@ async fn admin_login_et_logout() {
         ["You must first login using !admin login [password]"]
     );
     run(&mut other, "!admin login admin").await;
-    // Commandes serveur pas encore disponibles (J3).
+    // Commandes serveur : réponse `AdminCommandResult` (détail dans `commandes_admin.rs`).
     let packets = run(&mut other, "!admin /players").await;
     let admin: Vec<&Value> = packets
         .iter()
@@ -665,7 +665,7 @@ async fn admin_login_et_logout() {
     assert_eq!(admin.len(), 1);
     assert_eq!(
         admin[0]["data"][0]["text"],
-        "Server commands are not available yet."
+        "1 players of 3 connected :: Team #1: Alice (Bob) (Chloé)"
     );
     let packets = run(&mut other, "!admin logout").await;
     assert_eq!(
