@@ -62,3 +62,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : vrai téléchargement des ≈ 72 Mo (pas d'accord demandé) ; rendu à l'œil ; fermeture de la fenêtre pendant l'installation (thread détaché, restes nettoyés au prochain essai en théorie).
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 3, la génération : barre indéterminée, journal en direct, « Annuler ».
+
+### 2026-11-18 · Écran « Créer une partie », étape 3
+- **Fait** : panneau `generation` : `generate_blocking` dans un thread `std` avec `PythonBackend` (réseau bloqué), barre indéterminée, temps écoulé, journal en direct (2 000 lignes au plus), « Annuler », messages d'erreur du contrat avec « Voir le détail » (traceback) et « Réessayer » ; seed générée gardée pour l'étape 4. 7 tests ; `cargo test --workspace`, clippy et fmt passent. Pas de commit encore.
+- **Pas vérifié** : vraie génération depuis l'interface (générateur pas installé ici) ; rendu à l'œil ; fermeture de la fenêtre pendant une génération.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 4, l'hébergement de la seed générée (`host_generated`, « Réessayer » sur un autre port sans régénérer).

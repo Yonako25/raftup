@@ -8,13 +8,13 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **17 novembre 2026**.
+Mis à jour le **18 novembre 2026**.
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **Interface de génération** : écran « Créer une partie », étapes 1 (préparation) et 2 (installation du générateur, annulable) faites ; reste la génération (progression, annulation), l'hébergement et les erreurs ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
+- [ ] **Interface de génération** : écran « Créer une partie », étapes 1 (préparation), 2 (installation du générateur) et 3 (génération, journal en direct, annulation) faites ; reste l'hébergement et les erreurs d'hébergement ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
@@ -81,7 +81,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 **launcher-ui** (ADR 0011)
 
 - egui / eframe (wgpu), binaire `raftup`
-- Écrans « Héberger une partie », « Créer une partie » (préparation et installation du générateur), « Partie en cours » et « Bientôt », d'après la maquette
+- Écrans « Héberger une partie », « Créer une partie » (préparation, installation du générateur, génération), « Partie en cours » et « Bientôt », d'après la maquette
 - Polices Chakra Petch et Inter intégrées (OFL)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**

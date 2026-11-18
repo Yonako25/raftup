@@ -7,7 +7,8 @@
 //!
 //! Au clic sur « Générer », si le formulaire est bon, on vérifie que le générateur
 //! est installé ; sinon on demande l'accord de l'hôte pour l'installer (étape 2,
-//! `generator_setup`). La génération elle-même arrive à l'étape 3.
+//! `generator_setup`). S'il est prêt, la génération part dans un thread (étape 3,
+//! `generation`).
 
 use std::path::PathBuf;
 
@@ -15,7 +16,7 @@ use egui::{RichText, Ui};
 use launcher_core::generation::GenerateRequest;
 use launcher_core::{Encryption, PartyHostOptions};
 
-use super::generator_setup;
+use super::{generation, generator_setup};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -49,10 +50,10 @@ pub struct CreateForm {
     encrypted: bool,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
-    /// Message de réussite de la vérification (la génération arrive à l'étape 3).
-    ready: Option<String>,
     /// Le générateur : absent, en cours d'installation, prêt… (étape 2).
     setup: generator_setup::Setup,
+    /// La génération : en cours, finie ou échouée (étape 3).
+    generation: generation::Generation,
 }
 
 impl Default for CreateForm {
@@ -69,8 +70,8 @@ impl Default for CreateForm {
             encrypted: true,
             cert: None,
             key: None,
-            ready: None,
             setup: generator_setup::Setup::default(),
+            generation: generation::Generation::default(),
         }
     }
 }
@@ -94,6 +95,10 @@ pub fn show(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) -> O
         }
         // Consentement, progression ou erreur de l'installation du générateur.
         generator_setup::show(ui, &mut form.setup);
+        // Génération en cours, seed prête ou échec.
+        if generation::show(ui, &mut form.generation) {
+            on_generate(ui.ctx(), form, error);
+        }
 
         if ui.available_width() >= super::WIDE {
             ui.columns(2, |columns| {
@@ -255,37 +260,34 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         }
 
         ui.add_space(12.0);
-        // Grisé pendant l'installation du générateur.
-        let enabled = !form.setup.is_busy();
+        // Grisé pendant l'installation du générateur et pendant la génération.
+        let enabled = !form.setup.is_busy() && !form.generation.is_busy();
         if widgets::primary_button(ui, "▶ Générer la partie", enabled) {
-            match build_request(form) {
-                Ok((request, _host)) => {
-                    *error = None;
-                    // Formulaire bon : on regarde ensuite si le générateur est là.
-                    // S'il manque, le panneau de consentement s'affiche en haut.
-                    form.setup = generator_setup::check();
-                    form.ready = match form.setup {
-                        generator_setup::Setup::Ready => {
-                            let count = request.player_files.len();
-                            let plural = if count > 1 { "s" } else { "" };
-                            Some(format!(
-                                "Formulaire valide ({count} joueur{plural}) et générateur prêt. \
-                                 La génération arrive à l'étape suivante."
-                            ))
-                        }
-                        _ => None,
-                    };
-                }
-                Err(message) => {
-                    form.ready = None;
-                    *error = Some(message);
-                }
-            }
-        }
-        if let Some(message) = &form.ready {
-            ui.label(RichText::new(message).color(theme::GREEN).size(13.0));
+            on_generate(ui.ctx(), form, error);
         }
     });
+}
+
+/// Clic sur « Générer la partie » (ou « Réessayer ») : vérifie le formulaire, puis
+/// le générateur, puis lance la génération.
+fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
+    match build_request(form) {
+        Ok((request, _host)) => {
+            *error = None;
+            // Formulaire bon : on regarde ensuite si le générateur est là.
+            // S'il manque, le panneau de consentement s'affiche en haut.
+            form.setup = generator_setup::check();
+            form.generation = match form.setup {
+                // Les réglages du serveur (`_host`) serviront à l'étape 4 (hébergement).
+                generator_setup::Setup::Ready => generation::start(ctx, request),
+                _ => generation::Generation::Idle,
+            };
+        }
+        Err(message) => {
+            form.generation = generation::Generation::Idle;
+            *error = Some(message);
+        }
+    }
 }
 
 /// Ouvre la boîte de dialogue demandée pendant le dessin.
@@ -296,8 +298,6 @@ pub fn open_pending_dialog(form: &mut CreateForm) {
     let Some(pick) = form.pending_pick.take() else {
         return;
     };
-    // Le formulaire change : l'ancien « Formulaire valide » ne vaut plus.
-    form.ready = None;
     match pick {
         Pick::Yaml => {
             let picked = rfd::FileDialog::new()

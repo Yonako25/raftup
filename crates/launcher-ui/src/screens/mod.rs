@@ -2,6 +2,7 @@
 //! s'il y en a une, la page vers laquelle l'utilisateur veut aller.
 
 pub mod create;
+pub mod generation;
 pub mod generator_setup;
 pub mod library;
 pub mod matches;
