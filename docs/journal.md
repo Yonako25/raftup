@@ -133,6 +133,16 @@ _Aucune session en cours._
 
 ### 2026-11-18 · Contrôle visuel de la V1 par captures
 - **Fait** : scénario `salon` de la macro de captures ; onglet « Salon », préréglages, champ webhook et panneau d'installation du générateur regardés à l'écran ; pastilles (« Pas testé », « En ligne ») qui prenaient toute la hauteur de la ligne, dessinées à leur taille (18bd63d). Workspace, clippy et fmt passent.
-- **Pas vérifié** : « Tout tester » cliqué ; bannière de mise à jour ; fin de la génération par la macro (le runtime `Z:aftup-testuntime` est périmé depuis les nouveaux pins).
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Pas vérifié** : « Tout tester » cliqué ; bannière de mise à jour ; fin de la génération par la macro (le runtime `Z:
+aftup-test
+untime` est périmé depuis les nouveaux pins).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : J1 étape 9, partie réelle de Slime Rancher.
+
+### 2026-11-18 · ROM absente à la génération
+- **Fait** : sans ROM, soe bloquait la génération 5 min (boîte de fichier invisible d'Archipelago) ; le worker met `settings.no_gui = True` et l'erreur arrive en 6 s ; l'écran traduit ce `FileNotFoundError` en message clair (b14af43). Test réel `monde_avec_rom_absente`, workspace, clippy et fmt passent ; tests réels à lancer avec `--test-threads=1`.
+- **Pas vérifié** : message vu à l'écran ; autres mondes à ROM (seul soe essayé). Vrai gras Inter SemiBold pas fait : il faut télécharger la police, accord à demander.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : J1 étape 9, partie réelle de Slime Rancher (avec l'utilisatrice).
