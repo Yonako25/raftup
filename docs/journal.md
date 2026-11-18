@@ -118,3 +118,9 @@ _Aucune session en cours._
 - **Pas vérifié** : onglet « Salon » et sélecteur de preset jamais vus à l'écran ; aucun vrai message Discord ; signature minisign non recoupée avec l'outil officiel ; Slime Rancher jamais joué.
 - **Ne pas toucher** : `docs/profils-en-attente/` (reste le brouillon de demande).
 - **Suite** : valider les ADR 0022 à 0024, puis J1 étape 9 (partie réelle de Slime Rancher).
+
+### 2026-11-18 · F12 mise à jour terminée
+- **Fait** : ADR 0022-0024 acceptés ; outil `update_tool`, vraie clé publique, bannière et remplacement de l'exe (4bc917b). Workspace, clippy et fmt passent.
+- **Pas vérifié** : remplacement réel de l'exe sur un release ; bannière jamais vue ; signature recoupée avec l'outil minisign officiel.
+- **Ne pas toucher** : `docs/profils-en-attente/`, la clé privée (`C:\Users\ionak\.raftup-keys`, hors dépôt).
+- **Suite** : sauvegarder la clé privée ; J1 étape 9 (partie réelle de Slime Rancher).

@@ -23,7 +23,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **F08 salon de préparation** (côté hôte, sans hub) : onglet « Salon », test « prêt ? » par vraie connexion (ADR 0024) ; jamais regardé à l'écran
 - [x] **F10 webhook Discord** : branché dans « Héberger » ; reste « Créer une partie » et la mémorisation de l'URL (secret, décision à prendre)
 - [x] **F06 presets** : délai de génération seulement (ADR 0023 ; étape 2 `meta.yaml` à faire)
-- [ ] **F12 mise à jour** : cœur fait (ADR 0022) ; manquent clé publique, script de publication, application de la mise à jour et écran
+- [x] **F12 mise à jour** (ADR 0022) : outil `update_tool` (keygen, sign, manifest), vraie clé publique intégrée, bannière « Installer » + remplacement de l'exe ; jamais essayé sur un vrai release ; clé privée dans `C:\Users\ionak\.raftup-keys` (à sauvegarder hors ligne) ; reste à trancher exe nu ou zip avant la première release
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
