@@ -17,6 +17,7 @@ use egui::{RichText, Ui};
 use launcher_core::generation::GenerateRequest;
 use launcher_core::{Encryption, PartyHostOptions};
 
+use super::presets::Preset;
 use super::{generation, generator_setup, hosting};
 use crate::app::Page;
 use crate::format;
@@ -46,6 +47,8 @@ pub struct CreateForm {
     /// L'hôte a coché « J'ai compris » sous l'avertissement des apworlds.
     apworld_ack: bool,
     pending_pick: Option<Pick>,
+    /// Preset de génération (F06) : Rapide, Standard ou Long.
+    preset: Preset,
     port: String,
     password: String,
     public_host: String,
@@ -71,6 +74,7 @@ impl Default for CreateForm {
             apworlds: Vec::new(),
             apworld_ack: false,
             pending_pick: None,
+            preset: Preset::default(),
             port: "38281".to_string(),
             password: String::new(),
             public_host: "localhost".to_string(),
@@ -310,6 +314,14 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
             form.encrypted = false;
         }
 
+        labelled(ui, "Préréglage de génération");
+        ui.horizontal(|ui| {
+            for preset in Preset::ALL {
+                ui.selectable_value(&mut form.preset, preset, preset.label());
+            }
+        });
+        ui.label(widgets::dim(form.preset.description()).size(13.0));
+
         ui.add_space(12.0);
         // Grisé pendant l'installation du générateur et pendant la génération.
         let enabled =
@@ -489,11 +501,13 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
 
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
-    let request = GenerateRequest {
+    let mut request = GenerateRequest {
         player_files: form.yamls.clone(),
         apworlds: form.apworlds.clone(),
         ..GenerateRequest::default()
     };
+    // Le preset ne règle que des champs génériques de la demande (F06, ADR 0023).
+    form.preset.apply(&mut request);
     let host = PartyHostOptions {
         port,
         password,
@@ -530,6 +544,14 @@ mod tests {
         assert_eq!(host.public_host, "exemple.fr");
         assert_eq!(host.encryption, Encryption::Plain);
         assert!(!host.disable_save);
+    }
+
+    #[test]
+    fn preset_applique_au_delai() {
+        let mut form = valid();
+        form.preset = Preset::Rapide;
+        let (request, _) = build_request(&form).unwrap();
+        assert_eq!(request.timeout, Preset::Rapide.timeout());
     }
 
     #[test]
