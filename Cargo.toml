@@ -67,6 +67,11 @@ keyvalues-parser = "0.2"
 winreg = "0.56"
 # Encodage des liens d'invitation `raftup://` (ADR 0020) ; déjà tiré par d'autres crates.
 percent-encoding = "2.3"
+# Mise à jour automatique (ADR 0022) : signature minisign (MIT) et versions ; `minisign`
+# (qui sait signer) ne sert que dans les tests.
+minisign-verify = "0.3"
+semver = "1"
+minisign = "0.10"
 # Dossiers temporaires pour les tests.
 tempfile = "3"
 ap-protocol = { path = "crates/ap-protocol" }

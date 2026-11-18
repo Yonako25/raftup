@@ -34,6 +34,9 @@ py-bridge.workspace = true
 sha2.workspace = true
 # Lire les manifestes Epic (JSON) et fusionner les fichiers de config des mods.
 serde_json.workspace = true
+# Mise à jour automatique : signature minisign et versions (ADR 0022).
+minisign-verify.workspace = true
+semver.workspace = true
 
 # Registre Windows : seulement compilé sous Windows.
 [target.'cfg(windows)'.dependencies]
@@ -41,6 +44,8 @@ winreg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Signer un faux binaire dans les tests de update.rs.
+minisign.workspace = true
 # Certificat auto-signé pour le test du diagnostic TLS (diagnose.rs).
 rcgen.workspace = true
 futures-util.workspace = true

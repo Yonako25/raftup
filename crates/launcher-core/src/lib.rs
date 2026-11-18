@@ -37,7 +37,9 @@ pub mod record;
 pub mod seed;
 pub mod template;
 pub mod uninstall;
+pub mod update;
 pub mod url_scheme;
+pub mod webhook;
 
 pub use catalog::Catalog;
 pub use config::{GameSettings, LoadedConfig, UserConfig};
