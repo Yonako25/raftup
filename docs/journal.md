@@ -182,6 +182,14 @@ untime2`.
 ### 2026-11-18 · Reprise réelle d'une partie
 - **Fait** : avec l'utilisatrice : partie Slime Rancher réhébergée après redémarrage de Raftup, sauvegarde `.raftup` reprise (1/152), jeu reconnecté, nouvel emplacement validé (2/152) sans objet reçu en double.
 - **Pas vérifié** : reprise après un arrêt brutal (processus tué) ; partie à plusieurs joueurs.
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : clic sur un lien `raftup://` depuis Discord ou un navigateur avec le binaire `--release`.
+
+### 2026-11-18 · Liens d'invitation et boutons « Copier » en vrai
+- **Fait** : boutons « Copier » muets réparés (eframe sans « clipboard », 889f974, avec test) ; lien `raftup://join/?…` réécrit par le navigateur accepté, bulle « Copié » (910bbcd) ; avec l'utilisatrice : clic sur le lien depuis le navigateur → écran « Rejoindre » rempli. Discord ne rend pas le lien cliquable (ADR 0020 mis à jour).
+- **Pas vérifié** : après réhébergement, le compteur affichait 1/152 alors que 2/152 avait été annoncé ; à recontrôler (deuxième emplacement peut-être jamais envoyé).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : recontrôler la sauvegarde (valider un emplacement, réhéberger, comparer le compteur).
 

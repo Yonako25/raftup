@@ -19,7 +19,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Slime Rancher dans le catalogue** (ADR 0021 : mod sans licence, téléchargé chez l'auteur) ; reste J1 étape 9, la partie réelle
 - [x] **Mondes d'Archipelago qui ne s'importaient pas** : dépendances épinglées ajoutées (requests + 3 dépendances, setuptools 80.9.0, pyevermizer, zilliandomizer en source GitHub, section `[[source_packages]]`) ; les 7 mondes s'importent et se génèrent, sauf soe (ROM demandée à la génération : message clair en 6 s, sans ROM fournie) ; installation réelle à refaire chez un joueur (nouveaux pins = réinstallation)
 - [x] **Rejoindre par lien d'invitation** (F04, ADR 0020) : liens `raftup://` par joueur, écran « Rejoindre », instance unique, schéma enregistré au premier lancement du binaire livré ; essayé en vrai (2e instance qui passe le lien)
-- [ ] Essayer un clic sur un lien `raftup://` depuis Discord ou un navigateur avec le binaire `--release` installé
+- [x] Clic sur un lien `raftup://` (18 novembre 2026) : marche depuis le navigateur (forme `join/?` acceptée) ; Discord ne le rend pas cliquable, il faut le coller dans « Invitations »
 - [x] **F08 salon de préparation** (côté hôte, sans hub) : onglet « Salon », test « prêt ? » par vraie connexion (ADR 0024) ; jamais regardé à l'écran
 - [x] **F10 webhook Discord** : branché dans « Héberger » ; champ aussi dans « Créer », URL mémorisée en clair (ADR 0025) ; jamais essayé avec un vrai webhook
 - [x] **F06 presets** : délai + `meta.yaml` (Rapide, Long), choix mémorisé (ADR 0023) ; test réel du meta non lancé

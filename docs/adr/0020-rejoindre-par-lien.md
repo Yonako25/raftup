@@ -10,7 +10,7 @@ Aujourd'hui, l'hôte copie un texte (adresse, « demandez le mot de passe », li
 
 ## Décision
 
-1. **Format : `raftup://join?v=1&addr=…&slot=…&game=…`.** Le même lien peut aussi se coller dans un champ « Rejoindre » du launcher. Pas de page `https://` au MVP : il faudrait un domaine et le hub. Discord ne rend sans doute pas cliquable un schéma inconnu (à vérifier) : le collage sera souvent le vrai chemin.
+1. **Format : `raftup://join?v=1&addr=…&slot=…&game=…`.** Le même lien peut aussi se coller dans un champ « Rejoindre » du launcher. Pas de page `https://` au MVP : il faudrait un domaine et le hub. Discord ne rend pas cliquable un schéma inconnu (vérifié le 18 novembre 2026) : le collage est le vrai chemin depuis Discord. Chrome et Edge réécrivent le lien en `raftup://join/?…`, forme acceptée.
 2. **Contenu : jamais le mot de passe.** `v` (version du format), `addr` obligatoire, `slot` et `game` (nom du jeu côté Archipelago) facultatifs. Un mot de passe dans un lien finirait dans l'historique Discord, dans la ligne de commande visible des autres programmes et dans les journaux (NF09) : le joueur le tape à l'écran.
 3. **Un lien par joueur**, copié depuis sa ligne dans « Partie en cours », en plus du texte d'invitation général (qui gagne un lien sans slot).
 4. **Schéma d'URL enregistré au premier lancement** sous `HKCU\Software\Classes\raftup`, sans droits administrateur (NF10), avec `winreg` (déjà une dépendance). La clé est vérifiée à chaque démarrage et réécrite si le chemin de l'exécutable a changé.
