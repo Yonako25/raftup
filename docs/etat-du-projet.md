@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago` et 3 `fill` faites ; reste `generate` + APQuest, équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill` et 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) faites ; reste + APQuest, équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -45,6 +45,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour l'étape 3 de l'ADR 0027 |
+| `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
 
 ## Ce que fait chaque crate
 
@@ -98,6 +99,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Fenêtre sans bordure redimensionnable par ses bords et ses coins (`resize.rs`)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - En debug, macro `RAFTUP_DEV_CAPTURE=<dossier>` (+ `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) : joue « Créer une partie » et enregistre des captures PNG, sans être devant le PC
+- Case « Moteur Rust (expérimental) » dans « Créer une partie » : APQuest généré sans Python (ADR 0027), sinon Archipelago
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
 - Sauvegarde la partie hébergée dans un `.raftup` à côté de la seed, et la reprend au prochain hébergement (`HostOptions::disable_save` pour s'en passer, pas encore dans l'interface)
 - Fermer la fenêtre arrête la partie proprement (sauvegarde compactée), 5 s au plus

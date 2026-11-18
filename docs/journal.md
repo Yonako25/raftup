@@ -227,3 +227,9 @@ untime2`.
 - **Pas vérifié** : performance sur un gros multiworld (un balayage complet par objet de progression) ; restrictions d'objets par lieu (`item_rule`) absentes du modèle.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 4 de l'ADR 0027 : crate `generate` + APQuest en Rust, branché sur `RustBackend` (sur option).
+
+### 2026-11-18 · V2 étape 4 : `generate` + APQuest en Rust, moteur Rust dans le launcher
+- **Fait** : crate `generate` (`6eee3f3`) : APQuest porté (notice MIT), datapackage et `checksum` identiques à l'officiel, seed `.archipelago` comparée à 4 seeds du vrai 0.6.8 (tout sauf le placement), 16 combinaisons × 60 seeds jouables et reproductibles, seed chargée par le serveur officiel. YAML, `RustBackend` et case « Moteur Rust (expérimental) » (`4da4bb1`) : 2 joueurs générés et hébergés par la macro sans Python installé. Workspace, clippy et fmt passent.
+- **Pas vérifié** : partie jouée avec le vrai client APQuest sur une seed Rust ; seed Rust hébergée par `MultiServer` et comparée sur `Connect` (banc différentiel) ; spoiler et `meta.yaml` ignorés par le moteur Rust.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 5 de l'ADR 0027 : équilibrage de progression (`progression_balancing`).
