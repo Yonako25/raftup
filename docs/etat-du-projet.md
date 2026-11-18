@@ -16,11 +16,14 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
-- [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
+- [x] **Slime Rancher dans le catalogue** (ADR 0021 : mod sans licence, téléchargé chez l'auteur) ; reste J1 étape 9, la partie réelle
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
 - [x] **Rejoindre par lien d'invitation** (F04, ADR 0020) : liens `raftup://` par joueur, écran « Rejoindre », instance unique, schéma enregistré au premier lancement du binaire livré ; essayé en vrai (2e instance qui passe le lien)
 - [ ] Essayer un clic sur un lien `raftup://` depuis Discord ou un navigateur avec le binaire `--release` installé
-- [ ] Salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
+- [x] **F08 salon de préparation** (côté hôte, sans hub) : onglet « Salon », test « prêt ? » par vraie connexion (ADR 0024, proposé) ; jamais regardé à l'écran
+- [x] **F10 webhook Discord** : branché dans « Héberger » ; reste « Créer une partie » et la mémorisation de l'URL (secret, décision à prendre)
+- [x] **F06 presets** : délai de génération seulement (ADR 0023, proposé ; étape 2 `meta.yaml` à valider)
+- [ ] **F12 mise à jour** : cœur fait (ADR 0022, proposé) ; manquent clé publique, script de publication, application de la mise à jour et écran
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)

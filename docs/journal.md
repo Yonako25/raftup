@@ -112,3 +112,9 @@ _Aucune session en cours._
 - **Pas vérifié** : écran affiché après le clic (le release n'a pas la macro de captures) ; machine sans bon pilote graphique (wgpu) ; SmartScreen et pare-feu au premier lancement (il faut une machine propre).
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : test sur une machine propre (VirtualBox ou autre PC) juste avant la première diffusion.
+
+### 2026-11-18 · Catalogue Slime Rancher et fonctions V1 restantes
+- **Fait** : Slime Rancher au catalogue (a48e924, ADR 0021) ; F10 cœur+branchement (e630fbc, eaaa533) ; F12 cœur (e630fbc) ; F06 délai seulement (18f8651) ; F08 salon côté hôte (commit suivant). Workspace, clippy et fmt passent.
+- **Pas vérifié** : onglet « Salon » et sélecteur de preset jamais vus à l'écran ; aucun vrai message Discord ; signature minisign non recoupée avec l'outil officiel ; Slime Rancher jamais joué.
+- **Ne pas toucher** : `docs/profils-en-attente/` (reste le brouillon de demande).
+- **Suite** : valider les ADR 0022 à 0024, puis J1 étape 9 (partie réelle de Slime Rancher).

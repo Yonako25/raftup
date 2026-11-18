@@ -11,7 +11,7 @@ use crate::app::Page;
 use crate::format::{self, Piece, StatusKind};
 use crate::theme;
 use crate::widgets;
-use crate::worker::{Command, Shared, Worker};
+use crate::worker::{Command, ReadyCheck, ReadyState, Shared, Worker};
 
 /// Largeur de la colonne de droite (progression, fil d'activité).
 const SIDE_WIDTH: f32 = 340.0;
@@ -28,6 +28,7 @@ const PLAYER_COLORS: [Color32; 5] = [
 /// Les onglets du centre de l'écran (0 : « Équipage »).
 const TAB_CHAT: usize = 1;
 const TAB_JOURNAL: usize = 2;
+const TAB_SALON: usize = 3;
 
 /// Ce que l'hôte a saisi ou coché sur cet écran.
 #[derive(Default)]
@@ -40,6 +41,8 @@ pub struct RunningState {
     confirm_stop: bool,
     /// Onglet ouvert (0 pour l'équipage, `TAB_CHAT` ou `TAB_JOURNAL`).
     tab: usize,
+    /// Mot de passe de la salle, retapé pour les tests « prêt ? » (jamais enregistré).
+    salon_password: String,
 }
 
 pub fn show(
@@ -247,6 +250,7 @@ fn main_area(
             ("Équipage", Some(players)),
             ("Chat", Some(chats)),
             ("Journal", None),
+            ("Salon", None),
         ],
         &mut state.tab,
     );
@@ -254,6 +258,7 @@ fn main_area(
     match state.tab {
         TAB_CHAT => chat_tab(ui, state, worker, shared),
         TAB_JOURNAL => journal_tab(ui, state, shared),
+        TAB_SALON => salon_tab(ui, state, status, worker, shared, copy),
         // L'onglet 0 (« Équipage ») et toute valeur inattendue montrent l'équipage.
         _ => crew_tab(ui, status, now, copy),
     }
@@ -551,4 +556,118 @@ fn side_area(ui: &mut Ui, shared: &Shared, status: &HostStatus, now: f64) {
 fn compact_rows(ui: &mut Ui) {
     ui.spacing_mut().interact_size.y = 16.0;
     ui.spacing_mut().item_spacing.y = 4.0;
+}
+
+/// Onglet « Salon » (F08) : par joueur, le jeu, le lien d'invitation et le test « prêt ? ».
+///
+/// Le test ouvre une vraie connexion vers l'adresse publique de la partie, comme le ferait
+/// le joueur, puis la referme. Le travail se fait dans le worker : l'écran ne bloque jamais.
+fn salon_tab(
+    ui: &mut Ui,
+    state: &mut RunningState,
+    status: &HostStatus,
+    worker: &Worker,
+    shared: &Shared,
+    copy: &mut Option<String>,
+) {
+    let check = |slot: &SlotStatus, password: &str| {
+        worker.send(Command::CheckReady(ReadyCheck {
+            address: status.address.clone(),
+            slot: slot.name.clone(),
+            game: slot.game.clone(),
+            password: Some(password.to_string()).filter(|p| !p.is_empty()),
+        }));
+    };
+    let players: Vec<&SlotStatus> = status.server.slots.iter().filter(|s| !s.is_group).collect();
+    list_frame(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            if widgets::primary_button(ui, "Tout tester", true) {
+                for slot in &players {
+                    check(slot, &state.salon_password);
+                }
+            }
+            if status.has_password {
+                ui.label(widgets::dim("Mot de passe de la salle :"));
+                // Le mot de passe n'est pas gardé dans l'état de la partie : on le retape ici.
+                ui.add(
+                    egui::TextEdit::singleline(&mut state.salon_password)
+                        .password(true)
+                        .desired_width(160.0),
+                );
+            }
+        });
+        ui.add_space(4.0);
+        ui.label(
+            widgets::dim(
+                "« Tester » ouvre une vraie connexion sur le slot, puis la referme : elle \
+                 apparaît brièvement dans le journal du serveur.",
+            )
+            .size(12.0),
+        );
+        for slot in &players {
+            ui.separator();
+            ui.horizontal(|ui| {
+                widgets::badge(ui, 40.0, &format::initials(&slot.game), false);
+                ui.add_space(4.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(
+                        RichText::new(&slot.name)
+                            .size(15.0)
+                            .strong()
+                            .color(theme::TEXT),
+                    );
+                    ui.label(widgets::dim(format::game_with_tags(slot)).size(12.0));
+                    if let Some(link) = format::player_link(&status.address, slot) {
+                        let button = egui::Button::new(widgets::dim("Copier le lien").size(12.0))
+                            .frame(false);
+                        if ui.add(button).clicked() {
+                            *copy = Some(link);
+                        }
+                    }
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let state_of = shared.readiness.get(&slot.name);
+                    let checking = matches!(state_of, Some(ReadyState::Checking));
+                    if widgets::ghost_button(ui, if checking { "Test…" } else { "Tester" })
+                        && !checking
+                    {
+                        check(slot, &state.salon_password);
+                    }
+                    match state_of {
+                        None => widgets::pill(
+                            ui,
+                            "Pas testé",
+                            theme::TEXT_DIM,
+                            Color32::from_white_alpha(6),
+                        ),
+                        Some(ReadyState::Checking) => widgets::pill(
+                            ui,
+                            "Test en cours…",
+                            theme::AMBER,
+                            Color32::from_white_alpha(6),
+                        ),
+                        Some(ReadyState::Done(result)) => {
+                            let (fg, bg) = if result.is_ready() {
+                                (theme::GREEN, theme::GREEN_BG)
+                            } else {
+                                (theme::RED_TEXT, Color32::from_white_alpha(10))
+                            };
+                            widgets::pill(ui, result.label(), fg, bg);
+                        }
+                    }
+                });
+            });
+            // Le message complet (quoi faire) sous la ligne, seulement après un échec.
+            if let Some(ReadyState::Done(result)) = shared.readiness.get(&slot.name) {
+                if !result.is_ready() {
+                    ui.label(
+                        RichText::new(result.message())
+                            .size(12.0)
+                            .color(theme::RED_TEXT),
+                    );
+                }
+            }
+        }
+    });
 }

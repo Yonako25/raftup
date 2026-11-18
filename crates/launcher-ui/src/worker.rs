@@ -7,13 +7,14 @@
 //!   état partagé que l'interface lit sans attendre ;
 //! - demande ensuite un nouveau dessin (`request_repaint`).
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use std::path::PathBuf;
 
 use launcher_core::{
-    Host, HostOptions, HostStatus, LogBuffer, LogLine, NumberedEvent, SeedSummary,
+    Host, HostOptions, HostStatus, LogBuffer, LogLine, NumberedEvent, Readiness, SeedSummary,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -29,6 +30,24 @@ pub enum Command {
     Shutdown,
     /// Lire et résumer une seed, hors du fil de l'interface.
     LoadSeed(PathBuf),
+    /// Tester « prêt ? » d'un slot par une vraie connexion (F08).
+    CheckReady(ReadyCheck),
+}
+
+/// Ce qu'il faut pour tester un slot. Le mot de passe n'est pas dans `HostStatus` :
+/// l'hôte le retape dans le salon (il n'est jamais enregistré).
+pub struct ReadyCheck {
+    pub address: String,
+    pub slot: String,
+    pub game: String,
+    pub password: Option<String>,
+}
+
+/// Où en est le test d'un slot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReadyState {
+    Checking,
+    Done(Readiness),
 }
 
 /// L'état lu par l'interface.
@@ -46,6 +65,8 @@ pub struct Shared {
     pub error: Option<String>,
     /// Dernière seed lue : son chemin et son résumé, ou le message d'erreur.
     pub seed: Option<(PathBuf, Result<SeedSummary, String>)>,
+    /// Résultat des tests « prêt ? », par nom de slot (F08).
+    pub readiness: BTreeMap<String, ReadyState>,
 }
 
 /// Poignée côté interface.
@@ -114,7 +135,7 @@ async fn run(
                     None | Some(Command::Shutdown) => break,
                     Some(command) => command,
                 };
-                handle(command, &mut host, &shared, &mut next_event).await;
+                handle(command, &mut host, &shared, &mut next_event, &ctx).await;
             }
             _ = tick.tick() => {}
         }
@@ -134,7 +155,13 @@ fn with_shared<R>(shared: &Mutex<Shared>, f: impl FnOnce(&mut Shared) -> R) -> R
     f(&mut shared.lock().unwrap_or_else(|e| e.into_inner()))
 }
 
-async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_event: &mut u64) {
+async fn handle(
+    command: Command,
+    host: &mut Host,
+    shared: &Arc<Mutex<Shared>>,
+    next_event: &mut u64,
+    ctx: &egui::Context,
+) {
     match command {
         Command::Start(options) => {
             // Partie déjà lancée : ce `Start` vient d'un double clic envoyé
@@ -145,6 +172,7 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
             }
             with_shared(shared, |s| {
                 s.starting = true;
+                s.readiness.clear();
                 s.error = None;
             });
             let result = host.start(options).await;
@@ -165,6 +193,7 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
             with_shared(shared, |s| {
                 s.status = None;
                 s.events.clear();
+                s.readiness.clear();
                 *next_event = 0;
                 if let Err(e) = result {
                     s.error = Some(e.to_string());
@@ -190,6 +219,32 @@ async fn handle(command: Command, host: &mut Host, shared: &Mutex<Shared>, next_
                 Err(e) => Err(format!("lecture de la seed interrompue : {e}")),
             };
             with_shared(shared, |s| s.seed = Some((path, result)));
+        }
+        Command::CheckReady(check) => {
+            let slot = check.slot.clone();
+            with_shared(shared, |s| {
+                s.readiness.insert(slot.clone(), ReadyState::Checking);
+            });
+            // Tâche à part : le test peut durer 8 s et le worker doit continuer à traiter
+            // les autres commandes. `Arc::clone` : la tâche garde sa propre part de l'état.
+            let shared = Arc::clone(shared);
+            let ctx = ctx.clone();
+            tokio::spawn(async move {
+                let result = launcher_core::readiness::check_slot(
+                    &check.address,
+                    &check.slot,
+                    &check.game,
+                    check.password.as_deref(),
+                )
+                .await;
+                with_shared(&shared, |s| {
+                    // Partie arrêtée entre-temps : le résultat n'a plus de sens.
+                    if s.status.is_some() {
+                        s.readiness.insert(slot, ReadyState::Done(result));
+                    }
+                });
+                ctx.request_repaint();
+            });
         }
     }
 }

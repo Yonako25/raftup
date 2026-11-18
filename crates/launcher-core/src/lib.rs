@@ -10,6 +10,7 @@
 //! - [`party`] : générer une seed à partir de YAML puis l'héberger ;
 //! - [`launch`] : préparer et lancer le jeu ;
 //! - [`diagnose`] : expliquer en clair un échec de connexion ;
+//! - [`readiness`] : tester « prêt ? » d'un slot par une vraie connexion (F08) ;
 //! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup.
 //!
 //! `launcher-ui` (egui) n'appelle que cette crate.
@@ -33,6 +34,7 @@ pub mod logs;
 pub mod party;
 pub mod paths;
 pub mod profile;
+pub mod readiness;
 pub mod record;
 pub mod seed;
 pub mod template;
@@ -63,6 +65,7 @@ pub use paths::Paths;
 pub use profile::{Profile, ProfileError};
 /// Jeton d'annulation de `py-bridge`, réexporté : l'interface ne dépend que de `launcher-core`.
 pub use py_bridge::CancelToken;
+pub use readiness::{check_slot, Readiness};
 pub use record::{InstallRecord, RecordState};
 pub use seed::{SeedSlot, SeedSummary};
 pub use uninstall::{uninstall, UninstallReport};
