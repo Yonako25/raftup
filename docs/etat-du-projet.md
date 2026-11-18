@@ -1,7 +1,7 @@
 # État du projet
 
 > [!IMPORTANT]
-> - **J1 fini** : protocole complet, limites, tests différentiels, wss, et partie réelle de Slime Rancher (étape 9)
+> - **J1 presque fini** : protocole complet, limites, tests différentiels, wss ; Slime Rancher connecté en vrai avec le mod non modifié (étape 9), reste à finir une partie jusqu'à l'objectif (critère de la SPEC)
 > - **J2 fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise, captures différentielles comprises
 > - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
 > - **J3 côté interface** : hébergement, habillage et écran Bibliothèque faits ; Bibliothèque regardée à l'œil (vide et avec un profil de démo), le reste jamais contrôlé
