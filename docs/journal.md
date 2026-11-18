@@ -130,3 +130,9 @@ _Aucune session en cours._
 - **Pas vérifié** : test réel du `meta.yaml` ; aucun champ ni onglet vu à l'écran ; soe demande la ROM sans message clair ; kdl3 réclame `PyMemoryEditor`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:\raftup-test\runtime2` (runtime de vérification).
 - **Suite** : regarder l'interface avec la macro de captures, puis J1 étape 9.
+
+### 2026-11-18 · Contrôle visuel de la V1 par captures
+- **Fait** : scénario `salon` de la macro de captures ; onglet « Salon », préréglages, champ webhook et panneau d'installation du générateur regardés à l'écran ; pastilles (« Pas testé », « En ligne ») qui prenaient toute la hauteur de la ligne, dessinées à leur taille (18bd63d). Workspace, clippy et fmt passent.
+- **Pas vérifié** : « Tout tester » cliqué ; bannière de mise à jour ; fin de la génération par la macro (le runtime `Z:aftup-testuntime` est périmé depuis les nouveaux pins).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : J1 étape 9, partie réelle de Slime Rancher.
