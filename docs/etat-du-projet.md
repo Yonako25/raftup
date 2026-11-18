@@ -27,7 +27,6 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
-- [ ] Test sur une VM Windows propre (critère de fin de J3)
 
 ## Crates
 
