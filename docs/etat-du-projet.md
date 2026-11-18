@@ -1,7 +1,7 @@
 # État du projet
 
 > [!IMPORTANT]
-> - **J1 : étapes 1 à 8 faites** sur 9 : protocole complet, limites, tests différentiels, wss
+> - **J1 fini** : protocole complet, limites, tests différentiels, wss, et partie réelle de Slime Rancher (étape 9)
 > - **J2 fini** : indices, commandes `!`, sauvegarde `.raftup` avec reprise, captures différentielles comprises
 > - **J3 bien avancé côté logique** : `launcher-core` (profils, installation, détection, lancement), `py-bridge` et l'étape `generate` sont faits et testés avec le **vrai Archipelago 0.6.8** (APQuest) ; `generate_and_host` génère puis héberge en un appel
 > - **J3 côté interface** : hébergement, habillage et écran Bibliothèque faits ; Bibliothèque regardée à l'œil (vide et avec un profil de démo), le reste jamais contrôlé
@@ -25,7 +25,9 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **F06 presets** : délai + `meta.yaml` (Rapide, Long), choix mémorisé (ADR 0023) ; test réel du meta non lancé
 - [x] **F12 mise à jour** (ADR 0022) : outil `update_tool` (keygen, sign, manifest), vraie clé publique intégrée, bannière « Installer » + remplacement de l'exe ; jamais essayé sur un vrai release ; clé privée dans `C:\Users\ionak\.raftup-keys` (à sauvegarder hors ligne) ; exe nu (décision prise)
 - [ ] **Contrôle visuel du launcher** (vrai gras Inter SemiBold fait le 18 novembre) ; vus sur captures le 18 novembre : onglet « Salon », préréglages et champ webhook de « Créer », panneau d'installation du générateur
-- [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
+- [x] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup (18 novembre 2026 : Slimipelago 0.3.2.1 connecté sans modification, objets reçus)
+- [ ] « Créer une partie » doit reprendre seul les apworlds installés par la Bibliothèque (aujourd'hui, ajout à la main)
+- [ ] « Lancer le jeu » grisé tant que l'adresse et le slot sont vides : gênant pour un premier lancement
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
 
 ## Crates

@@ -150,6 +150,14 @@ untime2`.
 ### 2026-11-18 · Vrai gras Inter SemiBold
 - **Fait** : Inter SemiBold 4.001 (archive officielle `Inter-4.1.zip`, OFL) intégrée, famille `Bold` dans `theme.rs`, appliquée aux 18 textes `.strong()` ; gras vu sur captures (En cours, barre latérale). Workspace, clippy et fmt passent.
 - **Pas vérifié** : les scénarios `salon` et `bibliotheque` de la macro se sont arrêtés sur « En cours » (onglet et Bibliothèque pas capturés cette fois).
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : J1 étape 9, partie réelle de Slime Rancher (avec l'utilisatrice).
+
+### 2026-11-18 · Partie réelle de Slime Rancher (J1 étape 9)
+- **Fait** : avec l'utilisatrice devant le PC : installation par la Bibliothèque (MelonLoader, Slimipelago, apworld ; hash vérifiés), mod chargé au lancement, vrai générateur installé, partie générée par « Créer une partie » puis hébergée, mod connecté sans modification, lieux validés et objets reçus. J1 terminé.
+- **Pas vérifié** : reprise de la sauvegarde `.raftup` après redémarrage ; partie à plusieurs joueurs ; DeathLink.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : « Créer une partie » reprend seul les apworlds installés par la Bibliothèque.
 
