@@ -4,7 +4,9 @@
 //! par `cargo run -p launcher-core --example setup_generator -- <dossier>`, dont le dossier
 //! racine est donné par la variable `RAFTUP_REAL_RUNTIME`.
 //!
-//! `cargo test -p launcher-core --test generation_real -- --ignored --nocapture`
+//! `cargo test -p launcher-core --test generation_real -- --ignored --nocapture --test-threads=1`
+//!
+//! Un seul fil : le runtime n'accepte qu'une génération à la fois (sinon `Busy`).
 //!
 //! Remarque : Archipelago écrit `host.yaml` et `logs/` dans SON dossier, donc dans le
 //! runtime installé (jamais dans le dépôt). Les seeds et les sorties vont dans un dossier
@@ -196,4 +198,33 @@ fn generation_reelle_avec_meta_yaml() {
         logs.iter().any(|l| l.contains("Raftup test meta")),
         "le générateur n'a pas lu le meta.yaml : {logs:?}"
     );
+}
+
+/// Un monde qui demande la ROM du joueur (Secret of Evermore) : sans ROM, le générateur
+/// lève un `FileNotFoundError`, que l'interface traduit en message clair.
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn monde_avec_rom_absente() {
+    let Some(root) = runtime_root() else { return };
+    let work = tempfile::tempdir().unwrap();
+    let paths = Paths::under(work.path());
+    let mut backend = backend(&root);
+    let yaml = "name: Test\ngame: Secret of Evermore\nSecret of Evermore: {}\n";
+    let (tx, _rx) = channel();
+    let error = generate(
+        &paths,
+        &mut backend,
+        &request(work.path(), yaml, 1),
+        &CancelToken::new(),
+        tx,
+    )
+    .expect_err("sans ROM, la génération doit échouer");
+    eprintln!("{error:?}");
+    match error {
+        GenerationError::GeneratorFailed { kind, message, .. } => {
+            assert_eq!(kind, "FileNotFoundError");
+            assert!(message.contains(".sfc"), "{message}");
+        }
+        other => panic!("attendu GeneratorFailed, reçu {other:?}"),
+    }
 }

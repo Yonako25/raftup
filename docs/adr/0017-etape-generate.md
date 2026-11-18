@@ -40,7 +40,7 @@ Contrat JSON de `generate` : paramètres `archipelago_dir`, `site_packages`, `pl
 - Les redirections de téléchargement ne sont pas contrôlées par hôte : l'intégrité repose sur le sha256 épinglé (GitHub utilise `codeload.github.com` et `release-assets.githubusercontent.com`).
 - Le démarrage du pont (handshake, 30 s au plus) n'est pas annulable.
 - La fenêtre entre le lancement du worker et son placement dans le Job Object est sans effet : le worker ne lance rien avant la première requête.
-- Hypothèses sur l'Archipelago réel : vérifiées, voir la section « Vérification » en bas (reste : mondes qui demandent une ROM, non testés).
+- Hypothèses sur l'Archipelago réel : vérifiées, voir la section « Vérification » en bas ; monde qui demande une ROM absente (soe) : le worker met `settings.no_gui = True`, sinon Archipelago ouvre une boîte de fichier invisible et la génération attend le délai ; il lève alors `FileNotFoundError` en 6 s (test `monde_avec_rom_absente`, 18 novembre 2026).
 - Le chemin du zip annoncé par le worker n'est jamais utilisé : Rust reconstruit `output/AP_<seed_name>.zip` (nom de seed `[A-Za-z0-9_-]+`, fichier ordinaire, pas un lien).
 
 ## Vérification sur le vrai Archipelago 0.6.8 (test réel, 17 novembre 2026)

@@ -163,7 +163,12 @@ def generate(params):
         if os.environ.get("RAFTUP_BLOCK_NETWORK") == "1":
             block_network()
         import logging
+        import settings
 
+        # Sans cela, un monde qui demande un fichier absent (ROM du joueur) ouvre une
+        # boite de dialogue invisible et la generation attend jusqu'au delai : on veut
+        # un FileNotFoundError tout de suite.
+        settings.no_gui = True
         logging.basicConfig(stream=sys.stderr, level=logging.INFO)
         argv = ["Generate.py", "--player_files_path", a["players"],
                 "--outputpath", a["out"], "--spoiler", str(a["spoiler"])]

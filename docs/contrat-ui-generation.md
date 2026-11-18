@@ -35,6 +35,7 @@ Règles d'appel :
 | `NoPlayers` | « Ajoutez au moins un fichier YAML. » |
 | `InvalidPlayerFile` | « Le fichier {nom} n'est pas utilisable : {raison}. » |
 | `GeneratorFailed` | « Archipelago n'a pas pu générer la partie : {message}. » + « Voir le détail » (traceback) |
+| `GeneratorFailed` (`FileNotFoundError` sur une ROM) | « Un des jeux demande votre copie de sa ROM ({fichier}), introuvable. Raftup ne fournit aucune ROM : ajoutez votre copie, ou retirez ce joueur. » + « Voir le détail » |
 | `IncompatibleApworld` | « L'apworld {nom} demande une autre version d'Archipelago. » |
 | `Cancelled` | « Génération annulée. » |
 | `Busy` | « Une génération est déjà en cours. » |

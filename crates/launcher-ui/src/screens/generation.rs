@@ -319,12 +319,21 @@ fn failure(error: &GenerationError) -> Failure {
             format!("Le fichier {} n'est pas utilisable : {reason}.", name(path))
         }
         GenerationError::GeneratorFailed {
-            message, traceback, ..
+            kind,
+            message,
+            traceback,
         } => {
+            let message = match missing_rom(kind, message) {
+                Some(file) => format!(
+                    "Un des jeux demande votre copie de sa ROM ({file}), introuvable. \
+                     Raftup ne fournit aucune ROM : ajoutez votre copie, ou retirez ce joueur."
+                ),
+                None => format!("Archipelago n'a pas pu générer la partie : {message}."),
+            };
             return Failure {
-                message: format!("Archipelago n'a pas pu générer la partie : {message}."),
+                message,
                 detail: Some(traceback.clone()).filter(|t| !t.trim().is_empty()),
-            }
+            };
         }
         GenerationError::IncompatibleApworld { path, .. } => format!(
             "L'apworld {} demande une autre version d'Archipelago.",
@@ -340,10 +349,74 @@ fn failure(error: &GenerationError) -> Failure {
     }
 }
 
+/// Extensions des fichiers de jeu (ROM, image disque) que demandent certains mondes.
+const ROM_EXTENSIONS: [&str; 16] = [
+    "sfc", "smc", "gba", "gb", "gbc", "nes", "z64", "n64", "v64", "iso", "bin", "cue", "sms", "gg",
+    "md", "pce",
+];
+
+/// Si le générateur a échoué faute de ROM, renvoie le nom du fichier attendu.
+///
+/// Archipelago lève alors un `FileNotFoundError` sous deux formes :
+/// « <chemin> » seul (ex. `worlds/soe`), ou « <chemin> does not exist, but
+/// XSettings.rom_file is required » (`settings.py`, sans boîte de dialogue).
+fn missing_rom(kind: &str, message: &str) -> Option<String> {
+    if kind != "FileNotFoundError" {
+        return None;
+    }
+    // Le worker préfixe le message : « generation echouee : FileNotFoundError: … ».
+    let text = match message.split_once("FileNotFoundError: ") {
+        Some((_, rest)) => rest,
+        None => message,
+    };
+    let path = match text.split_once(" does not exist, but ") {
+        Some((path, _)) => path,
+        None => text,
+    }
+    .trim();
+    // `Path` sait couper sur `/` et `\` sous Windows ; on garde le seul nom du fichier.
+    let file = std::path::Path::new(path).file_name()?.to_string_lossy();
+    let extension = file.rsplit_once('.')?.1.to_ascii_lowercase();
+    let is_rom = ROM_EXTENSIONS.contains(&extension.as_str()) || text.contains("rom_file");
+    is_rom.then(|| file.into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn rom_manquante_reconnue() {
+        // Forme de `settings.py` (nom relatif, sans boîte de dialogue).
+        let message = "generation echouee : FileNotFoundError: Secret of Evermore (USA).sfc \
+                       does not exist, but SoESettings.rom_file is required";
+        assert_eq!(
+            missing_rom("FileNotFoundError", message).as_deref(),
+            Some("Secret of Evermore (USA).sfc")
+        );
+        // Forme de `worlds/soe` : le chemin complet seul.
+        let message = r"generation echouee : FileNotFoundError: C:\AP\Secret of Evermore (USA).sfc";
+        assert_eq!(
+            missing_rom("FileNotFoundError", message).as_deref(),
+            Some("Secret of Evermore (USA).sfc")
+        );
+        // Un autre fichier absent n'est pas une ROM.
+        let message = "generation echouee : FileNotFoundError: data/options.yaml";
+        assert_eq!(missing_rom("FileNotFoundError", message), None);
+        // Autre type d'erreur : pas concerné.
+        assert_eq!(missing_rom("FillError", "jeu.sfc"), None);
+
+        let error = GenerationError::GeneratorFailed {
+            kind: "FileNotFoundError".into(),
+            message: "generation echouee : FileNotFoundError: Jeu.SFC".into(),
+            traceback: "Traceback …".into(),
+        };
+        let f = failure(&error);
+        assert!(f.message.contains("ROM (Jeu.SFC)"), "{}", f.message);
+        assert!(f.message.contains("Raftup ne fournit aucune ROM"));
+        assert_eq!(f.detail.as_deref(), Some("Traceback …"));
+    }
 
     #[test]
     fn messages_du_contrat() {
