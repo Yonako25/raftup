@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge", "crates/logic"]
+members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge", "crates/logic", "crates/fill"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -73,6 +73,10 @@ percent-encoding = "2.3"
 minisign-verify = "0.3"
 semver = "1"
 minisign = "0.10"
+# Hasard reproductible du générateur Rust (ADR 0027, § 4) : ChaCha, versions épinglées
+# (MIT OR Apache-2.0). `fill` ne voit que le trait `Rng` de rand_core.
+rand_core = "=0.10.1"
+rand_chacha = "=0.10.0"
 # Dossiers temporaires pour les tests.
 tempfile = "3"
 ap-protocol = { path = "crates/ap-protocol" }
