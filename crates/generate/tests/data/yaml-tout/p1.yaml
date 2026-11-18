@@ -1,0 +1,10 @@
+name: Alice
+game: APQuest
+APQuest:
+  hard_mode: true
+  hammer: true
+  extra_starting_chest: true
+  start_with_one_confetti_cannon: true
+  trap_chance: 50
+  confetti_explosiveness: 10
+  player_sprite: duck

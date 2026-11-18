@@ -1,0 +1,6 @@
+name: Alice
+game: APQuest
+APQuest:
+  hard_mode: true
+  trap_chance: 100
+  player_sprite: kitty
