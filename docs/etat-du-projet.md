@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étape 1 `logic` (modèle en arènes, règles, balayage par sphères) ; puis écrivain de pickle dans `multidata`, `fill`, `generate` + APQuest, équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étape 1 `logic` faite ; reste écrivain de pickle dans `multidata`, `fill`, `generate` + APQuest, équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -43,6 +43,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `launcher-core` | Héberger, profils et installation, détection, lancement, runtime Python, `generate`, `generate_and_host` | **Logique complète** pour J3 (reste le catalogue réel) |
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
 | `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
+| `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 
 ## Ce que fait chaque crate
 

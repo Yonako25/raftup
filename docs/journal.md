@@ -207,3 +207,9 @@ untime2`.
 - **Pas vérifié** : calcul exact du `checksum` du datapackage d'Archipelago ; jeu réel d'APQuest avec son client.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 1 de l'ADR 0027 : créer la crate `logic` (modèle en arènes, règles, balayage par sphères), dans une nouvelle session.
+
+### 2026-11-18 · V2 étape 1 : crate `logic`
+- **Fait** : crate `logic` (`a3b2c81`) : `MultiWorld` en arènes à index `u32`, noms uniques par joueur, règles `rule_builder` sans « non », inventaire par sorte d'objet (progression seule), atteignabilité par point fixe, balayage par sphères, `validate`. 11 tests sur petits mondes ; workspace, clippy et fmt passent.
+- **Pas vérifié** : performance sur un gros multiworld (point fixe qui repasse sur tous les lieux) ; vocabulaire comparé au vrai `rule_builder` seulement via l'ADR.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 2 de l'ADR 0027 : écrivain de pickle et `write_archipelago` dans `multidata`.
