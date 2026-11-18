@@ -139,7 +139,7 @@ fn push_log(log: &mut VecDeque<String>, line: String) {
 
 /// Lit les messages du thread, sans jamais attendre.
 ///
-/// `pub(super)` : appelé par `show`, et par le test réel de `create` (sans fenêtre).
+/// `pub(super)` : appelé par `create::background` à chaque image, et par le test réel.
 pub(super) fn poll(generation: &mut Generation) {
     let Generation::Running(task) = generation else {
         return;
@@ -177,7 +177,7 @@ pub(super) fn poll(generation: &mut Generation) {
 /// Renvoie vrai si l'hôte clique « Réessayer » : `create` relance alors la
 /// vérification du formulaire puis la génération.
 pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
-    poll(generation);
+    // Pas de `poll` ici : `create::background` le fait à chaque image, écran affiché ou non.
     let mut retry = false;
     let mut close = false;
     match generation {

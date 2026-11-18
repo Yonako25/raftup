@@ -106,8 +106,14 @@ pub fn parse_port(text: &str) -> Result<u16, String> {
 }
 
 /// Mode de `release` / `collect` de la seed, en une expression française.
+///
+/// Les modes d'Archipelago : `disabled`, `enabled`, `goal`, `auto` et `auto-enabled`
+/// (automatique à l'objectif ET permis à tout moment). `auto-enabled` est testé avant
+/// `auto`, qu'il contient.
 fn mode_text(mode: &str) -> &'static str {
-    if mode.contains("auto") {
+    if mode.contains("auto-enabled") {
+        "automatiques à l'objectif et permis à tout moment"
+    } else if mode.contains("auto") {
         "automatiques à l'objectif"
     } else if mode.contains("goal") {
         "permis après l'objectif"
@@ -398,8 +404,14 @@ mod tests {
     #[test]
     fn options_de_la_seed() {
         assert_eq!(
-            seed_options("auto", "auto-enabled", 10),
+            seed_options("auto", "auto", 10),
             "Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %."
+        );
+        // `auto-enabled` n'est pas `auto` : permis aussi avant l'objectif.
+        assert_eq!(
+            seed_options("auto", "auto-enabled", 10),
+            "Options de la seed : release automatiques à l'objectif, collect automatiques à \
+             l'objectif et permis à tout moment, coût d'un indice 10 %."
         );
         assert_eq!(
             seed_options("goal", "disabled", 5),

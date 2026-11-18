@@ -85,6 +85,38 @@ impl Default for CreateForm {
     }
 }
 
+/// Fait avancer la génération et l'hébergement, que l'écran soit affiché ou non.
+///
+/// `App` l'appelle à CHAQUE image, avant de dessiner : si l'hôte va sur un autre écran
+/// pendant la génération, la seed est quand même hébergée dès qu'elle est prête, et
+/// une erreur de démarrage du serveur arrive dans le panneau d'hébergement (avec
+/// « Réessayer ») au lieu de s'afficher, puis de se perdre, sur un autre écran.
+///
+/// Rend vrai quand le serveur vient de démarrer.
+pub fn background(
+    form: &mut CreateForm,
+    error: &mut Option<String>,
+    worker: &Worker,
+    shared: &Shared,
+) -> bool {
+    generation::poll(&mut form.generation);
+    // Seed tout juste générée : on l'héberge avec les réglages du clic (une fois).
+    if let Some(output) = form.generation.output() {
+        if let Some(options) = form.pending_host.take() {
+            // Une vieille erreur (d'un autre écran) passerait sinon pour un échec
+            // du démarrage : `poll` prend la première erreur qu'il trouve.
+            *error = None;
+            form.hosting = hosting::start(worker, shared, output.clone(), options);
+        }
+    }
+    if hosting::poll(&mut form.hosting, shared, error) == hosting::Outcome::Started {
+        // Le serveur tourne : l'écran repart propre pour la prochaine partie.
+        form.generation = generation::Generation::Idle;
+        return true;
+    }
+    false
+}
+
 pub fn show(
     ui: &mut Ui,
     form: &mut CreateForm,
@@ -93,13 +125,6 @@ pub fn show(
     shared: &Shared,
 ) -> Option<Page> {
     let mut goto = None;
-    // Avant le bandeau d'erreur : une erreur de démarrage du serveur va dans le
-    // panneau d'hébergement (avec « Réessayer »), pas dans le bandeau.
-    if hosting::poll(&mut form.hosting, shared, error) == hosting::Outcome::Started {
-        // Le serveur tourne : l'écran repart propre pour la prochaine partie.
-        form.generation = generation::Generation::Idle;
-        goto = Some(Page::Hosted);
-    }
     super::page(ui, |ui| {
         super::header(
             ui,
@@ -120,15 +145,6 @@ pub fn show(
         // Génération en cours, seed prête ou échec.
         if generation::show(ui, &mut form.generation) {
             on_generate(ui.ctx(), form, error);
-        }
-        // Seed tout juste générée : on l'héberge avec les réglages du clic (une fois).
-        if let Some(output) = form.generation.output() {
-            if let Some(options) = form.pending_host.take() {
-                // Une vieille erreur (d'un autre écran) passerait sinon pour un échec
-                // du démarrage : `poll` prend la première erreur qu'il trouve.
-                *error = None;
-                form.hosting = hosting::start(worker, shared, output.clone(), options);
-            }
         }
         // Démarrage du serveur, ou échec avec « Réessayer ».
         if hosting::show(ui, &mut form.hosting) {
@@ -674,13 +690,19 @@ mod tests {
         // Le formulaire change pendant la génération : ce n'est pas ce port qui sert.
         form.port = "1".into();
 
-        // 2. La génération va au bout.
-        let output = wait_for(Duration::from_secs(300), || {
-            generation::poll(&mut form.generation);
-            match &form.generation {
-                generation::Generation::Done { output, .. } => Some(output.clone()),
-                generation::Generation::Failed { failure, log } => {
-                    panic!("génération ratée : {failure:?}\n{log:?}")
+        // 2 et 3. Comme `App` à chaque image, mais SANS jamais dessiner l'écran (l'hôte
+        // regarde ailleurs) : la génération va au bout, puis l'hébergement part tout seul
+        // avec les réglages du clic (port 38296, occupé) et échoue.
+        let (output, message) = wait_for(Duration::from_secs(300), || {
+            take_worker_error(&worker, &mut error);
+            let shared = worker.lock();
+            assert!(!background(&mut form, &mut error, &worker, &shared));
+            if let generation::Generation::Failed { failure, log } = &form.generation {
+                panic!("génération ratée : {failure:?}\n{log:?}")
+            }
+            match &form.hosting {
+                hosting::Hosting::Failed { output, message } => {
+                    Some((output.clone(), message.clone()))
                 }
                 _ => None,
             }
@@ -691,23 +713,8 @@ mod tests {
             output.archipelago_file.display()
         );
         assert_eq!(output.players.len(), 2);
-
-        // 3. Hébergement avec les réglages du clic (port 38296, occupé).
-        let options = form.pending_host.take().unwrap();
-        assert_eq!(options.port, 38296);
-        form.hosting = hosting::start(&worker, &worker.lock(), (*output).clone(), options);
-        let message = wait_for(Duration::from_secs(10), || {
-            take_worker_error(&worker, &mut error);
-            let shared = worker.lock();
-            assert_ne!(
-                hosting::poll(&mut form.hosting, &shared, &mut error),
-                hosting::Outcome::Started
-            );
-            match &form.hosting {
-                hosting::Hosting::Failed { message, .. } => Some(message.clone()),
-                _ => None,
-            }
-        });
+        // Les réglages du clic ont servi, une seule fois.
+        assert!(form.pending_host.is_none());
         eprintln!("{message}");
         assert!(
             message
@@ -722,10 +729,12 @@ mod tests {
         wait_for(Duration::from_secs(10), || {
             take_worker_error(&worker, &mut error);
             let shared = worker.lock();
-            let outcome = hosting::poll(&mut form.hosting, &shared, &mut error);
+            let started = background(&mut form, &mut error, &worker, &shared);
             assert_eq!(error, None);
-            (outcome == hosting::Outcome::Started).then_some(())
+            started.then_some(())
         });
+        // L'écran repart propre pour la prochaine partie.
+        assert!(matches!(form.generation, generation::Generation::Idle));
         {
             let shared = worker.lock();
             let status = shared.status.as_ref().unwrap();

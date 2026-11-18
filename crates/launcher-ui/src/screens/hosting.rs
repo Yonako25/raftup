@@ -162,8 +162,8 @@ pub fn poll(hosting: &mut Hosting, shared: &Shared, error: &mut Option<String>) 
 
 /// Dessine le panneau (rien si `Idle`). Rend vrai si l'hôte clique « Réessayer ».
 ///
-/// `poll` est appelé à part, AVANT le bandeau d'erreur de l'écran : sinon l'erreur
-/// du worker s'afficherait une image en haut avant d'arriver dans ce panneau.
+/// `poll` est appelé à part (`create::background`, à chaque image, avant le dessin) :
+/// sinon l'erreur du worker s'afficherait d'abord dans un bandeau, ou sur un autre écran.
 pub fn show(ui: &mut Ui, hosting: &mut Hosting) -> bool {
     let mut retry = false;
     let mut close = false;

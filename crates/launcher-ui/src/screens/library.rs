@@ -323,6 +323,16 @@ fn step_name(profile: &Profile, step_id: &str) -> String {
         .map_or_else(|| step_id.to_string(), |s| s.name.clone())
 }
 
+/// « Installation interrompue sans réponse. » ; accordé au masculin pour « Lancement ».
+fn interrupted(label: &str) -> String {
+    let ending = if label == "Lancement" {
+        "interrompu"
+    } else {
+        "interrompue"
+    };
+    format!("{label} {ending} sans réponse.")
+}
+
 /// Taille lisible : « 12,3 Mo ».
 pub(super) fn megabytes(bytes: u64) -> String {
     format!("{:.1} Mo", bytes as f64 / 1_000_000.0).replace('.', ",")
@@ -420,10 +430,7 @@ impl LibraryState {
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        self.notice = Some(Notice::Error(format!(
-                            "{} interrompue sans réponse.",
-                            task.label
-                        )));
+                        self.notice = Some(Notice::Error(interrupted(task.label)));
                         finished = true;
                         break;
                     }
@@ -592,7 +599,13 @@ pub fn open_pending_dialog(state: &mut LibraryState, ctx: &egui::Context) {
 // Dessin.
 // ---------------------------------------------------------------------------
 
-pub fn show(ui: &mut Ui, state: &mut LibraryState, shared: &Shared) -> Option<Page> {
+/// `error` : erreur du worker à montrer (la partie hébergée s'est arrêtée…).
+pub fn show(
+    ui: &mut Ui,
+    state: &mut LibraryState,
+    shared: &Shared,
+    error: Option<&str>,
+) -> Option<Page> {
     let ctx = ui.ctx().clone();
     // Première ouverture : on lance la détection.
     if state.scan.is_none() && state.scanning.is_none() {
@@ -611,6 +624,10 @@ pub fn show(ui: &mut Ui, state: &mut LibraryState, shared: &Shared) -> Option<Pa
         if let Err(e) = &state.paths {
             widgets::error_banner(ui, &format!("Dossiers de Raftup introuvables : {e}"));
             return;
+        }
+        if let Some(message) = error {
+            widgets::error_banner(ui, message);
+            ui.add_space(10.0);
         }
         match &state.notice {
             Some(Notice::Error(text)) => {
@@ -742,7 +759,7 @@ fn empty_state(ui: &mut Ui) {
         ));
         ui.add_space(4.0);
         ui.label(widgets::dim(
-            "Tu peux déjà héberger une partie depuis « En cours » : chaque joueur installe son mod à la main.",
+            "Vous pouvez déjà héberger une partie depuis « En cours » : chaque joueur installe son mod à la main.",
         ));
     });
 }
@@ -757,7 +774,7 @@ fn missing_game_note(ui: &mut Ui) {
             ui.label(RichText::new("Un jeu manque ?").strong().color(theme::TEXT));
             ui.label(widgets::dim(
                 "Raftup détecte les jeux installés via Steam et Epic. Pour une autre \
-                 installation, ajoute son dossier : Raftup vérifie que l'exécutable attendu \
+                 installation, ajoutez son dossier : Raftup vérifie que l'exécutable attendu \
                  s'y trouve avant de proposer le profil.",
             ));
         })
@@ -926,7 +943,7 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
         });
         if view.can_launch && credentials(&state.form).is_none() {
             ui.label(
-                widgets::dim("Renseigne l'adresse et le slot plus bas pour lancer.").size(12.0),
+                widgets::dim("Renseignez l'adresse et le slot plus bas pour lancer.").size(12.0),
             );
         }
         if let Some(task) = &state.task {
@@ -1118,6 +1135,18 @@ fn info_banner(ui: &mut Ui, text: &str) {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn tache_interrompue_accordee() {
+        assert_eq!(
+            interrupted("Installation"),
+            "Installation interrompue sans réponse."
+        );
+        assert_eq!(
+            interrupted("Lancement"),
+            "Lancement interrompu sans réponse."
+        );
+    }
 
     /// Profil de démonstration : il n'existe que dans les tests, jamais dans `profiles/`.
     const DEMO: &str = r#"

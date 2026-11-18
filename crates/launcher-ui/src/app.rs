@@ -120,6 +120,18 @@ impl eframe::App for App {
         let hosting = shared.status.is_some();
 
         let mut goto: Option<Page> = None;
+        // Génération et hébergement avancent même si l'écran « Créer » n'est pas affiché.
+        let started = create::background(&mut self.create, &mut self.error, &self.worker, &shared);
+        // On ne bascule vers la partie que si l'hôte regarde l'écran « Créer » : ailleurs,
+        // on ne lui retire pas l'écran sous les yeux (la partie apparaît dans « En cours »).
+        if started && self.page == Page::Create {
+            goto = Some(Page::Hosted);
+        }
+        // Plus de partie : la fenêtre « Arrêter le serveur ? », l'onglet et le message en
+        // cours de frappe ne doivent pas réapparaître sur la partie suivante.
+        if !hosting {
+            self.running = running::RunningState::default();
+        }
         // La barre de titre est déclarée avant la barre latérale : elle prend toute la largeur.
         egui::Panel::top("titlebar")
             .exact_size(crate::titlebar::HEIGHT)
@@ -135,13 +147,19 @@ impl eframe::App for App {
                     .inner_margin(Margin::symmetric(0, 18)),
             )
             .show(ui, |ui| {
-                goto = sidebar(ui, &self.page, &shared, self.library.game_count());
+                // `if let` : sans clic dans la barre, on garde la bascule déjà décidée
+                // (partie tout juste démarrée depuis « Créer une partie »).
+                if let Some(page) = sidebar(ui, &self.page, &shared, self.library.game_count()) {
+                    goto = Some(page);
+                }
             });
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let next = match &self.page {
-                Page::InProgress => matches::show(ui, &shared),
-                Page::Library => library::show(ui, &mut self.library, &shared),
+                Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
+                Page::Library => {
+                    library::show(ui, &mut self.library, &shared, self.error.as_deref())
+                }
                 Page::Hosted if hosting => running::show(
                     ui,
                     &mut self.running,
@@ -168,6 +186,11 @@ impl eframe::App for App {
         create::open_pending_dialog(&mut self.create);
         library::open_pending_dialog(&mut self.library, &ctx);
         if let Some(page) = goto {
+            // Changement d'écran : l'erreur de l'écran quitté ne le suit pas (« Ajoutez
+            // au moins un fichier YAML. » n'a pas de sens sur « Héberger une partie »).
+            if self.page != page {
+                self.error = None;
+            }
             self.page = page;
         }
         #[cfg(debug_assertions)]

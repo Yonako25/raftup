@@ -86,3 +86,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : panneau de consentement de l'installation (générateur déjà installé) ; boîtes de fichiers ; le bas de la barre latérale (« Compatible avec… ») est un peu serré à 820 px de haut.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : capturer les autres écrans avec la macro (consentement du générateur, Bibliothèque, Héberger) pour finir le contrôle visuel.
+
+### 2026-11-18 · Relecture de launcher-ui
+- **Fait** : `launcher-ui` relu en entier ; corrigé : génération et hébergement suivis à chaque image même hors de l'écran « Créer » (`create::background`), bascule vers la partie qui était effacée par la barre latérale (trouvé par la macro), erreur effacée au changement d'écran et montrée aussi sur « En cours » et Bibliothèque, état de « Partie en cours » remis à zéro à l'arrêt, `auto-enabled` bien décrit, « Lancement interrompu », interface toute au vouvoiement. 54 tests (réel compris), clippy, build `--release` et macro de captures passent. Pas de commit encore.
+- **Pas vérifié** : redimensionnement de la fenêtre sans bordure par ses bords (à regarder devant le PC).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : rejoindre par lien d'invitation (F06).

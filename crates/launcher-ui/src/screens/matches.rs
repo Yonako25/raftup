@@ -11,7 +11,8 @@ use crate::theme;
 use crate::widgets;
 use crate::worker::Shared;
 
-pub fn show(ui: &mut Ui, shared: &Shared) -> Option<Page> {
+/// `error` : erreur du worker à montrer (« La partie s'est arrêtée d'elle-même »…).
+pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>) -> Option<Page> {
     let mut goto = None;
     super::page(ui, |ui| {
         // Titre et sous-titre sur la même ligne, comme sur la maquette.
@@ -20,6 +21,10 @@ pub fn show(ui: &mut Ui, shared: &Shared) -> Option<Page> {
             ui.label(widgets::dim("Les parties lancées").size(14.0));
         });
         ui.add_space(14.0);
+        if let Some(message) = error {
+            widgets::error_banner(ui, message);
+            ui.add_space(10.0);
+        }
 
         match &shared.status {
             Some(_) => {
@@ -117,7 +122,7 @@ fn empty_state(ui: &mut Ui, starting: bool) -> bool {
     let mut clicked = false;
     widgets::panel(ui, "Aucune partie en cours", |ui| {
         ui.label(widgets::dim(
-            "Héberge une seed générée par Archipelago : tes amis la rejoignent avec l'adresse que Raftup te donne.",
+            "Hébergez une seed générée par Archipelago : vos amis la rejoignent avec l'adresse que Raftup vous donne.",
         ));
         ui.add_space(8.0);
         let text = if starting {
