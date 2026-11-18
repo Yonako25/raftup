@@ -30,7 +30,8 @@ win32job = "2"
 flate2 = "1"
 tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
 # Interface du launcher (ADR 0011) : egui via eframe, rendu wgpu, boîtes de fichiers natives.
-eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland"] }
+# « clipboard » : sans elle, les boutons « Copier » ne font rien ; « links » : ouvre les liens.
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "clipboard", "links", "x11", "wayland"] }
 egui = "0.37"
 rfd = { version = "0.18", default-features = false }
 # Heures locales (HH:MM) pour l'activité et le journal.
