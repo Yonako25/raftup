@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
-use launcher_core::webhook::WebhookUrl;
 use launcher_core::{Encryption, HostOptions, SeedSummary};
 
+use super::prefs;
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -53,6 +53,16 @@ impl Default for SetupForm {
             encrypted: true,
             cert: None,
             key: None,
+        }
+    }
+}
+
+impl SetupForm {
+    /// Formulaire dont le champ webhook est pré-rempli avec l'adresse mémorisée.
+    pub fn with_webhook(webhook: String) -> SetupForm {
+        SetupForm {
+            webhook,
+            ..SetupForm::default()
         }
     }
 }
@@ -219,6 +229,8 @@ fn config_panel(
                 match build_options(form) {
                     Ok(options) => {
                         *error = None;
+                        // Mémorise le webhook (ou l'efface si le champ est vide).
+                        prefs::remember(options.webhook.as_ref(), None);
                         worker.send(Command::Start(options));
                     }
                     Err(message) => *error = Some(message),
@@ -343,7 +355,7 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
             Encryption::Plain
         };
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
-    let webhook = parse_webhook(&form.webhook)?;
+    let webhook = format::parse_webhook(&form.webhook)?;
     Ok(HostOptions {
         seed,
         port,
@@ -352,18 +364,6 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
         public_host,
         disable_save: false,
         webhook,
-    })
-}
-
-/// Champ vide : pas de webhook. Sinon l'adresse doit être un webhook Discord valide ; le
-/// message d'erreur ne recopie jamais l'adresse (c'est un secret).
-fn parse_webhook(text: &str) -> Result<Option<WebhookUrl>, String> {
-    if text.trim().is_empty() {
-        return Ok(None);
-    }
-    WebhookUrl::new(text).map(Some).map_err(|_| {
-        "Adresse de webhook Discord refusée : elle doit commencer par          https://discord.com/api/webhooks/. Laissez le champ vide pour ne pas en utiliser."
-            .to_string()
     })
 }
 
@@ -408,30 +408,4 @@ fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
             .size(13.0),
         );
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn empty_webhook_means_none() {
-        assert_eq!(parse_webhook(""), Ok(None));
-        assert_eq!(parse_webhook("   "), Ok(None));
-    }
-
-    #[test]
-    fn valid_webhook_is_accepted_and_trimmed() {
-        let url = "https://discord.com/api/webhooks/1/abc";
-        let parsed = parse_webhook(&format!("  {url} ")).unwrap().unwrap();
-        assert_eq!(parsed.expose(), url);
-    }
-
-    #[test]
-    fn bad_webhook_gives_a_clear_message_without_the_address() {
-        let bad = "https://evil.org/api/webhooks/SECRETTOKEN";
-        let message = parse_webhook(bad).unwrap_err();
-        assert!(message.contains("webhook Discord"));
-        assert!(!message.contains("SECRETTOKEN"));
-    }
 }

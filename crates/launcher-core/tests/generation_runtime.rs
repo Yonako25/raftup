@@ -13,7 +13,7 @@ use launcher_core::generation::{
     GeneratorPins, RuntimeStatus, SetupStep,
 };
 use launcher_core::hash::Sha256;
-use launcher_core::{CancelToken, Paths};
+use launcher_core::{CancelToken, Paths, PinnedSource};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
@@ -449,4 +449,83 @@ fn annulation_pendant_le_telechargement_puis_reprise() {
     let rt = ensure_runtime_cancellable(&paths, &w.pins, &dl, &mut |_, _| {}, &CancelToken::new())
         .unwrap();
     assert!(rt.python_exe.is_file());
+}
+
+/// Ajoute au monde une source Python (zip GitHub d'un commit) à copier sous `site-packages`.
+fn add_source(w: &mut World, install_as: &str, entries: &[(&str, &[u8])]) {
+    let zip = build_zip(entries);
+    let file = w.tmp.path().join("src").join("source.zip");
+    fs::write(&file, &zip).unwrap();
+    let url = "https://github.com/t/zpkg/archive/abc.zip";
+    w.pins.source_packages.push(PinnedSource {
+        name: "zpkg".into(),
+        version: "0.1".into(),
+        url: url.into(),
+        sha256: Sha256::of_bytes(&zip),
+        size: zip.len() as u64,
+        max_bytes: 100_000,
+        strip_prefix: "proj-abc/src/zpkg".into(),
+        install_as: install_as.into(),
+        max_entries: 100,
+    });
+    let fetcher = std::mem::take(&mut w.fetcher).with_file(url, file);
+    w.fetcher = fetcher;
+}
+
+#[test]
+fn source_python_copiee_sous_son_nom() {
+    let _s = serial();
+    let mut w = good_world();
+    add_source(
+        &mut w,
+        "zpkg",
+        &[
+            ("proj-abc/src/zpkg/__init__.py", b"Z"),
+            ("proj-abc/src/zpkg/sub/m.py", b"M"),
+            // Hors du préfixe : ignoré.
+            ("proj-abc/src/generate.py", b"hors"),
+        ],
+    );
+    let paths = paths(&w);
+    let dl = downloader(&mut w);
+    let rt = ensure_runtime(&paths, &w.pins, &dl, &mut |_, _| {}).unwrap();
+    let site = rt.site_packages.unwrap();
+    assert_eq!(fs::read(site.join("zpkg/__init__.py")).unwrap(), b"Z");
+    assert_eq!(fs::read(site.join("zpkg/sub/m.py")).unwrap(), b"M");
+    assert!(!site.join("generate.py").exists());
+    assert!(matches!(
+        runtime_status(&paths, &w.pins),
+        RuntimeStatus::Ready(_)
+    ));
+}
+
+#[test]
+fn source_qui_ecrase_une_wheel_refusee() {
+    let _s = serial();
+    let mut w = good_world();
+    // Le dossier cible `pkga` contient déjà `__init__.py` (wheel pkga).
+    add_source(&mut w, "pkga", &[("proj-abc/src/zpkg/__init__.py", b"Z")]);
+    let paths = paths(&w);
+    let dl = downloader(&mut w);
+    let err = ensure_runtime(&paths, &w.pins, &dl, &mut |_, _| {}).unwrap_err();
+    assert!(
+        matches!(err, GenerationError::DuplicateWheelFile { ref wheel, .. } if wheel == "zpkg"),
+        "{err:?}"
+    );
+    assert!(!paths.generator_dir("0.6.8").join("runtime.json").exists());
+}
+
+#[test]
+fn marqueur_sans_sources_devient_perime_quand_une_source_est_ajoutee() {
+    let _s = serial();
+    let mut w = good_world();
+    let paths = paths(&w);
+    let dl = downloader(&mut w);
+    ensure_runtime(&paths, &w.pins, &dl, &mut |_, _| {}).unwrap();
+    // Un runtime installé avant l'ajout d'une source n'est plus conforme aux pins.
+    add_source(&mut w, "zpkg", &[("proj-abc/src/zpkg/__init__.py", b"Z")]);
+    assert!(matches!(
+        runtime_status(&paths, &w.pins),
+        RuntimeStatus::Broken(_)
+    ));
 }

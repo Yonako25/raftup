@@ -114,6 +114,7 @@ fn options(port: u16) -> PartyHostOptions {
         encryption: Encryption::Plain,
         public_host: "127.0.0.1".to_string(),
         disable_save: true,
+        webhook: None,
     }
 }
 
@@ -609,4 +610,16 @@ async fn partie_reelle_apquest() {
     assert_eq!(session.connected.slot, 1);
     client.close().await.unwrap();
     host.stop().await.unwrap();
+}
+
+#[test]
+fn le_webhook_passe_dans_les_options_d_hote_sans_apparaitre_dans_debug() {
+    let url =
+        launcher_core::webhook::WebhookUrl::new("https://discord.com/api/webhooks/1/SECRETTOKEN")
+            .unwrap();
+    let mut party = options(38299);
+    party.webhook = Some(url.clone());
+    assert!(!format!("{party:?}").contains("SECRETTOKEN"));
+    let host = party.into_host_options("seed.archipelago".into()).unwrap();
+    assert_eq!(host.webhook, Some(url));
 }

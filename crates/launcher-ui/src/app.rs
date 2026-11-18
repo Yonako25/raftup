@@ -55,6 +55,8 @@ impl App {
         link: Option<String>,
     ) -> App {
         dev_host(&worker);
+        // Webhook et préréglage mémorisés : ils pré-remplissent « Héberger » et « Créer ».
+        let saved = crate::screens::prefs::load();
         let mut join = join::JoinState::default();
         let page = match &link {
             Some(link) => {
@@ -66,8 +68,8 @@ impl App {
         App {
             page,
             worker,
-            setup: setup::SetupForm::default(),
-            create: create::CreateForm::default(),
+            setup: setup::SetupForm::with_webhook(saved.webhook.clone()),
+            create: create::CreateForm::with_prefs(saved),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
             join,

@@ -155,3 +155,79 @@ url = "https://files.pythonhosted.org/packages/9d/5d/31672172bb4566c1f1187fa28a1
 sha256 = "0b29568d1e33e32ea075c12a696b32e4d6cea344d0270a2292075254efd86014"
 size = 19553
 max_bytes = 5242880
+
+# Dépendances de mondes qui ne s'importaient pas sans elles (état du projet, point « Mondes d'Archipelago »).
+
+# Pour les mondes ffmq et messenger (import requests au chargement) ; requests 2.34.2 demande les trois suivantes.
+[[wheels]]
+name = "requests"
+version = "2.34.2"
+filename = "requests-2.34.2-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl"
+sha256 = "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+size = 73075
+max_bytes = 5242880
+
+# Dépendance de requests.
+[[wheels]]
+name = "urllib3"
+version = "2.8.0"
+filename = "urllib3-2.8.0-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl"
+sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+size = 135717
+max_bytes = 5242880
+
+# Dépendance de requests.
+[[wheels]]
+name = "idna"
+version = "3.20"
+filename = "idna-3.20-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl"
+sha256 = "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+size = 69583
+max_bytes = 5242880
+
+# Dépendance de requests.
+[[wheels]]
+name = "charset-normalizer"
+version = "3.5.2"
+filename = "charset_normalizer-3.5.2-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/eb/e6/e6e083884cbcfd49c64865af05027fe7011be7b2d9179524f099a1b611f3/charset_normalizer-3.5.2-cp312-cp312-win_amd64.whl"
+sha256 = "780fbe7cab297b81dad9fb8dc5eb003c0468ffb0d9e5f65068c53a34661a96bc"
+size = 207486
+max_bytes = 5242880
+
+# Pour le monde pokemon_emerald (import pkg_resources) : 80.9.0, dernière version testée qui l'embarque.
+[[wheels]]
+name = "setuptools"
+version = "80.9.0"
+filename = "setuptools-80.9.0-py3-none-any.whl"
+url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl"
+sha256 = "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922"
+size = 1201486
+max_bytes = 5242880
+
+# Pour le monde soe (hash identique à celui de worlds/soe/requirements.txt ; licence LGPL-3.0, téléchargée chez PyPI, jamais redistribuée).
+[[wheels]]
+name = "pyevermizer"
+version = "0.50.1"
+filename = "pyevermizer-0.50.1-cp312-cp312-win_amd64.whl"
+url = "https://files.pythonhosted.org/packages/5d/be/185b01cf5af694646ee4576d13d4dea8c109e88edc45e39426aef85a63f2/pyevermizer-0.50.1-cp312-cp312-win_amd64.whl"
+sha256 = "0f920d745df15e3171412cbda05fc21c9354323d0e8dfc066ed6051fa7df9879"
+size = 89153
+max_bytes = 5242880
+
+# Monde zillion : zilliandomizer 0.9.1 n'est pas sur PyPI (Archipelago l'installe depuis ce commit Git).
+# Archive GitHub du commit, dont seul src/zilliandomizer est copié dans site-packages.
+# Licence AGPL-3.0 avec exception de liaison (section 7) : téléchargée chez l'auteur, jamais redistribuée.
+[[source_packages]]
+name = "zilliandomizer"
+version = "0.9.1"
+url = "https://github.com/beauxq/zilliandomizer/archive/96d9a20f8278cee64bb4db859fbd874e0f332d36.zip"
+sha256 = "622fd834fede48198b38eb5d01585f68fdf96967e5152e986db4dc42864b5e93"
+size = 234311
+max_bytes = 2097152
+strip_prefix = "zilliandomizer-96d9a20f8278cee64bb4db859fbd874e0f332d36/src/zilliandomizer"
+install_as = "zilliandomizer"
+max_entries = 400

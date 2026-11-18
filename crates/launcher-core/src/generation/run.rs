@@ -46,6 +46,9 @@ pub struct GenerateRequest {
     pub spoiler: u8,
     pub race: bool,
     pub timeout: Duration,
+    /// Contenu d'un `meta.yaml` (réglages globaux du générateur, ex. `progression_balancing`).
+    /// Posé tel quel dans le dossier des joueurs, où Archipelago le lit sous ce nom (F06, ADR 0023).
+    pub meta_yaml: Option<String>,
 }
 
 impl Default for GenerateRequest {
@@ -58,6 +61,7 @@ impl Default for GenerateRequest {
             spoiler: DEFAULT_SPOILER,
             race: false,
             timeout: DEFAULT_TIMEOUT,
+            meta_yaml: None,
         }
     }
 }
@@ -266,6 +270,12 @@ fn generate_in(
 ) -> Result<GenerateOutput, GenerationError> {
     let _ = log.send("Préparation des fichiers joueurs".to_string());
     copy_player_files(&req.player_files, &players_dir)?;
+
+    if let Some(meta) = &req.meta_yaml {
+        // Pas un fichier joueur : Archipelago l'écarte et le lit comme réglages globaux.
+        let meta_path = players_dir.join("meta.yaml");
+        fs::write(&meta_path, meta).map_err(|e| io_err(&meta_path, e))?;
+    }
 
     let _ = log.send("Préparation des apworlds".to_string());
     install_apworlds(paths, &archipelago_dir, &req.apworlds)?;

@@ -124,3 +124,9 @@ _Aucune session en cours._
 - **Pas vérifié** : remplacement réel de l'exe sur un release ; bannière jamais vue ; signature recoupée avec l'outil minisign officiel.
 - **Ne pas toucher** : `docs/profils-en-attente/`, la clé privée (`C:\Users\ionak\.raftup-keys`, hors dépôt).
 - **Suite** : sauvegarder la clé privée ; J1 étape 9 (partie réelle de Slime Rancher).
+
+### 2026-11-18 · Reste de la V1, première vague
+- **Fait** : webhook dans « Créer » et mémorisé (ADR 0025), préréglage mémorisé, `meta.yaml` des préréglages (ADR 0023 étape 2), salon rafraîchi tout seul (ADR 0024), 7 mondes importés dont zillion par `[[source_packages]]` (ADR 0026 proposé). Workspace, clippy et fmt passent.
+- **Pas vérifié** : test réel du `meta.yaml` ; aucun champ ni onglet vu à l'écran ; soe demande la ROM sans message clair ; kdl3 réclame `PyMemoryEditor`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:\raftup-test\runtime2` (runtime de vérification).
+- **Suite** : regarder l'interface avec la macro de captures, puis J1 étape 9.

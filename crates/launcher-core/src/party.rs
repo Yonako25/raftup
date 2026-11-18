@@ -26,6 +26,7 @@ use crate::generation::{
 };
 use crate::host::{Encryption, Host, HostOptions, HostStatus};
 use crate::paths::Paths;
+use crate::webhook::WebhookUrl;
 
 /// Réglages de l'hébergement : ceux de [`HostOptions`], sans la seed (elle vient de la génération).
 #[derive(Clone, PartialEq, Eq)]
@@ -35,6 +36,8 @@ pub struct PartyHostOptions {
     pub encryption: Encryption,
     pub public_host: String,
     pub disable_save: bool,
+    /// Webhook Discord facultatif (F10, ADR 0025) : transmis tel quel à [`HostOptions`].
+    pub webhook: Option<WebhookUrl>,
 }
 
 impl PartyHostOptions {
@@ -58,7 +61,7 @@ impl PartyHostOptions {
             encryption: self.encryption,
             public_host: self.public_host,
             disable_save: self.disable_save,
-            webhook: None,
+            webhook: self.webhook,
         })
     }
 }
@@ -73,6 +76,8 @@ impl std::fmt::Debug for PartyHostOptions {
             .field("encryption", &self.encryption)
             .field("public_host", &self.public_host)
             .field("disable_save", &self.disable_save)
+            // `WebhookUrl` masque déjà son adresse dans son `Debug`.
+            .field("webhook", &self.webhook)
             .finish()
     }
 }

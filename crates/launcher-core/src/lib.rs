@@ -51,7 +51,7 @@ pub use detect::{
 pub use diagnose::{explain, ConnectionProblem};
 pub use download::{DirFetcher, Downloader, HttpFetcher};
 pub use error::LauncherError;
-pub use generation::{GenerationError, GeneratorPins, PinnedArchive, PinnedWheel};
+pub use generation::{GenerationError, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use host::{Encryption, Host, HostOptions, HostStatus, NumberedEvent};
 pub use install::{install, status, InstallError, InstallOptions, InstallReport, InstallStatus};
 pub use launch::{launch, plan_launch, Credentials, LaunchError, LaunchPlan};
@@ -65,7 +65,7 @@ pub use paths::Paths;
 pub use profile::{Profile, ProfileError};
 /// Jeton d'annulation de `py-bridge`, réexporté : l'interface ne dépend que de `launcher-core`.
 pub use py_bridge::CancelToken;
-pub use readiness::{check_slot, Readiness};
+pub use readiness::{check_slot, slots_due, Readiness, SlotTiming, AUTO_REFRESH_INTERVAL};
 pub use record::{InstallRecord, RecordState};
 pub use seed::{SeedSlot, SeedSummary};
 pub use uninstall::{uninstall, UninstallReport};

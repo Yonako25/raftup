@@ -244,6 +244,7 @@ mod tests {
             encryption: Encryption::Plain,
             public_host: "exemple.fr".into(),
             disable_save: false,
+            webhook: None,
         }
     }
 

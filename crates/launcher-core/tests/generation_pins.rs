@@ -34,7 +34,17 @@ fn le_vrai_fichier_se_charge_et_se_valide() {
         .archipelago
         .url
         .contains("54803be064fc7e80c4628777ed0b46a9390f255f"));
-    assert_eq!(pins.wheels.len(), 13);
+    assert_eq!(pins.wheels.len(), 19);
+    // Dépendances des mondes qui ne s'importaient pas sans elles.
+    for nom in ["requests", "setuptools", "pyevermizer"] {
+        assert!(
+            pins.wheels.iter().any(|w| w.name == nom),
+            "wheel {nom} absente"
+        );
+    }
+    assert_eq!(pins.source_packages.len(), 1);
+    assert_eq!(pins.source_packages[0].name, "zilliandomizer");
+    assert_eq!(pins.source_packages[0].install_as, "zilliandomizer");
     for nom in ["colorama", "websockets", "PyYAML", "MarkupSafe", "bsdiff4"] {
         assert!(
             pins.wheels.iter().any(|w| w.name == nom),
@@ -164,4 +174,22 @@ fn refuse_une_wheel_pour_une_autre_plateforme() {
 fn refuse_un_strip_prefix_qui_sort_de_l_archive() {
     let text = tweak("strip_prefix = \"python\"", "strip_prefix = \"../python\"");
     assert!(refusal(&text).contains("strip_prefix"));
+}
+
+#[test]
+fn refuse_une_source_avec_un_nom_de_dossier_dangereux() {
+    let text = tweak(
+        "install_as = \"zilliandomizer\"",
+        "install_as = \"../zilliandomizer\"",
+    );
+    assert!(refusal(&text).contains("install_as"));
+}
+
+#[test]
+fn refuse_une_source_hors_liste_blanche() {
+    let text = tweak(
+        "https://github.com/beauxq/zilliandomizer/",
+        "https://evil.example/beauxq/zilliandomizer/",
+    );
+    assert!(refusal(&text).contains("liste blanche"));
 }

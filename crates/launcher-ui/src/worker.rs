@@ -67,6 +67,8 @@ pub struct Shared {
     pub seed: Option<(PathBuf, Result<SeedSummary, String>)>,
     /// Résultat des tests « prêt ? », par nom de slot (F08).
     pub readiness: BTreeMap<String, ReadyState>,
+    /// Heure (secondes depuis 1970) de la fin du dernier test de chaque slot.
+    pub readiness_at: BTreeMap<String, f64>,
 }
 
 /// Poignée côté interface.
@@ -173,6 +175,7 @@ async fn handle(
             with_shared(shared, |s| {
                 s.starting = true;
                 s.readiness.clear();
+                s.readiness_at.clear();
                 s.error = None;
             });
             let result = host.start(options).await;
@@ -194,6 +197,7 @@ async fn handle(
                 s.status = None;
                 s.events.clear();
                 s.readiness.clear();
+                s.readiness_at.clear();
                 *next_event = 0;
                 if let Err(e) = result {
                     s.error = Some(e.to_string());
@@ -222,9 +226,18 @@ async fn handle(
         }
         Command::CheckReady(check) => {
             let slot = check.slot.clone();
-            with_shared(shared, |s| {
-                s.readiness.insert(slot.clone(), ReadyState::Checking);
+            // Jamais deux tests en même temps pour un slot (clics répétés, rafraîchissement
+            // automatique) : si l'un tourne déjà, on ignore la demande.
+            let already = with_shared(shared, |s| {
+                let running = matches!(s.readiness.get(&slot), Some(ReadyState::Checking));
+                if !running {
+                    s.readiness.insert(slot.clone(), ReadyState::Checking);
+                }
+                running
             });
+            if already {
+                return;
+            }
             // Tâche à part : le test peut durer 8 s et le worker doit continuer à traiter
             // les autres commandes. `Arc::clone` : la tâche garde sa propre part de l'état.
             let shared = Arc::clone(shared);
@@ -240,6 +253,7 @@ async fn handle(
                 with_shared(&shared, |s| {
                     // Partie arrêtée entre-temps : le résultat n'a plus de sens.
                     if s.status.is_some() {
+                        s.readiness_at.insert(slot.clone(), crate::format::now());
                         s.readiness.insert(slot, ReadyState::Done(result));
                     }
                 });

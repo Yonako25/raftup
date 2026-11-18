@@ -83,6 +83,43 @@ impl Readiness {
     }
 }
 
+/// Pause entre deux re-tests automatiques d'un même slot, en secondes.
+pub const AUTO_REFRESH_INTERVAL: f64 = 60.0;
+
+/// Ce que la cadence a besoin de savoir d'un slot.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SlotTiming<'a> {
+    pub name: &'a str,
+    /// Un test est déjà en cours pour ce slot.
+    pub checking: bool,
+    /// Heure (secondes depuis 1970) de la fin du dernier test, `None` si jamais testé.
+    pub last_tested: Option<f64>,
+}
+
+/// Cadence des re-tests automatiques : logique pure, l'heure `now` est passée en paramètre
+/// (aucune horloge lue ici), ce qui permet de la tester sans attendre.
+///
+/// Un slot est à re-tester si `enabled`, s'il n'est pas déjà en test, s'il a déjà été testé
+/// une fois (le premier test reste un geste de l'hôte : il peut avoir à saisir le mot de
+/// passe) et si `interval` secondes se sont écoulées depuis la fin de ce test. Une horloge
+/// qui recule ne déclenche rien.
+pub fn slots_due<'a>(
+    enabled: bool,
+    now: f64,
+    interval: f64,
+    slots: &[SlotTiming<'a>],
+) -> Vec<&'a str> {
+    if !enabled {
+        return Vec::new();
+    }
+    slots
+        .iter()
+        .filter(|s| !s.checking)
+        .filter(|s| matches!(s.last_tested, Some(last) if now - last >= interval))
+        .map(|s| s.name)
+        .collect()
+}
+
 /// Teste un slot par une vraie connexion, avec le délai par défaut.
 pub async fn check_slot(
     address: &str,
@@ -110,6 +147,41 @@ pub async fn check_slot_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn timing(name: &str, checking: bool, last: Option<f64>) -> SlotTiming<'_> {
+        SlotTiming {
+            name,
+            checking,
+            last_tested: last,
+        }
+    }
+
+    #[test]
+    fn cadence_attend_l_intervalle() {
+        let slots = [timing("A", false, Some(100.0))];
+        assert!(slots_due(true, 159.9, 60.0, &slots).is_empty());
+        assert_eq!(slots_due(true, 160.0, 60.0, &slots), vec!["A"]);
+    }
+
+    #[test]
+    fn cadence_jamais_deux_tests_en_meme_temps() {
+        let slots = [timing("A", true, Some(0.0)), timing("B", false, Some(0.0))];
+        assert_eq!(slots_due(true, 500.0, 60.0, &slots), vec!["B"]);
+    }
+
+    #[test]
+    fn cadence_inactive_ou_jamais_testee() {
+        let slots = [timing("A", false, Some(0.0)), timing("B", false, None)];
+        assert!(slots_due(false, 500.0, 60.0, &slots).is_empty());
+        // B n'a jamais été testé : le premier test reste manuel.
+        assert_eq!(slots_due(true, 500.0, 60.0, &slots), vec!["A"]);
+    }
+
+    #[test]
+    fn cadence_horloge_qui_recule() {
+        let slots = [timing("A", false, Some(1000.0))];
+        assert!(slots_due(true, 10.0, 60.0, &slots).is_empty());
+    }
 
     #[test]
     fn classement_des_problemes() {

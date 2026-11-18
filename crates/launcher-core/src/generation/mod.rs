@@ -11,7 +11,7 @@ pub use runtime::{
     ensure_runtime, ensure_runtime_cancellable, runtime_status, RuntimeStatus, SetupStep,
 };
 
-pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedWheel};
+pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use run::{
     generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,
     DEFAULT_SPOILER, DEFAULT_TIMEOUT,

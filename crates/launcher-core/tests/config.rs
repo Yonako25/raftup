@@ -108,3 +108,59 @@ fn aucun_mot_de_passe_ecrit() {
     loaded.config.save(&path).unwrap();
     assert!(!fs::read_to_string(&path).unwrap().contains("secret-123"));
 }
+
+#[test]
+fn fichier_v1_migre_en_v2_sans_perte() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    fs::write(
+        &path,
+        "format_version = 1\nplayer_name = \"Ioka\"\nlast_port = 4000\n",
+    )
+    .unwrap();
+    let loaded = load(&path).unwrap();
+    assert_eq!(loaded.config.format_version, 2);
+    assert_eq!(loaded.config.player_name.as_deref(), Some("Ioka"));
+    assert_eq!(loaded.config.last_port, Some(4000));
+    assert_eq!(loaded.config.webhook_url, None);
+    assert_eq!(loaded.config.preset, None);
+    // Réécrit, le fichier porte la version courante.
+    loaded.config.save(&path).unwrap();
+    assert!(fs::read_to_string(&path)
+        .unwrap()
+        .contains("format_version = 2"));
+}
+
+#[test]
+fn webhook_et_preset_font_l_aller_retour() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    let mut config = UserConfig::default();
+    assert!(config.set_webhook(Some("  https://discord.com/api/webhooks/1/abc ")));
+    assert!(config.set_preset("Long"));
+    config.save(&path).unwrap();
+    let loaded = load(&path).unwrap().config;
+    assert_eq!(
+        loaded.webhook_url.as_deref(),
+        Some("https://discord.com/api/webhooks/1/abc")
+    );
+    assert_eq!(loaded.preset.as_deref(), Some("Long"));
+}
+
+#[test]
+fn champ_vide_efface_le_webhook_memorise() {
+    let mut config = UserConfig::default();
+    config.set_webhook(Some("https://discord.com/api/webhooks/1/abc"));
+    assert!(!config.set_webhook(Some("https://discord.com/api/webhooks/1/abc")));
+    assert!(config.set_webhook(Some("   ")));
+    assert_eq!(config.webhook_url, None);
+    assert!(!config.set_webhook(None));
+}
+
+#[test]
+fn debug_ne_montre_jamais_le_webhook() {
+    let mut config = UserConfig::default();
+    config.set_webhook(Some("https://discord.com/api/webhooks/1/SECRETTOKEN"));
+    let text = format!("{config:?}");
+    assert!(!text.contains("SECRETTOKEN"), "{text}");
+}

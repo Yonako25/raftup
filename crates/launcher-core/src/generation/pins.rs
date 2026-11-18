@@ -34,17 +34,23 @@ pub struct GeneratorPins {
     pub python: PinnedArchive,
     pub archipelago: PinnedArchive,
     pub wheels: Vec<PinnedWheel>,
+    /// Bibliothèques Python sans wheel (code source pur), extraites dans `site-packages`.
+    // `#[serde(default)]` : un fichier d'épinglage sans cette section reste valide (liste vide).
+    #[serde(default)]
+    pub source_packages: Vec<PinnedSource>,
 }
 
 impl GeneratorPins {
-    /// Total des tailles réelles à télécharger (Python, Archipelago, wheels), en octets :
+    /// Total des tailles réelles à télécharger (Python, Archipelago, wheels, sources), en octets :
     /// ce qu'on montre au joueur avant de lui demander son accord.
     pub fn download_bytes(&self) -> u64 {
         let wheels: u64 = self.wheels.iter().map(|w| w.size).sum();
+        let sources: u64 = self.source_packages.iter().map(|s| s.size).sum();
         self.python
             .size
             .saturating_add(self.archipelago.size)
             .saturating_add(wheels)
+            .saturating_add(sources)
     }
 }
 
@@ -77,6 +83,25 @@ pub struct PinnedWheel {
     /// Taille réelle du fichier, en octets.
     pub size: u64,
     pub max_bytes: u64,
+}
+
+/// Une bibliothèque Python pure distribuée seulement en source (pas de wheel sur PyPI) :
+/// archive zip GitHub d'un commit, dont un sous-dossier est copié dans `site-packages`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedSource {
+    pub name: String,
+    pub version: String,
+    pub url: String,
+    pub sha256: Sha256,
+    /// Taille réelle du fichier, en octets.
+    pub size: u64,
+    pub max_bytes: u64,
+    /// Chemin dans l'archive du dossier à copier (ex. `projet-<commit>/src/paquet`).
+    pub strip_prefix: String,
+    /// Nom du dossier créé dans `site-packages` (le nom d'import Python).
+    pub install_as: String,
+    pub max_entries: usize,
 }
 
 /// Les valeurs épinglées du launcher (fichier embarqué), validées.
@@ -114,6 +139,41 @@ fn validate(pins: &GeneratorPins) -> Result<(), String> {
         if !seen.insert(normalize_name(&wheel.name)) {
             return Err(format!("wheel « {} » en double", wheel.name));
         }
+    }
+    let mut seen_sources = BTreeSet::new();
+    for source in &pins.source_packages {
+        check_source(source)?;
+        if !seen_sources.insert(normalize_name(&source.name)) {
+            return Err(format!("source « {} » en double", source.name));
+        }
+    }
+    Ok(())
+}
+
+/// Une source : mêmes règles d'URL et de taille que les archives, et un nom de dossier sûr.
+fn check_source(source: &PinnedSource) -> Result<(), String> {
+    let name = &source.name;
+    if name.trim().is_empty() || source.version.trim().is_empty() {
+        return Err("source sans nom ou sans version".to_string());
+    }
+    check_url(&source.url).map_err(|e| format!("source {name} : {e}"))?;
+    check_size(&format!("source {name}"), source.size, source.max_bytes)?;
+    if source.max_entries == 0 {
+        return Err(format!("source {name} : max_entries doit être > 0"));
+    }
+    let prefix = &source.strip_prefix;
+    if prefix.is_empty()
+        || prefix.starts_with('/')
+        || prefix.contains(['\\', ':', '\0'])
+        || prefix.split('/').any(|part| part == "..")
+    {
+        return Err(format!(
+            "source {name} : strip_prefix « {prefix} » invalide"
+        ));
+    }
+    let dest = &source.install_as;
+    if dest.is_empty() || dest.contains(['/', '\\', ':', '\0']) || dest.contains("..") {
+        return Err(format!("source {name} : install_as « {dest} » dangereux"));
     }
     Ok(())
 }

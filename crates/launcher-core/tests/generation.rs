@@ -736,3 +736,18 @@ fn python_backend_blocks_network_by_default() {
     let backend = PythonBackend::new(Runtime::from_local("python", "ap", None, "0.6.8"));
     assert!(backend.block_network);
 }
+
+#[test]
+fn meta_yaml_est_pose_dans_le_dossier_des_joueurs() {
+    let _s = serial();
+    let e = env();
+    let mut backend = FakeBackend::with_seed(&e.ap_dir);
+    let mut req = request(vec![e.yaml.clone()]);
+    req.meta_yaml = Some("meta_description: test\nnull:\n  accessibility: full\n".to_string());
+    run(&e, &mut backend, &req).expect("génération");
+    // Le worker voit meta.yaml à côté du fichier joueur, sous le nom exact attendu.
+    assert_eq!(
+        backend.seen_players,
+        vec!["P01_alice.yaml".to_string(), "meta.yaml".to_string()]
+    );
+}

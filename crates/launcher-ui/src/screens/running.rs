@@ -5,7 +5,9 @@
 //! À droite, la progression de toute la partie et le fil d'activité.
 
 use egui::{Color32, CornerRadius, Frame, Margin, RichText, ScrollArea, Stroke, Ui};
-use launcher_core::{GameEvent, HostStatus, SlotStatus};
+use launcher_core::{
+    slots_due, GameEvent, HostStatus, SlotStatus, SlotTiming, AUTO_REFRESH_INTERVAL,
+};
 
 use crate::app::Page;
 use crate::format::{self, Piece, StatusKind};
@@ -31,7 +33,6 @@ const TAB_JOURNAL: usize = 2;
 const TAB_SALON: usize = 3;
 
 /// Ce que l'hôte a saisi ou coché sur cet écran.
-#[derive(Default)]
 pub struct RunningState {
     /// Message à tous les joueurs, en cours de frappe.
     announce: String,
@@ -43,6 +44,22 @@ pub struct RunningState {
     tab: usize,
     /// Mot de passe de la salle, retapé pour les tests « prêt ? » (jamais enregistré).
     salon_password: String,
+    /// Case « Rafraîchir automatiquement » du salon (cochée par défaut).
+    salon_auto_refresh: bool,
+}
+
+// `Default` écrit à la main : `#[derive(Default)]` mettrait la case à `false`.
+impl Default for RunningState {
+    fn default() -> Self {
+        RunningState {
+            announce: String::new(),
+            details: false,
+            confirm_stop: false,
+            tab: 0,
+            salon_password: String::new(),
+            salon_auto_refresh: true,
+        }
+    }
 }
 
 pub fn show(
@@ -579,6 +596,32 @@ fn salon_tab(
         }));
     };
     let players: Vec<&SlotStatus> = status.server.slots.iter().filter(|s| !s.is_group).collect();
+
+    // Re-tests automatiques : cette fonction n'est dessinée que si l'onglet est visible et la
+    // partie hébergée. Le worker ignore un test demandé pour un slot déjà en cours.
+    let timings: Vec<SlotTiming> = players
+        .iter()
+        .map(|slot| SlotTiming {
+            name: &slot.name,
+            checking: matches!(shared.readiness.get(&slot.name), Some(ReadyState::Checking)),
+            last_tested: shared.readiness_at.get(&slot.name).copied(),
+        })
+        .collect();
+    let due = slots_due(
+        state.salon_auto_refresh,
+        format::now(),
+        AUTO_REFRESH_INTERVAL,
+        &timings,
+    );
+    for slot in players.iter().filter(|s| due.contains(&s.name.as_str())) {
+        check(slot, &state.salon_password);
+    }
+    let last_test = shared
+        .readiness_at
+        .values()
+        .copied()
+        .fold(None, |acc, t| Some(acc.map_or(t, |a: f64| a.max(t))));
+
     list_frame(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             if widgets::primary_button(ui, "Tout tester", true) {
@@ -595,6 +638,15 @@ fn salon_tab(
                         .desired_width(160.0),
                 );
             }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut state.salon_auto_refresh, "Rafraîchir automatiquement");
+            let every = format::short_duration(AUTO_REFRESH_INTERVAL);
+            let last = match last_test {
+                Some(t) => format!("dernier test à {}", format::local_time(t, true)),
+                None => "pas encore testé".to_string(),
+            };
+            ui.label(widgets::dim(format!("(toutes les {every}) · {last}")).size(12.0));
         });
         ui.add_space(4.0);
         ui.label(

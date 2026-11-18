@@ -173,3 +173,27 @@ fn annulation_precoce_rend_cancelled() {
     assert!(matches!(err, GenerationError::Cancelled), "{err:?}");
     assert!(t0.elapsed() < Duration::from_secs(20));
 }
+
+/// Un `meta.yaml` valide (format d'Archipelago 0.6.8) est lu par le vrai générateur :
+/// il le dit dans son journal (`Meta: ... >> <meta_description>`) et la génération réussit.
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn generation_reelle_avec_meta_yaml() {
+    let Some(root) = runtime_root() else { return };
+    let work = tempfile::tempdir().unwrap();
+    let paths = Paths::under(work.path());
+    let mut backend = backend(&root);
+    let mut req = request(work.path(), YAML, 777);
+    req.meta_yaml = Some(
+        "meta_description: Raftup test meta\nnull:\n  progression_balancing: 80\n  accessibility: minimal\n"
+            .to_string(),
+    );
+    let (tx, rx) = channel();
+    let out = generate(&paths, &mut backend, &req, &CancelToken::new(), tx).expect("génération");
+    assert_eq!(out.players.len(), 1);
+    let logs: Vec<String> = rx.try_iter().collect();
+    assert!(
+        logs.iter().any(|l| l.contains("Raftup test meta")),
+        "le générateur n'a pas lu le meta.yaml : {logs:?}"
+    );
+}

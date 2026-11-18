@@ -67,6 +67,10 @@ struct Marker {
     archipelago: Sha256,
     /// Nom de fichier de la wheel -> sha256. `BTreeMap` : ordre stable dans le fichier.
     wheels: BTreeMap<String, Sha256>,
+    /// Nom de la source -> sha256. `#[serde(default)]` : un ancien marqueur sans cette
+    /// clé se lit avec une liste vide, puis diffère des pins actuels (réinstallation).
+    #[serde(default)]
+    sources: BTreeMap<String, Sha256>,
 }
 
 impl Marker {
@@ -79,6 +83,11 @@ impl Marker {
                 .wheels
                 .iter()
                 .map(|w| (w.filename.clone(), w.sha256))
+                .collect(),
+            sources: pins
+                .source_packages
+                .iter()
+                .map(|s| (s.name.clone(), s.sha256))
                 .collect(),
         }
     }
@@ -232,6 +241,24 @@ pub fn ensure_runtime_cancellable(
         wheel_files.push((wheel, file));
     }
 
+    // Sources Python pures (sans wheel) : même téléchargement vérifié par sha256.
+    let mut source_files: Vec<(&crate::generation::PinnedSource, PathBuf)> = Vec::new();
+    for source in &pins.source_packages {
+        // La progression se range sous « Wheel » : c'est une bibliothèque comme les autres
+        // pour le joueur (on évite une nouvelle étape dans l'interface).
+        let step = SetupStep::Wheel(source.name.clone());
+        let file = downloader
+            .get_cancellable(
+                &source.url,
+                &source.sha256,
+                source.max_bytes,
+                &mut |n| progress(step.clone(), n),
+                cancel,
+            )
+            .map_err(cancelled)?;
+        source_files.push((source, file));
+    }
+
     // Dernière occasion d'annuler : après, on extrait jusqu'au bout.
     if cancel.is_cancelled() {
         return Err(GenerationError::Cancelled);
@@ -315,9 +342,36 @@ pub fn ensure_runtime_cancellable(
                 }
             }
         }
+        // Les sources : leurs fichiers atterrissent sous `<install_as>/`, et ne doivent
+        // écraser aucun fichier d'une wheel (même contrôle, sans casse).
+        for (source, file) in &source_files {
+            for relative in plan_zip(file, &source.strip_prefix, &source_limits(source))? {
+                let key = format!(
+                    "{}/{}",
+                    source.install_as,
+                    relative.to_string_lossy().replace('\\', "/")
+                )
+                .to_lowercase();
+                if !seen.insert(key) {
+                    return Err(GenerationError::DuplicateWheelFile {
+                        wheel: source.name.clone(),
+                        path: relative.display().to_string(),
+                    });
+                }
+            }
+        }
         // 2. Extraction.
         for (wheel, file) in &wheel_files {
             extract_zip(file, "", target, &wheel_limits(wheel), &mut |_, _| {})?;
+        }
+        for (source, file) in &source_files {
+            extract_zip(
+                file,
+                &source.strip_prefix,
+                &target.join(&source.install_as),
+                &source_limits(source),
+                &mut |_, _| {},
+            )?;
         }
         Ok(())
     })?;
@@ -346,6 +400,13 @@ fn wheel_limits(wheel: &crate::generation::PinnedWheel) -> ArchiveLimits {
     ArchiveLimits {
         max_entries: 5_000,
         max_total_bytes: wheel.max_bytes.saturating_mul(10),
+    }
+}
+
+fn source_limits(source: &crate::generation::PinnedSource) -> ArchiveLimits {
+    ArchiveLimits {
+        max_entries: source.max_entries,
+        max_total_bytes: source.max_bytes.saturating_mul(10),
     }
 }
 

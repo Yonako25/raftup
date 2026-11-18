@@ -17,6 +17,7 @@ use egui::{RichText, Ui};
 use launcher_core::generation::GenerateRequest;
 use launcher_core::{Encryption, PartyHostOptions};
 
+use super::prefs;
 use super::presets::Preset;
 use super::{generation, generator_setup, hosting};
 use crate::app::Page;
@@ -52,6 +53,8 @@ pub struct CreateForm {
     port: String,
     password: String,
     public_host: String,
+    /// Adresse du webhook Discord (secrète : champ masqué, jamais écrite dans un journal).
+    webhook: String,
     encrypted: bool,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
@@ -78,6 +81,7 @@ impl Default for CreateForm {
             port: "38281".to_string(),
             password: String::new(),
             public_host: "localhost".to_string(),
+            webhook: String::new(),
             encrypted: true,
             cert: None,
             key: None,
@@ -85,6 +89,17 @@ impl Default for CreateForm {
             generation: generation::Generation::default(),
             pending_host: None,
             hosting: hosting::Hosting::default(),
+        }
+    }
+}
+
+impl CreateForm {
+    /// Formulaire pré-rempli avec le webhook et le préréglage mémorisés.
+    pub fn with_prefs(prefs: prefs::Prefs) -> CreateForm {
+        CreateForm {
+            webhook: prefs.webhook,
+            preset: prefs.preset,
+            ..CreateForm::default()
         }
     }
 }
@@ -279,6 +294,13 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         labelled(ui, "Adresse publique (nom de domaine ou IP)");
         ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(f32::INFINITY));
 
+        labelled(ui, "Webhook Discord (facultatif)");
+        ui.add(
+            egui::TextEdit::singleline(&mut form.webhook)
+                .password(true)
+                .desired_width(f32::INFINITY),
+        );
+
         labelled(ui, "Chiffrement");
         let wss = widgets::choice_card(
             ui,
@@ -338,6 +360,8 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
     match build_request(form) {
         Ok((request, host)) => {
             *error = None;
+            // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage.
+            prefs::remember(host.webhook.as_ref(), Some(form.preset));
             form.hosting = hosting::Hosting::Idle;
             // Formulaire bon : on regarde ensuite si le générateur est là.
             // S'il manque, le panneau de consentement s'affiche en haut.
@@ -498,6 +522,7 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
             Encryption::Plain
         };
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
+    let webhook = format::parse_webhook(&form.webhook)?;
 
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
@@ -514,6 +539,7 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
         encryption,
         public_host,
         disable_save: false,
+        webhook,
     };
     Ok((request, host))
 }
@@ -544,6 +570,36 @@ mod tests {
         assert_eq!(host.public_host, "exemple.fr");
         assert_eq!(host.encryption, Encryption::Plain);
         assert!(!host.disable_save);
+    }
+
+    #[test]
+    fn webhook_vide_ou_valide_passe_dans_les_reglages() {
+        let mut form = valid();
+        assert_eq!(build_request(&form).unwrap().1.webhook, None);
+        form.webhook = " https://discord.com/api/webhooks/1/abc ".into();
+        let (_, host) = build_request(&form).unwrap();
+        assert_eq!(
+            host.webhook.unwrap().expose(),
+            "https://discord.com/api/webhooks/1/abc"
+        );
+    }
+
+    #[test]
+    fn webhook_refuse_sans_recopier_l_adresse() {
+        let mut form = valid();
+        form.webhook = "https://evil.org/api/webhooks/SECRETTOKEN".into();
+        let message = build_request(&form).unwrap_err();
+        assert!(!message.contains("SECRETTOKEN"));
+    }
+
+    #[test]
+    fn le_formulaire_est_prerempli_par_les_reglages_memorises() {
+        let form = CreateForm::with_prefs(prefs::Prefs {
+            webhook: "https://discord.com/api/webhooks/1/abc".into(),
+            preset: Preset::Long,
+        });
+        assert_eq!(form.webhook, "https://discord.com/api/webhooks/1/abc");
+        assert_eq!(form.preset, Preset::Long);
     }
 
     #[test]

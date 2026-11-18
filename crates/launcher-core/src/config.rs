@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// Version du format écrite par ce launcher.
-pub const CURRENT_FORMAT_VERSION: u32 = 1;
+pub const CURRENT_FORMAT_VERSION: u32 = 2;
 
 /// Ce qui fait échouer la lecture ou l'écriture de la configuration.
 #[derive(Debug, thiserror::Error)]
@@ -44,7 +44,9 @@ pub struct GameSettings {
 }
 
 /// Configuration de l'utilisateur. Volontairement sans mot de passe.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Debug` est écrit à la main : l'adresse du webhook (secrète, ADR 0025) n'y figure jamais.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserConfig {
     #[serde(default = "current_version")]
     pub format_version: u32,
@@ -55,6 +57,13 @@ pub struct UserConfig {
     pub games: BTreeMap<String, GameSettings>,
     #[serde(default)]
     pub last_port: Option<u16>,
+    /// Adresse du webhook Discord, en clair (ADR 0025). Secrète : ne jamais la logger ni
+    /// l'afficher ; absente quand l'hôte a vidé le champ. Ajouté en version 2.
+    #[serde(default)]
+    pub webhook_url: Option<String>,
+    /// Préréglage de génération choisi en dernier (nom affiché : « Rapide »…). Version 2.
+    #[serde(default)]
+    pub preset: Option<String>,
 }
 
 fn current_version() -> u32 {
@@ -68,6 +77,8 @@ impl Default for UserConfig {
             player_name: None,
             games: BTreeMap::new(),
             last_port: None,
+            webhook_url: None,
+            preset: None,
         }
     }
 }
@@ -82,10 +93,15 @@ pub struct LoadedConfig {
 
 /// Migre la table TOML de la version `from` vers `from + 1`.
 ///
-/// Aucune migration n'existe encore (une seule version) : le jour où le format change,
-/// on ajoute ici une branche `1 => { ... }` qui transforme la table.
-fn migrate_one(_from: u32, table: toml::Table) -> toml::Table {
-    table
+/// Version 1 -> 2 : `webhook_url` et `preset` sont apparus, tous deux facultatifs. Rien à
+/// transformer (leur absence se lit comme « aucune valeur ») ; la branche existe pour que la
+/// chaîne de migrations reste explicite : le jour où un champ change de sens, on y écrit la
+/// transformation.
+fn migrate_one(from: u32, table: toml::Table) -> toml::Table {
+    match from {
+        1 => table,
+        _ => table,
+    }
 }
 
 /// Lit la configuration. Absente : valeurs par défaut. Illisible : mise de côté puis défauts.
@@ -196,5 +212,41 @@ impl UserConfig {
             let _ = fs::remove_file(&tmp);
             io(path, e)
         })
+    }
+}
+
+impl std::fmt::Debug for UserConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Comme `HostOptions` : le secret apparaît comme « *** », jamais en clair.
+        let webhook = self.webhook_url.as_ref().map(|_| "***");
+        f.debug_struct("UserConfig")
+            .field("format_version", &self.format_version)
+            .field("player_name", &self.player_name)
+            .field("games", &self.games)
+            .field("last_port", &self.last_port)
+            .field("webhook_url", &webhook)
+            .field("preset", &self.preset)
+            .finish()
+    }
+}
+
+impl UserConfig {
+    /// Mémorise (ou efface) l'adresse du webhook : un texte vide ou blanc efface la valeur.
+    /// Rend vrai si la configuration a changé (pour n'écrire le disque que si besoin).
+    pub fn set_webhook(&mut self, url: Option<&str>) -> bool {
+        let new = url
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .map(String::from);
+        let changed = self.webhook_url != new;
+        self.webhook_url = new;
+        changed
+    }
+
+    /// Mémorise le préréglage choisi. Rend vrai si la configuration a changé.
+    pub fn set_preset(&mut self, label: &str) -> bool {
+        let changed = self.preset.as_deref() != Some(label);
+        self.preset = Some(label.to_string());
+        changed
     }
 }
