@@ -166,6 +166,14 @@ untime2`.
 ### 2026-11-18 · Apworlds installés pris automatiquement
 - **Fait** : « Créer une partie » ajoute seul les apworlds posés par la Bibliothèque (`installed_apworlds`, relus à chaque clic, sans l'avertissement) et les liste sous « Pris automatiquement » ; un apworld de même nom choisi à la main passe avant. Partie Slime Rancher générée et hébergée par la macro avec le seul YAML. Workspace, clippy et fmt passent.
 - **Pas vérifié** : apworld installé pour une autre version d'Archipelago que 0.6.8 (seul `worlds/0.6.8` est lu).
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : « Lancer le jeu » sans adresse ni slot (premier lancement).
+
+### 2026-11-18 · Lancer le jeu hors partie
+- **Fait** : `plan_launch_offline` (méthode de connexion du profil ignorée) ; dans la Bibliothèque, « Lancer le jeu » marche avec adresse et slot vides (jeu sans connexion), reste grisé si un seul des deux est rempli, avec une mention sous le bouton. Tests du cœur et de l'écran, workspace, clippy et fmt passent ; bouton vu sur capture.
+- **Pas vérifié** : clic réel sur « Lancer le jeu » sans adresse (Slime Rancher démarré par Raftup hors partie).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : reprise d'une partie hébergée après redémarrage de Raftup, en vrai.
 

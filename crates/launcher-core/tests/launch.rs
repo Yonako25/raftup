@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use launcher_core::launch::{launch, plan_launch, Credentials, LaunchError};
+use launcher_core::launch::{launch, plan_launch, plan_launch_offline, Credentials, LaunchError};
 use launcher_core::profile::Profile;
 use launcher_core::template::TemplateError;
 
@@ -268,4 +268,27 @@ connect = { method = "config_file", path = "{game_dir}/ap.json", format = "json"
     assert!(matches!(launch(&plan), Err(LaunchError::Config { .. })));
     // Le fichier d'origine n'est pas écrasé.
     assert_eq!(fs::read_to_string(&cfg).unwrap(), "pas du json");
+}
+
+#[test]
+fn lancement_hors_partie_sans_connexion() {
+    // Chaque méthode de connexion est ignorée : seuls l'exe et les arguments de base restent.
+    let methods = [
+        r#"connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{slot}"] }"#,
+        r#"connect = { method = "env", vars = { AP_SLOT = "{slot}" } }"#,
+        r#"connect = { method = "config_file", path = "{game_dir}/ap.json", format = "json", set = { a = "{slot}" } }"#,
+        r#"connect = { method = "manual", instructions = "Adresse {address}" }"#,
+    ];
+    for method in methods {
+        let p = profile(&format!(
+            "exe = \"{{game_dir}}/Demo.exe\"\nargs = [\"-windowed\"]\n{method}"
+        ));
+        let plan = plan_launch_offline(&p, Path::new(GAME), Path::new(WORLDS)).unwrap();
+        assert_eq!(plan.exe, Path::new(GAME).join("Demo.exe"), "{method}");
+        assert_eq!(plan.args, vec!["-windowed".to_string()], "{method}");
+        assert!(plan.env.is_empty(), "{method}");
+        assert!(plan.config_edit.is_none(), "{method}");
+        assert!(plan.uri.is_none(), "{method}");
+        assert!(plan.manual_instructions.is_none(), "{method}");
+    }
 }

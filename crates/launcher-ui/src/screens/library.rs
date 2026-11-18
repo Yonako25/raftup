@@ -11,9 +11,9 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
 use egui::{Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 use launcher_core::{
-    detect_games, install, launch, plan_launch, status, uninstall, validate_manual_dir, Catalog,
-    Credentials, DetectRule, DetectedGame, DetectionRoots, Downloader, GameState, HttpFetcher,
-    InstallOptions, InstallStatus, Paths, Profile, Store,
+    detect_games, install, launch, plan_launch, plan_launch_offline, status, uninstall,
+    validate_manual_dir, Catalog, Credentials, DetectRule, DetectedGame, DetectionRoots,
+    Downloader, GameState, HttpFetcher, InstallOptions, InstallStatus, Paths, Profile, Store,
 };
 
 use crate::app::Page;
@@ -322,6 +322,27 @@ pub fn view(
 }
 
 /// Identifiants du formulaire, ou `None` s'il manque l'adresse ou le slot.
+/// Ce que « Lancer le jeu » fera avec le formulaire de connexion.
+#[derive(Debug, PartialEq, Eq)]
+enum LaunchMode {
+    /// Adresse et slot remplis : le jeu se connecte à la partie.
+    Connect(Credentials),
+    /// Les deux vides : le jeu démarre seul (premier lancement, jeu hors partie).
+    Offline,
+    /// Un seul des deux rempli : on attend l'autre, le bouton reste grisé.
+    Incomplete,
+}
+
+fn launch_mode(form: &LaunchForm) -> LaunchMode {
+    match credentials(form) {
+        Some(credentials) => LaunchMode::Connect(credentials),
+        None if form.address.trim().is_empty() && form.slot.trim().is_empty() => {
+            LaunchMode::Offline
+        }
+        None => LaunchMode::Incomplete,
+    }
+}
+
 fn credentials(form: &LaunchForm) -> Option<Credentials> {
     let address = form.address.trim();
     let slot = form.slot.trim();
@@ -538,16 +559,16 @@ impl LibraryState {
 
     fn start_launch(&mut self, ctx: &egui::Context, profile: &Profile, game_dir: &Path) {
         let Ok(paths) = &self.paths else { return };
-        let Some(credentials) = credentials(&self.form) else {
-            return;
-        };
+        let worlds_dir = paths.worlds_dir(AP_VERSION);
         // Le plan est une fonction pure : on le calcule ici, ses erreurs arrivent tout de suite.
-        let plan = match plan_launch(
-            profile,
-            game_dir,
-            &paths.worlds_dir(AP_VERSION),
-            &credentials,
-        ) {
+        let planned = match launch_mode(&self.form) {
+            LaunchMode::Connect(credentials) => {
+                plan_launch(profile, game_dir, &worlds_dir, &credentials)
+            }
+            LaunchMode::Offline => plan_launch_offline(profile, game_dir, &worlds_dir),
+            LaunchMode::Incomplete => return,
+        };
+        let plan = match planned {
             Ok(plan) => plan,
             Err(e) => {
                 self.notice = Some(Notice::Error(format!("Lancement impossible : {e}")));
@@ -967,7 +988,7 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
         ui.horizontal(|ui| {
             let half = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
             if let (true, Some(game)) = (view.can_launch, &found) {
-                let ready = credentials(&state.form).is_some();
+                let ready = launch_mode(&state.form) != LaunchMode::Incomplete;
                 if big_button(ui, "Lancer le jeu", true, ready && !busy, half) {
                     let dir = game.install_dir.clone();
                     state.start_launch(ctx, &profile, &dir);
@@ -984,10 +1005,19 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 }
             }
         });
-        if view.can_launch && credentials(&state.form).is_none() {
-            ui.label(
-                widgets::dim("Renseignez l'adresse et le slot plus bas pour lancer.").size(12.0),
-            );
+        if view.can_launch {
+            let hint = match launch_mode(&state.form) {
+                LaunchMode::Connect(_) => None,
+                LaunchMode::Offline => {
+                    Some("Sans adresse ni slot, le jeu démarre sans se connecter à une partie.")
+                }
+                LaunchMode::Incomplete => {
+                    Some("Renseignez l'adresse et le slot plus bas pour vous connecter.")
+                }
+            };
+            if let Some(hint) = hint {
+                ui.label(widgets::dim(hint).size(12.0));
+            }
         }
         if let Some(task) = &state.task {
             ui.add_space(6.0);
@@ -1295,6 +1325,25 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let v = view(p, Some(&g), Some(&Ok(InstallStatus::InProgress)));
         assert_eq!(v.install_label, "Réparer");
         assert!(v.can_uninstall && !v.can_launch);
+    }
+
+    #[test]
+    fn mode_de_lancement() {
+        // Rien de rempli (ou des espaces) : lancement hors partie.
+        let mut form = LaunchForm {
+            address: "  ".into(),
+            ..LaunchForm::default()
+        };
+        assert_eq!(launch_mode(&form), LaunchMode::Offline);
+        // Un seul des deux : on attend l'autre.
+        form.address = "ws://localhost:38281".into();
+        assert_eq!(launch_mode(&form), LaunchMode::Incomplete);
+        form.address.clear();
+        form.slot = "Alice".into();
+        assert_eq!(launch_mode(&form), LaunchMode::Incomplete);
+        // Les deux : connexion.
+        form.address = "ws://localhost:38281".into();
+        assert!(matches!(launch_mode(&form), LaunchMode::Connect(_)));
     }
 
     #[test]

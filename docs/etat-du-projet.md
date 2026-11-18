@@ -27,7 +27,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Contrôle visuel du launcher** (vrai gras Inter SemiBold fait le 18 novembre) ; vus sur captures le 18 novembre : onglet « Salon », préréglages et champ webhook de « Créer », panneau d'installation du générateur
 - [x] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup (18 novembre 2026 : Slimipelago 0.3.2.1 connecté sans modification, objets reçus)
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
-- [ ] « Lancer le jeu » grisé tant que l'adresse et le slot sont vides : gênant pour un premier lancement
+- [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
 
 ## Crates

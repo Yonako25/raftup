@@ -146,6 +146,37 @@ pub fn plan_launch(
     worlds_dir: &Path,
     credentials: &Credentials,
 ) -> Result<LaunchPlan, LaunchError> {
+    plan(profile, game_dir, worlds_dir, Some(credentials))
+}
+
+/// Plan de lancement SANS connexion : le jeu démarre seul, sans adresse ni slot.
+///
+/// Sert au premier lancement (le mod loader prépare ses fichiers) ou pour jouer hors
+/// partie : la méthode de connexion du profil est ignorée (ni arguments de connexion,
+/// ni variables, ni config du mod modifiée, ni URI). Les `{address}`, `{slot}`… des
+/// arguments de base valent une chaîne vide.
+pub fn plan_launch_offline(
+    profile: &Profile,
+    game_dir: &Path,
+    worlds_dir: &Path,
+) -> Result<LaunchPlan, LaunchError> {
+    plan(profile, game_dir, worlds_dir, None)
+}
+
+fn plan(
+    profile: &Profile,
+    game_dir: &Path,
+    worlds_dir: &Path,
+    credentials: Option<&Credentials>,
+) -> Result<LaunchPlan, LaunchError> {
+    // Sans connexion, des identifiants vides : les modèles restent valides.
+    let empty = Credentials {
+        address: String::new(),
+        slot: String::new(),
+        password: None,
+    };
+    let connect = credentials.is_some();
+    let credentials = credentials.unwrap_or(&empty);
     let (host, port) = split_address(&credentials.address);
     let vars = Vars::new()
         .with("game_dir", &game_dir.to_string_lossy())
@@ -165,6 +196,8 @@ pub fn plan_launch(
     let mut manual_instructions = None;
 
     match &launch.connect {
+        // Lancement hors partie : aucune méthode de connexion n'est appliquée.
+        _ if !connect => {}
         ConnectMethod::CliArgs { args: more } => args.extend(expand_all(more, &vars)?),
         ConnectMethod::Env { vars: wanted } => {
             for (name, value) in wanted {
