@@ -190,6 +190,14 @@ untime2`.
 ### 2026-11-18 · Liens d'invitation et boutons « Copier » en vrai
 - **Fait** : boutons « Copier » muets réparés (eframe sans « clipboard », 889f974, avec test) ; lien `raftup://join/?…` réécrit par le navigateur accepté, bulle « Copié » (910bbcd) ; avec l'utilisatrice : clic sur le lien depuis le navigateur → écran « Rejoindre » rempli. Discord ne rend pas le lien cliquable (ADR 0020 mis à jour).
 - **Pas vérifié** : après réhébergement, le compteur affichait 1/152 alors que 2/152 avait été annoncé ; à recontrôler (deuxième emplacement peut-être jamais envoyé).
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : recontrôler la sauvegarde (valider un emplacement, réhéberger, comparer le compteur).
+
+### 2026-11-18 · Sauvegarde recontrôlée
+- **Fait** : doute du 1/152 levé : le 2e emplacement annoncé n'avait jamais été envoyé (sauvegarde lue : un seul lieu). Nouvel essai avec l'utilisatrice : lieu validé (2/152), écrit sur le disque aussitôt, puis Raftup fermé, rouvert, partie réhébergée : 2/152 repris.
+- **Pas vérifié** : reprise après un arrêt brutal (processus tué) ; partie à plusieurs joueurs.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : partie à deux joueurs (deux slots, deux jeux ou deux instances).
 
