@@ -1,0 +1,14 @@
+[package]
+name = "logic"
+description = "Modèle d'un multiworld et calcul de ce qui est atteignable (balayage par sphères)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true

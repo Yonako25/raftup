@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge"]
+members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge", "crates/logic"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -81,6 +81,7 @@ multidata = { path = "crates/multidata" }
 server = { path = "crates/server" }
 launcher-core = { path = "crates/launcher-core" }
 py-bridge = { path = "crates/py-bridge" }
+logic = { path = "crates/logic" }
 
 # Règles du compilateur et de clippy communes à toutes les crates.
 [workspace.lints.rust]
