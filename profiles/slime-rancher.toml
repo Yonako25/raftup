@@ -1,0 +1,67 @@
+# Slime Rancher (mod Slimipelago de SWCreeperKing).
+# Slimipelago n'a AUCUNE licence (gh api : license = null, vérifié le 2026-11-17). Raftup ne
+# redistribue rien : les fichiers sont téléchargés chez l'auteur, sur le PC du joueur, après
+# vérification du sha256. Décision de la mainteneuse : ADR 0021.
+# Hashes : calculés sur les fichiers téléchargés, identiques aux digest de GitHub.
+# Essai 2026-11-17 : installé sur un faux dossier (212 fichiers), réinstallation « à jour »,
+# désinstallation propre.
+
+format_version = 1
+
+[game]
+id = "slime-rancher"
+name = "Slime Rancher"
+ap_game = "Slime Rancher"          # vérifié : game = "Slime Rancher" dans slime_rancher/__init__.py
+status = "available"
+
+[game.detect]
+steam_appid = 433340               # vérifié : appmanifest_433340.acf local, installdir « Slime Rancher »
+expected_exe = "SlimeRancher.exe"  # vérifié : PE32+ x86-64 dans l'installation locale
+
+[credits]
+authors = ["SWCreeperKing (Slimipelago)", "LavaGang (MelonLoader, Apache-2.0)"]
+license = "unlicensed"            # voir ADR 0021
+
+[[steps]]
+id = "melonloader"
+kind = "mod_loader"
+name = "MelonLoader"
+version = "0.7.3"                  # version demandée par le README de Slimipelago
+source = { url = "https://github.com/LavaGang/MelonLoader/releases/download/v0.7.3/MelonLoader.x64.zip" }
+sha256 = "5b2b2f3d1cd42b59ec886c5bdc2663edae87a0097a4f4a8f58c0965a99dda416"
+max_bytes = 40000000
+# Le zip contient MelonLoader/ et version.dll à la racine (vérifié).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "slimipelago"
+kind = "mod"
+name = "Slimipelago"
+version = "0.3.2.1"
+source = { url = "https://github.com/SWCreeperKing/Slimipelago/releases/download/v0.3.2.1/Slimipelago.zip" }
+sha256 = "25698609ce66c9a50cf8357971f3008e1adb0df50a6d2f194d760a8d6335eb55"
+max_bytes = 10000000
+# Le zip contient Slimipelago/Mods/… et Slimipelago/UserLibs/… → à copier à la racine du jeu.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "Slimipelago/" }
+
+[[steps]]
+id = "slime-rancher-apworld"
+kind = "apworld"
+name = "Apworld Slime Rancher"
+version = "0.3.2.1"
+source = { url = "https://github.com/SWCreeperKing/Slimipelago/releases/download/v0.3.2.1/slime_rancher.apworld" }
+sha256 = "12ade0764bcfb515ecec2f4cf3bda01fd914c8b8f7b1b4572ecae4693450d038"
+max_bytes = 1000000
+install = { copy_to = "{worlds_dir}/slime_rancher.apworld" }
+
+[preserve]
+# Connexion enregistrée par le mod (fichier vu dans une installation réelle, contenu non lu).
+paths = ["{game_dir}/ApConnection.json"]
+
+[cleanup]
+# Créés par MelonLoader / le mod au premier lancement (observés localement, non vérifiés un par un).
+paths = ["{game_dir}/UserData", "{game_dir}/MusicRando", "{game_dir}/Plugins"]
+
+[launch]
+exe = "{game_dir}/SlimeRancher.exe"
+connect = { method = "manual", instructions = "Dans le jeu : Options → menu de connexion Archipelago. Adresse {address}, slot {slot}." }

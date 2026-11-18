@@ -128,7 +128,9 @@ pub struct DetectInfo {
 #[serde(deny_unknown_fields)]
 pub struct Credits {
     pub authors: Vec<String>,
-    /// Identifiant SPDX, ou `"permission"` (autorisation écrite de l'auteur).
+    /// Identifiant SPDX, `"permission"` (autorisation écrite de l'auteur) ou `"unlicensed"`
+    /// (le mod n'a aucune licence : Raftup ne le redistribue pas, il le télécharge chez
+    /// l'auteur sur le PC du joueur ; décision de la mainteneuse, ADR 0021).
     pub license: String,
     #[serde(default)]
     pub permission_url: Option<String>,
