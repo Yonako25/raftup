@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill` et 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) faites ; reste + APQuest, équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill` et 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) faites ; reste équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
