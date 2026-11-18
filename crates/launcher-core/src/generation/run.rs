@@ -85,6 +85,12 @@ pub trait GeneratorBackend {
     /// (c'est là que `generate` pose les apworlds).
     fn archipelago_dir(&self) -> &Path;
 
+    /// Ce moteur lit-il les apworlds ? Le moteur Rust (ses mondes sont dans Raftup) répond
+    /// non : on ne touche alors ni au dossier d'Archipelago ni à `custom_worlds`.
+    fn uses_apworlds(&self) -> bool {
+        true
+    }
+
     fn run(
         &mut self,
         p: &GenerateParams,
@@ -236,7 +242,11 @@ pub fn generate(
     }
 
     // Les chemins envoyés au worker sont absolus : il change de dossier courant.
-    let archipelago_dir = make_absolute(backend.archipelago_dir())?;
+    let archipelago_dir = if backend.uses_apworlds() {
+        make_absolute(backend.archipelago_dir())?
+    } else {
+        PathBuf::new()
+    };
     let (generation_dir, players_dir, output_dir) = make_generation_dirs(paths)?;
 
     let result = generate_in(
@@ -277,8 +287,10 @@ fn generate_in(
         fs::write(&meta_path, meta).map_err(|e| io_err(&meta_path, e))?;
     }
 
-    let _ = log.send("Préparation des apworlds".to_string());
-    install_apworlds(paths, &archipelago_dir, &req.apworlds)?;
+    if backend.uses_apworlds() {
+        let _ = log.send("Préparation des apworlds".to_string());
+        install_apworlds(paths, &archipelago_dir, &req.apworlds)?;
+    }
 
     let params = GenerateParams {
         archipelago_dir,

@@ -99,3 +99,14 @@
 | 4 | Premier monde : APQuest ; Slime Rancher par l'export des règles plus tard | APQuest |
 | 5 | Un seul moteur par multiworld ; moteur Rust sur option jusqu'à l'étape 5, puis par défaut | Oui |
 | 6 | Ordre des étapes 1 à 6 ci-dessus, en commençant par `logic` | Oui |
+
+## Mise en œuvre de l'étape 4 (18 novembre 2026)
+
+Choix pris en codant, dans le cadre des décisions ci-dessus :
+
+- **Hasard** : ChaCha20 (`rand_chacha` 0.10.0, `rand_core` 0.10.1, épinglés) ; un flux par usage (`yaml`, `world`, `fill`) et par slot, graine = SHA-256 de (étiquette, seed, slot). Le mélange (Fisher-Yates) et les tirages bornés sont écrits dans `fill`, pour ne pas dépendre de l'algorithme de la crate `rand`.
+- **Impasse du placement supposé** : selon l'ordre tiré, un objet peut ne plus avoir de lieu ; `fill` recommence avec la suite du même flux, 20 essais au plus.
+- **Nom de seed** : le numéro de seed sur 20 chiffres (`00000000000000012345`).
+- **YAML** : lus par `yaml-rust2` 0.13 (MIT / Apache-2.0). Le moteur Rust ne prend la génération que s'il comprend tout : jeu porté, options connues, valeurs simples, poids ou `random` ; `accessibility: full` ; options communes avancées vides ; pas de substitution dans les noms. Sinon la raison est écrite en tête du journal et Archipelago génère.
+- **Launcher** : `RustBackend` remplit le même contrat que `PythonBackend` (zip `AP_<seed>.zip` dans le dossier de sortie) ; il ne touche ni aux apworlds ni au dossier d'Archipelago, et ne demande pas l'installation de Python. Case « Moteur Rust (expérimental) » dans « Créer une partie », décochée par défaut.
+- **Ignoré pour l'instant** : `progression_balancing` (étape 5), le spoiler, le `meta.yaml` des préréglages.

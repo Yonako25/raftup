@@ -14,7 +14,7 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
-use launcher_core::generation::{installed_apworlds, GenerateRequest};
+use launcher_core::generation::{installed_apworlds, rust_support, GenerateRequest};
 use launcher_core::{Encryption, PartyHostOptions};
 
 use super::library::{load_paths, AP_VERSION};
@@ -54,6 +54,9 @@ pub struct CreateForm {
     pending_pick: Option<Pick>,
     /// Preset de génération (F06) : Rapide, Standard ou Long.
     preset: Preset,
+    /// L'hôte veut essayer le moteur Rust (ADR 0027, sur option tant que l'équilibrage
+    /// de progression n'est pas fait).
+    rust_engine: bool,
     port: String,
     password: String,
     public_host: String,
@@ -83,6 +86,7 @@ impl Default for CreateForm {
             installed_apworlds: Vec::new(),
             pending_pick: None,
             preset: Preset::default(),
+            rust_engine: false,
             port: "38281".to_string(),
             password: String::new(),
             public_host: "localhost".to_string(),
@@ -383,6 +387,15 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         });
         ui.label(widgets::dim(form.preset.description()).size(13.0));
 
+        ui.add_space(6.0);
+        ui.checkbox(&mut form.rust_engine, "Moteur Rust (expérimental)");
+        ui.label(
+            widgets::dim(
+                "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago                  génère comme d'habitude. Pas encore d'équilibrage de progression.",
+            )
+            .size(13.0),
+        );
+
         ui.add_space(12.0);
         // Grisé pendant l'installation du générateur et pendant la génération.
         let enabled =
@@ -404,6 +417,14 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage.
             prefs::remember(host.webhook.as_ref(), Some(form.preset));
             form.hosting = hosting::Hosting::Idle;
+            let (engine, note) = choose_engine(form.rust_engine, &request.player_files);
+            if engine == generation::Engine::Rust {
+                // Pas de Python : rien à installer.
+                form.setup = generator_setup::Setup::Ready;
+                form.pending_host = Some(host);
+                form.generation = generation::start(ctx, request, engine, note);
+                return;
+            }
             // Formulaire bon : on regarde ensuite si le générateur est là.
             // S'il manque, le panneau de consentement s'affiche en haut.
             form.setup = generator_setup::check();
@@ -411,7 +432,7 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
                 generator_setup::Setup::Ready => {
                     // Gardés pour héberger la seed à la fin de la génération.
                     form.pending_host = Some(host);
-                    generation::start(ctx, request)
+                    generation::start(ctx, request, engine, note)
                 }
                 _ => generation::Generation::Idle,
             };
@@ -423,6 +444,24 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
     }
 }
 
+/// Moteur de la génération : Rust seulement si l'hôte l'a demandé et que le moteur Rust
+/// comprend tous les fichiers joueurs ; sinon Python, avec la raison en première ligne
+/// du journal.
+fn choose_engine(wanted: bool, player_files: &[PathBuf]) -> (generation::Engine, Option<String>) {
+    if !wanted {
+        return (generation::Engine::Python, None);
+    }
+    match rust_support(player_files) {
+        Ok(()) => (generation::Engine::Rust, None),
+        Err(reason) => (
+            generation::Engine::Python,
+            Some(format!(
+                "Moteur Rust impossible ({reason}) : Archipelago prend la génération."
+            )),
+        ),
+    }
+}
+
 /// Ce que la macro de développement (`devscript.rs`) a besoin de savoir.
 #[cfg(debug_assertions)]
 pub struct DevState {
@@ -430,12 +469,14 @@ pub struct DevState {
     pub hosting_failed: bool,
 }
 
-/// Macro : remplit le formulaire (YAML donnés, en clair, port donné).
+/// Macro : remplit le formulaire (YAML donnés, en clair, port donné). Avec
+/// `RAFTUP_DEV_RUST=1`, la case « Moteur Rust » est cochée.
 #[cfg(debug_assertions)]
 pub fn dev_prefill(form: &mut CreateForm, yamls: Vec<PathBuf>, port: u16) {
     form.yamls = yamls;
     form.encrypted = false;
     form.port = port.to_string();
+    form.rust_engine = std::env::var("RAFTUP_DEV_RUST").is_ok_and(|v| v == "1");
 }
 
 /// Macro : comme un clic sur « Générer la partie ».
@@ -602,6 +643,39 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moteur_rust_seulement_si_demande_et_compris() {
+        let tmp = tempfile::tempdir().unwrap();
+        let apquest = tmp.path().join("a.yaml");
+        std::fs::write(
+            &apquest,
+            "name: A
+game: APQuest
+",
+        )
+        .unwrap();
+        let other = tmp.path().join("b.yaml");
+        std::fs::write(
+            &other,
+            "name: B
+game: Slime Rancher
+",
+        )
+        .unwrap();
+
+        assert_eq!(
+            choose_engine(false, std::slice::from_ref(&apquest)),
+            (generation::Engine::Python, None)
+        );
+        assert_eq!(
+            choose_engine(true, std::slice::from_ref(&apquest)),
+            (generation::Engine::Rust, None)
+        );
+        let (engine, note) = choose_engine(true, &[apquest, other]);
+        assert_eq!(engine, generation::Engine::Python);
+        assert!(note.unwrap().contains("Slime Rancher"));
+    }
 
     /// Un formulaire déjà rempli et valide (en clair, un joueur).
     fn valid() -> CreateForm {

@@ -31,6 +31,8 @@ percent-encoding.workspace = true
 client-core.workspace = true
 # Pont vers le générateur Python officiel (ADR 0016, 0017).
 py-bridge.workspace = true
+# Moteur de génération Rust (ADR 0027).
+generate.workspace = true
 sha2.workspace = true
 # Lire les manifestes Epic (JSON) et fusionner les fichiers de config des mods.
 serde_json.workspace = true

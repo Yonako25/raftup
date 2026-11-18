@@ -1,4 +1,5 @@
-//! Génération de seeds avec le générateur officiel d'Archipelago (ADR 0017).
+//! Génération de seeds avec le générateur officiel d'Archipelago (ADR 0017), ou avec le
+//! moteur Rust de Raftup pour les mondes portés (ADR 0027, [`RustBackend`]).
 //!
 //! - [`pins`] : le fichier d'épinglage `generator-pins.toml` (Python, Archipelago, wheels),
 //!   lu et validé.
@@ -6,6 +7,7 @@
 pub mod pins;
 mod run;
 pub mod runtime;
+mod rust;
 
 pub use runtime::{
     ensure_runtime, ensure_runtime_cancellable, runtime_status, RuntimeStatus, SetupStep,
@@ -16,6 +18,7 @@ pub use run::{
     generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,
     DEFAULT_SPOILER, DEFAULT_TIMEOUT,
 };
+pub use rust::{engine_name, rust_support, RustBackend};
 
 /// Ce qui peut échouer pendant la préparation ou le lancement d'une génération.
 ///

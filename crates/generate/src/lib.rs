@@ -9,6 +9,7 @@
 mod datapackage;
 mod multidata_build;
 pub mod worlds;
+pub mod yaml;
 
 use std::collections::BTreeSet;
 
@@ -21,6 +22,7 @@ use thiserror::Error;
 
 pub use datapackage::{archipelago_package, game_package, PackageSource};
 pub use worlds::{GameOptions, SUPPORTED_GAMES};
+pub use yaml::{read_players, Unsupported};
 
 /// Longueur maximale d'un nom de joueur, comme Archipelago.
 pub const MAX_NAME_LEN: usize = 16;

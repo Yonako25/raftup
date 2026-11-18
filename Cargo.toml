@@ -79,6 +79,9 @@ minisign = "0.10"
 # (MIT OR Apache-2.0). `fill` ne voit que le trait `Rng` de rand_core.
 rand_core = "=0.10.1"
 rand_chacha = "=0.10.0"
+# Lecture des YAML des joueurs par le générateur Rust (YAML 1.2, pur Rust, MIT OR Apache-2.0).
+yaml-rust2 = "0.13"
+generate = { path = "crates/generate" }
 # Dossiers temporaires pour les tests.
 tempfile = "3"
 ap-protocol = { path = "crates/ap-protocol" }

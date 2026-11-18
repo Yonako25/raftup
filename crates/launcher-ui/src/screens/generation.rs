@@ -12,7 +12,8 @@ use std::time::{Duration, Instant};
 
 use egui::{RichText, Ui};
 use launcher_core::generation::{
-    pins, runtime_status, GenerateOutput, GenerateRequest, PythonBackend, RuntimeStatus,
+    pins, runtime_status, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend,
+    RuntimeStatus, RustBackend,
 };
 use launcher_core::party::generate_blocking;
 use launcher_core::{CancelToken, GenerationError};
@@ -50,9 +51,20 @@ pub enum Generation {
     },
 }
 
+/// Qui génère la partie.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Engine {
+    /// Le générateur officiel d'Archipelago, dans le Python embarqué.
+    #[default]
+    Python,
+    /// Le moteur Rust de Raftup (ADR 0027), pour les mondes portés.
+    Rust,
+}
+
 /// Une génération qui tourne dans un thread.
 pub struct Running {
     started: Instant,
+    engine: Engine,
     /// Partagé avec le thread : l'annuler ici, il le voit là-bas.
     cancel: CancelToken,
     log: VecDeque<String>,
@@ -79,9 +91,16 @@ impl Generation {
 
 /// Lance la génération dans un thread et rend l'état « en cours ».
 ///
-/// Le runtime est relu sur le disque (petit fichier, appel rapide) : on vient de
-/// vérifier qu'il est prêt, mais il faut son chemin exact pour le `PythonBackend`.
-pub fn start(ctx: &egui::Context, request: GenerateRequest) -> Generation {
+/// Avec Python, le runtime est relu sur le disque (petit fichier, appel rapide) : on vient
+/// de vérifier qu'il est prêt, mais il faut son chemin exact pour le `PythonBackend`.
+/// `note` est une première ligne de journal (par exemple : pourquoi le moteur Rust n'a pas
+/// pu servir).
+pub fn start(
+    ctx: &egui::Context,
+    request: GenerateRequest,
+    engine: Engine,
+    note: Option<String>,
+) -> Generation {
     let fail = |message: String| Generation::Failed {
         failure: Failure {
             message,
@@ -93,18 +112,24 @@ pub fn start(ctx: &egui::Context, request: GenerateRequest) -> Generation {
         Ok(paths) => paths,
         Err(e) => return fail(format!("Dossier de données de Raftup introuvable : {e}.")),
     };
-    let pins = match pins() {
-        Ok(pins) => pins,
-        Err(e) => return fail(format!("Le générateur est mal configuré : {e}.")),
+    // `Box<dyn …>` : une boîte qui contient l'un ou l'autre moteur ; `Send` permet de
+    // l'envoyer dans le thread de génération.
+    let mut backend: Box<dyn GeneratorBackend + Send> = match engine {
+        Engine::Rust => Box::new(RustBackend),
+        Engine::Python => {
+            let pins = match pins() {
+                Ok(pins) => pins,
+                Err(e) => return fail(format!("Le générateur est mal configuré : {e}.")),
+            };
+            match runtime_status(&paths, &pins) {
+                RuntimeStatus::Ready(runtime) => Box::new(PythonBackend::new(runtime)),
+                _ => return fail(
+                    "Le générateur n'est plus installé. Cliquez de nouveau sur « Générer la partie »."
+                        .into(),
+                ),
+            }
+        }
     };
-    let runtime =
-        match runtime_status(&paths, &pins) {
-            RuntimeStatus::Ready(runtime) => runtime,
-            _ => return fail(
-                "Le générateur n'est plus installé. Cliquez de nouveau sur « Générer la partie »."
-                    .into(),
-            ),
-        };
 
     let (log_sender, log_receiver) = mpsc::channel();
     let (result_sender, result_receiver) = mpsc::channel();
@@ -113,17 +138,27 @@ pub fn start(ctx: &egui::Context, request: GenerateRequest) -> Generation {
     let thread_cancel = cancel.clone();
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let mut backend = PythonBackend::new(runtime);
-        let result = generate_blocking(&paths, &mut backend, &request, &thread_cancel, log_sender)
-            .map_err(|e| failure(&e));
+        let result = generate_blocking(
+            &paths,
+            backend.as_mut(),
+            &request,
+            &thread_cancel,
+            log_sender,
+        )
+        .map_err(|e| failure(&e));
         // L'écran a pu disparaître (fenêtre fermée) : un envoi raté n'est pas grave.
         let _ = result_sender.send(result);
         ctx.request_repaint();
     });
+    let mut log = VecDeque::new();
+    if let Some(note) = note {
+        log.push_back(note);
+    }
     Generation::Running(Running {
         started: Instant::now(),
+        engine,
         cancel,
-        log: VecDeque::new(),
+        log,
         log_receiver,
         result_receiver,
     })
@@ -184,10 +219,11 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
         Generation::Idle => return false,
         Generation::Running(task) => {
             widgets::panel(ui, "Génération de la partie", |ui| {
-                ui.label(format!(
-                    "Archipelago génère la partie… {}",
-                    elapsed(task.started.elapsed())
-                ));
+                let who = match task.engine {
+                    Engine::Python => "Archipelago génère la partie…",
+                    Engine::Rust => "Raftup génère la partie (moteur Rust)…",
+                };
+                ui.label(format!("{who} {}", elapsed(task.started.elapsed())));
                 ui.add_space(6.0);
                 indeterminate_bar(ui, ui.available_width(), ui.input(|i| i.time));
                 ui.add_space(8.0);
@@ -508,6 +544,7 @@ mod tests {
         let (result_sender, result_receiver) = mpsc::channel();
         let mut generation = Generation::Running(Running {
             started: Instant::now(),
+            engine: Engine::Python,
             cancel: CancelToken::new(),
             log: VecDeque::new(),
             log_receiver,
@@ -541,6 +578,7 @@ mod tests {
         drop(result_sender);
         let mut generation = Generation::Running(Running {
             started: Instant::now(),
+            engine: Engine::Python,
             cancel: CancelToken::new(),
             log: VecDeque::new(),
             log_receiver,
