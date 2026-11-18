@@ -144,5 +144,5 @@ untime2`.
 ### 2026-11-18 · ROM absente à la génération
 - **Fait** : sans ROM, soe bloquait la génération 5 min (boîte de fichier invisible d'Archipelago) ; le worker met `settings.no_gui = True` et l'erreur arrive en 6 s ; l'écran traduit ce `FileNotFoundError` en message clair (b14af43). Test réel `monde_avec_rom_absente`, workspace, clippy et fmt passent ; tests réels à lancer avec `--test-threads=1`.
 - **Pas vérifié** : message vu à l'écran ; autres mondes à ROM (seul soe essayé). Vrai gras Inter SemiBold pas fait : il faut télécharger la police, accord à demander.
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:\raftup-test\runtime2`.
 - **Suite** : J1 étape 9, partie réelle de Slime Rancher (avec l'utilisatrice).
