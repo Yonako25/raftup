@@ -72,6 +72,11 @@ impl Paths {
         self.cache_dir.join("downloads")
     }
 
+    /// Verrou et boîte aux lettres de l'instance unique du launcher.
+    pub fn instance_dir(&self) -> PathBuf {
+        self.data_dir.join("instance")
+    }
+
     /// Dossier des générations (un sous-dossier horodaté par génération).
     pub fn generations_dir(&self) -> PathBuf {
         self.data_dir.join("generations")
