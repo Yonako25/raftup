@@ -18,7 +18,8 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
-- [ ] **Rejoindre par lien d'invitation**, salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
+- [ ] **Rejoindre par lien d'invitation** (F04) : décisions proposées dans l'ADR 0020, en attente de validation
+- [ ] Salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
@@ -66,6 +67,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Échanges : `LocationScouts`, chat `Say`, `Bounce` (DeathLink)
 - Stockage : `Get`, `Set` (18 opérations), `SetNotify`, clés `_read_…`
 - **Indices** (ADR 0012, 0018) : `create_as_hint`, `CreateHints`, `UpdateHint`, points et coût des indices ; rangés et parcourus comme le `set` Python de l'officiel
+- **Commandes serveur** après `!admin login` : `/players`, `/status`, `/send`, `/send_location`, `/release`, `/collect`, `/allow_release`, `/hint`, `/save`…
 - **Commandes `!`** (ADR 0013) : `help`, `license`, `options`, `players`, `status`, `remaining`, `missing`, `checked`, `release`, `collect`, `alias`, `getitem`, `countdown`, `hint`, `hint_location`, `admin login` / `logout`
 - **Sauvegarde** (ADR 0014, NF07) : écrite et synchronisée sur le disque **avant** chaque réponse ; reprise au démarrage ; compactage au démarrage, à 10 000 deltas et à l'arrêt
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
@@ -83,6 +85,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - egui / eframe (wgpu), binaire `raftup`
 - Écrans « Héberger une partie », « Créer une partie » (préparation, installation du générateur, génération, hébergement), « Partie en cours » et « Bientôt », d'après la maquette
 - Polices Chakra Petch et Inter intégrées (OFL)
+- Fenêtre sans bordure redimensionnable par ses bords et ses coins (`resize.rs`)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - En debug, macro `RAFTUP_DEV_CAPTURE=<dossier>` (+ `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) : joue « Créer une partie » et enregistre des captures PNG, sans être devant le PC
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
@@ -110,10 +113,10 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0017** : étape `generate` (Python embarqué, générateur officiel épinglé)
 - **0018** : ordre des indices comme un `set` Python (module `pyset`)
 - **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
+- **0020** (proposé) : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 
 ## Reporté à J3
 
-- Commandes serveur après `!admin login` (`/players`, `/send`…)
 - Certificat automatique (Let's Encrypt) et rechargement sans redémarrage (ADR 0009)
 - `py-bridge`, catalogue et profils, installation des mods, détection des jeux, rejoindre par lien, salon, webhook Discord
 
@@ -165,7 +168,8 @@ Tests différentiels : voir `crates/server/tests/differentiel/README.md`.
 - `!missing`, `!checked`, indices d'un objet : lieux par numéro croissant, comme `_speedups` (le serveur officiel compilé) ; seul son repli en pur Python, qui affiche un avertissement, suit l'ordre du multidata
 - Ordre des indices (ADR 0018) : exact si `entrance` est vide, ou si l'officiel tourne avec `PYTHONHASHSEED=0` ; la sauvegarde automatique de l'officiel (toutes les 60 s) peut, rarement, changer son ordre
 - `!countdown` au-delà d'une heure : message court au lieu d'une trace
-- `!release` : pas d'autorisation par joueur depuis la console (`/allow_release`)
-- `!admin` : après connexion, les commandes serveur répondent « Server commands are not available yet. » (J3)
+- `!admin /…` : `/help`, `/license`, `/options`, `/exit`, `/alias`, `/option`, `/datastore` sont refusées (« Server command /x is not available in Raftup yet. ») ; les autres commandes serveur sont reprises
+- `!admin /…` : erreurs d'arguments en texte court (`Invalid arguments for /send.`), et `/send_multiple` au-delà de 100 ou `/countdown` au-delà d'une heure répondent par un message au lieu d'une trace
+- `!admin /allow_release` n'est pas sauvegardé (comme l'officiel) ; `/save` force une écriture du fichier `.raftup` et répond « Game saved »
 
 </details>

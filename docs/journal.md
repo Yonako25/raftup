@@ -5,7 +5,9 @@
 
 ## En cours
 
-_Aucune session n'indique de fichiers en cours. Une session qui touche à un dossier partagé (par exemple `crates/launcher-ui/`) écrit ici une ligne `session → fichiers` et la retire à la clôture._
+_Une session qui touche à un dossier partagé (par exemple `crates/launcher-ui/`) écrit ici une ligne `session → fichiers` et la retire à la clôture._
+
+_Aucune session en cours._
 
 ## Entrées
 
@@ -92,3 +94,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : redimensionnement de la fenêtre sans bordure par ses bords (à regarder devant le PC).
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : rejoindre par lien d'invitation (F06).
+
+### 2026-11-18 · Travail en parallèle (3 agents)
+- **Fait** : commandes serveur après `!admin login` (`/players`, `/status`, `/send`, `/send_location`, `/release`, `/collect`, `/allow_release`, `/hint`, `/save`…, textes de 0.6.8, 12 tests) ; fenêtre redimensionnable par ses bords (`resize.rs`, coins en L pour épargner « Fermer ») ; macro de captures étendue (`RAFTUP_DEV_SCENARIO` : bibliotheque, heberger, en-cours, generateur-absent), barre latérale non coupée ; ADR 0020 proposé pour rejoindre par lien (F04, et non F06). `cargo test --workspace`, test réel, clippy, build `--release` et macro passent.
+- **Pas vérifié** : textes `!admin` comparés au code Python, pas à un serveur officiel lancé ; redimensionnement à la souris ; la poignée du bord droit (5 px) chevauche un peu la barre de défilement des pages.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : faire valider les 7 décisions de l'ADR 0020, puis coder `invite.rs`, `instance.rs` et `url_scheme.rs` en parallèle.
