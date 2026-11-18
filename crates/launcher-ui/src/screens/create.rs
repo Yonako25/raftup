@@ -8,7 +8,8 @@
 //! Au clic sur « Générer », si le formulaire est bon, on vérifie que le générateur
 //! est installé ; sinon on demande l'accord de l'hôte pour l'installer (étape 2,
 //! `generator_setup`). S'il est prêt, la génération part dans un thread (étape 3,
-//! `generation`).
+//! `generation`). La seed générée est ensuite hébergée par le worker (étape 4,
+//! `hosting`), puis l'écran bascule vers « Partie en cours ».
 
 use std::path::PathBuf;
 
@@ -16,11 +17,12 @@ use egui::{RichText, Ui};
 use launcher_core::generation::GenerateRequest;
 use launcher_core::{Encryption, PartyHostOptions};
 
-use super::{generation, generator_setup};
+use super::{generation, generator_setup, hosting};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
 use crate::widgets;
+use crate::worker::{Shared, Worker};
 
 /// Avertissement obligatoire avant d'ajouter un apworld (contrat, « Avertissements »).
 pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur votre PC, sans bac \
@@ -54,6 +56,11 @@ pub struct CreateForm {
     setup: generator_setup::Setup,
     /// La génération : en cours, finie ou échouée (étape 3).
     generation: generation::Generation,
+    /// Réglages du serveur lus au clic sur « Générer » : ce sont eux qui servent à
+    /// héberger la seed, même si le formulaire change pendant la génération.
+    pending_host: Option<PartyHostOptions>,
+    /// L'hébergement de la seed générée (étape 4).
+    hosting: hosting::Hosting,
 }
 
 impl Default for CreateForm {
@@ -72,12 +79,27 @@ impl Default for CreateForm {
             key: None,
             setup: generator_setup::Setup::default(),
             generation: generation::Generation::default(),
+            pending_host: None,
+            hosting: hosting::Hosting::default(),
         }
     }
 }
 
-pub fn show(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) -> Option<Page> {
+pub fn show(
+    ui: &mut Ui,
+    form: &mut CreateForm,
+    error: &mut Option<String>,
+    worker: &Worker,
+    shared: &Shared,
+) -> Option<Page> {
     let mut goto = None;
+    // Avant le bandeau d'erreur : une erreur de démarrage du serveur va dans le
+    // panneau d'hébergement (avec « Réessayer »), pas dans le bandeau.
+    if hosting::poll(&mut form.hosting, shared, error) == hosting::Outcome::Started {
+        // Le serveur tourne : l'écran repart propre pour la prochaine partie.
+        form.generation = generation::Generation::Idle;
+        goto = Some(Page::Hosted);
+    }
     super::page(ui, |ui| {
         super::header(
             ui,
@@ -98,6 +120,19 @@ pub fn show(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) -> O
         // Génération en cours, seed prête ou échec.
         if generation::show(ui, &mut form.generation) {
             on_generate(ui.ctx(), form, error);
+        }
+        // Seed tout juste générée : on l'héberge avec les réglages du clic (une fois).
+        if let Some(output) = form.generation.output() {
+            if let Some(options) = form.pending_host.take() {
+                // Une vieille erreur (d'un autre écran) passerait sinon pour un échec
+                // du démarrage : `poll` prend la première erreur qu'il trouve.
+                *error = None;
+                form.hosting = hosting::start(worker, shared, output.clone(), options);
+            }
+        }
+        // Démarrage du serveur, ou échec avec « Réessayer ».
+        if hosting::show(ui, &mut form.hosting) {
+            retry_hosting(form, error, worker, shared);
         }
 
         if ui.available_width() >= super::WIDE {
@@ -261,7 +296,8 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
 
         ui.add_space(12.0);
         // Grisé pendant l'installation du générateur et pendant la génération.
-        let enabled = !form.setup.is_busy() && !form.generation.is_busy();
+        let enabled =
+            !form.setup.is_busy() && !form.generation.is_busy() && !form.hosting.is_busy();
         if widgets::primary_button(ui, "▶ Générer la partie", enabled) {
             on_generate(ui.ctx(), form, error);
         }
@@ -272,14 +308,18 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
 /// le générateur, puis lance la génération.
 fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
     match build_request(form) {
-        Ok((request, _host)) => {
+        Ok((request, host)) => {
             *error = None;
+            form.hosting = hosting::Hosting::Idle;
             // Formulaire bon : on regarde ensuite si le générateur est là.
             // S'il manque, le panneau de consentement s'affiche en haut.
             form.setup = generator_setup::check();
             form.generation = match form.setup {
-                // Les réglages du serveur (`_host`) serviront à l'étape 4 (hébergement).
-                generator_setup::Setup::Ready => generation::start(ctx, request),
+                generator_setup::Setup::Ready => {
+                    // Gardés pour héberger la seed à la fin de la génération.
+                    form.pending_host = Some(host);
+                    generation::start(ctx, request)
+                }
                 _ => generation::Generation::Idle,
             };
         }
@@ -287,6 +327,27 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             form.generation = generation::Generation::Idle;
             *error = Some(message);
         }
+    }
+}
+
+/// « Réessayer » après un démarrage raté : relit les réglages du serveur dans le
+/// formulaire (l'hôte a pu changer le port) et relance avec la MÊME seed.
+fn retry_hosting(
+    form: &mut CreateForm,
+    error: &mut Option<String>,
+    worker: &Worker,
+    shared: &Shared,
+) {
+    let Some(output) = form.hosting.failed_output().cloned() else {
+        return;
+    };
+    match build_request(form) {
+        Ok((_, host)) => {
+            *error = None;
+            form.hosting = hosting::start(worker, shared, output, host);
+        }
+        // Formulaire devenu invalide : message en haut, la seed reste gardée.
+        Err(message) => *error = Some(message),
     }
 }
 

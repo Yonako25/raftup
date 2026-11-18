@@ -4,6 +4,7 @@
 pub mod create;
 pub mod generation;
 pub mod generator_setup;
+pub mod hosting;
 pub mod library;
 pub mod matches;
 pub mod running;

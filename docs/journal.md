@@ -68,3 +68,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : vraie génération depuis l'interface (générateur pas installé ici) ; rendu à l'œil ; fermeture de la fenêtre pendant une génération.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 4, l'hébergement de la seed générée (`host_generated`, « Réessayer » sur un autre port sans régénérer).
+
+### 2026-11-18 · Écran « Créer une partie », étape 4
+- **Fait** : module `hosting` : la seed générée est hébergée par le worker avec les réglages lus au clic sur « Générer » ; bascule vers « Partie en cours » ; en cas d'échec, « Impossible de démarrer le serveur : {raison}. » et « Réessayer » qui relit le formulaire sans régénérer ; refus si une partie tourne déjà. 6 tests ; `cargo test --workspace`, clippy et fmt passent. Pas de commit encore.
+- **Pas vérifié** : enchaînement réel génération puis hébergement (générateur pas installé ici) ; rendu à l'œil ; port réellement occupé.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : faire tourner l'écran en vrai (installer le générateur, générer une partie APQuest, l'héberger) et le regarder à l'œil.

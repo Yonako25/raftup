@@ -4,7 +4,7 @@
 //! `generate_blocking` dans un thread `std` (jamais dans le fil de dessin, contrat
 //! « Règles d'appel »). L'écran montre une barre indéterminée, le temps écoulé, le
 //! journal du générateur en direct et un bouton « Annuler »
-//! (`docs/contrat-ui-generation.md`, état 3). L'hébergement arrive à l'étape 4.
+//! (`docs/contrat-ui-generation.md`, état 3). L'hébergement est dans `hosting`.
 
 use std::collections::VecDeque;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -66,6 +66,14 @@ impl Generation {
     /// Vrai pendant la génération : le bouton « Générer » est alors grisé.
     pub fn is_busy(&self) -> bool {
         matches!(self, Generation::Running(_))
+    }
+
+    /// La seed générée, une fois la génération réussie.
+    pub fn output(&self) -> Option<&GenerateOutput> {
+        match self {
+            Generation::Done { output, .. } => Some(output),
+            _ => None,
+        }
     }
 }
 
@@ -199,8 +207,7 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
                 let plural = if count > 1 { "s" } else { "" };
                 ui.label(
                     RichText::new(format!(
-                        "Seed {} générée pour {count} joueur{plural}. L'hébergement arrive à \
-                         l'étape suivante.",
+                        "Seed {} générée pour {count} joueur{plural}.",
                         output.seed_name
                     ))
                     .color(theme::GREEN),

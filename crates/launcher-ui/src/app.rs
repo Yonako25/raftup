@@ -147,7 +147,9 @@ impl eframe::App for App {
                 Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)
                 }
-                Page::Create => create::show(ui, &mut self.create, &mut self.error),
+                Page::Create => {
+                    create::show(ui, &mut self.create, &mut self.error, &self.worker, &shared)
+                }
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
