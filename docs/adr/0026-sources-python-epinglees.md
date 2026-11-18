@@ -1,6 +1,6 @@
 # ADR 0026 — Paquets Python installés depuis une archive de source
 
-- **Statut** : proposé (étend l'ADR 0017 ; à valider par la mainteneuse)
+- **Statut** : accepté le 18 novembre 2026 (étend l'ADR 0017)
 
 ## Contexte
 
