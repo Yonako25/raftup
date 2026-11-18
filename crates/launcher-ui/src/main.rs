@@ -4,6 +4,9 @@
 //! 1. le journal en mémoire (couche `tracing`) que le panneau « Journal du serveur » affiche ;
 //! 2. un runtime `tokio` multi-thread, sur lequel tourne le serveur de la partie ;
 //! 3. la fenêtre egui, qui ne fait jamais d'`await` : elle parle au serveur par un « worker ».
+//!
+//! Avant tout cela, `startup` lit le lien `raftup://` éventuel et vérifie qu'aucune autre
+//! fenêtre Raftup n'est ouverte ; s'il y en a une, il lui passe le lien et s'arrête.
 
 mod app;
 // Macro de développement (captures sans être devant le PC) : jamais dans `--release`.
@@ -12,6 +15,7 @@ mod devscript;
 mod format;
 mod resize;
 mod screens;
+mod startup;
 mod theme;
 mod titlebar;
 mod widgets;
@@ -37,6 +41,20 @@ fn main() -> anyhow::Result<()> {
         .with(logs.layer())
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    // Lien reçu de Windows, instance unique et schéma `raftup://` (ADR 0020).
+    let link = startup::link_from_args(std::env::args());
+    let (guard, instance_dir, link) = match startup::prepare(link) {
+        startup::Start::Forwarded => return Ok(()),
+        startup::Start::Run {
+            guard,
+            instance_dir,
+            link,
+        } => (guard, instance_dir, link),
+    };
+    // `_guard` (et non `_`) : la variable vit jusqu'à la fin de `main`, donc le verrou
+    // de l'instance unique aussi. `let _ = …` le relâcherait tout de suite.
+    let _guard = guard;
 
     // Le runtime doit rester en vie tant que la fenêtre est ouverte : quand `runtime`
     // est détruit (fin de `main`), le serveur et le worker s'arrêtent avec lui.
@@ -70,7 +88,7 @@ fn main() -> anyhow::Result<()> {
             // `Context` est un pointeur partagé : on le clone pour que le worker
             // puisse demander un nouveau dessin depuis un autre thread.
             let worker = worker::Worker::spawn(&handle, cc.egui_ctx.clone(), logs.clone(), done);
-            Ok(Box::new(app::App::new(worker)))
+            Ok(Box::new(app::App::new(worker, instance_dir, link)))
         }),
     );
     // Fenêtre fermée : on laisse au worker le temps d'arrêter la partie

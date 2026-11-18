@@ -73,12 +73,12 @@ pub fn show(
                 ui.spacing_mut().item_spacing.x = 20.0;
                 let main_width = ui.available_width() - SIDE_WIDTH - 20.0;
                 column(ui, main_width, |ui| {
-                    main_area(ui, state, worker, shared, now)
+                    main_area(ui, state, worker, shared, now, &mut copy)
                 });
                 column(ui, SIDE_WIDTH, |ui| side_area(ui, shared, status, now));
             });
         } else {
-            main_area(ui, state, worker, shared, now);
+            main_area(ui, state, worker, shared, now, &mut copy);
             ui.add_space(14.0);
             side_area(ui, shared, status, now);
         }
@@ -178,7 +178,7 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
         .inner_margin(Margin::symmetric(18, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label("Adresse à donner aux joueurs :");
                 ui.label(widgets::mono(&status.address, 15.0).color(theme::ITEM));
                 let password = if status.has_password {
@@ -193,6 +193,16 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                     }
                 });
             });
+            if format::is_local_host(&status.address) {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(
+                        "Cette adresse ne marche que sur ce PC : indiquez votre adresse publique pour inviter des amis.",
+                    )
+                    .size(13.0)
+                    .color(theme::AMBER),
+                );
+            }
         });
 }
 
@@ -218,7 +228,14 @@ fn confirm_window(ctx: &egui::Context, state: &mut RunningState, worker: &Worker
 }
 
 /// Le centre : les onglets et leur contenu.
-fn main_area(ui: &mut Ui, state: &mut RunningState, worker: &Worker, shared: &Shared, now: f64) {
+fn main_area(
+    ui: &mut Ui,
+    state: &mut RunningState,
+    worker: &Worker,
+    shared: &Shared,
+    now: f64,
+    copy: &mut Option<String>,
+) {
     let Some(status) = &shared.status else {
         return;
     };
@@ -238,12 +255,12 @@ fn main_area(ui: &mut Ui, state: &mut RunningState, worker: &Worker, shared: &Sh
         TAB_CHAT => chat_tab(ui, state, worker, shared),
         TAB_JOURNAL => journal_tab(ui, state, shared),
         // L'onglet 0 (« Équipage ») et toute valeur inattendue montrent l'équipage.
-        _ => crew_tab(ui, status, now),
+        _ => crew_tab(ui, status, now, copy),
     }
 }
 
 /// Onglet « Équipage » : une ligne par joueur, avec sa progression et son statut.
-fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64) {
+fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String>) {
     list_frame(ui, |ui| {
         // Les groupes (« item links ») ne jouent pas eux-mêmes : on ne les montre pas.
         let players = status.server.slots.iter().filter(|s| !s.is_group);
@@ -251,12 +268,26 @@ fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64) {
             if index > 0 {
                 ui.separator();
             }
-            crew_row(ui, slot, now, PLAYER_COLORS[index % PLAYER_COLORS.len()]);
+            crew_row(
+                ui,
+                slot,
+                &status.address,
+                now,
+                PLAYER_COLORS[index % PLAYER_COLORS.len()],
+                copy,
+            );
         }
     });
 }
 
-fn crew_row(ui: &mut Ui, slot: &SlotStatus, now: f64, color: Color32) {
+fn crew_row(
+    ui: &mut Ui,
+    slot: &SlotStatus,
+    address: &str,
+    now: f64,
+    color: Color32,
+    copy: &mut Option<String>,
+) {
     ui.horizontal(|ui| {
         widgets::badge(ui, 40.0, &format::initials(&slot.game), false);
         ui.add_space(4.0);
@@ -276,6 +307,14 @@ fn crew_row(ui: &mut Ui, slot: &SlotStatus, now: f64, color: Color32) {
                 ))
                 .size(12.0),
             );
+            // Lien personnel du joueur (absent si l'adresse ne permet pas d'en fabriquer un).
+            if let Some(link) = format::player_link(address, slot) {
+                let button =
+                    egui::Button::new(widgets::dim("Copier le lien").size(12.0)).frame(false);
+                if ui.add(button).clicked() {
+                    *copy = Some(link);
+                }
+            }
         });
         // De droite à gauche : le statut tout à droite, puis la progression.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

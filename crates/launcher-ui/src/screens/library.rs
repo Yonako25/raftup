@@ -119,6 +119,27 @@ impl LibraryState {
     pub fn game_count(&self) -> usize {
         self.catalog.as_ref().map_or(0, |c| c.profiles.len())
     }
+
+    /// Le catalogue, s'il s'est chargé (l'écran « Rejoindre » y cherche le jeu du lien).
+    pub fn catalog(&self) -> Option<&Catalog> {
+        self.catalog.as_ref().ok()
+    }
+
+    /// La dernière détection des jeux, si elle a abouti.
+    pub fn scan_result(&self) -> Option<&Scan> {
+        self.scan.as_ref()
+    }
+}
+
+/// Ouvre la fiche d'un jeu avec le formulaire de connexion pré-rempli (écran « Rejoindre »).
+/// Le mot de passe n'est jamais dans un lien : on le vide pour que le joueur le saisisse.
+pub fn open_with_invite(state: &mut LibraryState, game_id: &str, address: &str, slot: &str) {
+    state.selected = Some(game_id.to_string());
+    state.confirm_uninstall = false;
+    state.notice = None;
+    state.form.address = address.to_string();
+    state.form.slot = slot.to_string();
+    state.form.password.clear();
 }
 
 /// Variable d'environnement (builds de debug seulement) : dossier de profils `.toml`
@@ -161,7 +182,7 @@ fn dev_catalog(dir: &Path) -> Result<Catalog, String> {
 }
 
 /// Les vrais dossiers de Raftup ou, en debug, ceux sous `RAFTUP_DEV_RACINE`.
-pub(super) fn load_paths() -> Result<Paths, String> {
+pub(crate) fn load_paths() -> Result<Paths, String> {
     if let (true, Some(root)) = (cfg!(debug_assertions), std::env::var_os(DEV_ROOT)) {
         return Ok(Paths::under(Path::new(&root)));
     }
@@ -676,14 +697,24 @@ pub fn show(
 
 /// Recopie l'adresse de la partie hébergée, une seule fois par partie.
 fn prefill(form: &mut LaunchForm, shared: &Shared) {
-    let Some(status) = &shared.status else {
-        return;
-    };
-    if form.prefilled_from.as_deref() == Some(status.address.as_str()) {
+    if let Some(status) = &shared.status {
+        prefill_address(form, &status.address);
+    }
+}
+
+/// La logique de `prefill`, sans l'état partagé (testée).
+fn prefill_address(form: &mut LaunchForm, hosted: &str) {
+    if form.prefilled_from.as_deref() == Some(hosted) {
         return;
     }
-    form.prefilled_from = Some(status.address.clone());
-    form.address = status.address.clone();
+    // On ne remplace que ce que Raftup avait lui-même recopié (ou un champ vide) :
+    // une adresse tapée par le joueur ou venue d'un lien d'invitation est gardée.
+    let untouched = form.address.trim().is_empty()
+        || form.prefilled_from.as_deref() == Some(form.address.as_str());
+    if untouched {
+        form.address = hosted.to_string();
+    }
+    form.prefilled_from = Some(hosted.to_string());
 }
 
 fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
@@ -1307,6 +1338,34 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let catalog = dev_catalog(temp.path()).unwrap();
         assert_eq!(catalog.profiles.len(), 1);
         assert!(catalog.get("demo").is_some());
+    }
+
+    #[test]
+    fn ouvrir_avec_une_invitation_remplit_le_formulaire() {
+        let mut state = LibraryState::new();
+        state.form.password = "ancien".into();
+        open_with_invite(&mut state, "demo", "wss://h.example:38281", "Alice");
+        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert_eq!(state.form.address, "wss://h.example:38281");
+        assert_eq!(state.form.slot, "Alice");
+        assert!(state.form.password.is_empty());
+    }
+
+    /// La partie hébergée ne doit pas écraser l'adresse d'une invitation (ni ce que le
+    /// joueur a tapé) ; elle remplit un champ vide et suit ses propres changements.
+    #[test]
+    fn adresse_hebergee_n_ecrase_pas_une_invitation() {
+        let mut form = LaunchForm::default();
+        prefill_address(&mut form, "ws://localhost:38281");
+        assert_eq!(form.address, "ws://localhost:38281");
+        // Nouvelle partie hébergée : l'adresse recopiée suit.
+        prefill_address(&mut form, "ws://localhost:38282");
+        assert_eq!(form.address, "ws://localhost:38282");
+        // Une invitation remplace l'adresse ; la partie hébergée ne la reprend pas.
+        form.address = "wss://ami.example:38281".into();
+        prefill_address(&mut form, "ws://localhost:38282");
+        prefill_address(&mut form, "ws://localhost:38283");
+        assert_eq!(form.address, "wss://ami.example:38281");
     }
 
     #[test]

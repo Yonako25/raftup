@@ -228,10 +228,57 @@ pub fn invitation(address: &str, has_password: bool, slots: &[SlotStatus]) -> St
         .filter(|s| !s.is_group)
         .map(|s| format!("{} ({})", s.name, s.game))
         .collect();
+    // Lien sans slot ; `game` seulement si tous les joueurs jouent au même jeu.
+    // Le mot de passe n'est jamais mis dans un lien.
+    let mut games = slots.iter().filter(|s| !s.is_group).map(|s| &s.game);
+    let game = match games.next() {
+        Some(first) if games.all(|g| g == first) => Some(first.clone()),
+        _ => None,
+    };
+    let link = launcher_core::invite::ServerAddress::parse(address)
+        .and_then(|address| {
+            launcher_core::invite::make_invite(&launcher_core::invite::Invite {
+                address,
+                slot: None,
+                game,
+            })
+        })
+        .ok()
+        .map(|link| format!("\nLien : {link}"))
+        .unwrap_or_default();
     format!(
-        "Partie Raftup (compatible avec Archipelago)\nAdresse : {address}\n{password}\nJoueurs : {}",
+        "Partie Raftup (compatible avec Archipelago)\nAdresse : {address}{link}\n{password}\nJoueurs : {}",
         players.join(", ")
     )
+}
+
+/// Lien `raftup://join?…` d'un joueur précis (son slot et son jeu), sans mot de passe.
+/// `None` si l'adresse ou les noms ne permettent pas de fabriquer un lien valide.
+pub fn player_link(address: &str, slot: &SlotStatus) -> Option<String> {
+    let address = launcher_core::invite::ServerAddress::parse(address).ok()?;
+    launcher_core::invite::make_invite(&launcher_core::invite::Invite {
+        address,
+        slot: Some(slot.name.clone()),
+        game: Some(slot.game.clone()),
+    })
+    .ok()
+}
+
+/// Vrai si l'hôte de l'adresse (`ws://hôte:port`) n'est joignable que depuis ce PC :
+/// `localhost`, `127.x.x.x`, `[::1]`, `0.0.0.0`.
+pub fn is_local_host(address: &str) -> bool {
+    let Ok(parsed) = launcher_core::invite::ServerAddress::parse(address) else {
+        return false;
+    };
+    let host = parsed.host.to_ascii_lowercase();
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "0.0.0.0"
+        || host == "[::1]"
+        || host == "[::]"
+        || host
+            .parse::<std::net::Ipv4Addr>()
+            .is_ok_and(|ip| ip.is_loopback())
 }
 
 /// Un morceau d'une phrase d'activité : la couleur dépend de sa nature.
@@ -461,6 +508,59 @@ mod tests {
         assert!(text.contains("Adresse : wss://exemple.fr:38281"));
         assert!(text.contains("Pas de mot de passe"));
         assert!(text.ends_with("Joueurs : Alice (ChecksFinder)"));
+        // Une ligne « Lien : » relisible, sans slot, avec le jeu (un seul jeu).
+        let link = text
+            .lines()
+            .find_map(|l| l.strip_prefix("Lien : "))
+            .expect("ligne Lien");
+        let invite = launcher_core::invite::parse_invite(link).expect("lien valide");
+        assert_eq!(invite.address.host, "exemple.fr");
+        assert_eq!(invite.slot, None);
+        assert_eq!(invite.game.as_deref(), Some("ChecksFinder"));
+    }
+
+    #[test]
+    fn invitation_jeux_differents_et_mot_de_passe() {
+        let mut other = slot("Bob", 0, 0);
+        other.game = "Factorio".to_string();
+        let slots = vec![slot("Alice", 0, 0), other];
+        let text = invitation("ws://exemple.fr:38281", true, &slots);
+        let link = text
+            .lines()
+            .find_map(|l| l.strip_prefix("Lien : "))
+            .expect("ligne Lien");
+        assert_eq!(
+            launcher_core::invite::parse_invite(link)
+                .expect("lien valide")
+                .game,
+            None
+        );
+        assert!(!link.contains("password") && !link.contains("mot"));
+        // Adresse invalide : pas de ligne « Lien ».
+        assert!(!invitation("exemple.fr", false, &slots).contains("Lien :"));
+    }
+
+    #[test]
+    fn lien_de_joueur() {
+        let link = player_link("wss://exemple.fr:38281", &slot("Alice & Bob", 0, 0))
+            .expect("lien de joueur");
+        let invite = launcher_core::invite::parse_invite(&link).expect("lien valide");
+        assert_eq!(invite.slot.as_deref(), Some("Alice & Bob"));
+        assert_eq!(invite.game.as_deref(), Some("ChecksFinder"));
+        assert!(invite.address.secure);
+        assert_eq!(player_link("pas une adresse", &slot("A", 0, 0)), None);
+    }
+
+    #[test]
+    fn hotes_locaux() {
+        assert!(is_local_host("ws://localhost:38281"));
+        assert!(is_local_host("ws://127.0.0.1:38281"));
+        assert!(is_local_host("ws://127.1.2.3"));
+        assert!(is_local_host("ws://[::1]:38281"));
+        assert!(is_local_host("ws://0.0.0.0:38281"));
+        assert!(!is_local_host("ws://exemple.fr:38281"));
+        assert!(!is_local_host("ws://203.0.113.5:38281"));
+        assert!(!is_local_host("n'importe quoi"));
     }
 
     #[test]

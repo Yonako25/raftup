@@ -71,12 +71,12 @@ pub fn show(
                 if widgets::ghost_button(ui, "Créer depuis des YAML") {
                     goto = Some(Page::Create);
                 }
-                // Ces deux écrans arrivent plus tard.
+                // L'écran des salons arrive plus tard.
                 if widgets::ghost_button(ui, "Créer un salon") {
                     goto = Some(Page::Soon("Créer un salon"));
                 }
                 if widgets::ghost_button(ui, "Rejoindre par lien") {
-                    goto = Some(Page::Soon("Rejoindre par lien"));
+                    goto = Some(Page::Join);
                 }
             },
         );

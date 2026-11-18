@@ -100,3 +100,9 @@ _Aucune session en cours._
 - **Pas vérifié** : textes `!admin` comparés au code Python, pas à un serveur officiel lancé ; redimensionnement à la souris ; la poignée du bord droit (5 px) chevauche un peu la barre de défilement des pages.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : faire valider les 7 décisions de l'ADR 0020, puis coder `invite.rs`, `instance.rs` et `url_scheme.rs` en parallèle.
+
+### 2026-11-18 · Rejoindre par lien (F04)
+- **Fait** : ADR 0020 accepté (rust-version 1.89) ; `launcher-core` : `invite` (liens `raftup://join`, 55 cas), `instance` (verrou + boîte aux lettres), `url_scheme` (HKCU, idempotent) ; `launcher-ui` : liens par joueur et avertissement d'adresse locale dans « Partie en cours », écran « Rejoindre » (aussi via « Invitations »), démarrage (`startup.rs` : lien en argument, 2e instance qui passe la main, fenêtre ramenée au premier plan) ; recopie de l'adresse hébergée qui n'écrase plus un lien. 70 tests de `launcher-ui`, workspace, clippy et `--release` passent ; parcours essayé en vrai avec la macro (`RAFTUP_DEV_SCENARIO=rejoindre`).
+- **Pas vérifié** : clic sur un vrai lien `raftup://` (schéma enregistré seulement par le binaire `--release`, pas installé) ; Discord rend-il le lien cliquable ? ; un `.link` impossible à supprimer serait relu en boucle.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : test sur une VM Windows propre avec le binaire `--release` (critère de fin de J3), clic sur un lien compris.

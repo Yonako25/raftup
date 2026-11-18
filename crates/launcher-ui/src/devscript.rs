@@ -55,6 +55,8 @@ impl Scenario {
             Some("heberger") => Scenario::Host,
             Some("bibliotheque") => Scenario::Screen("1-bibliotheque"),
             Some("en-cours") => Scenario::Screen("1-en-cours"),
+            // Une seule capture, quand un lien reçu (argument ou 2e instance) est affiché.
+            Some("rejoindre") => Scenario::Screen("1-rejoindre"),
             Some("generateur-absent") => Scenario::NoGenerator,
             _ => Scenario::Create,
         }
@@ -187,9 +189,10 @@ impl DevScript {
                 self.next(Step::Finished);
             }
             // Scénarios à une capture : 2,5 s pour le scan, la lecture de la seed ou le
-            // démarrage de la partie, puis on capture et on s'arrête.
+            // démarrage de la partie (ou `RAFTUP_DEV_DELAY_MS`, par exemple pour laisser
+            // une 2e instance transmettre un lien), puis on capture et on s'arrête.
             Step::Prepared
-                if !self.scenario.on_create_screen() && elapsed > Duration::from_millis(2500) =>
+                if !self.scenario.on_create_screen() && elapsed > single_capture_delay() =>
             {
                 self.capture(ctx, self.scenario.file_name());
                 self.next(Step::Finished);
@@ -271,6 +274,15 @@ impl DevScript {
             }
         });
     }
+}
+
+/// Délai avant la capture des scénarios à une seule image (2,5 s par défaut).
+fn single_capture_delay() -> Duration {
+    let ms = std::env::var("RAFTUP_DEV_DELAY_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2500);
+    Duration::from_millis(ms)
 }
 
 /// Les `.yaml` du dossier, triés par nom (ordre stable).

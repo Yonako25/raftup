@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{create, library, matches, running, setup, soon};
+use crate::screens::{create, join, library, matches, running, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -18,6 +18,8 @@ pub enum Page {
     Hosted,
     /// « Créer une partie » : générer une partie à partir des YAML des joueurs.
     Create,
+    /// « Rejoindre » : lire un lien d'invitation avant de continuer vers la Bibliothèque.
+    Join,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
     /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
     Soon(&'static str),
@@ -30,26 +32,74 @@ pub struct App {
     create: create::CreateForm,
     running: running::RunningState,
     library: library::LibraryState,
+    join: join::JoinState,
     /// Erreur à montrer en rouge en haut de l'écran.
     error: Option<String>,
+    /// Boîte aux lettres de l'instance unique : les liens ouverts pendant que Raftup
+    /// tourne y arrivent (`None` : instance unique indisponible).
+    instance_dir: Option<std::path::PathBuf>,
+    /// Dernière lecture de la boîte aux lettres (relue deux fois par seconde au plus).
+    inbox_checked: std::time::Instant,
     /// Macro de développement (`RAFTUP_DEV_CAPTURE`), seulement en debug.
     #[cfg(debug_assertions)]
     dev: Option<crate::devscript::DevScript>,
 }
 
 impl App {
-    pub fn new(worker: Worker) -> App {
+    /// `link` : lien `raftup://` reçu en argument ; il ouvre l'écran « Rejoindre ».
+    pub fn new(
+        worker: Worker,
+        instance_dir: Option<std::path::PathBuf>,
+        link: Option<String>,
+    ) -> App {
         dev_host(&worker);
+        let mut join = join::JoinState::default();
+        let page = match &link {
+            Some(link) => {
+                join::receive(&mut join, link);
+                Page::Join
+            }
+            None => start_page(),
+        };
         App {
-            page: start_page(),
+            page,
             worker,
             setup: setup::SetupForm::default(),
             create: create::CreateForm::default(),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
+            join,
             error: None,
+            instance_dir,
+            inbox_checked: std::time::Instant::now(),
             #[cfg(debug_assertions)]
             dev: crate::devscript::DevScript::from_env(),
+        }
+    }
+}
+
+impl App {
+    /// Lit la boîte aux lettres de l'instance unique, deux fois par seconde au plus.
+    fn read_inbox(&mut self, ctx: &egui::Context) {
+        let Some(dir) = &self.instance_dir else {
+            return;
+        };
+        if self.inbox_checked.elapsed() < std::time::Duration::from_millis(500) {
+            return;
+        }
+        self.inbox_checked = std::time::Instant::now();
+        for message in launcher_core::instance::take_inbox(dir) {
+            if message != crate::startup::FOCUS {
+                // Le dernier lien reçu l'emporte : c'est celui que le joueur vient de cliquer.
+                join::receive(&mut self.join, &message);
+                if self.page != Page::Join {
+                    self.error = None;
+                }
+                self.page = Page::Join;
+            }
+            // Dans les deux cas, la fenêtre revient au premier plan.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
     }
 }
@@ -66,6 +116,7 @@ fn start_page() -> Page {
         Some("bibliotheque") => Page::Library,
         Some("partie") => Page::Hosted,
         Some("creer") => Page::Create,
+        Some("rejoindre") => Page::Join,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
         Some("catalogue") => Page::Soon("Catalogue"),
@@ -109,6 +160,9 @@ impl eframe::App for App {
         // La durée « il y a … » doit avancer même si rien d'autre ne bouge.
         ctx.request_repaint_after(std::time::Duration::from_secs(1));
         theme::paint_background(&ctx);
+
+        // Liens ouverts pendant que Raftup tourne (deuxième instance) : écran « Rejoindre ».
+        self.read_inbox(&ctx);
 
         // Une erreur d'une commande (port pris, certificat refusé…) arrive du worker.
         if let Some(message) = self.worker.take_error() {
@@ -181,6 +235,7 @@ impl eframe::App for App {
                 Page::Create => {
                     create::show(ui, &mut self.create, &mut self.error, &self.worker, &shared)
                 }
+                Page::Join => join::show(ui, &mut self.join, &mut self.library),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
@@ -269,7 +324,8 @@ fn sidebar(
             vec![
                 ("En cours", hosted, Page::InProgress),
                 ("Salons", 0, Page::Soon("Salons")),
-                ("Invitations", 0, Page::Soon("Invitations")),
+                // « Invitations » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
+                ("Invitations", 0, Page::Join),
             ],
         ),
         (
