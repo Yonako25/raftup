@@ -106,3 +106,9 @@ _Aucune session en cours._
 - **Pas vérifié** : clic sur un vrai lien `raftup://` (schéma enregistré seulement par le binaire `--release`, pas installé) ; Discord rend-il le lien cliquable ? ; un `.link` impossible à supprimer serait relu en boucle.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : test sur une VM Windows propre avec le binaire `--release` (critère de fin de J3), clic sur un lien compris.
+
+### 2026-11-18 · Binaire release sans VCRUNTIME, premier lancement réel
+- **Fait** : `.cargo/config.toml` compile en `crt-static` sous Windows : `raftup.exe` ne dépend plus de `VCRUNTIME140.dll` (absente d'un Windows neuf), seulement de DLL système (vérifié avec `dumpbin /dependents`). Binaire `--release` lancé comme un joueur : dossier de données et clé `HKCU\Software\Classes\raftup` créés au premier lancement, puis un vrai lien `raftup://` ouvert par Windows a été passé à la fenêtre déjà ouverte (un seul processus, boîte aux lettres vidée).
+- **Pas vérifié** : écran affiché après le clic (le release n'a pas la macro de captures) ; machine sans bon pilote graphique (wgpu) ; SmartScreen et pare-feu au premier lancement (il faut une machine propre).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : test sur une machine propre (VirtualBox ou autre PC) juste avant la première diffusion.

@@ -1,0 +1,9 @@
+# Réglages de compilation partagés par tout le workspace.
+
+# Windows (MSVC) : le runtime C de Visual Studio est intégré au binaire (`crt-static`).
+# Sans cela, `raftup.exe` dépend de `VCRUNTIME140.dll`, absente d'un Windows neuf : le
+# launcher ne démarrerait pas chez un joueur qui n'a jamais installé le « Visual C++
+# Redistributable ». Les `api-ms-win-crt-*` restent dynamiques : Windows 10 et 11 les
+# fournissent toujours.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
