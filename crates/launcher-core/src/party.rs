@@ -58,6 +58,7 @@ impl PartyHostOptions {
             encryption: self.encryption,
             public_host: self.public_host,
             disable_save: self.disable_save,
+            webhook: None,
         })
     }
 }

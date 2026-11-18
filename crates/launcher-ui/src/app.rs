@@ -142,6 +142,7 @@ fn dev_host(worker: &Worker) {
         encryption: launcher_core::Encryption::Plain,
         public_host: "localhost".to_string(),
         disable_save: true,
+        webhook: None,
     }));
 }
 

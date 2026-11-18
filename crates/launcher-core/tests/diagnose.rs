@@ -28,6 +28,7 @@ async fn start_host(encryption: Encryption, password: Option<&str>) -> (Host, u1
             encryption,
             public_host: "127.0.0.1".to_string(),
             disable_save: true,
+            webhook: None,
         })
         .await
         .unwrap();

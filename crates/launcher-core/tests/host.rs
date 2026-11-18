@@ -24,6 +24,7 @@ fn plain(port: u16) -> HostOptions {
         public_host: "localhost".to_string(),
         // Pas de `.raftup` écrit à côté de la seed du dépôt.
         disable_save: true,
+        webhook: None,
     }
 }
 
