@@ -380,7 +380,11 @@ fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
                 widgets::badge(ui, 36.0, &format::initials(&slot.game), slot.is_group);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 1.0;
-                    ui.label(RichText::new(&slot.name).strong());
+                    ui.label(
+                        RichText::new(&slot.name)
+                            .strong()
+                            .family(theme::bold_family()),
+                    );
                     let subtitle = if slot.is_group {
                         format!("Groupe d'objets · {}", format::join_names(&slot.members))
                     } else {

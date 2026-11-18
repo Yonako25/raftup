@@ -40,7 +40,8 @@ pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> bool {
     let button = egui::Button::new(
         RichText::new(text)
             .color(Color32::from_rgb(0x08, 0x12, 0x22))
-            .strong(),
+            .strong()
+            .family(theme::bold_family()),
     )
     .fill(theme::ACCENT);
     ui.add_enabled(enabled, button).clicked()
@@ -147,7 +148,12 @@ pub fn choice_card<R>(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             clicked = ui
-                .radio(selected, RichText::new(title_text).strong())
+                .radio(
+                    selected,
+                    RichText::new(title_text)
+                        .strong()
+                        .family(theme::bold_family()),
+                )
                 .clicked();
             ui.label(description);
             if selected {

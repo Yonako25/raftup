@@ -444,7 +444,12 @@ fn side_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> bool {
 /// Carte « Amis » : les comptes et la présence arrivent avec le hub, après le MVP.
 fn friends_card(ui: &mut Ui) {
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Amis").strong().color(theme::TEXT));
+        ui.label(
+            RichText::new("Amis")
+                .strong()
+                .family(theme::bold_family())
+                .color(theme::TEXT),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.label(widgets::dim("bientôt").size(12.0));
         });
@@ -466,7 +471,12 @@ fn profile_card(ui: &mut Ui) {
         );
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
-            ui.label(RichText::new("Joueur").strong().color(theme::TEXT));
+            ui.label(
+                RichText::new("Joueur")
+                    .strong()
+                    .family(theme::bold_family())
+                    .color(theme::TEXT),
+            );
             ui.label(widgets::dim("Mon profil").size(12.0));
         });
     });

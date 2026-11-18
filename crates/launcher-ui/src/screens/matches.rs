@@ -92,6 +92,7 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
                 RichText::new(format!("seed {}", status.seed.seed_name))
                     .size(17.0)
                     .strong()
+                    .family(theme::bold_family())
                     .color(theme::TEXT),
             );
             let line = match connected {

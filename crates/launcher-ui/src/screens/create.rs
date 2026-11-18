@@ -201,7 +201,11 @@ fn file_list(ui: &mut Ui, files: &mut Vec<PathBuf>, empty: &str) {
     let mut remove = None;
     for (index, path) in files.iter().enumerate() {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(file_name(path)).strong());
+            ui.label(
+                RichText::new(file_name(path))
+                    .strong()
+                    .family(theme::bold_family()),
+            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if widgets::ghost_button(ui, "Retirer") {
                     remove = Some(index);

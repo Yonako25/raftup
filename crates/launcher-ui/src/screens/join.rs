@@ -133,6 +133,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                 RichText::new(host_text(&invite))
                     .size(26.0)
                     .strong()
+                    .family(theme::bold_family())
                     .color(theme::TEXT),
             );
             if !invite.address.secure {
@@ -148,12 +149,18 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             ui.label(
                 RichText::new(invite.game.as_deref().unwrap_or("Non précisé"))
                     .strong()
+                    .family(theme::bold_family())
                     .color(theme::TEXT),
             );
             ui.add_space(8.0);
             ui.label(widgets::dim("Slot").size(13.0));
             if invite.slot.is_some() {
-                ui.label(RichText::new(&state.slot).strong().color(theme::TEXT));
+                ui.label(
+                    RichText::new(&state.slot)
+                        .strong()
+                        .family(theme::bold_family())
+                        .color(theme::TEXT),
+                );
             } else {
                 ui.add(
                     egui::TextEdit::singleline(&mut state.slot)

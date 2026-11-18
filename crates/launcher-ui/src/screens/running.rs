@@ -325,6 +325,7 @@ fn crew_row(
                 RichText::new(&slot.name)
                     .size(15.0)
                     .strong()
+                    .family(theme::bold_family())
                     .color(theme::TEXT),
             );
             ui.label(
@@ -391,6 +392,7 @@ fn status_tag(ui: &mut Ui, slot: &SlotStatus) {
                 RichText::new(text.to_uppercase())
                     .size(12.0)
                     .strong()
+                    .family(theme::bold_family())
                     .extra_letter_spacing(1.0)
                     .color(fg),
             );
@@ -418,7 +420,12 @@ fn is_chat(event: &GameEvent) -> bool {
 /// Un morceau de phrase : nom en gras, objet en bleu clair, le reste normal.
 fn piece_label(ui: &mut Ui, piece: &Piece) {
     match piece {
-        Piece::Name(s) => ui.label(RichText::new(s).strong().color(theme::TEXT)),
+        Piece::Name(s) => ui.label(
+            RichText::new(s)
+                .strong()
+                .family(theme::bold_family())
+                .color(theme::TEXT),
+        ),
         Piece::Item(s) => ui.label(RichText::new(s).color(theme::ITEM)),
         Piece::Text(s) => ui.label(RichText::new(s).color(theme::TEXT)),
     };
@@ -673,6 +680,7 @@ fn salon_tab(
                         RichText::new(&slot.name)
                             .size(15.0)
                             .strong()
+                            .family(theme::bold_family())
                             .color(theme::TEXT),
                     );
                     ui.label(widgets::dim(format::game_with_tags(slot)).size(12.0));

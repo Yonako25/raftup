@@ -45,6 +45,14 @@ pub fn title_bold_family() -> FontFamily {
     FontFamily::Name("TitleBold".into())
 }
 
+/// Famille du texte en gras de l'interface (Inter SemiBold).
+///
+/// egui n'a pas de graisse : `RichText::strong()` ne fait que changer la couleur.
+/// Le vrai gras passe donc par une famille à part, avec un fichier de police à part.
+pub fn bold_family() -> FontFamily {
+    FontFamily::Name("Bold".into())
+}
+
 pub fn title_font(size: f32) -> FontId {
     FontId::new(size, title_family())
 }
@@ -61,8 +69,12 @@ fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     // Les fichiers TTF sont copiés dans le binaire à la compilation (`include_bytes!`) :
     // le launcher marche hors ligne et ne dépend pas des polices du système.
-    let list: [(&str, &[u8]); 3] = [
+    let list: [(&str, &[u8]); 4] = [
         ("Inter", include_bytes!("../fonts/Inter.ttf")),
+        (
+            "Inter-SemiBold",
+            include_bytes!("../fonts/Inter-SemiBold.ttf"),
+        ),
         (
             "ChakraPetch-SemiBold",
             include_bytes!("../fonts/ChakraPetch-SemiBold.ttf"),
@@ -90,6 +102,10 @@ fn install_fonts(ctx: &egui::Context) {
     fonts.families.insert(
         title_bold_family(),
         vec!["ChakraPetch-Bold".to_string(), "Inter".to_string()],
+    );
+    fonts.families.insert(
+        bold_family(),
+        vec!["Inter-SemiBold".to_string(), "Inter".to_string()],
     );
     ctx.set_fonts(fonts);
 }

@@ -773,11 +773,17 @@ fn big_button(ui: &mut Ui, text: &str, primary: bool, enabled: bool, width: f32)
     } else {
         (theme::TEXT, theme::FIELD, theme::BORDER)
     };
-    let button = egui::Button::new(RichText::new(text).color(color).strong().size(15.0))
-        .fill(fill)
-        .stroke(Stroke::new(1.0, border))
-        .corner_radius(CornerRadius::same(theme::RADIUS))
-        .min_size(egui::vec2(width, 40.0));
+    let button = egui::Button::new(
+        RichText::new(text)
+            .color(color)
+            .strong()
+            .family(theme::bold_family())
+            .size(15.0),
+    )
+    .fill(fill)
+    .stroke(Stroke::new(1.0, border))
+    .corner_radius(CornerRadius::same(theme::RADIUS))
+    .min_size(egui::vec2(width, 40.0));
     ui.add_enabled(enabled, button).clicked()
 }
 
@@ -802,7 +808,12 @@ fn missing_game_note(ui: &mut Ui) {
         .inner_margin(Margin::same(16))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new("Un jeu manque ?").strong().color(theme::TEXT));
+            ui.label(
+                RichText::new("Un jeu manque ?")
+                    .strong()
+                    .family(theme::bold_family())
+                    .color(theme::TEXT),
+            );
             ui.label(widgets::dim(
                 "Raftup détecte les jeux installés via Steam et Epic. Pour une autre \
                  installation, ajoutez son dossier : Raftup vérifie que l'exécutable attendu \
@@ -907,6 +918,7 @@ fn card(
             ui.label(
                 RichText::new(&profile.game.name)
                     .strong()
+                    .family(theme::bold_family())
                     .size(15.0)
                     .color(theme::TEXT),
             );
@@ -1073,7 +1085,12 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
-                    ui.label(RichText::new(&step.name).strong().color(theme::TEXT));
+                    ui.label(
+                        RichText::new(&step.name)
+                            .strong()
+                            .family(theme::bold_family())
+                            .color(theme::TEXT),
+                    );
                     ui.label(widgets::dim(format!("{kind} · {}", step.version)).size(12.0));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
