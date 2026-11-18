@@ -120,6 +120,10 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 
+## Reporté à la fin de la V3 (décision du 18 novembre 2026)
+
+- Essais de validation des jalons du MVP : partie solo menée à l'objectif (J1), partie à 4 joueurs sur 4 jeux (J2), test sur une VM Windows propre (J3). Le développement continue sans les attendre.
+
 ## Reporté à J3
 
 - Certificat automatique (Let's Encrypt) et rechargement sans redémarrage (ADR 0009)
