@@ -6,6 +6,9 @@
 //! 3. la fenêtre egui, qui ne fait jamais d'`await` : elle parle au serveur par un « worker ».
 
 mod app;
+// Macro de développement (captures sans être devant le PC) : jamais dans `--release`.
+#[cfg(debug_assertions)]
+mod devscript;
 mod format;
 mod screens;
 mod theme;

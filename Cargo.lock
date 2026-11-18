@@ -1407,6 +1407,7 @@ dependencies = [
  "chrono",
  "eframe",
  "egui",
+ "image",
  "launcher-core",
  "rfd",
  "tempfile",

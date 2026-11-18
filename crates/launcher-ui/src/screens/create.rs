@@ -330,6 +330,43 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
     }
 }
 
+/// Ce que la macro de développement (`devscript.rs`) a besoin de savoir.
+#[cfg(debug_assertions)]
+pub struct DevState {
+    pub generation_failed: bool,
+    pub hosting_failed: bool,
+}
+
+/// Macro : remplit le formulaire (YAML donnés, en clair, port donné).
+#[cfg(debug_assertions)]
+pub fn dev_prefill(form: &mut CreateForm, yamls: Vec<PathBuf>, port: u16) {
+    form.yamls = yamls;
+    form.encrypted = false;
+    form.port = port.to_string();
+}
+
+/// Macro : comme un clic sur « Générer la partie ».
+#[cfg(debug_assertions)]
+pub fn dev_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
+    on_generate(ctx, form, error);
+}
+
+#[cfg(debug_assertions)]
+pub fn dev_state(form: &CreateForm) -> DevState {
+    DevState {
+        generation_failed: matches!(form.generation, generation::Generation::Failed { .. }),
+        hosting_failed: form.hosting.failed_output().is_some(),
+    }
+}
+
+/// Macro : change le port, puis comme un clic sur « Réessayer ».
+#[cfg(debug_assertions)]
+pub fn dev_retry(form: &mut CreateForm, error: &mut Option<String>, worker: &Worker, port: u16) {
+    form.port = port.to_string();
+    let shared = worker.lock();
+    retry_hosting(form, error, worker, &shared);
+}
+
 /// « Réessayer » après un démarrage raté : relit les réglages du serveur dans le
 /// formulaire (l'hôte a pu changer le port) et relance avec la MÊME seed.
 fn retry_hosting(

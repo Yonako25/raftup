@@ -32,6 +32,9 @@ pub struct App {
     library: library::LibraryState,
     /// Erreur à montrer en rouge en haut de l'écran.
     error: Option<String>,
+    /// Macro de développement (`RAFTUP_DEV_CAPTURE`), seulement en debug.
+    #[cfg(debug_assertions)]
+    dev: Option<crate::devscript::DevScript>,
 }
 
 impl App {
@@ -45,6 +48,8 @@ impl App {
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
             error: None,
+            #[cfg(debug_assertions)]
+            dev: crate::devscript::DevScript::from_env(),
         }
     }
 }
@@ -164,6 +169,16 @@ impl eframe::App for App {
         library::open_pending_dialog(&mut self.library, &ctx);
         if let Some(page) = goto {
             self.page = page;
+        }
+        #[cfg(debug_assertions)]
+        if let Some(dev) = &mut self.dev {
+            dev.step(
+                &ctx,
+                &self.page,
+                &mut self.create,
+                &mut self.error,
+                &self.worker,
+            );
         }
     }
 }

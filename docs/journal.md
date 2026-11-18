@@ -80,3 +80,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : rendu à l'œil (accès à la fenêtre refusé, session à distance) ; installation par le panneau de consentement (faite par l'exemple) ; un ancien `raftup.exe` du 17 novembre tourne encore et bloque `target/debug` (compilé dans `target/essai`).
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : regarder l'écran « Créer une partie » à l'œil, devant le PC (`RAFTUP_DEV_RACINE=Z:\raftup-test\runtime`, `RAFTUP_DEV_PAGE=creer`).
+
+### 2026-11-18 · Macro de captures du launcher
+- **Fait** : macro de debug `devscript.rs` (`RAFTUP_DEV_CAPTURE`, `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) qui remplit « Créer une partie », clique et enregistre ses propres captures PNG, sans boîte de validation ni faux clics Windows ; écran regardé sur 4 captures (préparation, génération, port occupé, partie en ligne après « Réessayer ») ; chemin de la seed affiché en double retiré. 53 tests de `launcher-ui` (réel compris), clippy et build `--release` passent. Pas de commit encore.
+- **Pas vérifié** : panneau de consentement de l'installation (générateur déjà installé) ; boîtes de fichiers ; le bas de la barre latérale (« Compatible avec… ») est un peu serré à 820 px de haut.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : capturer les autres écrans avec la macro (consentement du générateur, Bibliothèque, Héberger) pour finir le contrôle visuel.

@@ -27,6 +27,8 @@ tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macr
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry", "fmt"] }
 anyhow.workspace = true
+# PNG des captures de la macro de développement (`devscript.rs`) ; déjà tiré par eframe.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 # Dossier temporaire pour le test de détection de l'écran Bibliothèque.

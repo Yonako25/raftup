@@ -194,7 +194,7 @@ pub fn show(ui: &mut Ui, hosting: &mut Hosting) -> bool {
                     ))
                     .size(13.0),
                 );
-                ui.label(widgets::dim(output.archipelago_file.display().to_string()).size(12.0));
+                // Le chemin de la seed est déjà dans le panneau « Partie générée » au-dessus.
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     if widgets::primary_button(ui, "Réessayer", true) {
