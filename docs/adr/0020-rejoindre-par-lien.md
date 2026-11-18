@@ -1,6 +1,6 @@
 # 0020 — Rejoindre une partie par lien d'invitation (F04)
 
-- Statut : **proposé**, en attente de validation par l'utilisatrice
+- Statut : accepté (validé par l'utilisatrice le 2026-11-18)
 - Date : 2026-11-18
 - Concerne F04 de `docs/SPEC.md` (« Rejoindre par lien »). `docs/etat-du-projet.md` l'appelait F06 par erreur : F06, ce sont les presets.
 
@@ -8,7 +8,7 @@
 
 Aujourd'hui, l'hôte copie un texte (adresse, « demandez le mot de passe », liste des joueurs) et chaque joueur recopie l'adresse et son slot à la main dans la Bibliothèque. F04 demande un lien qui ouvre Raftup avec ces informations. Il faut choisir le format du lien, ce qu'il contient, comment Windows l'envoie au launcher, et ce que l'écran fait à l'ouverture, sans ouvrir de faille (lien malveillant, injection dans la ligne de commande d'un jeu).
 
-## Décision proposée
+## Décision
 
 1. **Format : `raftup://join?v=1&addr=…&slot=…&game=…`.** Le même lien peut aussi se coller dans un champ « Rejoindre » du launcher. Pas de page `https://` au MVP : il faudrait un domaine et le hub. Discord ne rend sans doute pas cliquable un schéma inconnu (à vérifier) : le collage sera souvent le vrai chemin.
 2. **Contenu : jamais le mot de passe.** `v` (version du format), `addr` obligatoire, `slot` et `game` (nom du jeu côté Archipelago) facultatifs. Un mot de passe dans un lien finirait dans l'historique Discord, dans la ligne de commande visible des autres programmes et dans les journaux (NF09) : le joueur le tape à l'écran.

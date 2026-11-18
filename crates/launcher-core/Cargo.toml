@@ -26,6 +26,8 @@ flate2.workspace = true
 ureq.workspace = true
 directories.workspace = true
 keyvalues-parser.workspace = true
+# Liens d'invitation `raftup://` (ADR 0020).
+percent-encoding.workspace = true
 client-core.workspace = true
 # Pont vers le générateur Python officiel (ADR 0016, 0017).
 py-bridge.workspace = true

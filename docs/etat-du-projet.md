@@ -18,7 +18,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
 - [ ] **Slime Rancher dans le catalogue** : brouillon dans `docs/profils-en-attente/` ; il manque l'autorisation écrite de l'auteur de Slimipelago (brouillon de demande dans le même dossier)
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
-- [ ] **Rejoindre par lien d'invitation** (F04) : décisions proposées dans l'ADR 0020, en attente de validation
+- [ ] **Rejoindre par lien d'invitation** (F04) : décisions validées (ADR 0020), code en cours
 - [ ] Salon de préparation, webhook Discord, presets, mise à jour automatique (F06, F08, F10, F12)
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
@@ -113,7 +113,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0017** : étape `generate` (Python embarqué, générateur officiel épinglé)
 - **0018** : ordre des indices comme un `set` Python (module `pyset`)
 - **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
-- **0020** (proposé) : rejoindre par lien `raftup://`, sans mot de passe, instance unique
+- **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 
 ## Reporté à J3
 

@@ -1380,6 +1380,7 @@ dependencies = [
  "futures-util",
  "keyvalues-parser",
  "multidata",
+ "percent-encoding",
  "py-bridge",
  "rcgen",
  "serde",

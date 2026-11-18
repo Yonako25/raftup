@@ -25,6 +25,8 @@ pub mod generation;
 pub mod hash;
 pub mod host;
 pub mod install;
+pub mod instance;
+pub mod invite;
 pub mod launch;
 pub mod lockfile;
 pub mod logs;
@@ -35,6 +37,7 @@ pub mod record;
 pub mod seed;
 pub mod template;
 pub mod uninstall;
+pub mod url_scheme;
 
 pub use catalog::Catalog;
 pub use config::{GameSettings, LoadedConfig, UserConfig};

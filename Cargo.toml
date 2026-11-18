@@ -11,7 +11,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Yonako25/raftup"
 # 1.88 : exigé par la crate `zip` (la plus récente des dépendances du launcher).
-rust-version = "1.88"
+rust-version = "1.89"
 
 # Versions des dépendances partagées : chaque crate écrit `xxx.workspace = true`.
 [workspace.dependencies]
@@ -65,6 +65,8 @@ directories = "6"
 keyvalues-parser = "0.2"
 # Registre Windows, utilisé seulement sous Windows (licence MIT).
 winreg = "0.56"
+# Encodage des liens d'invitation `raftup://` (ADR 0020) ; déjà tiré par d'autres crates.
+percent-encoding = "2.3"
 # Dossiers temporaires pour les tests.
 tempfile = "3"
 ap-protocol = { path = "crates/ap-protocol" }
