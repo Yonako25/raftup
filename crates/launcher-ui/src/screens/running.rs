@@ -62,6 +62,12 @@ impl Default for RunningState {
     }
 }
 
+/// Macro de développement : ouvre l'onglet « Salon ».
+#[cfg(debug_assertions)]
+pub fn dev_open_salon(state: &mut RunningState) {
+    state.tab = TAB_SALON;
+}
+
 pub fn show(
     ui: &mut Ui,
     state: &mut RunningState,

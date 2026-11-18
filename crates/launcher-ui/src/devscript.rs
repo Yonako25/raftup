@@ -7,7 +7,7 @@
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
-//!   `heberger`, `en-cours`, `generateur-absent` : une seule capture de l'écran,
+//!   `heberger`, `en-cours`, `salon`, `generateur-absent` : une seule capture de l'écran,
 //!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
 //!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
 //!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`
@@ -25,6 +25,7 @@ use std::time::{Duration, Instant};
 
 use crate::app::Page;
 use crate::screens::create::{self, CreateForm};
+use crate::screens::running::{self, RunningState};
 use crate::screens::setup::{self, SetupForm};
 use crate::worker::Worker;
 
@@ -32,6 +33,7 @@ use crate::worker::Worker;
 pub struct Forms<'a> {
     pub create: &'a mut CreateForm,
     pub setup: &'a mut SetupForm,
+    pub running: &'a mut RunningState,
 }
 
 /// Le scénario joué.
@@ -55,6 +57,8 @@ impl Scenario {
             Some("heberger") => Scenario::Host,
             Some("bibliotheque") => Scenario::Screen("1-bibliotheque"),
             Some("en-cours") => Scenario::Screen("1-en-cours"),
+            // « Partie en cours », onglet « Salon » (avec `RAFTUP_DEV_SEED`).
+            Some("salon") => Scenario::Screen("1-salon"),
             // Une seule capture, quand un lien reçu (argument ou 2e instance) est affiché.
             Some("rejoindre") => Scenario::Screen("1-rejoindre"),
             Some("generateur-absent") => Scenario::NoGenerator,
@@ -194,6 +198,11 @@ impl DevScript {
             Step::Prepared
                 if !self.scenario.on_create_screen() && elapsed > single_capture_delay() =>
             {
+                // Ouvert ici, pas au départ : tant que la partie n'a pas démarré, l'état
+                // de « Partie en cours » est remis à zéro à chaque image.
+                if self.scenario == Scenario::Screen("1-salon") {
+                    running::dev_open_salon(forms.running);
+                }
                 self.capture(ctx, self.scenario.file_name());
                 self.next(Step::Finished);
             }

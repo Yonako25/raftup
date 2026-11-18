@@ -273,6 +273,7 @@ impl eframe::App for App {
                 &mut crate::devscript::Forms {
                     create: &mut self.create,
                     setup: &mut self.setup,
+                    running: &mut self.running,
                 },
                 &mut self.error,
                 &self.worker,

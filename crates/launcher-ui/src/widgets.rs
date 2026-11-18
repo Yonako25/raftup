@@ -62,13 +62,17 @@ pub fn danger_button(ui: &mut Ui, text: &str) -> bool {
 
 /// Pastille de texte coloré sur fond coloré (« ● En ligne »).
 pub fn pill(ui: &mut Ui, text: &str, fg: Color32, bg: Color32) {
-    Frame::new()
-        .fill(bg)
-        .corner_radius(CornerRadius::same(theme::RADIUS))
-        .inner_margin(Margin::symmetric(10, 4))
-        .show(ui, |ui| {
-            ui.label(RichText::new(text).color(fg).size(13.0));
-        });
+    // Dessinée à la main, à sa taille exacte : un `Frame` placé dans une mise en page
+    // droite-à-gauche prenait toute la hauteur de la ligne (vu sur les captures).
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), FontId::proportional(13.0), fg);
+    let size = galley.size() + egui::vec2(20.0, 8.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, CornerRadius::same(theme::RADIUS), bg);
+    let text_pos = rect.center() - galley.size() / 2.0;
+    painter.galley(text_pos, galley, fg);
 }
 
 /// Message d'erreur rouge.
