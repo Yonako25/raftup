@@ -146,3 +146,10 @@ untime2`.
 - **Pas vérifié** : message vu à l'écran ; autres mondes à ROM (seul soe essayé). Vrai gras Inter SemiBold pas fait : il faut télécharger la police, accord à demander.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:\raftup-test\runtime2`.
 - **Suite** : J1 étape 9, partie réelle de Slime Rancher (avec l'utilisatrice).
+
+### 2026-11-18 · Vrai gras Inter SemiBold
+- **Fait** : Inter SemiBold 4.001 (archive officielle `Inter-4.1.zip`, OFL) intégrée, famille `Bold` dans `theme.rs`, appliquée aux 18 textes `.strong()` ; gras vu sur captures (En cours, barre latérale). Workspace, clippy et fmt passent.
+- **Pas vérifié** : les scénarios `salon` et `bibliotheque` de la macro se sont arrêtés sur « En cours » (onglet et Bibliothèque pas capturés cette fois).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : J1 étape 9, partie réelle de Slime Rancher (avec l'utilisatrice).
+

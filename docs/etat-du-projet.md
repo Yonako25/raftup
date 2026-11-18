@@ -24,7 +24,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **F10 webhook Discord** : branché dans « Héberger » ; champ aussi dans « Créer », URL mémorisée en clair (ADR 0025) ; jamais essayé avec un vrai webhook
 - [x] **F06 presets** : délai + `meta.yaml` (Rapide, Long), choix mémorisé (ADR 0023) ; test réel du meta non lancé
 - [x] **F12 mise à jour** (ADR 0022) : outil `update_tool` (keygen, sign, manifest), vraie clé publique intégrée, bannière « Installer » + remplacement de l'exe ; jamais essayé sur un vrai release ; clé privée dans `C:\Users\ionak\.raftup-keys` (à sauvegarder hors ligne) ; exe nu (décision prise)
-- [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée) ; vus sur captures le 18 novembre : onglet « Salon », préréglages et champ webhook de « Créer », panneau d'installation du générateur
+- [ ] **Contrôle visuel du launcher** (vrai gras Inter SemiBold fait le 18 novembre) ; vus sur captures le 18 novembre : onglet « Salon », préréglages et champ webhook de « Créer », panneau d'installation du générateur
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
 
