@@ -4,12 +4,16 @@
 //! - 1 octet : version du format (3 au maximum) ;
 //! - le reste : un pickle Python compressé avec zlib.
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 
-use crate::error::ArchiveError;
+use crate::error::{ArchiveError, WriteError};
+use crate::model::MultiData;
 use crate::pickle::{self, Limits, PickleDocument};
+use crate::pickle_writer;
 
 /// Version de format la plus récente acceptée (comme le serveur officiel 0.6.8).
 pub const MAX_FORMAT_VERSION: u8 = 3;
@@ -43,6 +47,21 @@ pub fn read_archipelago(
     }
     let raw = decompress(compressed, limits.max_decompressed_bytes)?;
     Ok(pickle::parse(&raw, &limits.pickle)?)
+}
+
+/// Version de format écrite par Raftup : la même que le générateur officiel 0.6.8.
+pub const WRITTEN_FORMAT_VERSION: u8 = 3;
+
+/// Écrit une seed en fichier `.archipelago` (comme `Main.py`) : l'octet de
+/// version, puis le pickle compressé avec zlib au niveau 9.
+///
+/// Même modèle ⇒ mêmes octets : le pickle suit l'ordre du modèle et la
+/// compression est déterministe.
+pub fn write_archipelago(data: &MultiData) -> Result<Vec<u8>, WriteError> {
+    let pickle = pickle_writer::encode(&data.to_py_value())?;
+    let mut encoder = ZlibEncoder::new(vec![WRITTEN_FORMAT_VERSION], Compression::best());
+    encoder.write_all(&pickle)?;
+    Ok(encoder.finish()?)
 }
 
 /// Décompresse en s'arrêtant dès que la limite est dépassée.

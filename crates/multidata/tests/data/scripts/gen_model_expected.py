@@ -1,12 +1,17 @@
 """Écrit le modèle de partie attendu pour une seed, calculé par le code officiel.
 
-Usage : python -I gen_model_expected.py <dossier source Archipelago> <seed .archipelago> <sortie .json>
+Usage : python -I gen_model_expected.py <dossier source Archipelago> <seed .archipelago> <sortie .json> [site-packages]
+
+Le 4e argument, facultatif, ajoute un dossier de dépendances (celui du
+générateur installé par Raftup, qui contient `yaml`).
 
 La forme JSON est celle que reproduit `crates/multidata/tests/modele.rs`.
 """
 import json, sys, zlib
 
 AP, SEED, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
+if len(sys.argv) > 4:
+    sys.path.insert(0, sys.argv[4])
 sys.path.insert(0, AP)
 import Utils  # noqa: E402
 from NetUtils import encode  # noqa: E402

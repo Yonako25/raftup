@@ -74,3 +74,14 @@ pub enum LoadError {
     #[error(transparent)]
     Model(#[from] ModelError),
 }
+
+/// Erreur d'écriture d'un pickle ou d'un fichier `.archipelago`.
+#[derive(Debug, thiserror::Error)]
+pub enum WriteError {
+    #[error("valeur trop imbriquée pour être écrite (limite : {0})")]
+    TooDeep(usize),
+    #[error("texte ou entier trop grand pour être écrit en pickle (4 Gio au plus)")]
+    TooLarge,
+    #[error("compression impossible : {0}")]
+    Compress(#[from] std::io::Error),
+}
