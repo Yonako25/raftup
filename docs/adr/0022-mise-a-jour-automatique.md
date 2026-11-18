@@ -1,6 +1,6 @@
 # ADR 0022 — Mise à jour automatique du launcher (F12)
 
-- **Statut** : proposé (à valider par la mainteneuse)
+- **Statut** : accepté le 18 novembre 2026
 
 ## Contexte
 
@@ -54,7 +54,13 @@ JSON de moins de 64 Kio :
 - Pas de téléchargement en tâche de fond tant que l'utilisatrice n'a pas accepté (à décider dans l'écran de F12).
 - Restent à faire : application de la mise à jour (Windows ne permet pas d'écraser le `.exe` en cours), écran du launcher, script de publication, génération de la clé.
 
-## Questions ouvertes
+## Réponses (18 novembre 2026)
+
+1. Une seule clé publique au MVP ; la rotation passera par une version intermédiaire qui en accepte deux.
+2. Version stable seulement, pas de canal bêta.
+3. Vérification au démarrage seulement.
+
+## Questions ouvertes (réglées ci-dessus)
 
 1. Une ou deux clés publiques acceptées (rotation sans version intermédiaire) ?
 2. Canal « bêta » (manifeste séparé) au MVP, ou seulement la version stable ?

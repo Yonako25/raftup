@@ -1,6 +1,6 @@
 # 0024 — Salon de préparation, côté hôte (F08)
 
-- Statut : proposé
+- Statut : accepté le 18 novembre 2026
 - Date : 2026-11-18
 - Concerne F08 de `docs/SPEC.md`. Périmètre MVP : sans hub (le hub est après le MVP).
 

@@ -1,6 +1,6 @@
 # ADR 0023 — Presets « Rapide / Standard / Long » (F06)
 
-- **Statut** : proposé
+- **Statut** : accepté le 18 novembre 2026 (étape 1 faite ; étape 2, le `meta.yaml`, reste à faire)
 
 ## Contexte
 
