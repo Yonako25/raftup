@@ -174,6 +174,14 @@ untime2`.
 ### 2026-11-18 · Lancer le jeu hors partie
 - **Fait** : `plan_launch_offline` (méthode de connexion du profil ignorée) ; dans la Bibliothèque, « Lancer le jeu » marche avec adresse et slot vides (jeu sans connexion), reste grisé si un seul des deux est rempli, avec une mention sous le bouton. Tests du cœur et de l'écran, workspace, clippy et fmt passent ; bouton vu sur capture.
 - **Pas vérifié** : clic réel sur « Lancer le jeu » sans adresse (Slime Rancher démarré par Raftup hors partie).
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : reprise d'une partie hébergée après redémarrage de Raftup, en vrai.
+
+### 2026-11-18 · Reprise réelle d'une partie
+- **Fait** : avec l'utilisatrice : partie Slime Rancher réhébergée après redémarrage de Raftup, sauvegarde `.raftup` reprise (1/152), jeu reconnecté, nouvel emplacement validé (2/152) sans objet reçu en double.
+- **Pas vérifié** : reprise après un arrêt brutal (processus tué) ; partie à plusieurs joueurs.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : clic sur un lien `raftup://` depuis Discord ou un navigateur avec le binaire `--release`.
 
