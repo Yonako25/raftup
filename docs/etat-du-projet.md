@@ -8,11 +8,13 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **18 novembre 2026**.
+Mis à jour le **18 novembre 2026** (V2 démarrée).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
+
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étape 1 `logic` (modèle en arènes, règles, balayage par sphères) ; puis écrivain de pickle dans `multidata`, `fill`, `generate` + APQuest, équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -119,6 +121,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0018** : ordre des indices comme un `set` Python (module `pyset`)
 - **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
+- **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

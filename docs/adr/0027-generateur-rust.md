@@ -1,6 +1,6 @@
 # 0027 — Générateur Rust (V2) : `logic`, `fill`, `generate`
 
-- Statut : **proposé** (à valider par l'utilisatrice, voir « Décisions à valider » en bas)
+- Statut : **accepté** le 18 novembre 2026 (les 6 décisions du bas, telles que recommandées)
 - Date : 2026-11-18
 
 ## Contexte
@@ -14,7 +14,7 @@
   - APQuest a 7 options (`hard_mode`, `hammer`, `extra_starting_chest`, `trap_chance`, `start_with_one_confetti_cannon`, `confetti_explosiveness`, `player_sprite`) et son `slot_data` en recopie 5 ;
   - l'apworld Slime Rancher n'a **pas de licence** (ADR 0021) : on n'a pas le droit d'en recopier le code en Rust.
 
-## Décision proposée
+## Décision
 
 ### 1. Trois crates, chacune avec un seul rôle
 
@@ -89,9 +89,9 @@
 - Nouvelle dépendance : `rand_chacha` (et `rand_core`), MIT / Apache-2.0, version épinglée. Écrire du pickle demande du soin : il est limité à la liste blanche et vérifié contre le vrai Python.
 - Une même seed ne donne pas la même partie selon le moteur : à afficher clairement dans l'interface et le spoiler.
 
-## Décisions à valider
+## Décisions validées (18 novembre 2026)
 
-| # | Question | Recommandation |
+| # | Question | Choix |
 | --- | --- | --- |
 | 1 | Découpage `logic` / `fill` / `generate`, mondes Rust dans `generate::worlds` en attendant `worlds-native` (V3) | Oui |
 | 2 | Sortie en vrai `.archipelago` (écrivain de pickle dans `multidata`) plutôt qu'un format de seed Raftup | `.archipelago` |

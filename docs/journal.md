@@ -201,3 +201,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
 - **Suite** : partie à deux joueurs (deux slots, deux jeux ou deux instances).
 
+
+### 2026-11-18 · Démarrage de la V2 : ADR du générateur Rust
+- **Fait** : ADR 0027 rédigé (`a1ec081`) puis accepté tel que recommandé : crates `logic` / `fill` / `generate`, sortie `.archipelago` (écrivain de pickle à ajouter), seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours. Aucun code.
+- **Pas vérifié** : calcul exact du `checksum` du datapackage d'Archipelago ; jeu réel d'APQuest avec son client.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 1 de l'ADR 0027 : créer la crate `logic` (modèle en arènes, règles, balayage par sphères), dans une nouvelle session.
