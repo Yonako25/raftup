@@ -46,7 +46,12 @@ pub struct RunningState {
     salon_password: String,
     /// Case « Rafraîchir automatiquement » du salon (cochée par défaut).
     salon_auto_refresh: bool,
+    /// Moment de la dernière copie : la bulle « Copié » s'affiche pendant `COPIED_FOR`.
+    copied_at: Option<std::time::Instant>,
 }
+
+/// Durée d'affichage de la bulle « Copié dans le presse-papiers ».
+const COPIED_FOR: std::time::Duration = std::time::Duration::from_secs(2);
 
 // `Default` écrit à la main : `#[derive(Default)]` mettrait la case à `false`.
 impl Default for RunningState {
@@ -58,6 +63,7 @@ impl Default for RunningState {
             tab: 0,
             salon_password: String::new(),
             salon_auto_refresh: true,
+            copied_at: None,
         }
     }
 }
@@ -112,6 +118,18 @@ pub fn show(
 
     if let Some(text) = copy {
         ui.ctx().copy_text(text);
+        state.copied_at = Some(std::time::Instant::now());
+    }
+    // Sans retour visible, on croit que « Copier » n'a rien fait (essai du 18 novembre).
+    if let Some(at) = state.copied_at {
+        if at.elapsed() < COPIED_FOR {
+            copied_bubble(ui.ctx());
+            // Redessiner à la fin du délai pour faire disparaître la bulle.
+            ui.ctx()
+                .request_repaint_after(COPIED_FOR.saturating_sub(at.elapsed()));
+        } else {
+            state.copied_at = None;
+        }
     }
     if state.confirm_stop {
         confirm_window(ui.ctx(), state, worker);
@@ -736,4 +754,25 @@ fn salon_tab(
             }
         }
     });
+}
+
+/// Bulle « Copié dans le presse-papiers », en bas au centre de la fenêtre.
+fn copied_bubble(ctx: &egui::Context) {
+    egui::Area::new(egui::Id::unique("running_copied"))
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -24.0))
+        .interactable(false)
+        .show(ctx, |ui| {
+            egui::Frame::new()
+                .fill(theme::GREEN_BG)
+                .stroke(egui::Stroke::new(1.0, theme::GREEN))
+                .corner_radius(egui::CornerRadius::same(theme::RADIUS))
+                .inner_margin(egui::Margin::symmetric(12, 6))
+                .show(ui, |ui| {
+                    ui.label(
+                        RichText::new("Copié dans le presse-papiers")
+                            .color(theme::GREEN)
+                            .size(13.0),
+                    );
+                });
+        });
 }

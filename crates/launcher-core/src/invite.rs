@@ -22,6 +22,9 @@ const MAX_SLOT_CHARS: usize = 16;
 const MAX_GAME_CHARS: usize = 64;
 /// Préfixe exact d'un lien (schéma, action et début de la requête).
 const LINK_PREFIX: &str = "raftup://join?";
+/// Même préfixe avec un `/` avant le `?` : Chrome et Edge réécrivent ainsi le lien
+/// (`raftup://join/?…`) avant de le passer à Windows, puis à Raftup.
+const LINK_PREFIX_SLASH: &str = "raftup://join/?";
 
 /// Caractères encodés en `%XX` dans une valeur de paramètre. Les caractères non ASCII
 /// sont toujours encodés par `utf8_percent_encode`. On laisse `:`, `/`, `[` et `]`
@@ -184,6 +187,7 @@ pub fn parse_invite(text: &str) -> Result<Invite, InviteError> {
     }
     let query = text
         .strip_prefix(LINK_PREFIX)
+        .or_else(|| text.strip_prefix(LINK_PREFIX_SLASH))
         .ok_or(InviteError::NotAnInvite)?;
 
     let (mut v, mut addr, mut slot, mut game) = (None, None, None, None);
@@ -361,8 +365,19 @@ mod tests {
                 format!("{LINK_PREFIX}v=1&addr=ws://h&slot={}", "a".repeat(16)),
                 ok(addr(false, "h", 38281), Some(&"a".repeat(16)), None),
             ),
+            // Forme réécrite par Chrome et Edge (bug vu le 18 novembre 2026).
+            (
+                "raftup://join/?v=1&addr=ws://localhost:38281&slot=Raftup1&game=Slime%20Rancher"
+                    .into(),
+                ok(
+                    addr(false, "localhost", 38281),
+                    Some("Raftup1"),
+                    Some("Slime Rancher"),
+                ),
+            ),
             // Pas un lien
             ("".into(), Err(InviteError::NotAnInvite)),
+            ("raftup://join//?v=1&addr=ws://h".into(), Err(InviteError::NotAnInvite)),
             ("https://exemple.fr".into(), Err(InviteError::NotAnInvite)),
             ("RAFTUP://join?v=1&addr=ws://h".into(), Err(InviteError::NotAnInvite)),
             ("raftup://other?v=1&addr=ws://h".into(), Err(InviteError::NotAnInvite)),
