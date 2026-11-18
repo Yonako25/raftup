@@ -56,6 +56,8 @@ JSON de moins de 64 Kio :
 
 ## Réponses (18 novembre 2026)
 
+0. Le fichier publié est l'exe nu (pas de zip), décision de la mainteneuse.
+
 1. Une seule clé publique au MVP ; la rotation passera par une version intermédiaire qui en accepte deux.
 2. Version stable seulement, pas de canal bêta.
 3. Vérification au démarrage seulement.
