@@ -20,10 +20,10 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Mondes d'Archipelago qui ne s'importent pas** faute de dépendances épinglées : ffmq, messenger, osrs, sm (`requests`), pokemon_emerald (`pkg_resources`), soe (`pyevermizer`), zillion (`zilliandomizer`) ; laissés pour l'instant
 - [x] **Rejoindre par lien d'invitation** (F04, ADR 0020) : liens `raftup://` par joueur, écran « Rejoindre », instance unique, schéma enregistré au premier lancement du binaire livré ; essayé en vrai (2e instance qui passe le lien)
 - [ ] Essayer un clic sur un lien `raftup://` depuis Discord ou un navigateur avec le binaire `--release` installé
-- [x] **F08 salon de préparation** (côté hôte, sans hub) : onglet « Salon », test « prêt ? » par vraie connexion (ADR 0024, proposé) ; jamais regardé à l'écran
+- [x] **F08 salon de préparation** (côté hôte, sans hub) : onglet « Salon », test « prêt ? » par vraie connexion (ADR 0024) ; jamais regardé à l'écran
 - [x] **F10 webhook Discord** : branché dans « Héberger » ; reste « Créer une partie » et la mémorisation de l'URL (secret, décision à prendre)
-- [x] **F06 presets** : délai de génération seulement (ADR 0023, proposé ; étape 2 `meta.yaml` à valider)
-- [ ] **F12 mise à jour** : cœur fait (ADR 0022, proposé) ; manquent clé publique, script de publication, application de la mise à jour et écran
+- [x] **F06 presets** : délai de génération seulement (ADR 0023 ; étape 2 `meta.yaml` à faire)
+- [ ] **F12 mise à jour** : cœur fait (ADR 0022) ; manquent clé publique, script de publication, application de la mise à jour et écran
 - [ ] **Contrôle visuel du launcher**, et un vrai gras (Inter SemiBold en famille séparée)
 - [ ] **J1, étape 9** : partie réelle de Slime Rancher sur le serveur Raftup
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
