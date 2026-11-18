@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étape 1 `logic` faite ; reste écrivain de pickle dans `multidata`, `fill`, `generate` + APQuest, équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic` et 2 écriture du `.archipelago` faites ; reste `fill`, `generate` + APQuest, équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -64,6 +64,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Lecteur pickle maison, **sans exécuter de code**, liste blanche officielle
 - Limites : **64 Mio** décompressés (NF08), 4 millions de nœuds
 - Modèle `MultiData` identique à Python sur 2 seeds (MIT, Slime Rancher)
+- Écriture d'une seed `.archipelago` (`write_archipelago`, ADR 0027), relue à l'identique par le vrai Python 0.6.8
 - Format `.raftup` (ADR 0014) : en-tête, instantané, deltas ; `diff` entre deux instantanés ; lecture tolérante à une dernière ligne coupée (même au milieu d'un caractère) ; création et compactage atomiques
 
 **server**

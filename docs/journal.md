@@ -213,3 +213,9 @@ untime2`.
 - **Pas vérifié** : performance sur un gros multiworld (point fixe qui repasse sur tous les lieux) ; vocabulaire comparé au vrai `rule_builder` seulement via l'ADR.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 2 de l'ADR 0027 : écrivain de pickle et `write_archipelago` dans `multidata`.
+
+### 2026-11-18 · V2 étape 2 : écriture du `.archipelago`
+- **Fait** : écrivain de pickle protocole 4 limité à la liste blanche (`PyValue`) et `write_archipelago` dans `multidata` (`bcc6a68`) : dictionnaire et types de `Main.py`, zlib 9, mêmes octets à chaque écriture. Seed MIT relue à l'identique par notre lecteur et par le vrai Python 0.6.8 (`relue_par_le_vrai_python`, `#[ignore]`, avec `RAFTUP_SITE_PACKAGES`). Workspace, clippy et fmt passent.
+- **Pas vérifié** : seed écrite hébergée par le serveur officiel (`MultiServer`) ; `checks_in_area` et options serveur hors modèle écrits vides ou absents.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 3 de l'ADR 0027 : crate `fill` (placement supposé, faisabilité, erreur expliquée).
