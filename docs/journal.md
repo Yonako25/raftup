@@ -198,7 +198,9 @@ untime2`.
 ### 2026-11-18 · Sauvegarde recontrôlée
 - **Fait** : doute du 1/152 levé : le 2e emplacement annoncé n'avait jamais été envoyé (sauvegarde lue : un seul lieu). Nouvel essai avec l'utilisatrice : lieu validé (2/152), écrit sur le disque aussitôt, puis Raftup fermé, rouvert, partie réhébergée : 2/152 repris.
 - **Pas vérifié** : reprise après un arrêt brutal (processus tué) ; partie à plusieurs joueurs.
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : partie à deux joueurs (deux slots, deux jeux ou deux instances).
 
 
@@ -219,3 +221,9 @@ untime2`.
 - **Pas vérifié** : seed écrite hébergée par le serveur officiel (`MultiServer`) ; `checks_in_area` et options serveur hors modèle écrits vides ou absents.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 3 de l'ADR 0027 : crate `fill` (placement supposé, faisabilité, erreur expliquée).
+
+### 2026-11-18 · V2 étape 3 : crate `fill`
+- **Fait** : crate `fill` (`73a2b03`) : placement supposé de la progression, puis utiles et remplissage ; nouvel essai (20 au plus) quand l'ordre tiré bloque, monde remis en état sur erreur ; faisabilité avant et après avec clause ou entrée qui bloque ; mélange maison sur `rand_core` 0.10 (ChaCha épinglé). 11 tests dont 1 000 seeds sur 2 joueurs ; workspace, clippy et fmt passent.
+- **Pas vérifié** : performance sur un gros multiworld (un balayage complet par objet de progression) ; restrictions d'objets par lieu (`item_rule`) absentes du modèle.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 4 de l'ADR 0027 : crate `generate` + APQuest en Rust, branché sur `RustBackend` (sur option).

@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic` et 2 écriture du `.archipelago` faites ; reste `fill`, `generate` + APQuest, équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago` et 3 `fill` faites ; reste `generate` + APQuest, équilibrage, export des règles
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -44,6 +44,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
 | `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
+| `fill` | Placement des objets (supposé), faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour l'étape 3 de l'ADR 0027 |
 
 ## Ce que fait chaque crate
 
