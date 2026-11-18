@@ -18,6 +18,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use py_bridge::CancelToken;
+
 use crate::hash::Sha256;
 
 /// Ce qui fait échouer un téléchargement.
@@ -48,6 +50,9 @@ pub enum DownloadError {
         expected: Sha256,
         actual: Sha256,
     },
+    /// Le joueur a annulé pendant le téléchargement ; le `.part` est supprimé.
+    #[error("téléchargement annulé")]
+    Cancelled,
 }
 
 /// Ouvre une adresse et rend un flux d'octets à lire.
@@ -200,6 +205,23 @@ impl Downloader {
         max_bytes: u64,
         progress: &mut dyn FnMut(u64),
     ) -> Result<PathBuf, DownloadError> {
+        // Un jeton neuf n'est jamais annulé : `get` se comporte comme avant.
+        self.get_cancellable(url, sha256, max_bytes, progress, &CancelToken::new())
+    }
+
+    /// Comme [`Downloader::get`], mais s'arrête avec `DownloadError::Cancelled` dès que
+    /// `cancel` est annulé (vérifié entre deux paquets de 64 Kio, donc très vite).
+    pub fn get_cancellable(
+        &self,
+        url: &str,
+        sha256: &Sha256,
+        max_bytes: u64,
+        progress: &mut dyn FnMut(u64),
+        cancel: &CancelToken,
+    ) -> Result<PathBuf, DownloadError> {
+        if cancel.is_cancelled() {
+            return Err(DownloadError::Cancelled);
+        }
         // Contrôle fait avant tout accès au disque ou au réseau.
         if !is_https(url) {
             return Err(DownloadError::NotHttps(url.to_string()));
@@ -227,7 +249,7 @@ impl Downloader {
         }
 
         // 2. Téléchargement. Quoi qu'il arrive, le `.part` est supprimé en cas d'échec.
-        let result = self.download_to_part(url, sha256, max_bytes, &part_path, progress);
+        let result = self.download_to_part(url, sha256, max_bytes, &part_path, progress, cancel);
         if let Err(error) = result {
             // Le résultat de la suppression est ignoré : l'erreur d'origine est plus utile.
             let _ = fs::remove_file(&part_path);
@@ -250,6 +272,7 @@ impl Downloader {
         max_bytes: u64,
         part_path: &Path,
         progress: &mut dyn FnMut(u64),
+        cancel: &CancelToken,
     ) -> Result<(), DownloadError> {
         let mut reader = self.fetcher.open(url)?;
         let mut file = File::create(part_path).map_err(|source| io_error(part_path, source))?;
@@ -257,6 +280,9 @@ impl Downloader {
         let mut buffer = [0u8; 64 * 1024];
         let mut total: u64 = 0;
         loop {
+            if cancel.is_cancelled() {
+                return Err(DownloadError::Cancelled);
+            }
             let read = match reader.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(n) => n,

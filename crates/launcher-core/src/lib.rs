@@ -56,6 +56,8 @@ pub use party::{
 };
 pub use paths::Paths;
 pub use profile::{Profile, ProfileError};
+/// Jeton d'annulation de `py-bridge`, réexporté : l'interface ne dépend que de `launcher-core`.
+pub use py_bridge::CancelToken;
 pub use record::{InstallRecord, RecordState};
 pub use seed::{SeedSlot, SeedSummary};
 pub use uninstall::{uninstall, UninstallReport};

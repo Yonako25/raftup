@@ -36,6 +36,18 @@ pub struct GeneratorPins {
     pub wheels: Vec<PinnedWheel>,
 }
 
+impl GeneratorPins {
+    /// Total des tailles réelles à télécharger (Python, Archipelago, wheels), en octets :
+    /// ce qu'on montre au joueur avant de lui demander son accord.
+    pub fn download_bytes(&self) -> u64 {
+        let wheels: u64 = self.wheels.iter().map(|w| w.size).sum();
+        self.python
+            .size
+            .saturating_add(self.archipelago.size)
+            .saturating_add(wheels)
+    }
+}
+
 /// Une archive (`.tar.gz` ou `.zip`) à télécharger puis extraire.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]

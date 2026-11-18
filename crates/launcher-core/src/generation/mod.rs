@@ -7,7 +7,9 @@ pub mod pins;
 mod run;
 pub mod runtime;
 
-pub use runtime::{ensure_runtime, runtime_status, RuntimeStatus, SetupStep};
+pub use runtime::{
+    ensure_runtime, ensure_runtime_cancellable, runtime_status, RuntimeStatus, SetupStep,
+};
 
 pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedWheel};
 pub use run::{

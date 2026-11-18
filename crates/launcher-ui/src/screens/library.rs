@@ -161,7 +161,7 @@ fn dev_catalog(dir: &Path) -> Result<Catalog, String> {
 }
 
 /// Les vrais dossiers de Raftup ou, en debug, ceux sous `RAFTUP_DEV_RACINE`.
-fn load_paths() -> Result<Paths, String> {
+pub(super) fn load_paths() -> Result<Paths, String> {
     if let (true, Some(root)) = (cfg!(debug_assertions), std::env::var_os(DEV_ROOT)) {
         return Ok(Paths::under(Path::new(&root)));
     }
@@ -324,7 +324,7 @@ fn step_name(profile: &Profile, step_id: &str) -> String {
 }
 
 /// Taille lisible : « 12,3 Mo ».
-fn megabytes(bytes: u64) -> String {
+pub(super) fn megabytes(bytes: u64) -> String {
     format!("{:.1} Mo", bytes as f64 / 1_000_000.0).replace('.', ",")
 }
 

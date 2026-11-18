@@ -5,8 +5,9 @@
 //! `build_request` vérifie le tout et en fait une demande de génération et des
 //! réglages d'hébergement (`docs/contrat-ui-generation.md`).
 //!
-//! La génération elle-même (runtime, progression, annulation) arrive à l'étape 2 :
-//! pour l'instant, le bouton « Générer » vérifie seulement le formulaire.
+//! Au clic sur « Générer », si le formulaire est bon, on vérifie que le générateur
+//! est installé ; sinon on demande l'accord de l'hôte pour l'installer (étape 2,
+//! `generator_setup`). La génération elle-même arrive à l'étape 3.
 
 use std::path::PathBuf;
 
@@ -14,6 +15,7 @@ use egui::{RichText, Ui};
 use launcher_core::generation::GenerateRequest;
 use launcher_core::{Encryption, PartyHostOptions};
 
+use super::generator_setup;
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -47,8 +49,10 @@ pub struct CreateForm {
     encrypted: bool,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
-    /// Message de réussite de la vérification (étape 1 : rien n'est encore lancé).
+    /// Message de réussite de la vérification (la génération arrive à l'étape 3).
     ready: Option<String>,
+    /// Le générateur : absent, en cours d'installation, prêt… (étape 2).
+    setup: generator_setup::Setup,
 }
 
 impl Default for CreateForm {
@@ -66,6 +70,7 @@ impl Default for CreateForm {
             cert: None,
             key: None,
             ready: None,
+            setup: generator_setup::Setup::default(),
         }
     }
 }
@@ -87,6 +92,8 @@ pub fn show(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) -> O
             widgets::error_banner(ui, message);
             ui.add_space(10.0);
         }
+        // Consentement, progression ou erreur de l'installation du générateur.
+        generator_setup::show(ui, &mut form.setup);
 
         if ui.available_width() >= super::WIDE {
             ui.columns(2, |columns| {
@@ -248,16 +255,26 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         }
 
         ui.add_space(12.0);
-        if widgets::primary_button(ui, "▶ Générer la partie", true) {
+        // Grisé pendant l'installation du générateur.
+        let enabled = !form.setup.is_busy();
+        if widgets::primary_button(ui, "▶ Générer la partie", enabled) {
             match build_request(form) {
                 Ok((request, _host)) => {
                     *error = None;
-                    let count = request.player_files.len();
-                    let plural = if count > 1 { "s" } else { "" };
-                    form.ready = Some(format!(
-                        "Formulaire valide : {count} joueur{plural}. La génération arrive à \
-                         l'étape suivante."
-                    ));
+                    // Formulaire bon : on regarde ensuite si le générateur est là.
+                    // S'il manque, le panneau de consentement s'affiche en haut.
+                    form.setup = generator_setup::check();
+                    form.ready = match form.setup {
+                        generator_setup::Setup::Ready => {
+                            let count = request.player_files.len();
+                            let plural = if count > 1 { "s" } else { "" };
+                            Some(format!(
+                                "Formulaire valide ({count} joueur{plural}) et générateur prêt. \
+                                 La génération arrive à l'étape suivante."
+                            ))
+                        }
+                        _ => None,
+                    };
                 }
                 Err(message) => {
                     form.ready = None;

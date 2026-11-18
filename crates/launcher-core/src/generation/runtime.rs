@@ -21,8 +21,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use py_bridge::CancelToken;
+
 use super::{GenerationError, GeneratorPins, Runtime};
 use crate::archive::{extract_tar_gz, extract_zip, plan_zip, ArchiveLimits};
+use crate::download::DownloadError;
 use crate::download::Downloader;
 use crate::hash::Sha256;
 use crate::paths::Paths;
@@ -105,13 +108,9 @@ pub fn runtime_status(paths: &Paths, pins: &GeneratorPins) -> RuntimeStatus {
         .generator_dir(&pins.archipelago.version)
         .join(MARKER_FILE);
     if !marker_path.exists() {
-        let wheels: u64 = pins.wheels.iter().map(|w| w.size).sum();
-        let download_bytes = pins
-            .python
-            .size
-            .saturating_add(pins.archipelago.size)
-            .saturating_add(wheels);
-        return RuntimeStatus::Missing { download_bytes };
+        return RuntimeStatus::Missing {
+            download_bytes: pins.download_bytes(),
+        };
     }
 
     let text = match fs::read_to_string(&marker_path) {
@@ -168,6 +167,21 @@ pub fn ensure_runtime(
     downloader: &Downloader,
     progress: &mut dyn FnMut(SetupStep, u64),
 ) -> Result<Runtime, GenerationError> {
+    ensure_runtime_cancellable(paths, pins, downloader, progress, &CancelToken::new())
+}
+
+/// Comme [`ensure_runtime`], annulable par `cancel` pendant les téléchargements
+/// (`GenerationError::Cancelled`). Une fois l'extraction commencée, elle va au bout :
+/// elle est courte, et chaque dossier est mis en place d'un coup (`.partial` puis renommage).
+/// Les fichiers déjà vérifiés restent dans le cache : une nouvelle tentative ne les
+/// retélécharge pas.
+pub fn ensure_runtime_cancellable(
+    paths: &Paths,
+    pins: &GeneratorPins,
+    downloader: &Downloader,
+    progress: &mut dyn FnMut(SetupStep, u64),
+    cancel: &CancelToken,
+) -> Result<Runtime, GenerationError> {
     if let RuntimeStatus::Ready(runtime) = runtime_status(paths, pins) {
         return Ok(runtime);
     }
@@ -181,29 +195,46 @@ pub fn ensure_runtime(
     // 1. Téléchargements (cache par sha256 : rien n'est rouvert s'il est déjà là).
     let python_file = {
         let step = SetupStep::Python;
-        downloader.get(
-            &pins.python.url,
-            &pins.python.sha256,
-            pins.python.max_bytes,
-            &mut |n| progress(step.clone(), n),
-        )?
+        downloader
+            .get_cancellable(
+                &pins.python.url,
+                &pins.python.sha256,
+                pins.python.max_bytes,
+                &mut |n| progress(step.clone(), n),
+                cancel,
+            )
+            .map_err(cancelled)?
     };
     let ap_file = {
         let step = SetupStep::Archipelago;
-        downloader.get(
-            &pins.archipelago.url,
-            &pins.archipelago.sha256,
-            pins.archipelago.max_bytes,
-            &mut |n| progress(step.clone(), n),
-        )?
+        downloader
+            .get_cancellable(
+                &pins.archipelago.url,
+                &pins.archipelago.sha256,
+                pins.archipelago.max_bytes,
+                &mut |n| progress(step.clone(), n),
+                cancel,
+            )
+            .map_err(cancelled)?
     };
     let mut wheel_files: Vec<(&crate::generation::PinnedWheel, PathBuf)> = Vec::new();
     for wheel in &pins.wheels {
         let step = SetupStep::Wheel(wheel.name.clone());
-        let file = downloader.get(&wheel.url, &wheel.sha256, wheel.max_bytes, &mut |n| {
-            progress(step.clone(), n)
-        })?;
+        let file = downloader
+            .get_cancellable(
+                &wheel.url,
+                &wheel.sha256,
+                wheel.max_bytes,
+                &mut |n| progress(step.clone(), n),
+                cancel,
+            )
+            .map_err(cancelled)?;
         wheel_files.push((wheel, file));
+    }
+
+    // Dernière occasion d'annuler : après, on extrait jusqu'au bout.
+    if cancel.is_cancelled() {
+        return Err(GenerationError::Cancelled);
     }
 
     // 2. Mise en place.
@@ -300,6 +331,15 @@ pub fn ensure_runtime(
     fs::rename(&tmp, &marker_path).map_err(|e| io_err(&marker_path, e))?;
 
     Ok(runtime)
+}
+
+/// Une annulation du téléchargement devient l'annulation de l'installation ; les autres
+/// erreurs de téléchargement restent telles quelles.
+fn cancelled(error: DownloadError) -> GenerationError {
+    match error {
+        DownloadError::Cancelled => GenerationError::Cancelled,
+        other => GenerationError::Download(other),
+    }
 }
 
 fn wheel_limits(wheel: &crate::generation::PinnedWheel) -> ArchiveLimits {

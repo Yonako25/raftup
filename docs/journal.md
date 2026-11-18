@@ -56,3 +56,9 @@ _Aucune session n'indique de fichiers en cours. Une session qui touche à un dos
 - **Pas vérifié** : rendu à l'œil (accès à la fenêtre refusé) ; boîtes de fichiers ; `cargo test --workspace` non relancé. Le bouton « Générer » ne fait que vérifier le formulaire.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 2, runtime absent : consentement au téléchargement (≈ 72 Mo), progression, annulation.
+
+### 2026-11-17 · Écran « Créer une partie », étape 2
+- **Fait** : installation du générateur annulable dans `launcher-core` (`Downloader::get_cancellable`, `ensure_runtime_cancellable`, `GeneratorPins::download_bytes`, `CancelToken` réexporté) avec 2 tests ; panneau `generator_setup` : consentement (sources, taille, hash), progression par étape et globale, « Annuler », erreurs du contrat, « Réessayer ». `cargo test --workspace`, clippy et fmt passent. Pas de commit encore.
+- **Pas vérifié** : vrai téléchargement des ≈ 72 Mo (pas d'accord demandé) ; rendu à l'œil ; fermeture de la fenêtre pendant l'installation (thread détaché, restes nettoyés au prochain essai en théorie).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : étape 3, la génération : barre indéterminée, journal en direct, « Annuler ».

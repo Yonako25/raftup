@@ -9,11 +9,11 @@ use std::sync::Mutex;
 
 use launcher_core::download::{DirFetcher, Downloader};
 use launcher_core::generation::{
-    ensure_runtime, parse_pins, runtime_status, GenerationError, GeneratorPins, RuntimeStatus,
-    SetupStep,
+    ensure_runtime, ensure_runtime_cancellable, parse_pins, runtime_status, GenerationError,
+    GeneratorPins, RuntimeStatus, SetupStep,
 };
 use launcher_core::hash::Sha256;
-use launcher_core::Paths;
+use launcher_core::{CancelToken, Paths};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
@@ -390,4 +390,63 @@ fn meme_fichier_dans_deux_wheels_refuse() {
     assert!(!generator.join("runtime.json").exists());
     assert!(!generator.join("site-packages").exists());
     assert!(!generator.join("site-packages.partial").exists());
+}
+
+#[test]
+fn annulation_avant_le_debut_ne_telecharge_rien() {
+    let _s = serial();
+    let mut w = good_world();
+    let paths = paths(&w);
+    let opened = w.fetcher.open_counter();
+    let dl = downloader(&mut w);
+    let cancel = CancelToken::new();
+    cancel.cancel();
+    let err =
+        ensure_runtime_cancellable(&paths, &w.pins, &dl, &mut |_, _| {}, &cancel).unwrap_err();
+    assert!(matches!(err, GenerationError::Cancelled), "{err:?}");
+    assert_eq!(opened.load(Ordering::SeqCst), 0);
+    assert!(matches!(
+        runtime_status(&paths, &w.pins),
+        RuntimeStatus::Missing { .. }
+    ));
+}
+
+#[test]
+fn annulation_pendant_le_telechargement_puis_reprise() {
+    let _s = serial();
+    let mut w = good_world();
+    let paths = paths(&w);
+    let dl = downloader(&mut w);
+    let cancel = CancelToken::new();
+    // On annule dès les premiers octets d'Archipelago : la première archive est déjà en cache.
+    let err = ensure_runtime_cancellable(
+        &paths,
+        &w.pins,
+        &dl,
+        &mut |step, _| {
+            if step == SetupStep::Archipelago {
+                cancel.cancel();
+            }
+        },
+        &cancel,
+    )
+    .unwrap_err();
+    assert!(matches!(err, GenerationError::Cancelled), "{err:?}");
+    // Rien d'installé, et aucun `.part` ne traîne dans le cache.
+    assert!(matches!(
+        runtime_status(&paths, &w.pins),
+        RuntimeStatus::Missing { .. }
+    ));
+    assert!(!paths.data_dir.join("python").exists());
+    let leftovers: Vec<String> = fs::read_dir(&dl.dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".part"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+
+    // Une nouvelle tentative, sans annulation, va au bout.
+    let rt = ensure_runtime_cancellable(&paths, &w.pins, &dl, &mut |_, _| {}, &CancelToken::new())
+        .unwrap();
+    assert!(rt.python_exe.is_file());
 }
