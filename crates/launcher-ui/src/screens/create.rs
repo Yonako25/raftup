@@ -14,9 +14,10 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
-use launcher_core::generation::GenerateRequest;
+use launcher_core::generation::{installed_apworlds, GenerateRequest};
 use launcher_core::{Encryption, PartyHostOptions};
 
+use super::library::{load_paths, AP_VERSION};
 use super::prefs;
 use super::presets::Preset;
 use super::{generation, generator_setup, hosting};
@@ -47,6 +48,9 @@ pub struct CreateForm {
     apworlds: Vec<PathBuf>,
     /// L'hôte a coché « J'ai compris » sous l'avertissement des apworlds.
     apworld_ack: bool,
+    /// Apworlds installés par la Bibliothèque (profils du catalogue, hash vérifié) :
+    /// ajoutés tout seuls à la génération, sans l'avertissement des apworlds choisis à la main.
+    installed_apworlds: Vec<PathBuf>,
     pending_pick: Option<Pick>,
     /// Preset de génération (F06) : Rapide, Standard ou Long.
     preset: Preset,
@@ -76,6 +80,7 @@ impl Default for CreateForm {
             yamls: Vec::new(),
             apworlds: Vec::new(),
             apworld_ack: false,
+            installed_apworlds: Vec::new(),
             pending_pick: None,
             preset: Preset::default(),
             port: "38281".to_string(),
@@ -94,13 +99,24 @@ impl Default for CreateForm {
 }
 
 impl CreateForm {
+    /// Relit les apworlds installés par la Bibliothèque (liste vide si les dossiers de
+    /// Raftup sont introuvables : la génération dira alors ce qui manque).
+    fn refresh_installed(&mut self) {
+        self.installed_apworlds = match load_paths() {
+            Ok(paths) => installed_apworlds(&paths.worlds_dir(AP_VERSION)),
+            Err(_) => Vec::new(),
+        };
+    }
+
     /// Formulaire pré-rempli avec le webhook et le préréglage mémorisés.
     pub fn with_prefs(prefs: prefs::Prefs) -> CreateForm {
-        CreateForm {
+        let mut form = CreateForm {
             webhook: prefs.webhook,
             preset: prefs.preset,
             ..CreateForm::default()
-        }
+        };
+        form.refresh_installed();
+        form
     }
 }
 
@@ -251,6 +267,25 @@ fn players_panel(ui: &mut Ui, form: &mut CreateForm) {
         );
         ui.checkbox(&mut form.apworld_ack, "J'ai compris");
         ui.add_space(6.0);
+        if !form.installed_apworlds.is_empty() {
+            let names: Vec<String> = form
+                .installed_apworlds
+                .iter()
+                .filter_map(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .collect();
+            // Deux lignes courtes : le panneau justifie un texte qui passe à la ligne,
+            // ce qui étirait les espaces entre les lettres.
+            ui.label(
+                widgets::dim("Pris automatiquement (installés par la Bibliothèque) :").size(13.0),
+            );
+            ui.label(
+                RichText::new(names.join(", "))
+                    .color(theme::TEXT)
+                    .size(13.0),
+            );
+            ui.add_space(4.0);
+        }
         file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
         ui.add_space(6.0);
         // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
@@ -361,6 +396,8 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
 /// Clic sur « Générer la partie » (ou « Réessayer ») : vérifie le formulaire, puis
 /// le générateur, puis lance la génération.
 fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
+    // Relu à chaque clic : un jeu a pu être installé depuis l'ouverture de l'écran.
+    form.refresh_installed();
     match build_request(form) {
         Ok((request, host)) => {
             *error = None;
@@ -497,6 +534,20 @@ fn add_files(list: &mut Vec<PathBuf>, picked: Vec<PathBuf>) {
 ///
 /// Tout est vérifié AVANT de générer : une génération dure des minutes, on ne veut
 /// pas la perdre sur un port mal tapé.
+/// Apworlds choisis à la main, puis ceux de la Bibliothèque. Un apworld installé dont le
+/// nom de fichier est déjà choisi à la main est sauté : deux fichiers de même nom
+/// s'écraseraient dans `custom_worlds`, et le choix de l'hôte passe avant.
+fn all_apworlds(form: &CreateForm) -> Vec<PathBuf> {
+    let mut all = form.apworlds.clone();
+    for installed in &form.installed_apworlds {
+        let same_name = all.iter().any(|p| p.file_name() == installed.file_name());
+        if !same_name {
+            all.push(installed.clone());
+        }
+    }
+    all
+}
+
 fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions), String> {
     if form.yamls.is_empty() {
         return Err("Ajoutez au moins un fichier YAML.".into());
@@ -532,7 +583,7 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
     let mut request = GenerateRequest {
         player_files: form.yamls.clone(),
-        apworlds: form.apworlds.clone(),
+        apworlds: all_apworlds(form),
         ..GenerateRequest::default()
     };
     // Le preset ne règle que des champs génériques de la demande (F06, ADR 0023).
@@ -652,6 +703,30 @@ mod tests {
     fn mot_de_passe_vide_absent() {
         let (_, host) = build_request(&valid()).unwrap();
         assert_eq!(host.password, None);
+    }
+
+    #[test]
+    fn apworlds_installes_ajoutes_sans_avertissement() {
+        let mut form = valid();
+        form.installed_apworlds = vec![
+            PathBuf::from("worlds").join("slime_rancher.apworld"),
+            PathBuf::from("worlds").join("autre.apworld"),
+        ];
+        // Pas besoin de « J'ai compris » : ils viennent du catalogue, hash vérifié.
+        let (request, _) = build_request(&form).unwrap();
+        assert_eq!(request.apworlds, form.installed_apworlds);
+
+        // Même nom choisi à la main : celui de l'hôte passe avant, sans doublon.
+        form.apworlds = vec![PathBuf::from("perso").join("slime_rancher.apworld")];
+        form.apworld_ack = true;
+        let (request, _) = build_request(&form).unwrap();
+        assert_eq!(
+            request.apworlds,
+            vec![
+                PathBuf::from("perso").join("slime_rancher.apworld"),
+                PathBuf::from("worlds").join("autre.apworld"),
+            ]
+        );
     }
 
     #[test]

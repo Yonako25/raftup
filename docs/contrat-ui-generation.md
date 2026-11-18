@@ -45,7 +45,7 @@ Règles d'appel :
 
 ## Avertissements obligatoires
 
-- **Apworld** : « Un apworld est du code qui s'exécute sur votre PC, sans bac à sable. N'ajoutez que ceux que vous jugez sûrs. » (avant toute copie d'un apworld)
+- **Apworld** : « Un apworld est du code qui s'exécute sur votre PC, sans bac à sable. N'ajoutez que ceux que vous jugez sûrs. » (avant toute copie d'un apworld) ; ne concerne pas les apworlds installés par la Bibliothèque (profil du catalogue, hash vérifié), ajoutés tout seuls à chaque génération et listés sous « Pris automatiquement » ; un apworld choisi à la main de même nom passe avant
 - **Premier téléchargement** : sources et taille affichées (Python, Archipelago, bibliothèques), vérifiées par hash.
 
 ## Décisions prises (ADR 0019)

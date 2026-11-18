@@ -104,3 +104,53 @@ pub enum GenerationError {
     #[error("seed produite illisible : {0}")]
     Seed(String),
 }
+
+/// Apworlds posés par la Bibliothèque dans `worlds_dir` (profils du catalogue, hash vérifié).
+///
+/// « Créer une partie » les ajoute tout seul à la génération : le joueur n'a pas à les
+/// rechoisir. Seuls les fichiers ordinaires `*.apworld` comptent (pas les dossiers ni les
+/// liens) ; un dossier absent ou illisible donne une liste vide. Ordre trié, donc stable.
+pub fn installed_apworlds(worlds_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let Ok(entries) = std::fs::read_dir(worlds_dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<std::path::PathBuf> = entries
+        // `flatten` saute les entrées illisibles (un `Result` en erreur ne donne rien).
+        .flatten()
+        .filter(|entry| {
+            // `file_type` ne suit pas les liens : un lien n'est pas un fichier ordinaire.
+            entry.file_type().is_ok_and(|t| t.is_file())
+                && entry
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("apworld"))
+        })
+        .map(|entry| entry.path())
+        .collect();
+    found.sort();
+    found
+}
+
+#[cfg(test)]
+mod tests {
+    use super::installed_apworlds;
+
+    #[test]
+    fn apworlds_installes_listes_et_tries() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("zeta.apworld"), b"z").unwrap();
+        std::fs::write(dir.path().join("alpha.APWORLD"), b"a").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), b"n").unwrap();
+        std::fs::create_dir(dir.path().join("dossier.apworld")).unwrap();
+        let found = installed_apworlds(dir.path());
+        assert_eq!(
+            found,
+            vec![
+                dir.path().join("alpha.APWORLD"),
+                dir.path().join("zeta.apworld")
+            ]
+        );
+        // Dossier absent : liste vide, pas d'erreur.
+        assert!(installed_apworlds(&dir.path().join("absent")).is_empty());
+    }
+}

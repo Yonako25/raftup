@@ -158,6 +158,14 @@ untime2`.
 ### 2026-11-18 · Partie réelle de Slime Rancher (J1 étape 9)
 - **Fait** : avec l'utilisatrice devant le PC : installation par la Bibliothèque (MelonLoader, Slimipelago, apworld ; hash vérifiés), mod chargé au lancement, vrai générateur installé, partie générée par « Créer une partie » puis hébergée, mod connecté sans modification, lieux validés et objets reçus. J1 terminé.
 - **Pas vérifié** : reprise de la sauvegarde `.raftup` après redémarrage ; partie à plusieurs joueurs ; DeathLink.
-- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:
+aftup-test
+untime2`.
 - **Suite** : « Créer une partie » reprend seul les apworlds installés par la Bibliothèque.
+
+### 2026-11-18 · Apworlds installés pris automatiquement
+- **Fait** : « Créer une partie » ajoute seul les apworlds posés par la Bibliothèque (`installed_apworlds`, relus à chaque clic, sans l'avertissement) et les liste sous « Pris automatiquement » ; un apworld de même nom choisi à la main passe avant. Partie Slime Rancher générée et hébergée par la macro avec le seul YAML. Workspace, clippy et fmt passent.
+- **Pas vérifié** : apworld installé pour une autre version d'Archipelago que 0.6.8 (seul `worlds/0.6.8` est lu).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `Z:aftup-testuntime2`.
+- **Suite** : « Lancer le jeu » sans adresse ni slot (premier lancement).
 
