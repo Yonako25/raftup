@@ -354,6 +354,11 @@ fn crew_row(
                 ))
                 .size(12.0),
             );
+            // Suivi asynchrone (ADR 0031) : absence et votes de release.
+            let note = format::follow_note(slot);
+            if !note.is_empty() {
+                ui.label(RichText::new(note).size(12.0).color(theme::AMBER));
+            }
             // Lien personnel du joueur (absent si l'adresse ne permet pas d'en fabriquer un).
             if let Some(link) = format::player_link(address, slot) {
                 let button =
@@ -568,6 +573,21 @@ fn side_area(ui: &mut Ui, shared: &Shared, status: &HostStatus, now: f64) {
             ))
             .size(13.0),
         );
+        // Suivi asynchrone (ADR 0031) : absents et votes de release en cours.
+        let players = status.server.slots.iter().filter(|s| !s.is_group);
+        let away = players.clone().filter(|s| s.away.is_some()).count();
+        let votes = players.filter(|s| s.release_votes > 0).count();
+        if away > 0 || votes > 0 {
+            let away_plural = if away > 1 { "s" } else { "" };
+            let vote_plural = if votes > 1 { "s" } else { "" };
+            ui.label(
+                RichText::new(format!(
+                    "{away} absent{away_plural} · {votes} vote{vote_plural} de release en cours"
+                ))
+                .size(13.0)
+                .color(theme::AMBER),
+            );
+        }
     });
     ui.add_space(14.0);
 

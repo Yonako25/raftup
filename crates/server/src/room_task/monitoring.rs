@@ -68,6 +68,13 @@ impl RoomTask {
                 total: data.locations.get(slot).map_or(0, |l| l.len()),
                 status: u32::from(self.game.status(team, *slot).map_or(0, |s| s.0)),
                 last_activity: self.activity.get(&(team, *slot)).copied(),
+                away: self
+                    .follow
+                    .away
+                    .get(&(team, *slot))
+                    .map(|a| a.message.clone()),
+                release_votes: u32::try_from(self.follow.vote_count(team, *slot))
+                    .unwrap_or(u32::MAX),
             });
         }
         ServerStatus {

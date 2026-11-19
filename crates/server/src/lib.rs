@@ -13,6 +13,7 @@ mod command_line;
 mod connection;
 mod datastore;
 pub mod error;
+mod follow;
 mod fuzzy;
 mod game;
 mod hints;

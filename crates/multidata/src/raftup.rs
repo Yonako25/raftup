@@ -6,8 +6,8 @@
 //! une autre seed. Aucun mot de passe n'est écrit.
 //!
 //! ```text
-//! {"format_version":1,"kind":"raftup-save","raftup_version":"0.1.0","seed_name":"AP_123","seed_sha256":"ab12…","created":1760000000.5}
-//! {"type":"snapshot","location_checks":[],"received_items":[],"client_status":[],"hints":[],"hints_used":[],"aliases":[],"group_collected":[],"store":[],"activity":[]}
+//! {"format_version":2,"kind":"raftup-save","raftup_version":"0.1.0","seed_name":"AP_123","seed_sha256":"ab12…","created":1760000000.5}
+//! {"type":"snapshot","location_checks":[],"received_items":[],"client_status":[],"hints":[],"hints_used":[],"aliases":[],"group_collected":[],"store":[],"activity":[],"away":[],"seen":[],"release_votes":[],"feed":[]}
 //! {"type":"checks","team":0,"slot":1,"locations":[100,101]}
 //! {"type":"alias","team":0,"slot":1,"alias":"Zoé"}
 //! ```
@@ -25,7 +25,7 @@
 //! écrit `<fichier>.tmp` puis le renomme par-dessus l'original : le remplacement
 //! est atomique, et un `.tmp` resté après une interruption est simplement ignoré.
 //!
-//! Choix consigné dans l'ADR 0014.
+//! Choix consigné dans l'ADR 0014 ; format 2 (suivi asynchrone) : ADR 0031.
 
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -36,7 +36,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Version du format écrite par ce code.
-pub const FORMAT_VERSION: u32 = 1;
+///
+/// - 1 : format d'origine (ADR 0014) ;
+/// - 2 : suivi asynchrone (ADR 0031) : absences, « vu pour la dernière fois »,
+///   votes de release et fil d'activité. Un fichier version 1 se lit toujours.
+pub const FORMAT_VERSION: u32 = 2;
+/// Entrées gardées au plus dans le fil d'activité (`Snapshot::feed`).
+pub const FEED_MAX: usize = 200;
 /// Valeur du champ `kind` d'une sauvegarde Raftup.
 pub const SAVE_KIND: &str = "raftup-save";
 
@@ -166,6 +172,71 @@ pub struct SlotActivity {
     pub time: f64,
 }
 
+/// Un slot marqué absent (`!away`, ADR 0031).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlotAway {
+    pub team: u32,
+    pub slot: u32,
+    /// Début de l'absence, en secondes Unix.
+    pub since: f64,
+    pub message: String,
+}
+
+/// Absence portée par un delta (`None` : le joueur est revenu).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AwayInfo {
+    pub since: f64,
+    pub message: String,
+}
+
+/// Dernier départ d'un slot : quand, et combien d'objets il avait reçus.
+/// Sert au résumé de retour (ADR 0031).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlotSeen {
+    pub team: u32,
+    pub slot: u32,
+    pub items: u64,
+    pub time: f64,
+}
+
+/// Votes en cours pour relâcher le monde de `target`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReleaseVotes {
+    pub team: u32,
+    pub target: u32,
+    /// Slots qui ont voté, triés.
+    pub voters: Vec<u32>,
+}
+
+/// Ce qu'une entrée du fil d'activité raconte.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FeedKind {
+    /// Le slot a atteint son objectif.
+    Goal,
+    /// Le monde du slot a été relâché (`!release`, `/release`, automatique).
+    Release,
+    /// Le slot s'est déclaré absent.
+    Away { message: String },
+    /// Le slot est revenu.
+    Back,
+    /// `voter` a voté pour relâcher le monde du slot.
+    ReleaseVote { voter: u32, votes: u32, needed: u32 },
+    /// Le vote a réussi : le monde du slot a été relâché.
+    ReleasedByVote,
+}
+
+/// Une entrée du fil d'activité. `seq` grandit d'une entrée à l'autre : c'est
+/// lui qui dit quelles entrées sont nouvelles (`diff`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FeedEntry {
+    pub seq: u64,
+    pub time: f64,
+    pub team: u32,
+    pub slot: u32,
+    pub event: FeedKind,
+}
+
 /// État complet de la partie (ligne 2). L'ordre des listes est conservé.
 // `#[serde(tag = "type", rename = "snapshot")]` sur une structure : serde écrit
 // un champ `"type":"snapshot"` en tête, et refuse une ligne qui porte un autre type.
@@ -190,6 +261,16 @@ pub struct Snapshot {
     pub store: Vec<StoreEntry>,
     #[serde(default)]
     pub activity: Vec<SlotActivity>,
+    // Suivi asynchrone (format 2, ADR 0031). `default` : vides dans un
+    // fichier version 1.
+    #[serde(default)]
+    pub away: Vec<SlotAway>,
+    #[serde(default)]
+    pub seen: Vec<SlotSeen>,
+    #[serde(default)]
+    pub release_votes: Vec<ReleaseVotes>,
+    #[serde(default)]
+    pub feed: Vec<FeedEntry>,
 }
 
 /// Un delta : un changement d'état à ajouter à la fin du fichier.
@@ -237,6 +318,29 @@ pub enum Record {
     Store {
         key: String,
         value: serde_json::Value,
+    },
+    /// `None` : l'absence est levée (format 2).
+    Away {
+        team: u32,
+        slot: u32,
+        away: Option<AwayInfo>,
+    },
+    /// Dernier départ du slot (format 2).
+    Seen {
+        team: u32,
+        slot: u32,
+        items: u64,
+        time: f64,
+    },
+    /// Votants contre `target` ; liste vide : plus de vote (format 2).
+    ReleaseVotes {
+        team: u32,
+        target: u32,
+        voters: Vec<u32>,
+    },
+    /// Une entrée AJOUTÉE au fil d'activité (format 2).
+    Feed {
+        entry: FeedEntry,
     },
 }
 
@@ -370,7 +474,91 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> Vec<Record> {
             });
         }
     }
+    diff_async(old, new, &mut records);
     records
+}
+
+/// Deltas du suivi asynchrone (format 2, ADR 0031).
+fn diff_async(old: &Snapshot, new: &Snapshot, records: &mut Vec<Record>) {
+    for entry in &new.away {
+        let before = old
+            .away
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before != Some(entry) {
+            records.push(Record::Away {
+                team: entry.team,
+                slot: entry.slot,
+                away: Some(AwayInfo {
+                    since: entry.since,
+                    message: entry.message.clone(),
+                }),
+            });
+        }
+    }
+    for entry in &old.away {
+        if !new
+            .away
+            .iter()
+            .any(|e| e.team == entry.team && e.slot == entry.slot)
+        {
+            records.push(Record::Away {
+                team: entry.team,
+                slot: entry.slot,
+                away: None,
+            });
+        }
+    }
+    for entry in &new.seen {
+        let before = old
+            .seen
+            .iter()
+            .find(|e| e.team == entry.team && e.slot == entry.slot);
+        if before != Some(entry) {
+            records.push(Record::Seen {
+                team: entry.team,
+                slot: entry.slot,
+                items: entry.items,
+                time: entry.time,
+            });
+        }
+    }
+    for entry in &new.release_votes {
+        let before = old
+            .release_votes
+            .iter()
+            .find(|e| e.team == entry.team && e.target == entry.target);
+        if before != Some(entry) {
+            records.push(Record::ReleaseVotes {
+                team: entry.team,
+                target: entry.target,
+                voters: entry.voters.clone(),
+            });
+        }
+    }
+    for entry in &old.release_votes {
+        if !new
+            .release_votes
+            .iter()
+            .any(|e| e.team == entry.team && e.target == entry.target)
+        {
+            records.push(Record::ReleaseVotes {
+                team: entry.team,
+                target: entry.target,
+                voters: Vec::new(),
+            });
+        }
+    }
+    // Le fil ne fait que grandir (les plus anciennes entrées tombent) : sont
+    // nouvelles les entrées dont le numéro dépasse le dernier de `old`.
+    let last = old.feed.iter().map(|e| e.seq).max();
+    for entry in &new.feed {
+        if last.is_none_or(|last| entry.seq > last) {
+            records.push(Record::Feed {
+                entry: entry.clone(),
+            });
+        }
+    }
 }
 
 impl Snapshot {
@@ -503,6 +691,79 @@ impl Snapshot {
                     value: value.clone(),
                 }),
             },
+            Record::Away { team, slot, away } => {
+                let pos = self
+                    .away
+                    .iter()
+                    .position(|e| e.team == *team && e.slot == *slot);
+                match (pos, away) {
+                    (Some(i), Some(a)) => {
+                        self.away[i].since = a.since;
+                        self.away[i].message = a.message.clone();
+                    }
+                    (Some(i), None) => {
+                        self.away.remove(i);
+                    }
+                    (None, Some(a)) => self.away.push(SlotAway {
+                        team: *team,
+                        slot: *slot,
+                        since: a.since,
+                        message: a.message.clone(),
+                    }),
+                    (None, None) => {}
+                }
+            }
+            Record::Seen {
+                team,
+                slot,
+                items,
+                time,
+            } => match self
+                .seen
+                .iter_mut()
+                .find(|e| e.team == *team && e.slot == *slot)
+            {
+                Some(e) => {
+                    e.items = *items;
+                    e.time = *time;
+                }
+                None => self.seen.push(SlotSeen {
+                    team: *team,
+                    slot: *slot,
+                    items: *items,
+                    time: *time,
+                }),
+            },
+            Record::ReleaseVotes {
+                team,
+                target,
+                voters,
+            } => {
+                let pos = self
+                    .release_votes
+                    .iter()
+                    .position(|e| e.team == *team && e.target == *target);
+                match (pos, voters.is_empty()) {
+                    (Some(i), false) => self.release_votes[i].voters = voters.clone(),
+                    (Some(i), true) => {
+                        self.release_votes.remove(i);
+                    }
+                    (None, false) => self.release_votes.push(ReleaseVotes {
+                        team: *team,
+                        target: *target,
+                        voters: voters.clone(),
+                    }),
+                    (None, true) => {}
+                }
+            }
+            Record::Feed { entry } => {
+                self.feed.push(entry.clone());
+                // On garde les `FEED_MAX` dernières entrées.
+                if self.feed.len() > FEED_MAX {
+                    let extra = self.feed.len() - FEED_MAX;
+                    self.feed.drain(..extra);
+                }
+            }
         }
     }
 }
@@ -708,7 +969,10 @@ impl SaveFile {
     }
 
     /// Remplace le fichier par en-tête + `snapshot` (atomique : fichier temporaire puis renommage).
+    ///
+    /// Un fichier d'une version plus ancienne est réécrit dans la version courante.
     pub fn compact(&mut self, snapshot: &Snapshot) -> Result<(), SaveError> {
+        self.header.format_version = FORMAT_VERSION;
         replace_base(&self.path, &self.header, snapshot)?;
         self.file = open_append(&self.path)?;
         self.lines_since_compact = 0;

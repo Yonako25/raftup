@@ -37,6 +37,15 @@ const HELP_TEXT: &str = concat!(
     "    for example !hint_location atomic-bomb to get a spoiler peek for that location.\n",
 );
 
+/// Suite de `!help` quand la salle a le suivi asynchrone (ADR 0031), même forme.
+const FOLLOW_HELP_TEXT: &str = concat!(
+    "!away [message] \n    Mark yourself as away, with an optional message for the other players.\n",
+    "!back \n    Clear your away status.\n",
+    "!summary \n    Away players, release votes and recent activity of the multiworld.\n",
+    "!vote_release [player] \n    Vote to release the world of a player who left the game.\n",
+    "    A majority of the other players is needed. Without a player, lists the votes.\n",
+);
+
 /// Texte de `!license`. DÉCISION : le serveur officiel affiche le fichier LICENSE
 /// d'Archipelago ; nous affichons la notice de Raftup (écart déclaré).
 const LICENSE_TEXT: &str =
@@ -46,7 +55,11 @@ See the LICENSE-MIT and LICENSE-APACHE files distributed with Raftup for the ful
 
 impl RoomTask {
     pub(super) fn cmd_help(&self, id: ClientId) {
-        self.output(id, HELP_TEXT);
+        if self.follow_on() {
+            self.output(id, format!("{HELP_TEXT}{FOLLOW_HELP_TEXT}"));
+        } else {
+            self.output(id, HELP_TEXT);
+        }
     }
 
     pub(super) fn cmd_license(&self, id: ClientId) {

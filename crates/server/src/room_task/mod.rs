@@ -34,6 +34,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::connection::Incoming;
 use crate::datastore::{self, DataStore};
+use crate::follow::FollowState;
 use crate::game::{locations_for_player, GameState, Sent};
 use crate::limits::{ChatRate, Limits};
 use crate::monitor::{GameEvent, Names, ServerStatus, SlotStatus};
@@ -48,6 +49,7 @@ use multidata::raftup::{diff, SaveFile, SlotActivity, Snapshot, StoreEntry};
 mod commands;
 mod connect;
 mod exchange;
+mod follow;
 mod hints;
 mod messages;
 mod monitoring;
@@ -219,8 +221,13 @@ pub(crate) async fn run(
             return;
         }
     }
-    // Arrêt propre : un dernier compactage. En cas d'échec, le fichier garde
-    // son instantané et ses deltas, toujours lisibles : rien n'est perdu.
+    // Arrêt propre : les joueurs encore connectés sont notés « vus » (pour
+    // leur résumé de retour, ADR 0031), puis un dernier compactage. En cas
+    // d'échec, le fichier garde son instantané et ses deltas, toujours
+    // lisibles : rien n'est perdu.
+    if task.mark_connected_seen() && !task.commit() {
+        return;
+    }
     task.compact();
 }
 
@@ -264,7 +271,7 @@ impl RoomTask {
         save: Option<SaveState>,
     ) -> RoomTask {
         // Reprise : l'état vient de la sauvegarde ; sinon, l'état de départ.
-        let (game, store, activity, save) = match save {
+        let (game, store, activity, follow, save) = match save {
             Some(SaveState { file, snapshot }) => (
                 GameState::from_snapshot(room.data(), &snapshot),
                 DataStore::from_entries(
@@ -278,6 +285,7 @@ impl RoomTask {
                     .iter()
                     .map(|a| ((a.team, a.slot), a.time))
                     .collect(),
+                FollowState::from_snapshot(&snapshot),
                 Some(Saver {
                     file,
                     last: snapshot,
@@ -287,6 +295,7 @@ impl RoomTask {
                 GameState::new(room.data()),
                 DataStore::default(),
                 BTreeMap::new(),
+                FollowState::default(),
                 None,
             ),
         };
@@ -301,6 +310,7 @@ impl RoomTask {
             names,
             monitor,
             activity,
+            follow,
             countdown_timer: 0,
             countdown_next: None,
             admin_client: None,
@@ -329,6 +339,9 @@ struct RoomTask {
     monitor: broadcast::Sender<GameEvent>,
     /// Heure du dernier paquet reçu de chaque slot.
     activity: BTreeMap<(TeamId, SlotId), f64>,
+    /// Suivi asynchrone (ADR 0031) : absences, départs, votes, fil d'activité.
+    /// Toujours chargé et sauvegardé ; il ne change que si `room.async_follow()`.
+    follow: FollowState,
     /// Compte à rebours en cours (`countdown_timer` du serveur officiel) :
     /// secondes restantes à annoncer.
     countdown_timer: i64,
@@ -387,6 +400,7 @@ impl RoomTask {
                 time: *time,
             })
             .collect();
+        self.follow.fill_snapshot(&mut snapshot);
         snapshot
     }
 

@@ -31,6 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
+- [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
 
 ## Crates
 
@@ -83,7 +84,8 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **Sauvegarde** (ADR 0014, NF07) : écrite et synchronisée sur le disque **avant** chaque réponse ; reprise au démarrage ; compactage au démarrage, à 10 000 deltas et à l'arrêt
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
 - Chiffrement (ADR 0009) : `wss` avec `--cert` et `--cert_key` (fichiers PEM) ; clair seulement avec `--no-tls`
-- Binaire : `raftup-server <seed> --cert fullchain.pem --cert_key privkey.pem [--savefile X.raftup | --disable_save]`
+- Binaire : `raftup-server <seed> --cert fullchain.pem --cert_key privkey.pem [--savefile X.raftup | --disable_save] [--async_follow]`
+- **Suivi async** (ADR 0031, avec l'option) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour, réponse automatique quand on cite un absent, clés `_read_raftup_away_<équipe>` et `_read_raftup_release_votes_<équipe>`
 - Tests différentiels (ADR 0008) : `tests/differentiel/`, lancés à la main, hors CI
 
 **launcher-core** (ADR 0010)
@@ -128,6 +130,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 - **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
+- **0031** : suivi async (option de la salle, désactivée par défaut) : absence, résumé de retour, release par vote à la majorité, fil d'activité, `.raftup` version 2
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

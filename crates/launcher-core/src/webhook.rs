@@ -104,6 +104,18 @@ pub enum Event {
     Goal { player: String },
     /// Tous les joueurs ont atteint leur objectif.
     PartyFinished,
+    /// Un joueur s'est déclaré absent (ADR 0031) ; `message` peut être vide.
+    Away { player: String, message: String },
+    /// Il est revenu.
+    Back { player: String },
+    /// Un vote pour relâcher le monde de `target` ; `passed` : le monde est relâché.
+    ReleaseVote {
+        voter: String,
+        target: String,
+        votes: u32,
+        needed: u32,
+        passed: bool,
+    },
 }
 
 /// Traduit un événement du serveur ; `None` pour ce qu'on n'annonce pas (connexions, chat).
@@ -127,6 +139,27 @@ pub fn event_from(event: &GameEvent) -> Option<Event> {
         }),
         GameEvent::Goal { name, .. } => Some(Event::Goal {
             player: name.clone(),
+        }),
+        GameEvent::Away { name, message, .. } => Some(Event::Away {
+            player: name.clone(),
+            message: message.clone(),
+        }),
+        GameEvent::Back { name, .. } => Some(Event::Back {
+            player: name.clone(),
+        }),
+        GameEvent::ReleaseVote {
+            target_name,
+            voter_name,
+            votes,
+            needed,
+            passed,
+            ..
+        } => Some(Event::ReleaseVote {
+            voter: voter_name.clone(),
+            target: target_name.clone(),
+            votes: *votes,
+            needed: *needed,
+            passed: *passed,
         }),
         _ => None,
     }
@@ -177,6 +210,34 @@ pub fn format_message(event: &Event) -> String {
         ),
         Event::Goal { player } => format!("**{}** a terminé son objectif !", escape(player)),
         Event::PartyFinished => "**Partie terminée** : tous les joueurs ont fini.".to_string(),
+        Event::Away { player, message } if message.is_empty() => {
+            format!("**{}** est absent.", escape(player))
+        }
+        Event::Away { player, message } => {
+            format!("**{}** est absent : {}", escape(player), escape(message))
+        }
+        Event::Back { player } => format!("**{}** est de retour.", escape(player)),
+        Event::ReleaseVote {
+            target,
+            votes,
+            needed,
+            passed: true,
+            ..
+        } => format!(
+            "Vote réussi : le monde de **{}** est relâché ({votes}/{needed}).",
+            escape(target)
+        ),
+        Event::ReleaseVote {
+            voter,
+            target,
+            votes,
+            needed,
+            passed: false,
+        } => format!(
+            "**{}** vote pour relâcher le monde de **{}** ({votes}/{needed}).",
+            escape(voter),
+            escape(target)
+        ),
     };
     truncate_chars(&text, MAX_CONTENT_CHARS)
 }
@@ -425,6 +486,44 @@ mod tests {
     }
 
     #[test]
+    fn async_follow_events() {
+        let away = GameEvent::Away {
+            time: 0.0,
+            slot: 1,
+            name: "A".into(),
+            message: "lundi".into(),
+        };
+        let event = event_from(&away).unwrap();
+        assert_eq!(format_message(&event), "**A** est absent : lundi");
+        let back = GameEvent::Back {
+            time: 0.0,
+            slot: 1,
+            name: "A".into(),
+        };
+        assert_eq!(
+            format_message(&event_from(&back).unwrap()),
+            "**A** est de retour."
+        );
+        let vote = |votes, passed| GameEvent::ReleaseVote {
+            time: 0.0,
+            target: 2,
+            target_name: "B".into(),
+            voter_name: "A".into(),
+            votes,
+            needed: 2,
+            passed,
+        };
+        assert_eq!(
+            format_message(&event_from(&vote(1, false)).unwrap()),
+            "**A** vote pour relâcher le monde de **B** (1/2)."
+        );
+        assert_eq!(
+            format_message(&event_from(&vote(2, true)).unwrap()),
+            "Vote réussi : le monde de **B** est relâché (2/2)."
+        );
+    }
+
+    #[test]
     fn message_escapes_and_blocks_mentions() {
         let event = Event::Goal {
             player: "@everyone **gras**\nligne".into(),
@@ -462,6 +561,8 @@ mod tests {
             total: 0,
             status,
             last_activity: None,
+            away: None,
+            release_votes: 0,
         };
         let status = |slots| ServerStatus {
             slots,

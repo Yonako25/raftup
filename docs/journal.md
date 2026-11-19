@@ -282,3 +282,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+
+### 2026-11-19 · V2, suivi async (ADR 0031)
+- **Fait** : ADR 0031 (accepté en autonomie, à relire). Option de salle `with_async_follow` (désactivée par défaut, `--async_follow`, toujours active dans le launcher) : `!away`, `!back`, `!summary`, `!vote_release` (majorité stricte des autres joueurs, passe outre `release_mode`), résumé de retour en `PrintJSON` après le tutoriel, réponse automatique quand le chat cite un absent, clés `_read_raftup_away_<équipe>` / `_read_raftup_release_votes_<équipe>`, fil d'activité borné. `.raftup` en `format_version` 2 (version 1 toujours lue, réécrite au compactage). Événements `Away`, `Back`, `ReleaseVote` vers le webhook et « Partie en cours ». 8 tests serveur, tests `multidata`, webhook et format ; workspace, clippy et fmt passent.
+- **Pas vérifié** : tests différentiels contre le vrai serveur Python non relancés (comportement inchangé sans l'option, captures rejouées vertes) ; écran regardé à l'œil ; vrai mod qui envoie `!away` ; vrai webhook.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : faire relire l'ADR 0031 (noms des commandes, vote qui passe outre `release_mode`) ; regarder « Partie en cours » avec un absent et un vote.

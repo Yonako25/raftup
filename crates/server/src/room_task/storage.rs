@@ -32,6 +32,10 @@ impl RoomTask {
         if name == "race_mode" {
             return Some(Value::from(i64::from(data.race_mode)));
         }
+        // Clés du suivi asynchrone (ADR 0031) ; `null` sans l'option.
+        if name.starts_with("raftup_") {
+            return self.read_follow_key(name);
+        }
         if let Some(rest) = name.strip_prefix("hints_") {
             let (team, slot) = parse_team_slot(rest)?;
             if team != 0 || !data.slots.contains_key(&slot) {

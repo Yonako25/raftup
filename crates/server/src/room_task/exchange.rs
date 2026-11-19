@@ -204,6 +204,8 @@ impl RoomTask {
         }
         // Les commandes `!` s'exécutent après la diffusion, comme sur le serveur officiel.
         self.on_command_line(id, text);
+        // Suivi asynchrone : un message qui cite un absent (ADR 0031).
+        self.reply_for_away(id, text);
     }
 
     /// Relaie un message libre (par exemple un DeathLink) aux clients visés.
