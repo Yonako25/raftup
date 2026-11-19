@@ -282,3 +282,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+
+### 2026-11-19 · Hub `raftup-hub` : comptes, amis, présence (ADR 0033)
+- **Fait** : ADR 0033 (axum 0.8, sqlx 0.8 + SQLite, PostgreSQL prévu dans `store.rs` seul, jetons opaques hachés SHA-256 révocables) ; crate `crates/hub` en AGPL-3.0-or-later, binaire `raftup-hub` ; inscription et connexion e-mail + mot de passe argon2id, pseudo unique (NFKC + minuscules), demandes d'ami, présence en mémoire avec expiration, limites de tentatives. 32 tests (API, NF09 sur base et journal, ADR 0003 : aucune crate n'en dépend) ; licences des dépendances vérifiées (toutes permissives).
+- **Pas vérifié** : PostgreSQL (rien d'écrit) ; binaire seulement essayé en local (inscription, connexion) ; `LICENSE-AGPL` écrit sans téléchargement, à comparer avec le texte de gnu.org. Pas de Discord, de vérification d'e-mail, de blocage ni de RGPD (listés dans l'ADR).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : relire l'ADR 0033 ; client du hub dans `launcher-core` (jeton dans `keyring`) et panneau d'amis.
