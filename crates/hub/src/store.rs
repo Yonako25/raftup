@@ -17,9 +17,15 @@ use sqlx::{AnyPool, Row};
 
 use crate::error::HubError;
 
+// Méthodes de la console d'admin (rôles, sessions d'admin, chiffres du tableau de
+// bord), rangées à part dans `store/admin.rs`. Un module enfant voit les champs
+// privés de `Store`, comme le reste de ce fichier.
+mod admin;
+pub use admin::{DashboardCounts, Role};
+
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -34,7 +40,8 @@ CREATE TABLE IF NOT EXISTS users (
     id {id},
     username TEXT NOT NULL,
     username_norm TEXT NOT NULL UNIQUE,
-    created_at BIGINT NOT NULL
+    created_at BIGINT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'player'
 );
 CREATE TABLE IF NOT EXISTS user_identities (
     id {id},
@@ -85,7 +92,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_identities_one_per_provider
     ON user_identities (user_id, provider);
 CREATE INDEX IF NOT EXISTS friend_requests_to ON friend_requests (to_user);
 CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
-CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_sessions_user ON admin_sessions (user_id)
 ";
 
 /// Migrations d'une version à la suivante : `(version atteinte, instructions)`.
@@ -98,6 +112,12 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (3, ""),
     // Version 4 : une seule identité par fournisseur et par compte (index de `SCHEMA`).
     (4, ""),
+    // Version 5 (ADR 0036) : rôle du compte (`player` ou `admin`) ; la table
+    // `admin_sessions` est créée par `SCHEMA`.
+    (
+        5,
+        "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'player'",
+    ),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.

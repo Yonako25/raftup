@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **19 novembre 2026** (registre de paquets signés branché dans la Bibliothèque, vraie clé ; release `registre` à créer).
+Mis à jour le **19 novembre 2026** (socle de la console d'admin Rafthub, ADR 0036).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -31,7 +31,8 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
-- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, blocages, RGPD (export, suppression), e-mails (vérification, mot de passe oublié, SMTP derrière un trait), connexion Discord (OAuth 2.0 + PKCE) ; SQLite et PostgreSQL, mêmes tests sur les deux ; reste : vrai SMTP et vraie application Discord jamais essayés, changement de pseudo, déploiement
+- [ ] **Hub Rafthub** (binaire `rafthub`, ex-`raftup-hub`) (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, blocages, RGPD (export, suppression), e-mails (vérification, mot de passe oublié, SMTP derrière un trait), connexion Discord (OAuth 2.0 + PKCE) ; SQLite et PostgreSQL, mêmes tests sur les deux ; reste : vrai SMTP et vraie application Discord jamais essayés, changement de pseudo, déploiement
+- [ ] **Console d'admin Rafthub** (ADR 0036, socle fait le 19 novembre 2026) : binaire renommé `rafthub`, console `/admin` en gabarits askama (menu, connexion, tableau de bord avec comptes, en ligne, e-mails non vérifiés, état base/SMTP/Discord), CSS et polices servies par le hub, rôle `admin` (`rafthub admin create|remove <e-mail>`), cookie `rafthub_admin` 12 h haché en base, anti-CSRF, essais limités ; regardée dans le navigateur ; reste les pages Joueurs, Distribution, Réglages, Journaux (« Bientôt » pour l'instant) et la page publique `/telecharger`
 - [x] **Client du hub et écran « Amis »** (ADR 0035, accepté en autonomie le 19 novembre 2026, à relire) : `launcher_core::hub_client` (API `/v1` par `ureq`, sans dépendre du hub), jeton dans le trousseau (`keyring`), adresse par défaut `http://127.0.0.1:8787` modifiable ; écran « Amis » (connexion, inscription, amis et présence, demandes, ajout par pseudo), appels dans un thread à part, présence renvoyée toutes les 60 s ; vu sur captures (macro, scénario `amis`) et essayé contre un vrai `raftup-hub` ; reste la présence « en partie » et l'adresse officielle
 - [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; vraie clé `A3D76747B9BA50E2` (secrète dans `C:\Users\ionak\.raftup-keys`, à sauvegarder hors ligne) ; source `registre/registre.toml` (apworld Slime Rancher) et procédure dans `registre/README.md` ; branché dans la Bibliothèque (jeux en plus marqués « Registre », « Mondes du registre » avec « Installer », échec discret) ; **reste à l'utilisatrice : créer la release GitHub `registre` et y envoyer `index.json` + `index.json.minisig`** (d'ici là : « Registre indisponible »)
 - [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
@@ -57,7 +58,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
-| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe ou Discord, amis, blocages, présence, RGPD ; API HTTP `/v1` (V2) | **Côté serveur fait** : SQLite et PostgreSQL, e-mails et Discord derrière des traits (essayés avec de faux services seulement) ; client dans le launcher (ADR 0035) |
+| `hub` | Rafthub, binaire `rafthub` (AGPL) : comptes e-mail + mot de passe ou Discord, amis, blocages, présence, RGPD ; API HTTP `/v1` (V2) | **Côté serveur fait** : SQLite et PostgreSQL, e-mails et Discord derrière des traits (essayés avec de faux services seulement) ; client dans le launcher (ADR 0035) |
 | `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** (ADR 0032), branché dans la Bibliothèque ; release `registre` à créer |
 
 ## Ce que fait chaque crate

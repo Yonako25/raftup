@@ -52,6 +52,13 @@ pub enum MailError {
 /// `Send + Sync` : l'objet est partagé entre les threads du serveur.
 pub trait Mailer: Send + Sync {
     fn send(&self, email: &Email) -> Result<(), MailError>;
+
+    /// Vrai si ce service envoie vraiment les messages (tableau de bord de la
+    /// console d'admin, ADR 0036). Méthode par défaut : les services la gardent,
+    /// sauf [`DisabledMailer`].
+    fn is_configured(&self) -> bool {
+        true
+    }
 }
 
 /// Envoi réel par SMTP.
@@ -99,6 +106,10 @@ impl Mailer for DisabledMailer {
     fn send(&self, email: &Email) -> Result<(), MailError> {
         tracing::warn!(subject = %email.subject, "envoi d'e-mail désactivé : message abandonné");
         Ok(())
+    }
+
+    fn is_configured(&self) -> bool {
+        false
     }
 }
 

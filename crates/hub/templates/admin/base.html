@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %} · Rafthub</title>
+<link rel="stylesheet" href="/admin/static/rafthub.css">
+</head>
+<body>
+<div class="shell">
+<aside class="sidebar">
+<div class="brand">
+<svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 18 L14 22 L25 18" fill="none" stroke="#3D8BFF" stroke-width="2.2"/><path d="M5 13 L14 16.5 L23 13" fill="none" stroke="#9AA8B6" stroke-width="2.2"/><path d="M14 3 L14 13" stroke="#E6ECF2" stroke-width="2.2"/><path d="M14 4 L21 10 L14 10 Z" fill="#3D8BFF"/></svg>
+<div><div class="brand-name">RAFTHUB</div><div class="muted small">Console d'admin</div></div>
+</div>
+<nav class="menu" aria-label="Menu d'admin">
+<a href="/admin"{% if layout.active == "dashboard" %} aria-current="page"{% endif %}>Tableau de bord</a>
+<a href="/admin/joueurs"{% if layout.active == "players" %} aria-current="page"{% endif %}>Joueurs</a>
+<a href="/admin/distribution"{% if layout.active == "distribution" %} aria-current="page"{% endif %}>Distribution du launcher</a>
+<a href="/admin/reglages"{% if layout.active == "settings" %} aria-current="page"{% endif %}>Réglages</a>
+<a href="/admin/journaux"{% if layout.active == "logs" %} aria-current="page"{% endif %}>Journaux</a>
+</nav>
+<div class="sidebar-foot">
+<div>Rafthub {{ layout.version }}</div>
+<div>Connecté : {{ layout.username }}</div>
+<form method="post" action="/admin/logout">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<button type="submit" class="link-button">Se déconnecter</button>
+</form>
+</div>
+</aside>
+<main class="content">
+{% block content %}{% endblock %}
+</main>
+</div>
+</body>
+</html>

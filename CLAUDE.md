@@ -31,7 +31,7 @@ crates/
   launcher-core/   catalogue, profils d'installation, installation des mods, lancement des jeux
   launcher-ui/     application egui (ne dépend que de launcher-core)
   logic/  fill/  worlds-native/  generate/   → V2 et V3, ne pas créer avant
-  hub/             service raftup-hub : comptes, amis, présence (AGPL, après le MVP, ne pas créer avant)
+  hub/             Rafthub (binaire `rafthub`) : comptes, amis, présence, console d'admin /admin (AGPL)
 profiles/          profils d'installation déclaratifs, un fichier TOML par jeu
 docs/              SPEC.md, décisions d'architecture (docs/adr/)
 ```

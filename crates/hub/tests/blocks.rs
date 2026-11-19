@@ -177,6 +177,11 @@ async fn base_en_version_1_migree() {
         .execute(&raw)
         .await
         .unwrap();
+    // La colonne `role` n'arrive qu'en version 5 (ADR 0036) : la migration la rajoute.
+    sqlx::query("ALTER TABLE users DROP COLUMN role")
+        .execute(&raw)
+        .await
+        .unwrap();
     sqlx::query("UPDATE schema_version SET version = 1")
         .execute(&raw)
         .await

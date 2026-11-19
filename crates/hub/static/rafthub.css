@@ -1,0 +1,157 @@
+/* Rafthub, console d'admin (ADR 0036).
+   Identité visuelle de la SPEC : acier, bleu électrique, angles de 2 px au plus,
+   fond dégradé et panneaux semi-transparents ; Chakra Petch pour les titres, Inter
+   pour le reste. Polices servies par le hub lui-même (licence OFL, voir fonts/). */
+
+@font-face { font-family: "Inter"; src: url("fonts/Inter.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("fonts/Inter-SemiBold.ttf") format("truetype"); font-weight: 500 700; font-display: swap; }
+@font-face { font-family: "Chakra Petch"; src: url("fonts/ChakraPetch-SemiBold.ttf") format("truetype"); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: "Chakra Petch"; src: url("fonts/ChakraPetch-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+
+:root {
+  --bg: #0B1015;
+  --bg-top: #0E141B;
+  --sidebar: rgba(8, 12, 16, 0.7);
+  --panel: rgba(22, 30, 39, 0.72);
+  --border: #2A3644;
+  --line: #222D39;
+  --text: #E6ECF2;
+  --muted: #9AA8B6;
+  --menu: #B4C0CC;
+  --accent: #1F6FE0;
+  --accent-bright: #3D8BFF;
+  --link: #7DB8FF;
+  --link-hover: #B5D6FF;
+  --ok: #3FD18B;
+  --warn: #E8A33D;
+  --off: #5A6876;
+  --danger: #F06A6A;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 15px;
+  color: var(--text);
+  background:
+    radial-gradient(1000px 500px at 90% -15%, rgba(31, 111, 224, 0.26), transparent 60%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 100%);
+  background-attachment: fixed;
+}
+
+a { color: var(--link); }
+a:hover { color: var(--link-hover); }
+code { font-size: 13px; color: var(--text); }
+
+h1 { margin: 0 0 4px; font-family: "Chakra Petch", sans-serif; font-weight: 600; font-size: 32px; }
+
+.muted { color: var(--muted); margin: 0; }
+.small { font-size: 13px; }
+.strong { font-weight: 600; font-size: 14px; }
+.grow { flex: 1; min-width: 0; }
+
+/* ---------- Mise en page : menu à gauche, contenu à droite ---------- */
+
+.shell { min-height: 100vh; display: flex; flex-wrap: wrap; align-items: stretch; }
+
+.sidebar {
+  flex: 1 1 240px; max-width: 260px; min-width: 220px;
+  background: var(--sidebar); border-right: 1px solid #1F2A36;
+  padding: 20px 14px; display: flex; flex-direction: column; gap: 4px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
+.brand-name { font-family: "Chakra Petch", sans-serif; font-weight: 700; font-size: 18px; letter-spacing: 0.04em; }
+
+.menu { display: flex; flex-direction: column; gap: 2px; }
+.menu a {
+  text-decoration: none; color: var(--menu);
+  padding: 11px 14px; border-radius: 2px; font-size: 15px;
+  border-left: 2px solid transparent;
+}
+.menu a:hover { color: #FFFFFF; background: rgba(31, 111, 224, 0.08); }
+.menu a[aria-current="page"] {
+  color: #FFFFFF; background: rgba(31, 111, 224, 0.18);
+  border-left-color: var(--accent-bright); font-weight: 600;
+}
+
+.sidebar-foot {
+  margin-top: auto; padding: 14px 12px 0; border-top: 1px solid #1F2A36;
+  font-size: 13px; color: var(--muted); line-height: 1.5;
+}
+
+.link-button {
+  margin-top: 6px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: var(--link); text-decoration: underline;
+}
+.link-button:hover { color: var(--link-hover); }
+
+.content {
+  flex: 999 1 640px; min-width: 0; padding: 28px 32px 56px;
+  display: flex; flex-direction: column; gap: 22px;
+}
+
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* ---------- Éléments ---------- */
+
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--accent); color: #FFFFFF; text-decoration: none;
+  padding: 11px 16px; border: 0; border-radius: 2px;
+  font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.button:hover { background: var(--accent-bright); color: #FFFFFF; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 2px; padding: 18px; }
+.card-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.card-value { font-family: "Chakra Petch", sans-serif; font-size: 34px; font-weight: 600; }
+.card-note { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 2px; }
+.panel h2 {
+  margin: 0; padding: 16px 18px; font-size: 13px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--link);
+  border-bottom: 1px solid var(--line);
+}
+
+.row { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row-title { font-weight: 500; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--off); }
+.dot-ok { background: var(--ok); }
+.dot-warn { background: var(--warn); }
+.dot-off { background: var(--off); }
+
+/* ---------- Connexion et pages d'erreur ---------- */
+
+.center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.login { width: 100%; max-width: 400px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.login .brand { padding: 0 0 6px; }
+
+.form { display: flex; flex-direction: column; gap: 8px; }
+.form label { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.form input {
+  font: inherit; color: var(--text); background: rgba(8, 12, 16, 0.6);
+  border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px;
+}
+.form input:focus { outline: 2px solid var(--accent-bright); outline-offset: 0; border-color: transparent; }
+.form .button { margin-top: 12px; }
+
+.alert {
+  margin: 0; padding: 10px 12px; border-radius: 2px; font-size: 14px;
+  background: rgba(240, 106, 106, 0.12); border: 1px solid rgba(240, 106, 106, 0.5); color: #FFD5D5;
+}
+
+/* Téléphone : le menu passe au-dessus du contenu. */
+@media (max-width: 700px) {
+  .sidebar { max-width: none; flex-basis: 100%; border-right: 0; border-bottom: 1px solid #1F2A36; }
+  .content { padding: 20px 16px 40px; }
+}

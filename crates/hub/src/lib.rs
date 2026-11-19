@@ -1,9 +1,11 @@
-//! `raftup-hub` : comptes, amis et présence des joueurs de Raftup (ADR 0002, 0033).
+//! Rafthub (binaire `rafthub`) : comptes, amis et présence des joueurs de Raftup
+//! (ADR 0002, 0033), et sa console d'admin web sous `/admin` (ADR 0036).
 //!
 //! Licence : **AGPL-3.0-or-later** (ADR 0003), contrairement au reste du dépôt.
 //! Aucune crate MIT/Apache ne dépend de celle-ci.
 //!
-//! L'API HTTP est versionnée (`/v1/...`) et parle JSON. Voir [`api`] pour les routes.
+//! L'API HTTP est versionnée (`/v1/...`) et parle JSON. Voir [`api`] pour les routes,
+//! et [`web`] pour les pages de la console d'admin.
 //! Pas encore fait (ADR 0033) : changement de pseudo, refus de toutes les demandes.
 
 pub mod api;
@@ -15,6 +17,7 @@ pub mod memory;
 pub mod password;
 pub mod session;
 pub mod store;
+pub mod web;
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -55,6 +58,8 @@ pub struct HubConfig {
     pub oauth_ttl: Duration,
     /// Connexions Discord en attente gardées au plus en mémoire.
     pub oauth_max_pending: usize,
+    /// Durée de vie d'une session de la console d'admin (12 h, ADR 0036).
+    pub admin_session_lifetime: Duration,
 }
 
 impl Default for HubConfig {
@@ -73,6 +78,7 @@ impl Default for HubConfig {
             mail_window: Duration::from_secs(3600),
             oauth_ttl: Duration::from_secs(10 * 60),
             oauth_max_pending: 10_000,
+            admin_session_lifetime: Duration::from_secs(12 * 3600),
         }
     }
 }
@@ -101,6 +107,9 @@ struct Inner {
     config: HubConfig,
     presence: PresenceBoard,
     login_limiter: RateLimiter,
+    /// Échecs de connexion à la console d'admin, par adresse e-mail. À part de
+    /// `login_limiter` : bloquer l'API d'un joueur ne bloque pas la console.
+    admin_login_limiter: RateLimiter,
     friend_limiter: RateLimiter,
     /// Limite les e-mails envoyés à une même adresse (ou pour un même compte).
     mail_limiter: RateLimiter,
@@ -147,6 +156,10 @@ impl AppState {
             inner: Arc::new(Inner {
                 presence: PresenceBoard::new(config.presence_ttl),
                 login_limiter: RateLimiter::new(config.login_max_failures, config.login_window),
+                admin_login_limiter: RateLimiter::new(
+                    config.login_max_failures,
+                    config.login_window,
+                ),
                 friend_limiter: RateLimiter::new(
                     config.friend_requests_per_minute,
                     Duration::from_secs(60),
