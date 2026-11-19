@@ -31,7 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
-- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
+- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, blocages, RGPD (export, suppression), e-mails (vérification, mot de passe oublié, SMTP derrière un trait), connexion Discord (OAuth 2.0 + PKCE) ; SQLite et PostgreSQL, mêmes tests sur les deux ; reste : vrai SMTP et vraie application Discord jamais essayés, client et panneau d'amis du launcher, changement de pseudo, déploiement
 - [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; vraie clé `A3D76747B9BA50E2` (secrète dans `C:\Users\ionak\.raftup-keys`, à sauvegarder hors ligne) ; source `registre/registre.toml` (apworld Slime Rancher) et procédure dans `registre/README.md` ; branché dans la Bibliothèque (jeux en plus marqués « Registre », « Mondes du registre » avec « Installer », échec discret) ; **reste à l'utilisatrice : créer la release GitHub `registre` et y envoyer `index.json` + `index.json.minisig`** (d'ici là : « Registre indisponible »)
 - [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
 - [x] **Bac à sable du générateur** (V2, ADR 0034, 19 novembre 2026) : worker en intégrité basse sous Windows, activé par défaut, refus s'il n'est pas appliqué ; tests réels de génération et d'export passent avec ; hors Windows, repli sans bac à sable
@@ -56,7 +56,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
-| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe, amis, présence ; API HTTP `/v1` (V2) | **Commencé** : SQLite seul, pas de Discord ni de client dans le launcher (ADR 0033) |
+| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe ou Discord, amis, blocages, présence, RGPD ; API HTTP `/v1` (V2) | **Côté serveur fait** : SQLite et PostgreSQL, e-mails et Discord derrière des traits (essayés avec de faux services seulement) ; pas de client dans le launcher (ADR 0033) |
 | `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** (ADR 0032), branché dans la Bibliothèque ; release `registre` à créer |
 
 ## Ce que fait chaque crate
@@ -143,7 +143,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 - **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
-- **0033** : `raftup-hub` : axum, sqlx + SQLite (PostgreSQL prévu), jetons de session opaques hachés et révocables (accepté en autonomie, à relire)
+- **0033** : `raftup-hub` : axum, sqlx `Any` (SQLite et PostgreSQL), jetons de session opaques hachés et révocables, blocages, RGPD, e-mails (`lettre`), Discord OAuth 2.0 + PKCE (accepté en autonomie, ajouts à relire)
 - **0032** : registre de paquets signés : index JSON versionné (URL + sha256), une signature minisign pour l'index, clé distincte des mises à jour, catalogue embarqué prioritaire (accepté en autonomie, à relire)
 - **0034** : bac à sable du générateur : sous Windows, worker en intégrité basse (copie de `python.exe` étiquetée par `icacls`), écriture seulement dans le dossier de la génération ; rien hors Windows (à relire par l'utilisatrice)
 - **0029** : moteur « export » : règles d'objet en listes calculées par Archipelago (contrôle croisé), objets à placer tôt en sphère 0, `accessibility` (accepté en autonomie, à relire)
