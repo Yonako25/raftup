@@ -31,6 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
+- [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
 
 ## Crates
 

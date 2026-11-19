@@ -14,6 +14,15 @@
 //! actuels, l'installation est complète. Chaque dossier est d'abord préparé dans
 //! `<dossier>.partial` puis renommé, donc une coupure ne laisse jamais un dossier à moitié rempli
 //! sous son vrai nom.
+//!
+//! **Windows seulement pour l'instant (NF11).** Les pins visent Python pour
+//! `x86_64-pc-windows-msvc` et la disposition ci-dessus (`python.exe` à la racine) est celle
+//! de cette archive ; sous Linux et macOS, python-build-standalone range l'exécutable dans
+//! `bin/python3`. Le code compile et ses tests passent partout, mais un vrai runtime installé
+//! hors Windows ne démarrerait pas. Repli hors Windows : le moteur Rust seul (ADR 0027), qui
+//! génère sans Python. Pour ouvrir un autre système : un bloc `[python]` par cible dans
+//! `generator-pins.toml` (sha256 relevés sur les vrais fichiers) et un chemin d'exécutable
+//! choisi par `cfg`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
