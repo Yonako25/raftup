@@ -6,9 +6,14 @@
 //! | `POST /v1/accounts` | inscription (`email`, `password`, `username`) |
 //! | `POST /v1/sessions` | connexion (`email`, `password`) → jeton |
 //! | `DELETE /v1/sessions/current` | déconnexion (révoque le jeton) |
-//! | `GET /v1/me` | compte connecté |
+//! | `GET /v1/me` | compte connecté (avec `email_verified`) |
 //! | `GET /v1/me/export` | toutes les données du compte, en JSON (RGPD) |
 //! | `DELETE /v1/me` | supprime le compte (`password` si le compte en a un) |
+//! | `POST /v1/email/verify` | vérifie l'adresse (`token` reçu par e-mail) |
+//! | `GET /v1/email/verify?token=…` | même chose, depuis le lien du message (réponse en texte) |
+//! | `POST /v1/email/verify/resend` | renvoie le message de vérification |
+//! | `POST /v1/password/forgot` | envoie un code de réinitialisation (`email`) ; répond toujours 202 |
+//! | `POST /v1/password/reset` | nouveau mot de passe (`token`, `password`) ; ferme toutes les sessions |
 //! | `PUT /v1/presence` | sa présence (`status`, `game`) |
 //! | `GET /v1/friends` | amis et leur présence |
 //! | `DELETE /v1/friends/{username}` | retirer un ami |
@@ -21,10 +26,11 @@
 //! | `POST /v1/blocks` | bloquer (`username`) : retire l'amitié et les demandes |
 //! | `DELETE /v1/blocks/{username}` | lever un blocage |
 //!
-//! Les routes sauf `/v1`, l'inscription et la connexion demandent l'en-tête
+//! Les routes sauf `/v1`, l'inscription, la connexion, la vérification d'adresse et
+//! le mot de passe oublié demandent l'en-tête
 //! `Authorization: Bearer <jeton>`.
 
-use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Path, State};
+use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
 use axum::http::{header, StatusCode};
 use axum::routing::{delete, get, post, put};
@@ -34,10 +40,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::HubError;
 use crate::identity::{normalize_email, normalize_username, parse_username};
+use crate::mail::{password_reset_email, verification_email};
 use crate::memory::{PresenceView, Status};
 use crate::password::{hash_password, verify_password, Password};
 use crate::session::{new_token, token_hash};
-use crate::store::{AccountExport, UserRow};
+use crate::store::{AccountExport, TokenPurpose, UserRow};
 use crate::{blocking, now_unix, AppState};
 
 /// Version de l'API, renvoyée par `GET /v1`.
@@ -56,6 +63,13 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/sessions/current", delete(logout))
         .route("/v1/me", get(me).delete(delete_account))
         .route("/v1/me/export", get(export_account))
+        .route(
+            "/v1/email/verify",
+            post(verify_email).get(verify_email_link),
+        )
+        .route("/v1/email/verify/resend", post(resend_verification))
+        .route("/v1/password/forgot", post(forgot_password))
+        .route("/v1/password/reset", post(reset_password))
         .route("/v1/presence", put(set_presence))
         .route("/v1/friends", get(list_friends))
         .route("/v1/friends/{username}", delete(remove_friend))
@@ -147,6 +161,38 @@ pub struct MeView {
     pub user_id: i64,
     pub username: String,
     pub email: Option<String>,
+    /// Vrai quand l'adresse a été confirmée par le lien du message.
+    pub email_verified: bool,
+}
+
+/// Jeton reçu par e-mail. `Debug` masqué : le jeton est un secret.
+#[derive(Deserialize)]
+pub struct TokenBody {
+    pub token: String,
+}
+
+impl std::fmt::Debug for TokenBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TokenBody(***)")
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailBody {
+    pub email: String,
+}
+
+/// Nouveau mot de passe après « mot de passe oublié ».
+#[derive(Deserialize)]
+pub struct ResetBody {
+    pub token: String,
+    pub password: Password,
+}
+
+impl std::fmt::Debug for ResetBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ResetBody(***)")
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -286,6 +332,7 @@ async fn register(
         .await?;
     // Ni l'adresse ni le mot de passe dans le journal (NF09, RGPD).
     tracing::info!(user_id, "compte créé");
+    send_verification(&state, user_id, &email, &username.display).await?;
     Ok((
         StatusCode::CREATED,
         Json(AccountView {
@@ -361,11 +408,13 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeView
         .user_by_id(user.user_id)
         .await?
         .ok_or(HubError::Unauthorized)?;
-    let email = state.store().email_of(user.user_id).await?;
+    let status = state.store().email_status(user.user_id).await?;
+    let email_verified = status.as_ref().is_some_and(|(_, verified)| *verified);
     Ok(Json(MeView {
         user_id: row.id,
         username: row.username,
-        email,
+        email: status.map(|(email, _)| email),
+        email_verified,
     }))
 }
 
@@ -636,5 +685,193 @@ async fn delete_account(
     store.delete_account(user.user_id).await?;
     state.inner.presence.clear(user.user_id);
     tracing::info!(user_id = user.user_id, "compte supprimé");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- E-mails : vérification d'adresse, mot de passe oublié ----------
+
+/// Durée en secondes, bornée pour tenir dans un `i64`.
+fn seconds(duration: std::time::Duration) -> i64 {
+    i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+}
+
+/// Crée un jeton à usage unique, garde son empreinte en base et renvoie le jeton
+/// en clair (il ne part que dans l'e-mail).
+async fn new_email_token(
+    state: &AppState,
+    user_id: i64,
+    purpose: TokenPurpose,
+    lifetime: std::time::Duration,
+) -> Result<String, HubError> {
+    let token = new_token();
+    let now = now_unix();
+    state
+        .store()
+        .insert_email_token(
+            &token_hash(&token),
+            user_id,
+            purpose,
+            now,
+            now.saturating_add(seconds(lifetime)),
+        )
+        .await?;
+    Ok(token)
+}
+
+/// Envoie le message de vérification d'adresse.
+async fn send_verification(
+    state: &AppState,
+    user_id: i64,
+    email: &str,
+    username: &str,
+) -> Result<(), HubError> {
+    let lifetime = state.inner.config.email_verify_lifetime;
+    let token = new_email_token(state, user_id, TokenPurpose::VerifyEmail, lifetime).await?;
+    let link = format!(
+        "{}/v1/email/verify?token={token}",
+        state.inner.config.public_url.trim_end_matches('/')
+    );
+    state.send_mail(verification_email(
+        email,
+        username,
+        &link,
+        lifetime.as_secs() / 3600,
+    ));
+    Ok(())
+}
+
+/// Vérifie l'adresse avec le jeton du message.
+async fn check_verification_token(state: &AppState, token: &str) -> Result<i64, HubError> {
+    let user_id = state
+        .store()
+        .consume_email_token(
+            &token_hash(token.trim()),
+            TokenPurpose::VerifyEmail,
+            now_unix(),
+        )
+        .await?
+        .ok_or(HubError::InvalidToken)?;
+    state.store().mark_email_verified(user_id).await?;
+    tracing::info!(user_id, "adresse e-mail vérifiée");
+    Ok(user_id)
+}
+
+async fn verify_email(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<TokenBody>,
+) -> Result<StatusCode, HubError> {
+    check_verification_token(&state, &body.token).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Lien cliqué dans le message : le navigateur affiche une phrase, pas du JSON.
+async fn verify_email_link(
+    State(state): State<AppState>,
+    Query(query): Query<std::collections::BTreeMap<String, String>>,
+) -> (StatusCode, &'static str) {
+    let Some(token) = query.get("token") else {
+        return (StatusCode::BAD_REQUEST, "Lien incomplet.");
+    };
+    match check_verification_token(&state, token).await {
+        Ok(_) => (
+            StatusCode::OK,
+            "Adresse vérifiée. Vous pouvez fermer cette page et revenir au launcher Raftup.",
+        ),
+        Err(HubError::InvalidToken) => (
+            StatusCode::BAD_REQUEST,
+            "Lien invalide, expiré ou déjà utilisé. Demandez un nouveau message depuis le launcher.",
+        ),
+        Err(error) => {
+            tracing::error!(%error, "vérification d'adresse");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Erreur interne du hub.")
+        }
+    }
+}
+
+async fn resend_verification(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<StatusCode, HubError> {
+    let (email, verified) =
+        state
+            .store()
+            .email_status(user.user_id)
+            .await?
+            .ok_or(HubError::BadRequest(
+                "ce compte n'a pas d'adresse e-mail".to_string(),
+            ))?;
+    if verified {
+        return Err(HubError::AlreadyVerified);
+    }
+    if !state
+        .inner
+        .mail_limiter
+        .hit(&format!("verify:{}", user.user_id))
+    {
+        return Err(HubError::TooManyAttempts);
+    }
+    let username = state
+        .store()
+        .user_by_id(user.user_id)
+        .await?
+        .ok_or(HubError::Unauthorized)?
+        .username;
+    send_verification(&state, user.user_id, &email, &username).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+/// « Mot de passe oublié ». Répond toujours `202 Accepted`, que l'adresse ait un
+/// compte ou non, et même au-delà de la limite d'envoi : la réponse ne dit pas
+/// quelles adresses sont inscrites.
+async fn forgot_password(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<EmailBody>,
+) -> Result<StatusCode, HubError> {
+    let email = normalize_email(&body.email)?;
+    if !state.inner.mail_limiter.hit(&format!("reset:{email}")) {
+        tracing::info!("mot de passe oublié : limite d'envoi atteinte");
+        return Ok(StatusCode::ACCEPTED);
+    }
+    if let Some((user_id, _)) = state.store().email_identity(&email).await? {
+        let username = state
+            .store()
+            .user_by_id(user_id)
+            .await?
+            .map(|row| row.username)
+            .unwrap_or_default();
+        let lifetime = state.inner.config.password_reset_lifetime;
+        let token = new_email_token(&state, user_id, TokenPurpose::ResetPassword, lifetime).await?;
+        state.send_mail(password_reset_email(
+            &email,
+            &username,
+            &token,
+            lifetime.as_secs() / 60,
+        ));
+        tracing::info!(user_id, "code de réinitialisation envoyé");
+    }
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn reset_password(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<ResetBody>,
+) -> Result<StatusCode, HubError> {
+    // Mot de passe vérifié d'abord : un mot de passe trop court ne gâche pas le code.
+    body.password.validate()?;
+    let user_id = state
+        .store()
+        .consume_email_token(
+            &token_hash(body.token.trim()),
+            TokenPurpose::ResetPassword,
+            now_unix(),
+        )
+        .await?
+        .ok_or(HubError::InvalidToken)?;
+    let params = state.inner.config.hash_params;
+    let password = body.password;
+    let hash = blocking(move || hash_password(&password, &params)).await?;
+    state.store().reset_password(user_id, &hash).await?;
+    state.inner.presence.clear(user_id);
+    tracing::info!(user_id, "mot de passe réinitialisé, sessions fermées");
     Ok(StatusCode::NO_CONTENT)
 }

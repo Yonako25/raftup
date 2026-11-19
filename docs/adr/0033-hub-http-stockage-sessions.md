@@ -63,6 +63,17 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 - **Suppression** : `DELETE /v1/me`. Un compte avec mot de passe doit le redonner (`{"password": …}`) : une session volée ne suffit pas. Les échecs comptent dans la limite de la connexion (10 en 15 minutes). La suppression efface la ligne de `users` ; toutes les autres tables suivent par `ON DELETE CASCADE`. Elle est immédiate et définitive (pas de délai de grâce) ; le pseudo et l'adresse redeviennent libres tout de suite (pas de pseudo gardé en réserve, à revoir avec le changement de pseudo de l'ADR 0002).
 - Le journal du hub ne garde que l'identifiant du compte (« compte supprimé »), sans pseudo ni adresse.
 
+### E-mails : vérification d'adresse et mot de passe oublié (ajout du 19 novembre 2026, à relire)
+
+- **Envoi derrière un trait** `Mailer` (`mail.rs`), synchrone, appelé sur un thread à part (`spawn_blocking`) **après** la réponse HTTP : la réponse ne dépend ni du serveur SMTP ni de l'existence de l'adresse. Trois implémentations : `SmtpMailer` (vrai envoi), `MemoryMailer` (tests), `DisabledMailer` (pas de SMTP réglé : message abandonné, avertissement au journal). Un échec d'envoi ne laisse qu'un avertissement.
+- **SMTP** : crate **`lettre` 0.11** (MIT), transport synchrone, TLS par rustls + ring (comme le reste du dépôt), certificats racines `webpki-roots`. Réglage par l'environnement (`RAFTUP_HUB_SMTP_URL`, `RAFTUP_HUB_MAIL_FROM`), jamais en argument (visible dans la liste des process). Les erreurs de `lettre` sont remplacées par des erreurs sans détail (elles pourraient recopier l'URL et son mot de passe). Fournisseur SMTP à choisir au déploiement (hébergé en Europe, ADR 0002).
+- **Jetons à usage unique** : table `email_tokens` (schéma version 3) : empreinte SHA-256 du jeton (32 octets aléatoires, comme les sessions), compte, usage (`verify_email` ou `reset_password`), date d'expiration. Un jeton ne sert qu'à son usage. Consommation en une requête `DELETE … RETURNING` : deux requêtes simultanées ne réussissent pas toutes les deux. Un nouveau message annule le jeton précédent du même usage. Jetons expirés retirés par le ménage horaire.
+- **Vérification d'adresse** : message envoyé à l'inscription, lien `<public_url>/v1/email/verify?token=…` valable 24 h (réponse en texte pour le navigateur), aussi `POST /v1/email/verify` (`token`) ; `POST /v1/email/verify/resend` pour un nouveau message. `GET /v1/me` dit `email_verified`. Une adresse non vérifiée n'empêche pas encore la connexion.
+- **Mot de passe oublié** : `POST /v1/password/forgot` (`email`) répond toujours `202`, adresse connue ou non, limite atteinte ou non. Le message contient un code valable 1 h et le lien profond `raftup://password-reset?token=…` (le hub n'a pas de page web). `POST /v1/password/reset` (`token`, `password`) : mot de passe vérifié avant de consommer le code ; nouveau hash, adresse marquée vérifiée, **toutes les sessions fermées**.
+- Limite : 3 messages par heure et par adresse (mot de passe oublié) ou par compte (renvoi de la vérification).
+- `--public-url` donne l'adresse publique du hub pour les liens (par défaut `http://127.0.0.1:8787`).
+- Licences ajoutées (même date) : ISC (`rustls-webpki`, `untrusted`, `ring` avec Apache-2.0), 0BSD (`quoted_printable`), CDLA-Permissive-2.0 (`webpki-roots`, données des certificats) ; compatibles avec l'AGPL.
+
 ### Licences des dépendances (vérifiées le 19 novembre 2026, `cargo tree -p hub -e normal,build`)
 
 Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-Clause (`subtle`, `matchit`), Zlib (`foldhash`), Unicode-3.0 (`icu_*`, `zerovec`…, via `idna` de `url`), Unlicense OR MIT (`memchr`), Apache-2.0 OR BSL-1.0 (`ryu`). Aucune dépendance sous GPL, LGPL ou licence propriétaire. Revérifié après l'ajout de PostgreSQL (même date) : en plus, BSD-2-Clause OR Apache-2.0 OR MIT, Zlib OR Apache-2.0 OR MIT, MIT AND BSD-3-Clause ; toujours compatibles.
@@ -70,7 +81,7 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 ## Pas encore fait (à prévoir)
 
 - **Discord** (OAuth 2.0 + PKCE) : pas pour l'instant ; la table `user_identities` est prête pour un fournisseur `discord`.
-- Vérification de l'adresse par lien, « mot de passe oublié » : demandent un service d'envoi d'e-mails. Tant qu'ils manquent, l'inscription révèle qu'une adresse a déjà un compte (`email_taken`).
+- L'inscription révèle toujours qu'une adresse a déjà un compte (`email_taken`) : à remplacer par un message « vous avez déjà un compte » envoyé à l'adresse, quand le launcher saura l'afficher. Connexion refusée tant que l'adresse n'est pas vérifiée : pas encore.
 - Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
 - RGPD : hébergement en Europe, politique de confidentialité, sauvegardes purgées des comptes supprimés.
 - Côté launcher : client du hub, jeton rangé dans le trousseau (`keyring`), panneau d'amis.

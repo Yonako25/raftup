@@ -19,7 +19,7 @@ use crate::error::HubError;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -73,6 +73,14 @@ CREATE TABLE IF NOT EXISTS blocks (
     CHECK (blocker <> blocked)
 );
 CREATE INDEX IF NOT EXISTS blocks_blocked ON blocks (blocked);
+CREATE TABLE IF NOT EXISTS email_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    purpose TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS email_tokens_user ON email_tokens (user_id);
 CREATE INDEX IF NOT EXISTS friend_requests_to ON friend_requests (to_user);
 CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
@@ -84,6 +92,8 @@ CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
 const MIGRATIONS: &[(i64, &str)] = &[
     // Version 2 : table `blocks`, créée par `SCHEMA`.
     (2, ""),
+    // Version 3 : table `email_tokens`, créée par `SCHEMA`.
+    (3, ""),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.
@@ -94,6 +104,22 @@ const EMAIL_PROVIDER: &str = "email";
 pub struct UserRow {
     pub id: i64,
     pub username: String,
+}
+
+/// Usage d'un jeton envoyé par e-mail. Un jeton ne sert qu'à son usage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TokenPurpose {
+    VerifyEmail,
+    ResetPassword,
+}
+
+impl TokenPurpose {
+    fn as_str(self) -> &'static str {
+        match self {
+            TokenPurpose::VerifyEmail => "verify_email",
+            TokenPurpose::ResetPassword => "reset_password",
+        }
+    }
 }
 
 /// Moyen de connexion, tel que l'export RGPD le montre (jamais le hash du secret).
@@ -771,12 +797,135 @@ impl Store {
              (SELECT COUNT(*) FROM sessions WHERE user_id = $1) + \
              (SELECT COUNT(*) FROM friend_requests WHERE from_user = $1 OR to_user = $1) + \
              (SELECT COUNT(*) FROM friendships WHERE user_a = $1 OR user_b = $1) + \
-             (SELECT COUNT(*) FROM blocks WHERE blocker = $1 OR blocked = $1) AS total",
+             (SELECT COUNT(*) FROM blocks WHERE blocker = $1 OR blocked = $1) + \
+             (SELECT COUNT(*) FROM email_tokens WHERE user_id = $1) AS total",
         )
         .bind(user_id)
         .fetch_one(&self.pool)
         .await?;
         Ok(row.try_get("total")?)
+    }
+}
+
+impl Store {
+    /// Adresse e-mail d'un compte et si elle est vérifiée.
+    pub async fn email_status(&self, user_id: i64) -> Result<Option<(String, bool)>, HubError> {
+        let row = sqlx::query(
+            "SELECT subject, verified FROM user_identities WHERE user_id = $1 AND provider = $2 \
+             ORDER BY id",
+        )
+        .bind(user_id)
+        .bind(EMAIL_PROVIDER)
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some(row) => {
+                let verified: i64 = row.try_get("verified")?;
+                Ok(Some((row.try_get("subject")?, verified != 0)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Enregistre un jeton à usage unique (seule son empreinte est gardée). Les
+    /// jetons précédents du même usage pour ce compte sont retirés : seul le
+    /// dernier message envoyé reste valable.
+    pub async fn insert_email_token(
+        &self,
+        token_hash: &str,
+        user_id: i64,
+        purpose: TokenPurpose,
+        now: i64,
+        expires_at: i64,
+    ) -> Result<(), HubError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM email_tokens WHERE user_id = $1 AND purpose = $2")
+            .bind(user_id)
+            .bind(purpose.as_str())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO email_tokens (token_hash, user_id, purpose, created_at, expires_at) \
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(token_hash)
+        .bind(user_id)
+        .bind(purpose.as_str())
+        .bind(now)
+        .bind(expires_at)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Consomme un jeton : le supprime et renvoie son compte, s'il existe, a le bon
+    /// usage et n'a pas expiré. Une seule requête (`DELETE … RETURNING`) : deux
+    /// requêtes simultanées avec le même jeton ne peuvent pas réussir toutes les deux.
+    pub async fn consume_email_token(
+        &self,
+        token_hash: &str,
+        purpose: TokenPurpose,
+        now: i64,
+    ) -> Result<Option<i64>, HubError> {
+        let row = sqlx::query(
+            "DELETE FROM email_tokens WHERE token_hash = $1 AND purpose = $2 AND expires_at > $3 \
+             RETURNING user_id",
+        )
+        .bind(token_hash)
+        .bind(purpose.as_str())
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(|r| r.try_get("user_id"))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    /// Retire les jetons expirés ; renvoie le nombre de lignes supprimées.
+    pub async fn purge_expired_email_tokens(&self, now: i64) -> Result<u64, HubError> {
+        let result = sqlx::query("DELETE FROM email_tokens WHERE expires_at <= $1")
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// Marque l'adresse e-mail d'un compte comme vérifiée.
+    pub async fn mark_email_verified(&self, user_id: i64) -> Result<(), HubError> {
+        sqlx::query("UPDATE user_identities SET verified = 1 WHERE user_id = $1 AND provider = $2")
+            .bind(user_id)
+            .bind(EMAIL_PROVIDER)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Nouveau mot de passe, en une transaction : nouveau hash, adresse vérifiée (le
+    /// joueur a lu le message), toutes les sessions fermées (celles d'un éventuel
+    /// voleur aussi) et jetons de réinitialisation restants retirés.
+    pub async fn reset_password(&self, user_id: i64, password_hash: &str) -> Result<(), HubError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "UPDATE user_identities SET secret_hash = $1, verified = 1 \
+             WHERE user_id = $2 AND provider = $3",
+        )
+        .bind(password_hash)
+        .bind(user_id)
+        .bind(EMAIL_PROVIDER)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM email_tokens WHERE user_id = $1 AND purpose = $2")
+            .bind(user_id)
+            .bind(TokenPurpose::ResetPassword.as_str())
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
     }
 }
 

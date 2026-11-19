@@ -45,6 +45,10 @@ pub enum HubError {
     YouBlocked,
     #[error("ce joueur n'est pas bloqué")]
     BlockNotFound,
+    #[error("lien ou code invalide, expiré ou déjà utilisé")]
+    InvalidToken,
+    #[error("adresse e-mail déjà vérifiée")]
+    AlreadyVerified,
     #[error("présence invalide : {0}")]
     InvalidPresence(&'static str),
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
@@ -78,6 +82,8 @@ impl HubError {
             HubError::SelfBlock => (StatusCode::BAD_REQUEST, "self_block"),
             HubError::YouBlocked => (StatusCode::CONFLICT, "you_blocked"),
             HubError::BlockNotFound => (StatusCode::NOT_FOUND, "block_not_found"),
+            HubError::InvalidToken => (StatusCode::BAD_REQUEST, "invalid_token"),
+            HubError::AlreadyVerified => (StatusCode::CONFLICT, "already_verified"),
             HubError::InvalidPresence(_) => (StatusCode::BAD_REQUEST, "invalid_presence"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {

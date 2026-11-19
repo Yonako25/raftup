@@ -4,12 +4,12 @@
 //! Aucune crate MIT/Apache ne dépend de celle-ci.
 //!
 //! L'API HTTP est versionnée (`/v1/...`) et parle JSON. Voir [`api`] pour les routes.
-//! Pas encore fait (ADR 0033) : vérification de l'adresse e-mail, mot de passe oublié,
-//! connexion Discord, blocages, changement de pseudo, export et suppression du compte.
+//! Pas encore fait (ADR 0033) : connexion Discord, changement de pseudo.
 
 pub mod api;
 pub mod error;
 pub mod identity;
+pub mod mail;
 pub mod memory;
 pub mod password;
 pub mod session;
@@ -20,6 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub use api::router;
 pub use error::HubError;
+pub use mail::{DisabledMailer, Email, Mailer, MemoryMailer, SmtpMailer};
 pub use password::{HashParams, Password};
 pub use store::Store;
 
@@ -39,6 +40,15 @@ pub struct HubConfig {
     pub login_window: Duration,
     /// Demandes d'ami permises par compte et par minute.
     pub friend_requests_per_minute: u32,
+    /// Adresse publique du hub, pour les liens des e-mails (sans `/` final).
+    pub public_url: String,
+    /// Durée de validité d'un lien de vérification d'adresse.
+    pub email_verify_lifetime: Duration,
+    /// Durée de validité d'un code « mot de passe oublié ».
+    pub password_reset_lifetime: Duration,
+    /// E-mails permis par adresse (ou par compte) dans `mail_window`.
+    pub mails_per_window: u32,
+    pub mail_window: Duration,
 }
 
 impl Default for HubConfig {
@@ -50,6 +60,11 @@ impl Default for HubConfig {
             login_max_failures: 10,
             login_window: Duration::from_secs(15 * 60),
             friend_requests_per_minute: 20,
+            public_url: "http://127.0.0.1:8787".to_string(),
+            email_verify_lifetime: Duration::from_secs(24 * 3600),
+            password_reset_lifetime: Duration::from_secs(3600),
+            mails_per_window: 3,
+            mail_window: Duration::from_secs(3600),
         }
     }
 }
@@ -79,13 +94,28 @@ struct Inner {
     presence: PresenceBoard,
     login_limiter: RateLimiter,
     friend_limiter: RateLimiter,
+    /// Limite les e-mails envoyés à une même adresse (ou pour un même compte).
+    mail_limiter: RateLimiter,
+    /// Service d'envoi. `Arc<dyn Mailer>` : un objet partagé dont on ne connaît que
+    /// le trait ; le vrai type (SMTP, mémoire…) est choisi au lancement.
+    mailer: Arc<dyn Mailer>,
     /// Hash d'un mot de passe bidon : vérifié quand l'adresse n'existe pas, pour que
     /// la réponse prenne le même temps (on ne devine pas les adresses inscrites).
     dummy_hash: String,
 }
 
 impl AppState {
+    /// État sans envoi d'e-mail ([`DisabledMailer`]).
     pub async fn new(store: Store, config: HubConfig) -> Result<AppState, HubError> {
+        AppState::with_mailer(store, config, Arc::new(DisabledMailer)).await
+    }
+
+    /// État avec un service d'envoi d'e-mails choisi.
+    pub async fn with_mailer(
+        store: Store,
+        config: HubConfig,
+        mailer: Arc<dyn Mailer>,
+    ) -> Result<AppState, HubError> {
         let params = config.hash_params;
         let dummy_hash = blocking(move || {
             password::hash_password(&Password::new("raftup-hub-dummy-password"), &params)
@@ -99,6 +129,8 @@ impl AppState {
                     config.friend_requests_per_minute,
                     Duration::from_secs(60),
                 ),
+                mail_limiter: RateLimiter::new(config.mails_per_window, config.mail_window),
+                mailer,
                 store,
                 config,
                 dummy_hash,
@@ -108,6 +140,19 @@ impl AppState {
 
     pub fn store(&self) -> &Store {
         &self.inner.store
+    }
+
+    /// Envoie un e-mail sans attendre : l'envoi part sur un thread à part et la
+    /// réponse HTTP n'attend pas le serveur SMTP. Elle prend donc le même temps que
+    /// l'adresse existe ou non. Un échec ne laisse qu'un avertissement au journal.
+    fn send_mail(&self, email: Email) {
+        let mailer = Arc::clone(&self.inner.mailer);
+        // Le `JoinHandle` rendu est ignoré : la tâche continue seule.
+        drop(tokio::task::spawn_blocking(move || {
+            if let Err(error) = mailer.send(&email) {
+                tracing::warn!(%error, subject = %email.subject, "e-mail non envoyé");
+            }
+        }));
     }
 }
 
