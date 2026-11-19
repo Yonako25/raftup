@@ -24,7 +24,9 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 
 - **sqlx 0.8** (MIT OR Apache-2.0), requêtes écrites à la main (`sqlx::query`), sans les macros vérifiées à la compilation : elles demandent une base ouverte au moment du build. Les tests d'intégration vérifient les requêtes.
 - **SQLite** (compilé avec `libsqlite3-sys`, MIT ; SQLite est dans le domaine public) pour les tests et le développement : base en mémoire pour les tests, fichier en WAL pour le binaire.
-- **PostgreSQL prévu, pas encore écrit.** Tout le SQL est dans `store.rs`, derrière les méthodes de `Store` ; le reste du hub n'en voit rien. Le SQL est portable (`RETURNING`, `ON CONFLICT ... DO NOTHING`, pas de fonction propre à SQLite). Le jour venu : ajouter la fonction `postgres` de sqlx, et faire de `Store` une énumération `Sqlite | Postgres` (ou passer par `sqlx::Any`). Changeront : les marques de paramètres (`?` → `$1`), `INTEGER PRIMARY KEY` → `BIGINT GENERATED ALWAYS AS IDENTITY`, et les tests de `Store` lancés aussi sur un PostgreSQL de test (`#[ignore]`, variable d'environnement).
+- **PostgreSQL** (ajout du 19 novembre 2026, à relire) : même code pour les deux bases, par le pilote générique **`sqlx::Any`** (fonctions `any`, `sqlite`, `postgres` de sqlx), qui choisit la base d'après l'URL (`sqlite:` ou `postgres://`). Écarté : une énumération `Sqlite | Postgres` (chaque requête écrite deux fois) et du code générique sur `sqlx::Database` (traits trop lourds pour une débutante). Règles du SQL commun : paramètres `$1`, `$2`… (SQLite les accepte et sqlx les lie par leur numéro), entiers en `BIGINT` (`i64`), seule la colonne d'identifiant change (`INTEGER PRIMARY KEY` en SQLite, `BIGINT GENERATED ALWAYS AS IDENTITY` en PostgreSQL). Pas de TLS vers PostgreSQL (aucune fonction `tls-*`) : la base doit être sur la même machine ou un réseau privé. Une URL `sqlite://C:\…` est récrite en `sqlite:C:\…` (le pilote `Any` lit l'URL avec la crate `url`, qui prendrait « C » pour un hôte).
+- Tests : SQLite en mémoire toujours ; avec `RAFTUP_HUB_TEST_POSTGRES=postgres://…`, les tests de `tests/api.rs` tournent sur PostgreSQL, chacun dans un schéma neuf (`search_path`). Les schémas de test ne sont pas supprimés : prendre une base jetable.
+- Migrations : `MIGRATIONS` dans `store.rs` (version atteinte, instructions), appliquées en transaction à l'ouverture d'une base plus ancienne ; les tables nouvelles viennent de `CREATE TABLE IF NOT EXISTS`.
 - Schéma versionné : table `schema_version`, un hub refuse une base plus récente que lui.
 - Tables (ADR 0002) : `users` (pseudo affiché + forme normalisée unique), `user_identities` (fournisseur `email`, adresse normalisée, hash, `verified`), `sessions`, `friend_requests`, `friendships` (paire rangée `user_a < user_b`). Les liens pointent vers l'identifiant du compte, jamais vers le pseudo.
 
@@ -50,7 +52,7 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 
 ### Licences des dépendances (vérifiées le 19 novembre 2026, `cargo tree -p hub -e normal,build`)
 
-Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-Clause (`subtle`, `matchit`), Zlib (`foldhash`), Unicode-3.0 (`icu_*`, `zerovec`…, via `idna` de `url`), Unlicense OR MIT (`memchr`), Apache-2.0 OR BSL-1.0 (`ryu`). Aucune dépendance sous GPL, LGPL ou licence propriétaire.
+Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-Clause (`subtle`, `matchit`), Zlib (`foldhash`), Unicode-3.0 (`icu_*`, `zerovec`…, via `idna` de `url`), Unlicense OR MIT (`memchr`), Apache-2.0 OR BSL-1.0 (`ryu`). Aucune dépendance sous GPL, LGPL ou licence propriétaire. Revérifié après l'ajout de PostgreSQL (même date) : en plus, BSD-2-Clause OR Apache-2.0 OR MIT, Zlib OR Apache-2.0 OR MIT, MIT AND BSD-3-Clause ; toujours compatibles.
 
 ## Pas encore fait (à prévoir)
 
@@ -64,5 +66,5 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 ## Conséquences
 
 - Le hub se lance et se teste sur le PC sans rien installer : `cargo run -p hub --bin raftup-hub`, `cargo test -p hub`.
-- Passer à PostgreSQL ne touche qu'à `store.rs` et à ses tests.
+- PostgreSQL et SQLite partagent tout le SQL de `store.rs` ; un test lancé sur les deux attrape les écarts.
 - Le binaire n'est pas exposable tel quel sur Internet : il lui faut un proxy TLS et les points ci-dessus (e-mails, RGPD) avant une instance publique.

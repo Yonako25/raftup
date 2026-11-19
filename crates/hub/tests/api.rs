@@ -1,5 +1,6 @@
 //! Tests d'intégration de l'API du hub : requêtes HTTP envoyées au routeur,
-//! sans ouvrir de port (`tower::ServiceExt::oneshot`), base SQLite en mémoire.
+//! sans ouvrir de port (`tower::ServiceExt::oneshot`), base SQLite en mémoire
+//! (ou PostgreSQL, voir `common`).
 
 // Les aides des tests paniquent en cas d'erreur : c'est voulu.
 #![allow(clippy::unwrap_used)]
@@ -13,8 +14,10 @@ use hub::{AppState, HubConfig, Store};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
+mod common;
+
 async fn app_with(config: HubConfig) -> Router {
-    let store = Store::in_memory().await.unwrap();
+    let store = common::test_store().await;
     let state = AppState::new(store, config).await.unwrap();
     hub::router(state)
 }
@@ -523,7 +526,7 @@ async fn trop_de_demandes_d_ami() {
 
 #[tokio::test]
 async fn menage_des_sessions_expirees() {
-    let store = Store::in_memory().await.unwrap();
+    let store = common::test_store().await;
     let state = AppState::new(store.clone(), HubConfig::for_tests())
         .await
         .unwrap();

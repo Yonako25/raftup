@@ -4,6 +4,8 @@
 //! raftup-hub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]
 //! ```
 //!
+//! `--db` accepte aussi une base PostgreSQL : `postgres://utilisateur:motdepasse@hote/base`.
+//!
 //! Le hub parle HTTP en clair : en production, il se place derrière un proxy
 //! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
 
@@ -27,6 +29,7 @@ fn parse_args() -> anyhow::Result<Args> {
             "--listen" => args.listen = iter.next().context("--listen attend une adresse")?,
             "--help" | "-h" => {
                 println!("raftup-hub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]");
+                println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
                 std::process::exit(0);
             }
             other => bail!("argument inconnu : {other}"),

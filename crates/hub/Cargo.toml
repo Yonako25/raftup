@@ -21,9 +21,9 @@ path = "src/main.rs"
 [dependencies]
 # Serveur HTTP (MIT), sur tokio comme le reste de Raftup.
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
-# Accès à la base (MIT OR Apache-2.0). SQLite seul pour l'instant (SQLite compilé avec la crate),
-# PostgreSQL prévu (ADR 0033). Pas de macros : les requêtes sont vérifiées par les tests.
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
+# Accès à la base (MIT OR Apache-2.0) : SQLite (compilé avec la crate) et PostgreSQL, derrière
+# le pilote générique `any` (ADR 0033). Pas de macros : les requêtes sont vérifiées par les tests.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres"] }
 # Hachage des mots de passe (argon2id, MIT OR Apache-2.0), sel tiré par le système.
 argon2 = { version = "0.5", features = ["std"] }
 # Forme normalisée des pseudos (NFKC), MIT OR Apache-2.0.

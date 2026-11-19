@@ -1,60 +1,66 @@
 //! Stockage des comptes, sessions et amitiés (ADR 0002, 0033).
 //!
-//! SQLite pour les tests et le développement. Le SQL reste portable vers PostgreSQL
-//! (`RETURNING`, pas de fonction propre à SQLite) ; seules les marques de paramètres
-//! (`?` ici, `$1` en PostgreSQL) et le type des identifiants changeront. Le reste du
-//! hub ne voit que les méthodes de [`Store`] : le jour du PostgreSQL, seul ce fichier
-//! change (ADR 0033).
+//! Deux bases possibles, avec **le même code** : SQLite (tests, développement) et
+//! PostgreSQL (production). On passe par le pilote générique `sqlx::Any`, qui choisit
+//! la base d'après le début de l'URL (`sqlite:` ou `postgres:`).
+//!
+//! Pour que le même SQL marche partout :
+//! - les paramètres s'écrivent `$1`, `$2`… (PostgreSQL les exige, SQLite les accepte) ;
+//! - les entiers sont des `BIGINT` (`i64` côté Rust) ;
+//! - seule la colonne d'identifiant auto-incrémenté diffère ([`Backend::id_column`]).
+//!
+//! Le reste du hub ne voit que les méthodes de [`Store`].
 
-use std::str::FromStr;
-
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
-use sqlx::Row;
+use sqlx::any::{AnyPoolOptions, AnyRow};
+use sqlx::{AnyPool, Row};
 
 use crate::error::HubError;
 
-/// Version du schéma de la base. À augmenter à chaque changement de schéma.
+/// Version du schéma de la base. À augmenter à chaque changement de schéma,
+/// en ajoutant la migration correspondante dans [`MIGRATIONS`].
 pub const SCHEMA_VERSION: i64 = 1;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
 /// pointent vers l'identifiant du compte, jamais vers le pseudo.
+///
+/// `{id}` est remplacé par la colonne d'identifiant propre à chaque base.
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS schema_version (
-    version INTEGER NOT NULL
+    version BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
+    id {id},
     username TEXT NOT NULL,
     username_norm TEXT NOT NULL UNIQUE,
-    created_at INTEGER NOT NULL
+    created_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS user_identities (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id {id},
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider TEXT NOT NULL,
     subject TEXT NOT NULL,
     secret_hash TEXT,
-    verified INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
+    verified BIGINT NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL,
     UNIQUE (provider, subject)
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS friend_requests (
-    from_user INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    to_user INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at INTEGER NOT NULL,
+    from_user BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_user BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
     PRIMARY KEY (from_user, to_user)
 );
 CREATE TABLE IF NOT EXISTS friendships (
-    user_a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at INTEGER NOT NULL,
+    user_a BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_b BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
     PRIMARY KEY (user_a, user_b),
     CHECK (user_a < user_b)
 );
@@ -62,6 +68,11 @@ CREATE INDEX IF NOT EXISTS friend_requests_to ON friend_requests (to_user);
 CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
 ";
+
+/// Migrations d'une version à la suivante : `(version atteinte, instructions)`.
+/// Les tables nouvelles sont déjà créées par [`SCHEMA`] (`IF NOT EXISTS`) ; une
+/// migration ne contient que ce que `SCHEMA` ne sait pas faire (ajout de colonne…).
+const MIGRATIONS: &[(i64, &str)] = &[];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.
 const EMAIL_PROVIDER: &str = "email";
@@ -73,10 +84,42 @@ pub struct UserRow {
     pub username: String,
 }
 
+/// La base derrière le pilote générique.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
+    Sqlite,
+    Postgres,
+}
+
+impl Backend {
+    /// Reconnaît la base d'après le début de l'URL.
+    pub fn from_url(url: &str) -> Result<Backend, HubError> {
+        if url.starts_with("sqlite:") {
+            Ok(Backend::Sqlite)
+        } else if url.starts_with("postgres:") || url.starts_with("postgresql:") {
+            Ok(Backend::Postgres)
+        } else {
+            Err(HubError::Internal(
+                "URL de base inconnue : attendu sqlite:… ou postgres://…".to_string(),
+            ))
+        }
+    }
+
+    /// Colonne d'identifiant auto-incrémenté. En SQLite, `INTEGER PRIMARY KEY` (et
+    /// pas `BIGINT`) est le seul type qui donne un identifiant automatique.
+    fn id_column(self) -> &'static str {
+        match self {
+            Backend::Sqlite => "INTEGER PRIMARY KEY",
+            Backend::Postgres => "BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY",
+        }
+    }
+}
+
 /// Accès à la base. `Clone` est bon marché : le pool est partagé derrière un compteur.
 #[derive(Clone)]
 pub struct Store {
-    pool: SqlitePool,
+    pool: AnyPool,
+    backend: Backend,
 }
 
 /// Paire rangée pour la table `friendships` (`user_a < user_b`).
@@ -88,37 +131,79 @@ fn ordered(a: i64, b: i64) -> (i64, i64) {
     }
 }
 
+/// Récrit une URL SQLite pour le pilote générique.
+///
+/// Le pilote `Any` lit l'URL avec la crate `url` avant de la passer à SQLite. Une
+/// forme `sqlite://C:\dossier\hub.db` y serait lue comme un nom d'hôte « C » suivi
+/// d'un port invalide ; la forme équivalente `sqlite:C:\dossier\hub.db` passe telle
+/// quelle. On ajoute aussi `mode=rwc` (création du fichier s'il manque).
+fn sqlite_url(url: &str) -> String {
+    let rest = url
+        .strip_prefix("sqlite://")
+        .or_else(|| url.strip_prefix("sqlite:"))
+        .unwrap_or(url);
+    if rest == ":memory:" || rest.contains("mode=") {
+        return format!("sqlite:{rest}");
+    }
+    let separator = if rest.contains('?') { '&' } else { '?' };
+    format!("sqlite:{rest}{separator}mode=rwc")
+}
+
 impl Store {
-    /// Ouvre (ou crée) une base SQLite, par exemple `sqlite://raftup-hub.db`.
+    /// Ouvre (ou crée) une base : `sqlite://raftup-hub.db` ou
+    /// `postgres://utilisateur:motdepasse@hote/base`.
     pub async fn open(url: &str) -> Result<Store, HubError> {
-        let options = SqliteConnectOptions::from_str(url)?
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await?;
-        Store::init(pool).await
+        // Le pilote `Any` doit connaître les pilotes compilés ; l'appel est sans
+        // effet après le premier.
+        sqlx::any::install_default_drivers();
+        let backend = Backend::from_url(url)?;
+        let pool = match backend {
+            Backend::Sqlite => {
+                let pool = AnyPoolOptions::new()
+                    .max_connections(5)
+                    .connect(&sqlite_url(url))
+                    .await?;
+                // WAL : lecteurs et écrivain ne se bloquent pas ; le réglage reste
+                // inscrit dans le fichier. Les clés étrangères sont activées par sqlx
+                // sur chaque connexion SQLite.
+                sqlx::query("PRAGMA journal_mode = WAL")
+                    .fetch_optional(&pool)
+                    .await?;
+                pool
+            }
+            Backend::Postgres => {
+                AnyPoolOptions::new()
+                    .max_connections(10)
+                    .connect(url)
+                    .await?
+            }
+        };
+        Store::init(pool, backend).await
     }
 
-    /// Base en mémoire, pour les tests. Une seule connexion, jamais fermée :
+    /// Base SQLite en mémoire, pour les tests. Une seule connexion, jamais fermée :
     /// une base SQLite en mémoire disparaît avec la connexion qui l'a créée.
     pub async fn in_memory() -> Result<Store, HubError> {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")?.foreign_keys(true);
-        let pool = SqlitePoolOptions::new()
+        sqlx::any::install_default_drivers();
+        let pool = AnyPoolOptions::new()
             .max_connections(1)
             .min_connections(1)
             .idle_timeout(None)
             .max_lifetime(None)
-            .connect_with(options)
+            .connect("sqlite::memory:")
             .await?;
-        Store::init(pool).await
+        Store::init(pool, Backend::Sqlite).await
     }
 
-    /// Crée les tables si besoin et vérifie la version du schéma.
-    async fn init(pool: SqlitePool) -> Result<Store, HubError> {
-        for statement in SCHEMA.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+    /// La base utilisée.
+    pub fn backend(&self) -> Backend {
+        self.backend
+    }
+
+    /// Crée les tables si besoin, applique les migrations et vérifie la version.
+    async fn init(pool: AnyPool, backend: Backend) -> Result<Store, HubError> {
+        let schema = SCHEMA.replace("{id}", backend.id_column());
+        for statement in schema.split(';').map(str::trim).filter(|s| !s.is_empty()) {
             sqlx::query(statement).execute(&pool).await?;
         }
         let version: Option<i64> = sqlx::query("SELECT version FROM schema_version")
@@ -128,19 +213,39 @@ impl Store {
             .transpose()?;
         match version {
             None => {
-                sqlx::query("INSERT INTO schema_version (version) VALUES (?)")
+                sqlx::query("INSERT INTO schema_version (version) VALUES ($1)")
                     .bind(SCHEMA_VERSION)
                     .execute(&pool)
                     .await?;
             }
             Some(v) if v == SCHEMA_VERSION => {}
+            Some(v) if v < SCHEMA_VERSION => {
+                for (target, statements) in MIGRATIONS.iter().filter(|(t, _)| *t > v) {
+                    let mut tx = pool.begin().await?;
+                    for statement in statements.split(';').map(str::trim) {
+                        if !statement.is_empty() {
+                            sqlx::query(statement).execute(&mut *tx).await?;
+                        }
+                    }
+                    sqlx::query("UPDATE schema_version SET version = $1")
+                        .bind(*target)
+                        .execute(&mut *tx)
+                        .await?;
+                    tx.commit().await?;
+                    tracing::info!(version = target, "schéma de la base migré");
+                }
+                sqlx::query("UPDATE schema_version SET version = $1")
+                    .bind(SCHEMA_VERSION)
+                    .execute(&pool)
+                    .await?;
+            }
             Some(v) => {
                 return Err(HubError::Internal(format!(
                     "schéma de base en version {v}, ce hub connaît la version {SCHEMA_VERSION}"
                 )))
             }
         }
-        Ok(Store { pool })
+        Ok(Store { pool, backend })
     }
 
     /// Crée un compte et son identité « e-mail », dans une seule transaction.
@@ -156,7 +261,8 @@ impl Store {
         // `&mut *tx` : la transaction se comporte comme une connexion ; on la prête
         // à chaque requête sans la céder, pour pouvoir la valider à la fin.
         let user_id: i64 = sqlx::query(
-            "INSERT INTO users (username, username_norm, created_at) VALUES (?, ?, ?) RETURNING id",
+            "INSERT INTO users (username, username_norm, created_at) VALUES ($1, $2, $3) \
+             RETURNING id",
         )
         .bind(username)
         .bind(username_norm)
@@ -167,7 +273,7 @@ impl Store {
         .try_get("id")?;
         sqlx::query(
             "INSERT INTO user_identities (user_id, provider, subject, secret_hash, created_at) \
-             VALUES (?, ?, ?, ?, ?)",
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(user_id)
         .bind(EMAIL_PROVIDER)
@@ -187,7 +293,7 @@ impl Store {
         email_norm: &str,
     ) -> Result<Option<(i64, String)>, HubError> {
         let row = sqlx::query(
-            "SELECT user_id, secret_hash FROM user_identities WHERE provider = ? AND subject = ?",
+            "SELECT user_id, secret_hash FROM user_identities WHERE provider = $1 AND subject = $2",
         )
         .bind(EMAIL_PROVIDER)
         .bind(email_norm)
@@ -202,7 +308,7 @@ impl Store {
     /// Adresse e-mail d'un compte (s'il en a une).
     pub async fn email_of(&self, user_id: i64) -> Result<Option<String>, HubError> {
         let row = sqlx::query(
-            "SELECT subject FROM user_identities WHERE user_id = ? AND provider = ? ORDER BY id",
+            "SELECT subject FROM user_identities WHERE user_id = $1 AND provider = $2 ORDER BY id",
         )
         .bind(user_id)
         .bind(EMAIL_PROVIDER)
@@ -214,7 +320,7 @@ impl Store {
     }
 
     pub async fn user_by_id(&self, user_id: i64) -> Result<Option<UserRow>, HubError> {
-        let row = sqlx::query("SELECT id, username FROM users WHERE id = ?")
+        let row = sqlx::query("SELECT id, username FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -222,7 +328,7 @@ impl Store {
     }
 
     pub async fn user_by_username(&self, username_norm: &str) -> Result<Option<UserRow>, HubError> {
-        let row = sqlx::query("SELECT id, username FROM users WHERE username_norm = ?")
+        let row = sqlx::query("SELECT id, username FROM users WHERE username_norm = $1")
             .bind(username_norm)
             .fetch_optional(&self.pool)
             .await?;
@@ -237,7 +343,8 @@ impl Store {
         expires_at: i64,
     ) -> Result<(), HubError> {
         sqlx::query(
-            "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO sessions (token_hash, user_id, created_at, expires_at) \
+             VALUES ($1, $2, $3, $4)",
         )
         .bind(token_hash)
         .bind(user_id)
@@ -251,7 +358,7 @@ impl Store {
     /// Compte d'une session encore valide.
     pub async fn session_user(&self, token_hash: &str, now: i64) -> Result<Option<i64>, HubError> {
         let row =
-            sqlx::query("SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?")
+            sqlx::query("SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > $2")
                 .bind(token_hash)
                 .bind(now)
                 .fetch_optional(&self.pool)
@@ -262,7 +369,7 @@ impl Store {
     }
 
     pub async fn delete_session(&self, token_hash: &str) -> Result<(), HubError> {
-        sqlx::query("DELETE FROM sessions WHERE token_hash = ?")
+        sqlx::query("DELETE FROM sessions WHERE token_hash = $1")
             .bind(token_hash)
             .execute(&self.pool)
             .await?;
@@ -271,7 +378,7 @@ impl Store {
 
     /// Retire les sessions expirées ; renvoie le nombre de lignes supprimées.
     pub async fn purge_expired_sessions(&self, now: i64) -> Result<u64, HubError> {
-        let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= ?")
+        let result = sqlx::query("DELETE FROM sessions WHERE expires_at <= $1")
             .bind(now)
             .execute(&self.pool)
             .await?;
@@ -280,26 +387,29 @@ impl Store {
 
     pub async fn are_friends(&self, a: i64, b: i64) -> Result<bool, HubError> {
         let (a, b) = ordered(a, b);
-        let row = sqlx::query("SELECT 1 FROM friendships WHERE user_a = ? AND user_b = ?")
-            .bind(a)
-            .bind(b)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row =
+            sqlx::query("SELECT 1 AS found FROM friendships WHERE user_a = $1 AND user_b = $2")
+                .bind(a)
+                .bind(b)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row.is_some())
     }
 
     pub async fn request_exists(&self, from: i64, to: i64) -> Result<bool, HubError> {
-        let row = sqlx::query("SELECT 1 FROM friend_requests WHERE from_user = ? AND to_user = ?")
-            .bind(from)
-            .bind(to)
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT 1 AS found FROM friend_requests WHERE from_user = $1 AND to_user = $2",
+        )
+        .bind(from)
+        .bind(to)
+        .fetch_optional(&self.pool)
+        .await?;
         Ok(row.is_some())
     }
 
     pub async fn insert_request(&self, from: i64, to: i64, now: i64) -> Result<(), HubError> {
         sqlx::query(
-            "INSERT INTO friend_requests (from_user, to_user, created_at) VALUES (?, ?, ?)",
+            "INSERT INTO friend_requests (from_user, to_user, created_at) VALUES ($1, $2, $3)",
         )
         .bind(from)
         .bind(to)
@@ -319,11 +429,12 @@ impl Store {
 
     /// Supprime une demande ; renvoie `false` si elle n'existait pas.
     pub async fn delete_request(&self, from: i64, to: i64) -> Result<bool, HubError> {
-        let result = sqlx::query("DELETE FROM friend_requests WHERE from_user = ? AND to_user = ?")
-            .bind(from)
-            .bind(to)
-            .execute(&self.pool)
-            .await?;
+        let result =
+            sqlx::query("DELETE FROM friend_requests WHERE from_user = $1 AND to_user = $2")
+                .bind(from)
+                .bind(to)
+                .execute(&self.pool)
+                .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -332,17 +443,15 @@ impl Store {
         let (low, high) = ordered(a, b);
         let mut tx = self.pool.begin().await?;
         sqlx::query(
-            "DELETE FROM friend_requests WHERE (from_user = ? AND to_user = ?) \
-             OR (from_user = ? AND to_user = ?)",
+            "DELETE FROM friend_requests WHERE (from_user = $1 AND to_user = $2) \
+             OR (from_user = $2 AND to_user = $1)",
         )
         .bind(a)
         .bind(b)
-        .bind(b)
-        .bind(a)
         .execute(&mut *tx)
         .await?;
         sqlx::query(
-            "INSERT INTO friendships (user_a, user_b, created_at) VALUES (?, ?, ?) \
+            "INSERT INTO friendships (user_a, user_b, created_at) VALUES ($1, $2, $3) \
              ON CONFLICT (user_a, user_b) DO NOTHING",
         )
         .bind(low)
@@ -357,7 +466,7 @@ impl Store {
     /// Retire une amitié ; renvoie `false` si elle n'existait pas.
     pub async fn remove_friendship(&self, a: i64, b: i64) -> Result<bool, HubError> {
         let (a, b) = ordered(a, b);
-        let result = sqlx::query("DELETE FROM friendships WHERE user_a = ? AND user_b = ?")
+        let result = sqlx::query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2")
             .bind(a)
             .bind(b)
             .execute(&self.pool)
@@ -367,14 +476,13 @@ impl Store {
 
     /// Amis d'un compte, rangés par pseudo normalisé (ordre stable).
     pub async fn friends_of(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
+        // `$1` sert trois fois : on ne le lie qu'une fois.
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friendships f \
-             JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END \
-             WHERE f.user_a = ? OR f.user_b = ? \
+             JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END \
+             WHERE f.user_a = $1 OR f.user_b = $1 \
              ORDER BY u.username_norm, u.id",
         )
-        .bind(user_id)
-        .bind(user_id)
         .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
@@ -385,7 +493,7 @@ impl Store {
     pub async fn incoming_requests(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friend_requests r JOIN users u ON u.id = r.from_user \
-             WHERE r.to_user = ? ORDER BY r.created_at, u.id",
+             WHERE r.to_user = $1 ORDER BY r.created_at, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -397,7 +505,7 @@ impl Store {
     pub async fn outgoing_requests(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friend_requests r JOIN users u ON u.id = r.to_user \
-             WHERE r.from_user = ? ORDER BY r.created_at, u.id",
+             WHERE r.from_user = $1 ORDER BY r.created_at, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -406,23 +514,25 @@ impl Store {
     }
 }
 
-fn user_row(row: &sqlx::sqlite::SqliteRow) -> Result<UserRow, HubError> {
+fn user_row(row: &AnyRow) -> Result<UserRow, HubError> {
     Ok(UserRow {
         id: row.try_get("id")?,
         username: row.try_get("username")?,
     })
 }
 
-/// Traduit une violation d'unicité en erreur lisible. Le message de SQLite nomme la
-/// colonne en cause (`users.username_norm`, `user_identities.provider, ...`).
+/// Traduit une violation d'unicité en erreur lisible. Le message des deux bases
+/// nomme la contrainte en cause : `users.username_norm` (SQLite),
+/// `users_username_norm_key` (PostgreSQL), et de même pour `user_identities`.
 fn map_unique(error: sqlx::Error) -> HubError {
     if let sqlx::Error::Database(db) = &error {
         if db.is_unique_violation() {
             let message = db.message();
-            if message.contains("username_norm") {
+            let constraint = db.constraint().unwrap_or("");
+            if message.contains("username_norm") || constraint.contains("username_norm") {
                 return HubError::UsernameTaken;
             }
-            if message.contains("user_identities") {
+            if message.contains("user_identities") || constraint.contains("user_identities") {
                 return HubError::EmailTaken;
             }
         }
@@ -432,4 +542,30 @@ fn map_unique(error: sqlx::Error) -> HubError {
 
 fn is_unique_violation(error: &sqlx::Error) -> bool {
     matches!(error, sqlx::Error::Database(db) if db.is_unique_violation())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn urls_sqlite_recrites() {
+        assert_eq!(sqlite_url("sqlite://hub.db"), "sqlite:hub.db?mode=rwc");
+        assert_eq!(
+            sqlite_url(r"sqlite://C:\d\hub.db"),
+            r"sqlite:C:\d\hub.db?mode=rwc"
+        );
+        assert_eq!(sqlite_url("sqlite:hub.db?mode=ro"), "sqlite:hub.db?mode=ro");
+        assert_eq!(sqlite_url("sqlite::memory:"), "sqlite::memory:");
+    }
+
+    #[test]
+    fn base_reconnue_par_l_url() {
+        assert_eq!(Backend::from_url("sqlite:x").ok(), Some(Backend::Sqlite));
+        assert_eq!(
+            Backend::from_url("postgres://u@h/b").ok(),
+            Some(Backend::Postgres)
+        );
+        assert!(Backend::from_url("mysql://h").is_err());
+    }
 }
