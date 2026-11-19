@@ -645,16 +645,31 @@ fn repli_sur_archipelago_seul() {
     // chaque fois ; on vérifie la seed sur la première qu'Archipelago réussit.
     for seed in 1..=20 {
         let work = tempfile::tempdir().unwrap();
-        let (output, log) = try_generate_with_export(
-            &runtime,
+        let apworld = work.path().join("raftup_sonde.apworld");
+        write_sonde_apworld(&apworld);
+        let mut backend = ExportBackend::new(runtime.clone());
+        let (output, log) = run_generation(
+            &mut backend,
             work.path(),
             &[("sam.yaml", sonde_yaml(true))],
+            vec![apworld],
             seed,
         );
         assert!(
             log.iter()
                 .any(|l| l.contains("Archipelago génère seul") && l.contains("Bad Spot")),
             "seed {seed} : {log:#?}"
+        );
+        // Le rapport de fin dit le repli et sa raison (montrés par l'interface).
+        use launcher_core::generation::{EngineUsed, GeneratorBackend};
+        let report = backend.report();
+        assert_eq!(report.engine, EngineUsed::Python);
+        assert!(
+            report
+                .fallback
+                .as_deref()
+                .is_some_and(|r| r.contains("Bad Spot")),
+            "{report:?}"
         );
         if let Ok(output) = output {
             assert_eq!(output.summary.players, 1);

@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use py_bridge::{CancelToken, GenerateParams, GenerateResult, GeneratedPlayer};
 
+use super::export::{EngineReport, EngineUsed};
 use super::run::GeneratorBackend;
 use super::GenerationError;
 
@@ -120,6 +121,10 @@ impl GeneratorBackend for RustBackend {
         false
     }
 
+    fn report(&self) -> EngineReport {
+        EngineReport::plain(EngineUsed::Rust)
+    }
+
     fn run(
         &mut self,
         p: &GenerateParams,
@@ -149,11 +154,19 @@ impl GeneratorBackend for RustBackend {
         }
 
         let zip = p.output_dir.join(format!("AP_{}.zip", generated.seed_name));
-        write_zip(
-            &zip,
-            &format!("AP_{}.archipelago", generated.seed_name),
-            &generated.archipelago,
-        )?;
+        let mut entries = vec![(
+            format!("AP_{}.archipelago", generated.seed_name),
+            generated.archipelago.clone(),
+        )];
+        // Spoiler comme Archipelago : aucun au niveau 0, sans parcours au niveau 1.
+        if p.spoiler > 0 {
+            let text = generated.spoiler.to_text(p.spoiler >= 2);
+            entries.push((
+                format!("AP_{}_Spoiler.txt", generated.seed_name),
+                text.into_bytes(),
+            ));
+        }
+        write_zip(&zip, &entries)?;
         let _ = log.send(format!("Seed écrite : {}", zip.display()));
 
         let players = players
@@ -175,8 +188,9 @@ impl GeneratorBackend for RustBackend {
     }
 }
 
-/// Écrit `AP_<seed>.zip` avec la seule seed dedans, comme le générateur officiel.
-fn write_zip(path: &Path, entry: &str, bytes: &[u8]) -> Result<(), GenerationError> {
+/// Écrit `AP_<seed>.zip` avec la seed et, s'il est demandé, le spoiler, comme le
+/// générateur officiel. `entries` : (nom dans le zip, contenu), dans l'ordre d'écriture.
+fn write_zip(path: &Path, entries: &[(String, Vec<u8>)]) -> Result<(), GenerationError> {
     let io = |source: std::io::Error| GenerationError::Io {
         path: path.to_path_buf(),
         source,
@@ -186,8 +200,10 @@ fn write_zip(path: &Path, entry: &str, bytes: &[u8]) -> Result<(), GenerationErr
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
     let zip_err = |e: zip::result::ZipError| io(std::io::Error::other(e.to_string()));
-    zip.start_file(entry, options).map_err(zip_err)?;
-    zip.write_all(bytes).map_err(io)?;
+    for (entry, bytes) in entries {
+        zip.start_file(entry.as_str(), options).map_err(zip_err)?;
+        zip.write_all(bytes).map_err(io)?;
+    }
     zip.finish().map_err(zip_err)?;
     Ok(())
 }

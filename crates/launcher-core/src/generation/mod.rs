@@ -14,7 +14,7 @@ pub use runtime::{
     ensure_runtime, ensure_runtime_cancellable, runtime_status, RuntimeStatus, SetupStep,
 };
 
-pub use export::ExportBackend;
+pub use export::{fallback_line, EngineReport, EngineUsed, ExportBackend};
 pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use run::{
     generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,

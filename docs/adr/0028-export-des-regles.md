@@ -137,7 +137,7 @@ Deux choix validés par l'utilisatrice le 19 novembre 2026 : Archipelago écrit 
 - **Launcher** : `ExportBackend` (`launcher-core`). Si l'import ou le placement échoue (monde non pris en charge, contrôle croisé, placement impossible), la raison va dans le journal, et la génération repart avec le générateur Python seul, dans un worker neuf. Un export sans contrôle croisé est refusé. Dans l'interface, la case « Moteur Rust » choisit le moteur Rust seul s'il comprend tous les YAML, sinon ce moteur « export ».
 - **Vérifié en vrai** : seed complète à 2 joueurs (`raftup_sonde` et APQuest) placée par Raftup, écrite par Archipelago, relue par `multidata` (14 lieux remplis). Même seed deux fois : mêmes placements et même `slot_data`. Le repli a lieu quand une règle est refusée. `version` du worker donne `hash_randomization = 0`.
 - **Constat** : sur le petit monde de test (2 lieux ouverts au départ), le placement d'Archipelago échoue sur certaines seeds (`FillError`), alors que celui de Raftup réussit grâce à ses nouveaux essais.
-- **Reste** : le moteur « export » n'a pas encore généré un vrai monde tiers (Slime Rancher, étape 5) ; le journal du launcher ne montre pas encore le moteur utilisé à la fin.
+- **Reste** : le moteur « export » n'a pas encore généré un vrai monde tiers (Slime Rancher, étape 5). Moteur affiché, fait le 19 novembre 2026 (session `moteur-finitions`) : l'écran de génération dit à la fin quel moteur a vraiment généré (`GeneratorBackend::report`, `EngineReport`) et montre la raison d'un repli sur Archipelago seul, en direct et à la fin.
 
 ## Étape 5 : Slime Rancher (19 novembre 2026)
 

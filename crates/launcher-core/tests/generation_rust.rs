@@ -61,6 +61,98 @@ fn seed_apquest_sans_python() {
     assert_eq!(std::fs::read(&again.archipelago_file).unwrap(), first);
 }
 
+/// Noms des fichiers du zip produit.
+fn zip_entries(path: &std::path::Path) -> Vec<String> {
+    let archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    archive
+        .file_names()
+        .map(|name| name.unwrap().into_owned())
+        .collect()
+}
+
+fn zip_text(path: &std::path::Path, name: &str) -> String {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+    let mut text = String::new();
+    archive
+        .by_name(name)
+        .unwrap()
+        .read_to_string(&mut text)
+        .unwrap();
+    text
+}
+
+#[test]
+fn spoiler_dans_le_zip_selon_le_niveau() {
+    let _serial = serial();
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths::under(tmp.path());
+    let alice = yaml(tmp.path(), "alice.yaml", "name: Alice\ngame: APQuest\n");
+    let bob = yaml(tmp.path(), "bob.yaml", "name: Bob\ngame: APQuest\n");
+    let request = GenerateRequest {
+        player_files: vec![alice, bob],
+        seed: Some(99),
+        ..GenerateRequest::default()
+    };
+    // Niveau par défaut (3) : spoiler complet, parcours compris.
+    let (log, _) = channel();
+    let output = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+    let spoiler = "AP_00000000000000000099_Spoiler.txt";
+    let mut names = zip_entries(&output.zip_file);
+    names.sort();
+    assert_eq!(names, ["AP_00000000000000000099.archipelago", spoiler]);
+    let text = zip_text(&output.zip_file, spoiler);
+    assert!(text.starts_with("Raftup "), "{text}");
+    assert!(text.contains("Seed: 00000000000000000099"));
+    assert!(text.contains("\nPlayer 2: Bob\n"));
+    assert!(text.contains("\n\nLocations:\n\n"));
+    assert!(text.contains("\n\nPlaythrough:\n\n"));
+
+    // Niveau 1 : placement sans parcours.
+    let request1 = GenerateRequest {
+        spoiler: 1,
+        ..request.clone()
+    };
+    let (log, _) = channel();
+    let output = generate(
+        &paths,
+        &mut RustBackend,
+        &request1,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
+    let text = zip_text(&output.zip_file, spoiler);
+    assert!(text.contains("Locations:") && !text.contains("Playthrough"));
+
+    // Niveau 0 : pas de spoiler.
+    let request0 = GenerateRequest {
+        spoiler: 0,
+        ..request
+    };
+    let (log, _) = channel();
+    let output = generate(
+        &paths,
+        &mut RustBackend,
+        &request0,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
+    assert_eq!(
+        zip_entries(&output.zip_file),
+        ["AP_00000000000000000099.archipelago"]
+    );
+}
+
+#[test]
+fn rapport_du_moteur_rust() {
+    use launcher_core::generation::{EngineUsed, GeneratorBackend};
+    let report = RustBackend.report();
+    assert_eq!(report.engine, EngineUsed::Rust);
+    assert_eq!(report.fallback, None);
+}
+
 #[test]
 fn jeu_non_porte_refuse_avec_la_raison() {
     let _serial = serial();

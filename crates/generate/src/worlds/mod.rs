@@ -38,6 +38,13 @@ impl GameOptions {
         }
     }
 
+    /// Options lisibles pour le spoiler : (nom affiché, valeur), dans l'ordre du monde.
+    pub fn spoiler_options(&self) -> Vec<(&'static str, String)> {
+        match self {
+            GameOptions::ApQuest(o) => o.spoiler_options(),
+        }
+    }
+
     pub(crate) fn create<R: Rng + ?Sized>(
         &self,
         world: &mut MultiWorld,

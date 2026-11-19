@@ -109,7 +109,7 @@ Choix pris en codant, dans le cadre des décisions ci-dessus :
 - **Nom de seed** : le numéro de seed sur 20 chiffres (`00000000000000012345`).
 - **YAML** : lus par `yaml-rust2` 0.13 (MIT / Apache-2.0). Le moteur Rust ne prend la génération que s'il comprend tout : jeu porté, options connues, valeurs simples, poids ou `random` ; `accessibility: full` ; options communes avancées vides ; pas de substitution dans les noms. Sinon la raison est écrite en tête du journal et Archipelago génère.
 - **Launcher** : `RustBackend` remplit le même contrat que `PythonBackend` (zip `AP_<seed>.zip` dans le dossier de sortie) ; il ne touche ni aux apworlds ni au dossier d'Archipelago, et ne demande pas l'installation de Python. Case « Moteur Rust (expérimental) » dans « Créer une partie », décochée par défaut.
-- **Ignoré pour l'instant** : le spoiler. (`progression_balancing` et le `meta.yaml` des préréglages sont faits à l'étape 5, ci-dessous.)
+- **Spoiler** (19 novembre 2026, session `moteur-finitions`) : `generate::spoiler` écrit `AP_<seed>_Spoiler.txt` dans le zip, inspiré d'Archipelago (en-tête « Raftup … compatible avec Archipelago 0.6.8 », options, placement, parcours par sphères avec tous les objets de progression, sans réduction au plus court chemin) ; niveau 0 : aucun spoiler, niveau 1 : sans parcours. (`progression_balancing` et le `meta.yaml` des préréglages sont faits à l'étape 5, ci-dessous.)
 
 ## Mise en œuvre de l'étape 5 (19 novembre 2026)
 
