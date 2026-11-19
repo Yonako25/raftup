@@ -17,6 +17,7 @@ fn main() -> anyhow::Result<()> {
             "Alice",
             GameOptions::ApQuest(ApQuestOptions::default()),
         )],
+        time_balance: Default::default(),
     })?;
     let path = std::path::Path::new(&dir).join(format!("AP_{}.archipelago", generated.seed_name));
     std::fs::write(&path, &generated.archipelago)?;

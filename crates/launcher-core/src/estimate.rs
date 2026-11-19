@@ -97,6 +97,44 @@ pub fn estimate(data: &MultiData, catalog: &Catalog) -> SeedEstimate {
     })
 }
 
+/// Réglages de l'équilibrage par temps de jeu (ADR 0030), **activé**, pour des joueurs
+/// dont on donne les jeux (noms Archipelago) dans l'ordre des slots. Le temps par lieu
+/// vient de `seconds_for` (le profil du jeu), [`DEFAULT_SECONDS_PER_LOCATION`] sinon,
+/// comme pour [`estimate_with`].
+pub fn time_balance_settings<'a>(
+    games: impl IntoIterator<Item = &'a str>,
+    seconds_for: impl Fn(&str) -> Option<u32>,
+) -> generate::TimeBalance {
+    let seconds_per_location = games
+        .into_iter()
+        .map(|game| {
+            let given = seconds_for(game).filter(|s| (1..=MAX_SECONDS_PER_LOCATION).contains(s));
+            u64::from(given.unwrap_or(DEFAULT_SECONDS_PER_LOCATION))
+        })
+        .collect();
+    generate::TimeBalance {
+        enabled: true,
+        seconds_per_location,
+        // Les autres réglages (nombre d'échanges) gardent leur valeur par défaut.
+        ..generate::TimeBalance::default()
+    }
+}
+
+/// Comme [`time_balance_settings`], avec les temps des profils embarqués dans le
+/// launcher. Si le catalogue ne se lit pas (ce qui ne devrait pas arriver : il est testé),
+/// chaque jeu prend la valeur par défaut.
+pub fn time_balance_embedded<'a>(
+    games: impl IntoIterator<Item = &'a str>,
+) -> generate::TimeBalance {
+    let catalog = Catalog::embedded().ok();
+    time_balance_settings(games, |game| {
+        catalog
+            .as_ref()
+            .and_then(|c| c.by_ap_game(game))
+            .and_then(|p| p.game.seconds_per_location)
+    })
+}
+
 /// Lit une seed `.archipelago` (lecture sûre, NF08) et l'estime.
 pub fn estimate_file(path: &Path, catalog: &Catalog) -> Result<SeedEstimate, LauncherError> {
     let bytes =

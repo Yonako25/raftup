@@ -57,6 +57,9 @@ pub struct CreateForm {
     /// L'hôte veut essayer le moteur Rust (ADR 0027, sur option tant que l'équilibrage
     /// de progression n'est pas fait).
     rust_engine: bool,
+    /// Équilibrage par temps de jeu (ADR 0030), seulement avec le moteur Rust ou export.
+    /// Décoché par défaut.
+    time_balance: bool,
     port: String,
     password: String,
     public_host: String,
@@ -87,6 +90,7 @@ impl Default for CreateForm {
             pending_pick: None,
             preset: Preset::default(),
             rust_engine: false,
+            time_balance: false,
             port: "38281".to_string(),
             password: String::new(),
             public_host: "localhost".to_string(),
@@ -392,7 +396,20 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         ui.checkbox(&mut form.rust_engine, "Moteur Rust (expérimental)");
         ui.label(
             widgets::dim(
-                "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago                  génère comme d'habitude. Pas encore d'équilibrage de progression.",
+                "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago \
+                 construit les mondes et Raftup place les objets.",
+            )
+            .size(13.0),
+        );
+        // `add_enabled` : la case est grisée (et ignorée) sans le moteur Rust.
+        ui.add_enabled(
+            form.rust_engine,
+            egui::Checkbox::new(&mut form.time_balance, "Équilibrer par temps de jeu"),
+        );
+        ui.label(
+            widgets::dim(
+                "Avance les objets dont un joueur a besoin pour qu'il attende moins, d'après le \
+                 temps moyen d'un lieu de chaque jeu (estimé, pas encore mesuré).",
             )
             .size(13.0),
         );
@@ -423,11 +440,13 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
                 &request.player_files,
                 request.meta_yaml.as_deref(),
             );
+            // Sans le moteur Rust, la case est grisée : on ne la suit pas.
+            let time_balance = form.rust_engine && form.time_balance;
             if engine == generation::Engine::Rust {
                 // Pas de Python : rien à installer.
                 form.setup = generator_setup::Setup::Ready;
                 form.pending_host = Some(host);
-                form.generation = generation::start(ctx, request, engine, note);
+                form.generation = generation::start(ctx, request, engine, note, time_balance);
                 return;
             }
             // Formulaire bon : on regarde ensuite si le générateur est là.
@@ -437,7 +456,7 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
                 generator_setup::Setup::Ready => {
                     // Gardés pour héberger la seed à la fin de la génération.
                     form.pending_host = Some(host);
-                    generation::start(ctx, request, engine, note)
+                    generation::start(ctx, request, engine, note, time_balance)
                 }
                 _ => generation::Generation::Idle,
             };
@@ -481,13 +500,15 @@ pub struct DevState {
 }
 
 /// Macro : remplit le formulaire (YAML donnés, en clair, port donné). Avec
-/// `RAFTUP_DEV_RUST=1`, la case « Moteur Rust » est cochée.
+/// `RAFTUP_DEV_RUST=1`, la case « Moteur Rust » est cochée ; avec `RAFTUP_DEV_TEMPS=1`,
+/// « Équilibrer par temps de jeu » aussi.
 #[cfg(debug_assertions)]
 pub fn dev_prefill(form: &mut CreateForm, yamls: Vec<PathBuf>, port: u16) {
     form.yamls = yamls;
     form.encrypted = false;
     form.port = port.to_string();
     form.rust_engine = std::env::var("RAFTUP_DEV_RUST").is_ok_and(|v| v == "1");
+    form.time_balance = std::env::var("RAFTUP_DEV_TEMPS").is_ok_and(|v| v == "1");
 }
 
 /// Macro : comme un clic sur « Générer la partie ».
@@ -654,6 +675,13 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn equilibrage_par_temps_decoche_par_defaut() {
+        let form = CreateForm::default();
+        assert!(!form.time_balance);
+        assert!(!form.rust_engine);
+    }
 
     #[test]
     fn moteur_rust_seulement_si_demande_et_compris() {

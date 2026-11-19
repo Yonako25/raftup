@@ -155,3 +155,23 @@ fn le_temps_du_profil_est_utilise() {
         profile.game.seconds_per_location.is_some()
     );
 }
+
+/// Réglages de l'équilibrage par temps (ADR 0030) : temps du profil, défaut sinon, valeur
+/// hors bornes ignorée, un réglage par slot dans l'ordre donné.
+#[test]
+fn reglages_de_l_equilibrage_par_temps() {
+    let settings =
+        launcher_core::time_balance_settings(["Slime Rancher", "APQuest", "Bizarre"], |game| {
+            match game {
+                "Slime Rancher" => Some(240),
+                "Bizarre" => Some(0),
+                _ => None,
+            }
+        });
+    assert!(settings.enabled);
+    assert_eq!(settings.seconds_per_location, vec![240, 120, 120]);
+
+    // Profils embarqués : Slime Rancher a son temps, APQuest (sans profil) le défaut.
+    let embedded = launcher_core::time_balance_embedded(["Slime Rancher", "APQuest"]);
+    assert_eq!(embedded.seconds_per_location, vec![240, 120]);
+}

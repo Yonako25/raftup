@@ -422,6 +422,19 @@ pub fn fill_imported(
     export: &Export,
     seed: u64,
 ) -> Result<Vec<PlacementLine>, ImportError> {
+    fill_imported_with(imported, export, seed, &fill::TimeBalance::default())
+        .map(|(lines, _)| lines)
+}
+
+/// Comme [`fill_imported`], avec l'équilibrage par temps de jeu (ADR 0030) après
+/// l'équilibrage de progression s'il est activé ; rend aussi ce qu'il a fait (`None` s'il
+/// est désactivé).
+pub fn fill_imported_with(
+    imported: &mut Imported,
+    export: &Export,
+    seed: u64,
+    time_balance: &fill::TimeBalance,
+) -> Result<(Vec<PlacementLine>, Option<fill::TimeBalanceReport>), ImportError> {
     let world = &mut imported.world;
     let empty: Vec<LocationId> = world
         .location_ids()
@@ -441,6 +454,7 @@ pub fn fill_imported(
         .map(|p| p.progression_balancing)
         .collect();
     fill::balance(world, &balancing, &imported.start, &mut rng)?;
+    let report = crate::run_time_balance(world, time_balance, &imported.start)?;
 
     let mut lines = Vec::with_capacity(empty.len());
     for id in empty {
@@ -458,7 +472,7 @@ pub fn fill_imported(
             item.name.clone(),
         ));
     }
-    Ok(lines)
+    Ok((lines, report))
 }
 
 /// Construit le monde décrit par l'export.

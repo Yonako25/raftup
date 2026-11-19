@@ -18,7 +18,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-use generate::imported::{build_world, fill_imported, read_export, ImportError, MAX_EXPORT_BYTES};
+use generate::imported::{
+    build_world, fill_imported_with, read_export, ImportError, MAX_EXPORT_BYTES,
+};
 use py_bridge::{
     CancelToken, ExportParams, FinishParams, GenerateParams, GenerateResult, PyBridge,
     EXPORTER_SCRIPT,
@@ -67,6 +69,9 @@ pub struct ExportBackend {
     pub python: PythonBackend,
     /// Raison du repli de la dernière génération (`None` : placement par Raftup).
     last_fallback: Option<String>,
+    /// Équilibrage par temps de jeu (ADR 0030) au placement par Raftup ; faux par défaut.
+    /// Sans effet si la génération se replie sur Archipelago seul.
+    pub time_balance: bool,
 }
 
 impl ExportBackend {
@@ -75,6 +80,7 @@ impl ExportBackend {
         ExportBackend {
             python: PythonBackend::new(runtime),
             last_fallback: None,
+            time_balance: false,
         }
     }
 }
@@ -107,8 +113,16 @@ impl GeneratorBackend for ExportBackend {
         let seed = *p.seed.get_or_insert_with(random_seed);
         self.last_fallback = None;
         let mut bridge = self.python.start_bridge(&p, log.clone())?;
-        let outcome =
-            export_then_finish(&self.python, &mut bridge, &p, seed, timeout, cancel, &log);
+        let outcome = export_then_finish(
+            &self.python,
+            &mut bridge,
+            &p,
+            seed,
+            self.time_balance,
+            timeout,
+            cancel,
+            &log,
+        );
         // Un worker par génération : fermé dans tous les cas (erreur de fermeture ignorée).
         let _ = bridge.shutdown();
         match outcome {
@@ -165,6 +179,7 @@ fn export_then_finish(
     bridge: &mut PyBridge,
     p: &GenerateParams,
     seed: u64,
+    time_balance: bool,
     timeout: Duration,
     cancel: &CancelToken,
     log: &Sender<String>,
@@ -193,7 +208,18 @@ fn export_then_finish(
     }
     let mut imported = build_world(&export).map_err(unsupported)?;
     let _ = log.send("Placement des objets par Raftup".to_string());
-    let placement = fill_imported(&mut imported, &export, seed).map_err(unsupported)?;
+    // Équilibrage par temps (ADR 0030) : temps par lieu des profils, jeux dans l'ordre
+    // des slots de l'export.
+    let settings = if time_balance {
+        crate::estimate::time_balance_embedded(export.players.iter().map(|p| p.game.as_str()))
+    } else {
+        generate::TimeBalance::default()
+    };
+    let (placement, report) =
+        fill_imported_with(&mut imported, &export, seed, &settings).map_err(unsupported)?;
+    if let Some(report) = &report {
+        let _ = log.send(super::rust::time_balance_line(report));
+    }
     if cancel.is_cancelled() {
         return Err(Step::Error(GenerationError::Cancelled));
     }

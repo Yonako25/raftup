@@ -502,6 +502,7 @@ fn apquest_exporte_egal_au_portage_rust() {
         let built = build(&GenerateRequest {
             seed: 1,
             players: vec![PlayerRequest::new("Alice", GameOptions::ApQuest(options))],
+            time_balance: Default::default(),
         })
         .unwrap();
         compare(&imported, &built, &format!("options {bits:04b}"));
@@ -536,6 +537,7 @@ fn deux_joueurs_exportes() {
             PlayerRequest::new("Alice", GameOptions::ApQuest(a)),
             PlayerRequest::new("Bob", GameOptions::ApQuest(b)),
         ],
+        time_balance: Default::default(),
     })
     .unwrap();
     compare(&imported, &built, "deux joueurs");

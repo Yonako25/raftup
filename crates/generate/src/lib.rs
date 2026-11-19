@@ -23,7 +23,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+// Réglages et rapport de l'équilibrage par temps (ADR 0030), pour les appelants qui ne
+// dépendent pas de `fill`.
 pub use datapackage::{archipelago_package, game_package, PackageSource};
+pub use fill::{TimeBalance, TimeBalanceReport};
 pub use spoiler::Spoiler;
 pub use worlds::{GameOptions, SUPPORTED_GAMES};
 pub use yaml::{read_players, read_players_with_meta, Unsupported};
@@ -58,6 +61,21 @@ pub struct GenerateRequest {
     pub seed: u64,
     /// Joueurs dans l'ordre des slots (le premier reçoit le slot 1).
     pub players: Vec<PlayerRequest>,
+    /// Équilibrage par temps de jeu (ADR 0030), après l'équilibrage de progression.
+    /// Désactivé par défaut (`TimeBalance::default()`) : la seed est alors la même
+    /// qu'avant l'arrivée de cette option.
+    pub time_balance: fill::TimeBalance,
+}
+
+impl GenerateRequest {
+    /// Une demande sans équilibrage par temps.
+    pub fn new(seed: u64, players: Vec<PlayerRequest>) -> GenerateRequest {
+        GenerateRequest {
+            seed,
+            players,
+            time_balance: fill::TimeBalance::default(),
+        }
+    }
 }
 
 /// Une partie générée.
@@ -70,6 +88,8 @@ pub struct Generated {
     pub archipelago: Vec<u8>,
     /// Spoiler de la partie (`AP_<seed_name>_Spoiler.txt` une fois mis en texte).
     pub spoiler: Spoiler,
+    /// Ce qu'a fait l'équilibrage par temps, s'il était activé.
+    pub time_balance: Option<fill::TimeBalanceReport>,
 }
 
 /// Erreurs de génération.
@@ -185,6 +205,10 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
         .map(|p| p.progression_balancing)
         .collect();
     fill::balance(&mut world, &balancing, &start, &mut rng)?;
+    // Équilibrage par temps (ADR 0030) : sans hasard, donc la suite du flux `fill` n'est
+    // pas touchée. Appelé seulement s'il est activé : désactivé, il simulerait la partie
+    // pour rien.
+    let time_balance = run_time_balance(&mut world, &request.time_balance, &start)?;
 
     let seed_name = seed_name(request.seed);
     let spoiler = spoiler::build(&world, request, &seed_name, &start, &start_items);
@@ -196,7 +220,20 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
         multidata,
         archipelago,
         spoiler,
+        time_balance,
     })
+}
+
+/// Lance [`fill::time_balance`] s'il est activé ; `None` sinon.
+pub(crate) fn run_time_balance(
+    world: &mut MultiWorld,
+    settings: &fill::TimeBalance,
+    start: &State,
+) -> Result<Option<fill::TimeBalanceReport>, fill::FillError> {
+    if !settings.enabled {
+        return Ok(None);
+    }
+    fill::time_balance(world, settings, start).map(Some)
 }
 
 fn check_players(request: &GenerateRequest) -> Result<(), GenerateError> {

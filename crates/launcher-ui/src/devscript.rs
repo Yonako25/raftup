@@ -5,6 +5,7 @@
 //! Elle s'active avec `RAFTUP_DEV_CAPTURE=<dossier>` :
 //! - `RAFTUP_DEV_YAML=<dossier>` : les fichiers `.yaml` à ajouter comme joueurs ;
 //! - `RAFTUP_DEV_RUST=1` : coche « Moteur Rust (expérimental) » avant de générer ;
+//! - `RAFTUP_DEV_TEMPS=1` : coche aussi « Équilibrer par temps de jeu » (ADR 0030) ;
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,

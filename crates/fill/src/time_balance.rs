@@ -24,7 +24,7 @@
 //! systèmes. Pas de hasard : les candidats sont parcourus dans un ordre fixe.
 //!
 //! Limites (voir l'ADR) : la simulation suppose qu'un joueur joue sans pause et visite
-//! tous ses lieux ; elle ne connaît pas les règles d'objet par lieu (`item_rule`).
+//! tous ses lieux. Un échange respecte les règles d'objet des lieux (`can_hold`, ADR 0029).
 
 use logic::{sweep, ItemKindId, LocationId, MultiWorld, Progress, Reachability, State};
 
@@ -331,6 +331,11 @@ fn improve_once(
         let targets = targets(world, current, stall);
         for &late in &candidates {
             for &early in &targets {
+                // Règles d'objet (ADR 0029) : chaque objet doit être accepté par son
+                // nouveau lieu, sinon on n'essaie même pas.
+                if !fits(world, late, early) {
+                    continue;
+                }
                 swap(world, late, early)?;
                 let trial = simulate(world, start, seconds);
                 if trial.score() < current.score() {
@@ -396,6 +401,14 @@ fn targets(world: &MultiWorld, timeline: &Timeline, stall: u64) -> Vec<LocationI
         .take(MAX_TARGETS)
         .map(|(_, id)| id)
         .collect()
+}
+
+/// Vrai si l'objet de `a` peut aller en `b` et celui de `b` en `a` (règles d'objet,
+/// `MultiWorld::can_hold`). Un lieu vide ne gêne pas.
+fn fits(world: &MultiWorld, a: LocationId, b: LocationId) -> bool {
+    let item_a = world.location(a).and_then(|l| l.item);
+    let item_b = world.location(b).and_then(|l| l.item);
+    item_a.is_none_or(|i| world.can_hold(b, i)) && item_b.is_none_or(|i| world.can_hold(a, i))
 }
 
 /// Échange les objets de deux lieux.

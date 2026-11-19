@@ -35,6 +35,7 @@ fn request() -> GenerateRequest {
             PlayerRequest::new("Alice", GameOptions::ApQuest(ApQuestOptions::default())),
             PlayerRequest::new("Bob", GameOptions::ApQuest(hard)),
         ],
+        time_balance: Default::default(),
     }
 }
 
