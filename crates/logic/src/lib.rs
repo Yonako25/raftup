@@ -27,5 +27,6 @@ pub use rule::Rule;
 pub use state::State;
 pub use sweep::{sweep, Reachability, SweepResult};
 pub use world::{
-    Classification, Entrance, ItemGroup, ItemKind, Location, LogicError, MultiWorld, Region, Slot,
+    Classification, Entrance, ItemGroup, ItemKind, Location, LogicError, MultiWorld, Progress,
+    Region, Slot,
 };

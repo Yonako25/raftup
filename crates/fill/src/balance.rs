@@ -15,16 +15,17 @@
 //!   un résultat identique sur tous les systèmes ;
 //! - les lieux sont parcourus dans l'ordre de création (index croissant), pas dans l'ordre
 //!   d'un `set` Python ; le hasard vient du même flux que le placement ;
-//! - il n'y a ni règle d'objet par lieu (`item_rule`) ni lieu « prioritaire » dans le
-//!   modèle : tout lieu libre accepte tout objet ;
+//! - il n'y a pas de règle d'objet par lieu (`item_rule`) dans le modèle ; comme dans
+//!   Archipelago, un objet posé dans un lieu **prioritaire** ne bouge pas, et un lieu
+//!   **exclu** ne reçoit jamais l'objet de progression avancé ;
 //! - un lieu « verrouillé » est un lieu sans numéro réseau (un événement) ;
 //! - à la fin, on vérifie que la partie reste jouable de bout en bout.
 
-use logic::{sweep, ItemKindId, LocationId, MultiWorld, Reachability, SlotId, State};
+use logic::{sweep, ItemKindId, LocationId, MultiWorld, Progress, Reachability, SlotId, State};
 use rand_core::Rng;
 
 use crate::explain::explain;
-use crate::place::FillError;
+use crate::place::{progress, FillError};
 use crate::shuffle::shuffle;
 
 /// Valeur la plus haute de `progression_balancing` dans Archipelago (« extreme »).
@@ -419,6 +420,7 @@ fn plan<R: Rng + ?Sized>(
             let owner = kind.slot.index();
             if !b.locked(*id)
                 && !kind.classification.skip_balancing
+                && progress(world, *id) != Progress::Priority
                 && balancing.contains(&owner)
                 && b.owner(*id).map(|s| s.index()) != Some(owner)
             {
@@ -512,7 +514,10 @@ fn pair_up<R: Rng + ?Sized>(
         .world
         .location_ids()
         .filter(|id| {
-            flag(checked, id.index()) && !b.locked(*id) && b.progression_item(*id).is_none()
+            flag(checked, id.index())
+                && !b.locked(*id)
+                && b.progression_item(*id).is_none()
+                && progress(b.world, *id) != Progress::Excluded
         })
         .collect();
     shuffle(rng, &mut replacement);

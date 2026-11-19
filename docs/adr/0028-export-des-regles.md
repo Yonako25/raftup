@@ -119,3 +119,11 @@ Pour chaque joueur :
 - **Monde de test** `raftup_sonde` (`launcher-core/tests/data`, écrit pour Raftup) : 9 règles en lambdas, avec fonction d'aide, `count`, groupe, `can_reach` et liste. En vrai : 9 règles sondées, 0 opaque, contrôle croisé réussi, monde jouable. Avec l'option `bad_rule` (`not state.has(...)`), la règle est refusée (« non monotone ») et le monde reste au générateur Python.
 - **Reste** : `checks` est facultatif dans le JSON, pour les exports écrits à la main des tests ; le branchement de l'étape 4 l'exigera.
 
+## Mise en œuvre de l'étape 3 (19 novembre 2026)
+
+- **Modèle** : `logic::Progress` (`Default`, `Priority`, `Excluded`) sur chaque lieu, avec `MultiWorld::set_progress`. L'import lit `progress_type` (1, 2, 3) ; une autre valeur rend l'export incohérent.
+- **Placement** (d'après `distribute_items_restrictive` d'Archipelago 0.6.8) : la progression va dans le premier lieu **prioritaire** atteignable, sinon dans le premier lieu normal, jamais dans un lieu **exclu**. Les lieux exclus reçoivent ensuite du remplissage (ni progression ni utile), puis les utiles et le reste vont partout ailleurs. S'il y a moins de remplissage que de lieux exclus : `FillError::TooManyExcluded`, avant tout placement.
+- **Écart avec Archipelago** : il fait d'abord une passe de placement réservée aux lieux prioritaires (avec ses objets « déprioritisés »), puis la passe normale. Raftup préfère simplement un lieu prioritaire à chaque objet de progression. Mesuré : au moins 9 lieux prioritaires sur 10 reçoivent de la progression dans le monde de test de `fill`.
+- **Équilibrage** : comme Archipelago, un objet posé dans un lieu prioritaire n'est jamais avancé, et un lieu exclu ne reçoit jamais l'objet avancé.
+- **Vérifié** : 300 seeds à 2 joueurs, sans aucune progression ni objet utile dans un lieu exclu, avant comme après l'équilibrage ; lieux prioritaires inchangés par l'équilibrage ; reproductible. En vrai, le monde `raftup_sonde` exporte un lieu prioritaire et un lieu exclu, retrouvés tels quels dans le monde Rust.
+

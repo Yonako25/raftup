@@ -11,8 +11,8 @@
 //! Ce qui n'est pas encore pris en charge rend le monde **non exportable**
 //! ([`ImportError::Unsupported`]) : la génération reste alors au générateur Python.
 //! À cette étape : règle opaque (lambda que le sondage n'a pas su traduire), règle
-//! d'objet propre à un lieu (`item_rule`), lieu prioritaire ou exclu (`progress_type`,
-//! étape 3), monde qui redéfinit `collect`.
+//! d'objet propre à un lieu (`item_rule`), monde qui redéfinit `collect`. Les lieux
+//! prioritaires et exclus (`progress_type`) sont pris en charge.
 //!
 //! **Contrôle croisé** (ADR 0028, § 4) : l'export contient des inventaires tirés au
 //! hasard et la valeur de chaque règle calculée par le vrai Archipelago. On recalcule
@@ -22,8 +22,8 @@ use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use logic::{
-    Classification, EntranceId, ItemKindId, LocationId, LogicError, MultiWorld, Reachability,
-    RegionId, Rule, SlotId, State,
+    Classification, EntranceId, ItemKindId, LocationId, LogicError, MultiWorld, Progress,
+    Reachability, RegionId, Rule, SlotId, State,
 };
 use multidata::GamePackage;
 use serde::Deserialize;
@@ -411,6 +411,19 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
             names
                 .locations
                 .insert((player.slot, location.name.clone()), id);
+            // `LocationProgressType` d'Archipelago : 1 normal, 2 prioritaire, 3 exclu.
+            let progress = match location.progress_type {
+                1 => Progress::Default,
+                2 => Progress::Priority,
+                3 => Progress::Excluded,
+                other => {
+                    return Err(invalid(format!(
+                        "lieu « {} » : progress_type {other} inconnu",
+                        location.name
+                    )))
+                }
+            };
+            world.set_progress(id, progress)?;
             if let Some(item) = &location.item {
                 world.place(id, names.item(item.player, &item.name)?)?;
             }
@@ -512,12 +525,6 @@ fn check_supported(export: &Export) -> Result<(), ImportError> {
             if !location.default_item_rule {
                 return Err(refuse(format!(
                     "le lieu « {} » a sa propre règle d'objet",
-                    location.name
-                )));
-            }
-            if location.progress_type != 1 {
-                return Err(refuse(format!(
-                    "le lieu « {} » est prioritaire ou exclu",
                     location.name
                 )));
             }

@@ -105,13 +105,32 @@ fn regle_opaque_refusee() {
 }
 
 #[test]
-fn regle_d_objet_et_progress_type_refuses() {
+fn regle_d_objet_refusee() {
     let mut v = base();
     v["players"][0]["locations"][0]["default_item_rule"] = json!(false);
     assert!(unsupported(&v).contains("règle d'objet"));
+}
+
+#[test]
+fn lieux_prioritaires_et_exclus_lus() {
     let mut v = base();
     v["players"][0]["locations"][0]["progress_type"] = json!(3);
-    assert!(unsupported(&v).contains("exclu"));
+    v["players"][0]["locations"][1]["progress_type"] = json!(2);
+    let imported = import(&v).unwrap();
+    let w = &imported.world;
+    let alice = w.slot_ids().next().unwrap();
+    let progress = |n: &str| {
+        w.location(w.location_named(alice, n).unwrap())
+            .unwrap()
+            .progress
+    };
+    assert_eq!(progress("Chest"), logic::Progress::Excluded);
+    assert_eq!(progress("Deep"), logic::Progress::Priority);
+    assert_eq!(progress("Boss"), logic::Progress::Default);
+    // Valeur inconnue : export incohérent.
+    let mut v = base();
+    v["players"][0]["locations"][0]["progress_type"] = json!(7);
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
 }
 
 #[test]

@@ -152,6 +152,15 @@ fn lambdas_sondees_et_controlees() {
         "Cave Crystal"
     ));
     assert!(!reach(&[("Sword", 1), ("Gem", 2)], "Cave Crystal"));
+    // Lieux prioritaire et exclu, posés par le monde dans `set_rules`.
+    let progress = |n: &str| {
+        w.location(w.location_named(sam, n).unwrap())
+            .unwrap()
+            .progress
+    };
+    assert_eq!(progress("Start Chest"), logic::Progress::Priority);
+    assert_eq!(progress("Forest Stump"), logic::Progress::Excluded);
+    assert_eq!(progress("Cave Pool"), logic::Progress::Default);
     // Tout le pool en main : tout s'ouvre, victoire comprise.
     let mut state = imported.start.clone();
     for item in &imported.pool {

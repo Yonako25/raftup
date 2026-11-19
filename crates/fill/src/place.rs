@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use logic::{sweep, ItemKindId, LocationId, LogicError, MultiWorld, State};
+use logic::{sweep, ItemKindId, LocationId, LogicError, MultiWorld, Progress, State};
 use rand_core::Rng;
 use thiserror::Error;
 
@@ -16,6 +16,8 @@ pub enum FillError {
     Logic(#[from] LogicError),
     #[error("{items} objets à placer pour {locations} lieux vides : il en faut autant")]
     CountMismatch { items: usize, locations: usize },
+    #[error("{excluded} lieux exclus pour {filler} objets de remplissage : il en manque")]
+    TooManyExcluded { excluded: usize, filler: usize },
     #[error("options impossibles, même avec tous les objets : {}", list(.blocked))]
     Impossible { blocked: Vec<Blocked> },
     #[error("aucun lieu libre atteignable pour « {item} » (joueur {slot})")]
@@ -99,6 +101,22 @@ pub fn fill<R: Rng + ?Sized>(
             locations: empty.len(),
         });
     }
+    // Un lieu exclu ne reçoit que du remplissage (ni progression ni utile).
+    let excluded = empty
+        .iter()
+        .filter(|id| progress(world, **id) == Progress::Excluded)
+        .count();
+    let filler = pool
+        .iter()
+        .filter(|item| {
+            world
+                .item_kind(**item)
+                .is_some_and(|k| !k.classification.progression && !k.classification.useful)
+        })
+        .count();
+    if excluded > filler {
+        return Err(FillError::TooManyExcluded { excluded, filler });
+    }
     check_feasible(world, &pool, start)?;
 
     // Le placement supposé peut se bloquer selon l'ordre tiré : si la clé est posée avant
@@ -124,13 +142,21 @@ pub fn fill<R: Rng + ?Sized>(
     }
 }
 
+/// Type du lieu (normal si le lieu n'existe pas).
+pub(crate) fn progress(world: &MultiWorld, location: LocationId) -> Progress {
+    world
+        .location(location)
+        .map(|l| l.progress)
+        .unwrap_or_default()
+}
+
 /// Nombre d'essais de placement avant d'abandonner.
 pub const MAX_ATTEMPTS: u32 = 20;
 
 fn place_all<R: Rng + ?Sized>(
     world: &mut MultiWorld,
     pool: Vec<ItemKindId>,
-    mut empty: Vec<LocationId>,
+    empty: Vec<LocationId>,
     start: &State,
     rng: &mut R,
     placed: &mut Vec<LocationId>,
@@ -152,14 +178,27 @@ fn place_all<R: Rng + ?Sized>(
             rest.push(item);
         }
     }
+    let mut empty = empty;
     shuffle(rng, &mut empty);
     shuffle(rng, &mut progression);
     shuffle(rng, &mut useful);
     shuffle(rng, &mut rest);
+    // Trois listes de lieux, dans l'ordre mélangé : prioritaires, normaux, exclus.
+    let mut priority = Vec::new();
+    let mut normal = Vec::new();
+    let mut excluded = Vec::new();
+    for location in empty {
+        match progress(world, location) {
+            Progress::Priority => priority.push(location),
+            Progress::Default => normal.push(location),
+            Progress::Excluded => excluded.push(location),
+        }
+    }
 
     // Progression : placement supposé. On prend le dernier objet du paquet ; on suppose
     // qu'on possède tous ceux qui restent ; le balayage ramasse en plus les objets déjà
-    // posés dans les lieux atteints. L'objet va dans le premier lieu libre atteignable.
+    // posés dans les lieux atteints. L'objet va dans le premier lieu prioritaire libre et
+    // atteignable, sinon dans le premier lieu normal ; jamais dans un lieu exclu.
     // `pop` retire le dernier élément : le paquet rétrécit à chaque tour.
     while let Some(item) = progression.pop() {
         let mut state = start.clone();
@@ -167,7 +206,13 @@ fn place_all<R: Rng + ?Sized>(
             state.collect(world, *other);
         }
         let reach = sweep(world, state).reach;
-        let Some(index) = empty.iter().position(|l| reach.location(*l)) else {
+        let found = [&mut priority, &mut normal].into_iter().find_map(|list| {
+            list.iter()
+                .position(|l| reach.location(*l))
+                // `remove` garde l'ordre (mélangé) des lieux restants.
+                .map(|index| list.remove(index))
+        });
+        let Some(location) = found else {
             let kind = world.item_kind(item);
             return Err(FillError::NoReachableLocation {
                 slot: kind
@@ -177,15 +222,22 @@ fn place_all<R: Rng + ?Sized>(
                 item: kind.map(|k| k.name.clone()).unwrap_or_default(),
             });
         };
-        // `remove` garde l'ordre (mélangé) des lieux restants.
-        let location = empty.remove(index);
         world.place(location, item)?;
         placed.push(location);
     }
 
-    // Utiles puis remplissage : n'importe quel lieu libre, ils ne débloquent rien.
+    // Lieux exclus : du remplissage d'abord (`fill` a vérifié qu'il y en a assez).
+    // `split_off` coupe la liste : `rest` garde le début, `for_excluded` prend la fin.
+    let for_excluded = rest.split_off(rest.len().saturating_sub(excluded.len()));
+    for (item, location) in for_excluded.into_iter().zip(excluded) {
+        world.place(location, item)?;
+        placed.push(location);
+    }
+
+    // Utiles puis le reste du remplissage : n'importe quel lieu libre restant.
     // `zip` associe un objet à un lieu ; les deux listes ont la même longueur.
-    for (item, location) in useful.into_iter().chain(rest).zip(empty) {
+    let remaining = priority.into_iter().chain(normal);
+    for (item, location) in useful.into_iter().chain(rest).zip(remaining) {
         world.place(location, item)?;
         placed.push(location);
     }

@@ -130,6 +130,20 @@ pub struct Location {
     pub rule: Rule,
     /// Objet placé ici, s'il y en a un.
     pub item: Option<ItemKindId>,
+    /// Normal, prioritaire ou exclu (`LocationProgressType` d'Archipelago).
+    pub progress: Progress,
+}
+
+/// Ce que le placement a le droit de mettre dans un lieu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Progress {
+    /// N'importe quel objet.
+    #[default]
+    Default,
+    /// Reçoit de préférence un objet de progression.
+    Priority,
+    /// Ne reçoit ni progression ni objet utile : seulement du remplissage ou un piège.
+    Excluded,
 }
 
 /// Une sorte d'objet d'un joueur.
@@ -275,6 +289,7 @@ impl MultiWorld {
             address,
             rule,
             item: None,
+            progress: Progress::Default,
         });
         Ok(id)
     }
@@ -380,6 +395,20 @@ impl MultiWorld {
             .get_mut(location.index())
             .ok_or(LogicError::UnknownLocation(location.raw()))?;
         location.rule = rule;
+        Ok(())
+    }
+
+    /// Rend un lieu prioritaire ou exclu (voir [`Progress`]).
+    pub fn set_progress(
+        &mut self,
+        location: LocationId,
+        progress: Progress,
+    ) -> Result<(), LogicError> {
+        let location = self
+            .locations
+            .get_mut(location.index())
+            .ok_or(LogicError::UnknownLocation(location.raw()))?;
+        location.progress = progress;
         Ok(())
     }
 

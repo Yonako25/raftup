@@ -7,7 +7,7 @@ Menu --(Sword et 2 Key)--> Castle (Victory)
 """
 from dataclasses import dataclass
 
-from BaseClasses import Item, ItemClassification, Location, Region
+from BaseClasses import Item, ItemClassification, Location, LocationProgressType, Region
 from Options import PerGameCommonOptions, Toggle
 from worlds.AutoWorld import World
 
@@ -99,6 +99,9 @@ class SondeWorld(World):
         if self.options.bad_rule:
             mw.get_location("Bad Spot", p).access_rule = lambda s: not s.has("Lamp", p)
         mw.get_location("Victory", p).access_rule = lambda s: s.has("Key", p, 2)
+        # Un lieu prioritaire et un lieu exclu (LocationProgressType).
+        mw.get_location("Start Chest", p).progress_type = LocationProgressType.PRIORITY
+        mw.get_location("Forest Stump", p).progress_type = LocationProgressType.EXCLUDED
         mw.completion_condition[p] = lambda s: s.has("Victory", p)
 
     def fill_slot_data(self):

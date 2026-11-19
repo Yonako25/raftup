@@ -258,3 +258,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : ADR 0028, étape 3 : `progress_type` (lieux exclus et prioritaires) dans `logic` et `fill`.
 
+### 2026-11-19 · ADR 0028, étape 3 : lieux prioritaires et exclus
+- **Fait** : `logic::Progress` et `set_progress` ; `fill` place la progression d'abord dans les lieux prioritaires, jamais dans les exclus, met du remplissage dans les exclus (`TooManyExcluded` sinon) ; l'équilibrage ne touche pas aux prioritaires et ne remplit pas les exclus. Import de `progress_type`. 4 tests de `fill` (300 seeds), test d'import, monde `raftup_sonde` vérifié en vrai. Workspace et clippy passent.
+- **Pas vérifié** : écart assumé avec la passe « Priority » séparée d'Archipelago (objets déprioritisés non distingués), mesuré seulement sur le monde de test.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : ADR 0028, étape 4 : `finish_worlds` et branchement ; d'abord faire valider qui écrit la seed (Archipelago ou Rust) et le réglage de `PYTHONHASHSEED`.
+
