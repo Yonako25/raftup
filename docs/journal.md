@@ -276,3 +276,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : jouer une partie de Slime Rancher générée avec la case « Moteur Rust » (à faire par l'utilisatrice, devant le jeu).
 
+### 2026-11-19 · Slime Rancher en jeu, piloté par macro (seed placée par Raftup)
+- **Fait** : launcher en macro (`RAFTUP_DEV_CAPTURE`, `RAFTUP_DEV_RUST=1`, port 38281) : moteur « export » choisi seul, placement Raftup réussi (fichiers de travail supprimés, pas de repli), partie hébergée en `ws`. Jeu lancé et piloté par un script PowerShell (`SendInput`, captures d'écran ; pas de computer-use) : menu Archipelago de Slimipelago prérempli par `ApConnection.json`, connexion acceptée, nouvelle partie « Archipelago » avec l'`ap_uuid` du `slot_data`, objet de départ reçu en jeu (« Region Unlock: Mochi's Manor », from Server).
+- **Pas vérifié** : aucun lieu validé en jeu (achat d'amélioration au terminal du ranch non trouvé à l'aveugle) ; la borne à droite du marché ne s'ouvre pas avec E.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
+
