@@ -186,9 +186,14 @@ pub fn validate_manual_dir(rule: &DetectRule, path: &Path) -> Result<DetectedGam
 }
 
 /// Vrai si `text` est un chemin relatif sans `..`, sans racine ni lettre de disque.
+///
+/// `\` et `:` sont refusés quel que soit le système : sous Linux et macOS, `..\x.exe`
+/// serait sinon un simple nom de fichier, et le même profil serait accepté ici et
+/// refusé sous Windows. Les profils écrivent leurs chemins avec `/`.
 fn is_safe_relative(text: &str) -> bool {
     let path = Path::new(text);
     !text.is_empty()
+        && !text.contains(['\\', ':'])
         && path
             .components()
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))

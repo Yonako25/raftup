@@ -30,6 +30,12 @@ anyhow.workspace = true
 # PNG des captures de la macro de développement (`devscript.rs`) ; déjà tiré par eframe.
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Linux et BSD (NF11) : rfd exige exactement un moteur de boîtes de fichiers, sinon son
+# `build.rs` s'arrête. « xdg-portal » passe par le portail du bureau (D-Bus), en Rust pur,
+# sans bibliothèque GTK à installer. Windows et macOS utilisent les boîtes natives.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+rfd = { workspace = true, features = ["xdg-portal"] }
+
 [dev-dependencies]
 # Dossier temporaire pour le test de détection de l'écran Bibliothèque.
 tempfile.workspace = true

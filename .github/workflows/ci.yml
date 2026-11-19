@@ -7,14 +7,33 @@ on:
 
 jobs:
   verifier:
-    # Windows d'abord (NF11) ; macOS et Linux seront ajoutés avant la V2.
-    runs-on: windows-latest
+    # NF11 : le workspace se compile et ses tests passent sous Windows, macOS et Linux.
+    # Le code propre à Windows (registre, Job Object, schéma raftup://) est derrière
+    # `#[cfg(windows)]`, avec un repli documenté à côté de chaque bloc.
+    strategy:
+      # Un système en échec n'arrête pas les autres : on veut savoir lesquels cassent.
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # Linux : en-têtes des bibliothèques de fenêtrage tirées par eframe (X11, Wayland,
+      # clavier). Les boîtes de fichiers passent par le portail xdg, sans GTK.
+      - name: Dépendances système (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libx11-dev
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # NF12 : déjà compris dans `cargo test --workspace`, relancé à part pour que son
+      # résultat se lise d'un coup d'œil sur chaque système.
+      - name: Empreinte de la seed APQuest (NF12)
+        run: cargo test -p generate --test empreinte

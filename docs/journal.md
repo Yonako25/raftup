@@ -293,3 +293,7 @@ untime2`.
 - **Pas vérifié** : vraie clé du registre (`REGISTRY_PUBLIC_KEY` vide : tout est refusé), adresse de publication, binaire jamais lancé sur une vraie apworld ; rien dans l'interface (Bibliothèque, installation d'une apworld du registre).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : générer la clé (`raftup-registry keygen`, hors du dépôt), écrire le `registre.toml` source, brancher le registre dans la Bibliothèque.
+### 2026-11-19 · NF11 / NF12 : CI multi-OS et empreinte de seed
+- **Fait** : `ci.yml` en matrice Windows, macOS, Linux (`fail-fast: false`, en-têtes X11/Wayland sous Linux) ; test `generate/tests/empreinte.rs` : sha256 du `.archipelago` d'une seed APQuest à 2 joueurs, valeur écrite dans le test, mise à jour expliquée en tête. Relecture des `cfg(windows)` : rfd ne compilait pas sous Linux (aucun moteur de boîte de fichiers) → `xdg-portal` ; `detect::is_safe_relative` acceptait `..\x.exe` hors Windows → `\` et `:` refusés partout. Runtime Python documenté Windows seulement (repli : moteur Rust). fmt, clippy et workspace passent sous Windows.
+- **Pas vérifié** : aucune compilation ni test sous macOS ou Linux (cibles non installées, pas de push) ; empreinte identique sur les trois OS pas encore prouvée.
+- **Suite** : pousser la branche pour lancer la CI, corriger ce qui casse sous macOS et Linux.

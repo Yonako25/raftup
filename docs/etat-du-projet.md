@@ -33,6 +33,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
 - [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
 - [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; reste : vraie clé (`REGISTRY_PUBLIC_KEY` vide), source `registre.toml`, adresse de publication, branchement dans la Bibliothèque
+- [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
 
 ## Crates
 
