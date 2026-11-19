@@ -282,39 +282,51 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
-
 ### 2026-11-19 · Hub `raftup-hub` : comptes, amis, présence (ADR 0033)
 - **Fait** : ADR 0033 (axum 0.8, sqlx 0.8 + SQLite, PostgreSQL prévu dans `store.rs` seul, jetons opaques hachés SHA-256 révocables) ; crate `crates/hub` en AGPL-3.0-or-later, binaire `raftup-hub` ; inscription et connexion e-mail + mot de passe argon2id, pseudo unique (NFKC + minuscules), demandes d'ami, présence en mémoire avec expiration, limites de tentatives. 32 tests (API, NF09 sur base et journal, ADR 0003 : aucune crate n'en dépend) ; licences des dépendances vérifiées (toutes permissives).
 - **Pas vérifié** : PostgreSQL (rien d'écrit) ; binaire seulement essayé en local (inscription, connexion) ; `LICENSE-AGPL` écrit sans téléchargement, à comparer avec le texte de gnu.org. Pas de Discord, de vérification d'e-mail, de blocage ni de RGPD (listés dans l'ADR).
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : relire l'ADR 0033 ; client du hub dans `launcher-core` (jeton dans `keyring`) et panneau d'amis.
+
 ### 2026-11-19 · Registre de paquets signés (session `registre`, ADR 0032)
 - **Fait** : ADR 0032 (accepté en autonomie, à relire) ; crate `registry` (MIT OR Apache-2.0) : `index.json` versionné, trié, une version par paquet, URL + sha256 + taille + licence + auteurs (rien n'est hébergé) ; signature minisign vérifiée avant lecture ; binaire `raftup-registry` (`keygen`, `publish`, `verify`) qui écrit en local et n'envoie rien. `launcher-core::registry` : index et paquets téléchargés bornés et vérifiés, profils du registre ajoutés au catalogue sans jamais remplacer l'embarqué. 21 tests `registry`, 10 `launcher-core` ; workspace, clippy et fmt passent.
 - **Pas vérifié** : vraie clé du registre (`REGISTRY_PUBLIC_KEY` vide : tout est refusé), adresse de publication, binaire jamais lancé sur une vraie apworld ; rien dans l'interface (Bibliothèque, installation d'une apworld du registre).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : générer la clé (`raftup-registry keygen`, hors du dépôt), écrire le `registre.toml` source, brancher le registre dans la Bibliothèque.
+
 ### 2026-11-19 · NF11 / NF12 : CI multi-OS et empreinte de seed
 - **Fait** : `ci.yml` en matrice Windows, macOS, Linux (`fail-fast: false`, en-têtes X11/Wayland sous Linux) ; test `generate/tests/empreinte.rs` : sha256 du `.archipelago` d'une seed APQuest à 2 joueurs, valeur écrite dans le test, mise à jour expliquée en tête. Relecture des `cfg(windows)` : rfd ne compilait pas sous Linux (aucun moteur de boîte de fichiers) → `xdg-portal` ; `detect::is_safe_relative` acceptait `..\x.exe` hors Windows → `\` et `:` refusés partout. Runtime Python documenté Windows seulement (repli : moteur Rust). fmt, clippy et workspace passent sous Windows.
 - **Pas vérifié** : aucune compilation ni test sous macOS ou Linux (cibles non installées, pas de push) ; empreinte identique sur les trois OS pas encore prouvée.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : pousser la branche pour lancer la CI, corriger ce qui casse sous macOS et Linux.
+
 ### 2026-11-19 · Bac à sable du générateur (ADR 0034)
 - **Fait** : ADR 0034 (accepté en autonomie, à relire). Sous Windows, le worker est lancé en intégrité basse : copie `python-raftup-low.exe` étiquetée par `icacls`, écriture permise seulement dans `generations/<horodatage>/` (TEMP compris), remis à « moyen » après l'arrêt ; le worker annonce son niveau (`whoami /groups`) et le pont refuse un worker qui n'est pas en intégrité basse. Activé par défaut (`PythonBackend::sandbox`), aussi pour le moteur export. Sans `unsafe`, sans nouvelle crate. Tests `py-bridge/tests/sandbox.rs` (faux worker vraiment lancé en intégrité basse) ; tests réels de génération (5) et d'export (8, dont Slime Rancher) passent avec le bac à sable ; 39 tests Python.
 - **Pas vérifié** : repli hors Windows (rien appliqué, seulement écrit et relu) ; disque sans étiquettes (FAT32, réseau : la génération échoue) ; runtime neuf (`.pyc` jamais écrits par le worker, coût non mesuré) ; durée comparée à avant (export réel : 846 s pour 8 tests, sans mesure avant). Builds dans un `target` à part (`agents-v2-bac-a-sable`, puis `v2-bac-a-sable`) : le `target` commun mélangeait les worktrees.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : relire l'ADR 0034 ; plus tard, AppContainer (lecture et réseau) et bac à sable Linux/macOS.
+
 ### 2026-11-19 · Règles d'objet, objets à placer tôt et accessibilité (ADR 0029, session early-items)
 - **Fait** : ADR 0029 (accepté en autonomie, à relire). `logic` : `ItemRule` (arène), `can_hold`, `Accessibility`, `must_reach` ; `fill` : `fill_with_early` (sphère 0 d'après `distribute_early_items`), règles d'objet respectées au placement et à l'équilibrage, `minimal` / `items` ; export format 2 : règles d'objet en listes calculées par Archipelago, contrôle croisé `can_fill`, `early_items`, `accessibility`. Monde `raftup_sonde` : options `early_items`, `item_rules`. Tests `fill` (8), import, Python (41), réels `export_real` (2 nouveaux).
 - **Pas vérifié** : un monde tiers qui pose des règles d'objet ou des objets tôt ; gros multiworld (coût du calcul en Python) ; pas d'échange façon `remaining_fill` (échec ⇒ repli Python).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : relecture de l'ADR 0029 par l'utilisatrice ; essai sur un apworld qui se sert de `local_items` ou d'`early_items`.
+
 ### 2026-11-19 · Finitions du moteur (session `moteur-finitions`)
 - **Fait** : spoiler `AP_<seed>_Spoiler.txt` dans le zip du moteur Rust seul (`generate::spoiler` : en-tête, options, placement, parcours par sphères ; niveau 0 sans spoiler, 1 sans parcours) ; `GeneratorBackend::report` (`EngineReport`) : l'écran dit à la fin quel moteur a vraiment généré ; raison du repli du moteur export affichée en direct et à la fin (avant le message d'erreur). Tests `generate`, `launcher-core`, `launcher-ui` ; workspace et clippy passent.
 - **Vu sur captures** (macro, port 38296 occupé) : APQuest « Moteur : Raftup seul » ; Slime Rancher + APQuest export « Archipelago a construit les mondes, Raftup a placé les objets » ; `local_items` → « Archipelago seul » + raison du repli en orange.
 - **Pas vérifié** : test réel `repli_sur_archipelago_seul` (assertion du rapport ajoutée, non lancé) ; spoiler non relu par un outil tiers ; `CARGO_TARGET_DIR` partagé (`agents-v2`) inutilisable en parallèle (rlib d'une autre worktree liée) : construit dans `target/agents-v2-finitions`. `ignore_eof_shutdown_et_drop_rapides` (py-bridge, non touché) a échoué une fois sous charge, passe seul.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : écrire dans le spoiler la version des apworlds (ADR 0028, § reproductibilité).
+
 ### 2026-11-19 · Durée estimée et équilibrage par temps (ADR 0030)
 - **Fait** : ADR 0030 (accepté en autonomie, à relire) ; champ facultatif `game.seconds_per_location` des profils (Slime Rancher : 240 s, défaut 120 s, `format_version` inchangé) ; `launcher_core::estimate` (temps de jeu et fin au plus tard par sphères) ; panneau « Durée estimée » (`screens/estimate.rs`, une ligne dans `create.rs`) ; `fill::time_balance` et `simulate`, désactivé par défaut, 9 tests sur des mondes écrits à la main.
 - **Pas vérifié** : temps par lieu jamais mesuré en vraie partie ; équilibrage par temps branché nulle part (ni `generate` ni interface) ; coût sur une grosse partie. Builds dans `target/agents-v2-duree` : le `target/agents-v2` partagé entre worktrees donnait un `fill` d'une autre branche.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : brancher `time_balance` derrière une option (case ou option YAML), afficher l'estimation dans « Partie en cours ».
+
 ### 2026-11-19 · V2, suivi async (ADR 0031)
 - **Fait** : ADR 0031 (accepté en autonomie, à relire). Option de salle `with_async_follow` (désactivée par défaut, `--async_follow`, toujours active dans le launcher) : `!away`, `!back`, `!summary`, `!vote_release` (majorité stricte des autres joueurs, passe outre `release_mode`), résumé de retour en `PrintJSON` après le tutoriel, réponse automatique quand le chat cite un absent, clés `_read_raftup_away_<équipe>` / `_read_raftup_release_votes_<équipe>`, fil d'activité borné. `.raftup` en `format_version` 2 (version 1 toujours lue, réécrite au compactage). Événements `Away`, `Back`, `ReleaseVote` vers le webhook et « Partie en cours ». 8 tests serveur, tests `multidata`, webhook et format ; workspace, clippy et fmt passent.
 - **Pas vérifié** : tests différentiels contre le vrai serveur Python non relancés (comportement inchangé sans l'option, captures rejouées vertes) ; écran regardé à l'œil ; vrai mod qui envoie `!away` ; vrai webhook.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : faire relire l'ADR 0031 (noms des commandes, vote qui passe outre `release_mode`) ; regarder « Partie en cours » avec un absent et un vote.
