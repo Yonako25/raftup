@@ -14,6 +14,11 @@
 //! | `POST /v1/email/verify/resend` | renvoie le message de vérification |
 //! | `POST /v1/password/forgot` | envoie un code de réinitialisation (`email`) ; répond toujours 202 |
 //! | `POST /v1/password/reset` | nouveau mot de passe (`token`, `password`) ; ferme toutes les sessions |
+//! | `POST /v1/oauth/discord/start` | commence une connexion Discord (`return_port` facultatif) ; avec un jeton : liaison au compte |
+//! | `GET /v1/oauth/discord/callback` | retour de Discord (navigateur), renvoie vers le launcher |
+//! | `POST /v1/oauth/discord/finish` | finit la connexion (`state`, `secret`, `ticket`) |
+//! | `POST /v1/oauth/discord/register` | crée le compte d'un nouveau joueur Discord (`username` en plus) |
+//! | `DELETE /v1/me/identities/discord` | délie Discord (s'il reste un autre moyen de connexion) |
 //! | `PUT /v1/presence` | sa présence (`status`, `game`) |
 //! | `GET /v1/friends` | amis et leur présence |
 //! | `DELETE /v1/friends/{username}` | retirer un ami |
@@ -27,24 +32,26 @@
 //! | `DELETE /v1/blocks/{username}` | lever un blocage |
 //!
 //! Les routes sauf `/v1`, l'inscription, la connexion, la vérification d'adresse et
-//! le mot de passe oublié demandent l'en-tête
+//! le mot de passe oublié, et la connexion Discord demandent l'en-tête
 //! `Authorization: Bearer <jeton>`.
 
 use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::discord::{code_challenge, Outcome, Pending, ReturnTo};
 use crate::error::HubError;
 use crate::identity::{normalize_email, normalize_username, parse_username};
 use crate::mail::{password_reset_email, verification_email};
 use crate::memory::{PresenceView, Status};
 use crate::password::{hash_password, verify_password, Password};
 use crate::session::{new_token, token_hash};
-use crate::store::{AccountExport, TokenPurpose, UserRow};
+use crate::store::{AccountExport, TokenPurpose, UserRow, DISCORD_PROVIDER};
 use crate::{blocking, now_unix, AppState};
 
 /// Version de l'API, renvoyée par `GET /v1`.
@@ -70,6 +77,11 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/email/verify/resend", post(resend_verification))
         .route("/v1/password/forgot", post(forgot_password))
         .route("/v1/password/reset", post(reset_password))
+        .route("/v1/oauth/discord/start", post(discord_start))
+        .route("/v1/oauth/discord/callback", get(discord_callback))
+        .route("/v1/oauth/discord/finish", post(discord_finish))
+        .route("/v1/oauth/discord/register", post(discord_register))
+        .route("/v1/me/identities/discord", delete(discord_unlink))
         .route("/v1/presence", put(set_presence))
         .route("/v1/friends", get(list_friends))
         .route("/v1/friends/{username}", delete(remove_friend))
@@ -163,6 +175,53 @@ pub struct MeView {
     pub email: Option<String>,
     /// Vrai quand l'adresse a été confirmée par le lien du message.
     pub email_verified: bool,
+    /// Vrai quand un compte Discord est lié.
+    pub discord_linked: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct DiscordStartBody {
+    /// Port du petit serveur local du launcher ; sans lui, retour par `raftup://`.
+    #[serde(default)]
+    pub return_port: Option<u16>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiscordStartView {
+    /// Adresse à ouvrir dans le navigateur du système.
+    pub authorize_url: String,
+    pub state: String,
+    /// Secret à garder par le launcher, redemandé à la fin.
+    pub secret: String,
+}
+
+/// Fin de la connexion Discord. `Debug` masqué : secrets.
+#[derive(Deserialize)]
+pub struct DiscordFinishBody {
+    pub state: String,
+    pub secret: String,
+    pub ticket: String,
+    /// Seulement pour `/register` : le pseudo choisi.
+    #[serde(default)]
+    pub username: Option<String>,
+}
+
+impl std::fmt::Debug for DiscordFinishBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DiscordFinishBody(***)")
+    }
+}
+
+/// Résultat de `finish` / `register` : `logged_in` (avec la session), `linked`,
+/// ou `needs_username` (avec un pseudo proposé, s'il est libre).
+#[derive(Debug, Serialize)]
+pub struct DiscordFinishView {
+    pub status: &'static str,
+    /// `flatten` : les champs de la session sont au même niveau que `status`.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_username: Option<String>,
 }
 
 /// Jeton reçu par e-mail. `Debug` masqué : le jeton est un secret.
@@ -267,27 +326,38 @@ impl FromRequestParts<AppState> for AuthUser {
     type Rejection = HubError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, HubError> {
-        let header_value = parts
-            .headers
-            .get(header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .ok_or(HubError::Unauthorized)?;
-        let token = header_value
-            .strip_prefix("Bearer ")
-            .map(str::trim)
-            .filter(|t| !t.is_empty())
-            .ok_or(HubError::Unauthorized)?;
-        let hash = token_hash(token);
-        let user_id = state
-            .store()
-            .session_user(&hash, now_unix())
+        optional_auth(&parts.headers, state)
             .await?
-            .ok_or(HubError::Unauthorized)?;
-        Ok(AuthUser {
-            user_id,
-            token_hash: hash,
-        })
+            .ok_or(HubError::Unauthorized)
     }
+}
+
+/// Session facultative : `Ok(None)` sans en-tête `Authorization`, une erreur si
+/// l'en-tête est là mais le jeton faux ou expiré.
+async fn optional_auth(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<Option<AuthUser>, HubError> {
+    let Some(value) = headers.get(header::AUTHORIZATION) else {
+        return Ok(None);
+    };
+    let token = value
+        .to_str()
+        .ok()
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .ok_or(HubError::Unauthorized)?;
+    let hash = token_hash(token);
+    let user_id = state
+        .store()
+        .session_user(&hash, now_unix())
+        .await?
+        .ok_or(HubError::Unauthorized)?;
+    Ok(Some(AuthUser {
+        user_id,
+        token_hash: hash,
+    }))
 }
 
 // ---------- Routes ----------
@@ -373,6 +443,11 @@ async fn login(
     };
     limiter.reset(&email);
 
+    Ok(Json(open_session(&state, user_id).await?))
+}
+
+/// Ouvre une session pour un compte (connexion par mot de passe ou Discord).
+async fn open_session(state: &AppState, user_id: i64) -> Result<SessionView, HubError> {
     let user = state
         .store()
         .user_by_id(user_id)
@@ -387,12 +462,12 @@ async fn login(
         .insert_session(&token_hash(&token), user_id, now, expires_at)
         .await?;
     tracing::info!(user_id, "session ouverte");
-    Ok(Json(SessionView {
+    Ok(SessionView {
         token,
         user_id,
         username: user.username,
         expires_at,
-    }))
+    })
 }
 
 async fn logout(State(state): State<AppState>, user: AuthUser) -> Result<StatusCode, HubError> {
@@ -410,11 +485,13 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeView
         .ok_or(HubError::Unauthorized)?;
     let status = state.store().email_status(user.user_id).await?;
     let email_verified = status.as_ref().is_some_and(|(_, verified)| *verified);
+    let providers = state.store().identity_providers(user.user_id).await?;
     Ok(Json(MeView {
         user_id: row.id,
         username: row.username,
         email: status.map(|(email, _)| email),
         email_verified,
+        discord_linked: providers.iter().any(|p| p == DISCORD_PROVIDER),
     }))
 }
 
@@ -873,5 +950,270 @@ async fn reset_password(
     state.store().reset_password(user_id, &hash).await?;
     state.inner.presence.clear(user_id);
     tracing::info!(user_id, "mot de passe réinitialisé, sessions fermées");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- Connexion Discord (OAuth 2.0 + PKCE) ----------
+
+fn discord_api(state: &AppState) -> Result<std::sync::Arc<dyn crate::DiscordApi>, HubError> {
+    state.inner.discord.clone().ok_or(HubError::DiscordDisabled)
+}
+
+/// Étape 1 : commence une connexion. Avec une session : liaison de Discord à ce compte.
+async fn discord_start(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ApiJson(body): ApiJson<DiscordStartBody>,
+) -> Result<Json<DiscordStartView>, HubError> {
+    let api = discord_api(&state)?;
+    let link_user = optional_auth(&headers, &state).await?.map(|u| u.user_id);
+    let return_to = match body.return_port {
+        Some(0) => return Err(HubError::BadRequest("return_port invalide".to_string())),
+        Some(port) => ReturnTo::Loopback(port),
+        None => ReturnTo::DeepLink,
+    };
+    // Trois valeurs aléatoires : `state` (dans les adresses), `secret` (gardé par
+    // le launcher) et le vérificateur PKCE (gardé par le hub).
+    let oauth_state = new_token();
+    let secret = new_token();
+    let code_verifier = new_token();
+    let authorize_url = api.authorize_url(&oauth_state, &code_challenge(&code_verifier));
+    let pending = Pending {
+        secret_hash: token_hash(&secret),
+        code_verifier,
+        link_user,
+        return_to,
+        created: std::time::Instant::now(),
+        outcome: None,
+    };
+    if !state
+        .inner
+        .oauth_pending
+        .insert(oauth_state.clone(), pending)
+    {
+        return Err(HubError::TooManyAttempts);
+    }
+    Ok(Json(DiscordStartView {
+        authorize_url,
+        state: oauth_state,
+        secret,
+    }))
+}
+
+/// Étape 2 : retour de Discord dans le navigateur : échange du code, puis renvoi vers le
+/// launcher avec un `ticket` (même en cas de refus, pour que le launcher l'apprenne).
+async fn discord_callback(
+    State(state): State<AppState>,
+    Query(query): Query<std::collections::BTreeMap<String, String>>,
+) -> Response {
+    let text_error = |message: &'static str| (StatusCode::BAD_REQUEST, message).into_response();
+    let Some(oauth_state) = query.get("state") else {
+        return text_error("Lien incomplet.");
+    };
+    let Some(pending) = state.inner.oauth_pending.get(oauth_state) else {
+        return text_error("Connexion inconnue ou expirée : recommencez depuis le launcher.");
+    };
+    if pending.outcome.is_some() {
+        return text_error("Cette connexion est déjà revenue de Discord.");
+    }
+    let outcome = match (query.get("code"), discord_api(&state)) {
+        (Some(code), Ok(api)) if !query.contains_key("error") => {
+            let code = code.clone();
+            let verifier = pending.code_verifier.clone();
+            match blocking(move || Ok(api.identify(&code, &verifier))).await {
+                Ok(Ok(user)) => Outcome::Identified(user),
+                Ok(Err(crate::discord::DiscordError::Refused)) => Outcome::Refused,
+                _ => Outcome::Unavailable,
+            }
+        }
+        // `error=access_denied` : le joueur a dit non chez Discord.
+        _ => Outcome::Refused,
+    };
+    let ticket = new_token();
+    if !state
+        .inner
+        .oauth_pending
+        .set_outcome(oauth_state, outcome, token_hash(&ticket))
+    {
+        return text_error("Cette connexion est déjà revenue de Discord.");
+    }
+    Redirect::to(&pending.return_to.url(oauth_state, &ticket)).into_response()
+}
+
+/// Vérifie `state`, `secret` et `ticket`, et renvoie l'identité Discord obtenue.
+/// Un refus ou une panne de Discord termine la connexion.
+fn checked_discord_user(
+    state: &AppState,
+    body: &DiscordFinishBody,
+) -> Result<(Pending, crate::DiscordUser), HubError> {
+    let pending = state
+        .inner
+        .oauth_pending
+        .get(&body.state)
+        .ok_or(HubError::InvalidToken)?;
+    if token_hash(&body.secret) != pending.secret_hash {
+        return Err(HubError::InvalidToken);
+    }
+    let Some((outcome, ticket_hash)) = pending.outcome.clone() else {
+        return Err(HubError::InvalidToken);
+    };
+    if token_hash(&body.ticket) != ticket_hash {
+        return Err(HubError::InvalidToken);
+    }
+    match outcome {
+        Outcome::Identified(user) => Ok((pending, user)),
+        Outcome::Refused => {
+            state.inner.oauth_pending.remove(&body.state);
+            Err(HubError::DiscordRefused)
+        }
+        Outcome::Unavailable => {
+            state.inner.oauth_pending.remove(&body.state);
+            Err(HubError::DiscordUnavailable)
+        }
+    }
+}
+
+/// Pseudo proposé à partir du nom Discord, s'il respecte les règles et est libre.
+async fn suggested_username(
+    state: &AppState,
+    user: &crate::DiscordUser,
+) -> Result<Option<String>, HubError> {
+    for candidate in [user.global_name.as_deref(), Some(user.username.as_str())]
+        .into_iter()
+        .flatten()
+    {
+        if let Ok(name) = parse_username(candidate) {
+            if state
+                .store()
+                .user_by_username(&name.normalized)
+                .await?
+                .is_none()
+            {
+                return Ok(Some(name.display));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Étape 3 : fin de la connexion : session, liaison, ou pseudo à choisir.
+async fn discord_finish(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<DiscordFinishBody>,
+) -> Result<Json<DiscordFinishView>, HubError> {
+    let (pending, discord) = checked_discord_user(&state, &body)?;
+    let store = state.store();
+    let owner = store.identity_user(DISCORD_PROVIDER, &discord.id).await?;
+
+    if let Some(user_id) = pending.link_user {
+        // Liaison à un compte déjà connecté. La connexion en attente est retirée
+        // quoi qu'il arrive : une liaison ne se retente pas avec le même ticket.
+        state.inner.oauth_pending.remove(&body.state);
+        match owner {
+            // Déjà lié à ce compte : rien à faire.
+            Some(owner) if owner == user_id => {}
+            Some(_) => return Err(HubError::DiscordTaken),
+            None => {
+                store
+                    .link_identity(user_id, DISCORD_PROVIDER, &discord.id, now_unix())
+                    .await?
+            }
+        }
+        tracing::info!(user_id, "compte Discord lié");
+        return Ok(Json(DiscordFinishView {
+            status: "linked",
+            session: None,
+            suggested_username: None,
+        }));
+    }
+
+    match owner {
+        Some(user_id) => {
+            state.inner.oauth_pending.remove(&body.state);
+            Ok(Json(DiscordFinishView {
+                status: "logged_in",
+                session: Some(open_session(&state, user_id).await?),
+                suggested_username: None,
+            }))
+        }
+        // Nouveau joueur : la connexion reste ouverte le temps de choisir un pseudo.
+        None => Ok(Json(DiscordFinishView {
+            status: "needs_username",
+            session: None,
+            suggested_username: suggested_username(&state, &discord).await?,
+        })),
+    }
+}
+
+/// Crée le compte d'un nouveau joueur venu par Discord, avec le pseudo choisi.
+async fn discord_register(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<DiscordFinishBody>,
+) -> Result<(StatusCode, Json<DiscordFinishView>), HubError> {
+    let (pending, discord) = checked_discord_user(&state, &body)?;
+    if pending.link_user.is_some() {
+        return Err(HubError::BadRequest(
+            "connexion commencée pour une liaison : utiliser /finish".to_string(),
+        ));
+    }
+    let store = state.store();
+    // Compte créé entre-temps (deux onglets) : simple connexion.
+    if let Some(user_id) = store.identity_user(DISCORD_PROVIDER, &discord.id).await? {
+        state.inner.oauth_pending.remove(&body.state);
+        let session = open_session(&state, user_id).await?;
+        return Ok((
+            StatusCode::OK,
+            Json(DiscordFinishView {
+                status: "logged_in",
+                session: Some(session),
+                suggested_username: None,
+            }),
+        ));
+    }
+    let wanted = body
+        .username
+        .as_deref()
+        .ok_or(HubError::InvalidUsername("pseudo manquant"))?;
+    let username = parse_username(wanted)?;
+    // Pseudo pris : la connexion reste ouverte, le joueur en essaie un autre.
+    let user_id = store
+        .create_account_with_identity(
+            &username.display,
+            &username.normalized,
+            DISCORD_PROVIDER,
+            &discord.id,
+            now_unix(),
+        )
+        .await?;
+    state.inner.oauth_pending.remove(&body.state);
+    tracing::info!(user_id, "compte créé par Discord");
+    let session = open_session(&state, user_id).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(DiscordFinishView {
+            status: "logged_in",
+            session: Some(session),
+            suggested_username: None,
+        }),
+    ))
+}
+
+/// Délie Discord, sauf si c'est le dernier moyen de se connecter au compte.
+async fn discord_unlink(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<StatusCode, HubError> {
+    let providers = state.store().identity_providers(user.user_id).await?;
+    if !providers.iter().any(|p| p == DISCORD_PROVIDER) {
+        return Err(HubError::IdentityNotFound);
+    }
+    if providers.len() == 1 {
+        return Err(HubError::LastIdentity);
+    }
+    state
+        .store()
+        .unlink_identity(user.user_id, DISCORD_PROVIDER)
+        .await?;
+    tracing::info!(user_id = user.user_id, "compte Discord délié");
     Ok(StatusCode::NO_CONTENT)
 }

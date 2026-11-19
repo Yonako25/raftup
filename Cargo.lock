@@ -1675,6 +1675,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "axum",
+ "base64 0.22.1",
  "lettre",
  "serde",
  "serde_json",
@@ -1688,6 +1689,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-normalization",
+ "ureq",
+ "url",
 ]
 
 [[package]]

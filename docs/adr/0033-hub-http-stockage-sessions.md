@@ -72,6 +72,14 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 - **Mot de passe oublié** : `POST /v1/password/forgot` (`email`) répond toujours `202`, adresse connue ou non, limite atteinte ou non. Le message contient un code valable 1 h et le lien profond `raftup://password-reset?token=…` (le hub n'a pas de page web). `POST /v1/password/reset` (`token`, `password`) : mot de passe vérifié avant de consommer le code ; nouveau hash, adresse marquée vérifiée, **toutes les sessions fermées**.
 - Limite : 3 messages par heure et par adresse (mot de passe oublié) ou par compte (renvoi de la vérification).
 - `--public-url` donne l'adresse publique du hub pour les liens (par défaut `http://127.0.0.1:8787`).
+### Connexion Discord (ajout du 19 novembre 2026, à relire)
+
+- **OAuth 2.0 avec PKCE (`S256`)**, portée `identify` seulement (ni e-mail ni serveurs : données minimales). Le **hub** est le client OAuth : il garde le secret de l'application et le vérificateur PKCE ; le launcher ne voit jamais le code d'autorisation. L'adresse de retour déclarée chez Discord est celle du hub (`<public_url>/v1/oauth/discord/callback`), fixe : Discord n'accepte pas un port local variable.
+- Parcours : `POST /v1/oauth/discord/start` → `authorize_url`, `state`, `secret` ; le navigateur du système va chez Discord, revient au hub, qui échange le code (jeton d'accès jamais gardé) puis renvoie le navigateur vers le launcher (`http://127.0.0.1:<return_port>/discord` ou `raftup://oauth/discord`) avec un `ticket` ; `POST /v1/oauth/discord/finish` (`state`, `secret`, `ticket`) → `logged_in` (session), `linked`, ou `needs_username` (pseudo proposé : nom Discord s'il est valide et libre) puis `POST /v1/oauth/discord/register` (`username`).
+- Pourquoi `secret` **et** `ticket` : `secret` prouve que c'est le launcher qui a commencé ; `ticket` n'arrive que dans le navigateur qui a dit oui à Discord, sur la machine du joueur. Sans le ticket, quelqu'un qui enverrait son lien d'autorisation à une victime récupérerait la session de celle-ci (hameçonnage du parcours « appareil »).
+- Connexions en attente **en mémoire** (comme la présence), 10 minutes au plus, 10 000 au plus ; le retour de Discord n'est accepté qu'une fois. Un hub redémarré oublie les connexions en cours (le joueur recommence).
+- Liaison : `start` avec une session lie Discord au compte connecté. Un compte Discord ne va qu'à un compte (`discord_taken`), un compte n'a qu'un Discord (`already_linked`, index unique `(user_id, provider)`, schéma version 4). Pas de liaison automatique par adresse e-mail (on ne lit pas l'e-mail Discord). `DELETE /v1/me/identities/discord` délie, sauf si c'est le dernier moyen de connexion (`last_identity`). Un compte Discord seul se supprime sans mot de passe.
+- Client HTTP derrière le trait `DiscordApi` (`discord.rs`) : `HttpDiscord` (crate `ureq`, déjà utilisée par le launcher, HTTPS seulement, 15 s au plus) et `FakeDiscord` pour les tests. Appel sur un thread à part (`spawn_blocking`). Réglage par l'environnement (`RAFTUP_HUB_DISCORD_CLIENT_ID`, `RAFTUP_HUB_DISCORD_CLIENT_SECRET`) ; sans lui, les routes répondent `discord_disabled` (503). Nouvelles dépendances : `ureq`, `url`, `base64` (MIT OR Apache-2.0).
 - Licences ajoutées (même date) : ISC (`rustls-webpki`, `untrusted`, `ring` avec Apache-2.0), 0BSD (`quoted_printable`), CDLA-Permissive-2.0 (`webpki-roots`, données des certificats) ; compatibles avec l'AGPL.
 
 ### Licences des dépendances (vérifiées le 19 novembre 2026, `cargo tree -p hub -e normal,build`)
@@ -80,7 +88,7 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 
 ## Pas encore fait (à prévoir)
 
-- **Discord** (OAuth 2.0 + PKCE) : pas pour l'instant ; la table `user_identities` est prête pour un fournisseur `discord`.
+- Discord : révocation du jeton d'accès après lecture (inutile tant qu'il n'est pas gardé), vrai essai avec une application Discord.
 - L'inscription révèle toujours qu'une adresse a déjà un compte (`email_taken`) : à remplacer par un message « vous avez déjà un compte » envoyé à l'adresse, quand le launcher saura l'afficher. Connexion refusée tant que l'adresse n'est pas vérifiée : pas encore.
 - Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
 - RGPD : hébergement en Europe, politique de confidentialité, sauvegardes purgées des comptes supprimés.

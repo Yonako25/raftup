@@ -49,6 +49,20 @@ pub enum HubError {
     InvalidToken,
     #[error("adresse e-mail déjà vérifiée")]
     AlreadyVerified,
+    #[error("connexion Discord non configurée sur ce hub")]
+    DiscordDisabled,
+    #[error("connexion Discord refusée")]
+    DiscordRefused,
+    #[error("Discord ne répond pas, réessayer plus tard")]
+    DiscordUnavailable,
+    #[error("ce compte Discord est déjà lié à un autre compte")]
+    DiscordTaken,
+    #[error("ce compte a déjà un compte Discord lié")]
+    AlreadyLinked,
+    #[error("aucun moyen de connexion de ce type sur le compte")]
+    IdentityNotFound,
+    #[error("c'est le dernier moyen de connexion du compte")]
+    LastIdentity,
     #[error("présence invalide : {0}")]
     InvalidPresence(&'static str),
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
@@ -84,6 +98,13 @@ impl HubError {
             HubError::BlockNotFound => (StatusCode::NOT_FOUND, "block_not_found"),
             HubError::InvalidToken => (StatusCode::BAD_REQUEST, "invalid_token"),
             HubError::AlreadyVerified => (StatusCode::CONFLICT, "already_verified"),
+            HubError::DiscordDisabled => (StatusCode::SERVICE_UNAVAILABLE, "discord_disabled"),
+            HubError::DiscordRefused => (StatusCode::BAD_REQUEST, "discord_refused"),
+            HubError::DiscordUnavailable => (StatusCode::BAD_GATEWAY, "discord_unavailable"),
+            HubError::DiscordTaken => (StatusCode::CONFLICT, "discord_taken"),
+            HubError::AlreadyLinked => (StatusCode::CONFLICT, "already_linked"),
+            HubError::IdentityNotFound => (StatusCode::NOT_FOUND, "identity_not_found"),
+            HubError::LastIdentity => (StatusCode::CONFLICT, "last_identity"),
             HubError::InvalidPresence(_) => (StatusCode::BAD_REQUEST, "invalid_presence"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {

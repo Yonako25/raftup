@@ -13,8 +13,12 @@
 //! | `RAFTUP_HUB_DB` | URL de la base (remplace `--db`) |
 //! | `RAFTUP_HUB_SMTP_URL` | serveur d'envoi : `smtps://utilisateur:motdepasse@hote:465` |
 //! | `RAFTUP_HUB_MAIL_FROM` | expéditeur : `Raftup <no-reply@exemple.org>` |
+//! | `RAFTUP_HUB_DISCORD_CLIENT_ID` | application Discord (portail développeur) |
+//! | `RAFTUP_HUB_DISCORD_CLIENT_SECRET` | secret de cette application |
 //!
 //! Sans `RAFTUP_HUB_SMTP_URL`, aucun e-mail ne part (avertissement au journal).
+//! Sans les deux variables Discord, la connexion Discord répond `discord_disabled`.
+//! L'adresse de retour à déclarer chez Discord est `<public-url>/v1/oauth/discord/callback`.
 //!
 //! Le hub parle HTTP en clair : en production, il se place derrière un proxy
 //! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
@@ -22,7 +26,10 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
-use hub::{AppState, DisabledMailer, HubConfig, Mailer, SmtpMailer, Store};
+use hub::{
+    AppState, DisabledMailer, DiscordApi, DiscordConfig, HttpDiscord, HubConfig, Mailer,
+    SmtpMailer, Store,
+};
 
 struct Args {
     db: String,
@@ -54,8 +61,9 @@ fn parse_args() -> anyhow::Result<Args> {
                 println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
                 println!("  --public-url : adresse publique du hub, pour les liens des e-mails");
                 println!(
-                    "  environnement : RAFTUP_HUB_DB, RAFTUP_HUB_SMTP_URL, RAFTUP_HUB_MAIL_FROM"
+                    "  environnement : RAFTUP_HUB_DB, RAFTUP_HUB_SMTP_URL, RAFTUP_HUB_MAIL_FROM,"
                 );
+                println!("    RAFTUP_HUB_DISCORD_CLIENT_ID, RAFTUP_HUB_DISCORD_CLIENT_SECRET");
                 std::process::exit(0);
             }
             other => bail!("argument inconnu : {other}"),
@@ -89,7 +97,27 @@ async fn main() -> anyhow::Result<()> {
             Arc::new(DisabledMailer)
         }
     };
-    let state = AppState::with_mailer(store.clone(), config, mailer).await?;
+    let discord: Option<Arc<dyn DiscordApi>> = match (
+        env("RAFTUP_HUB_DISCORD_CLIENT_ID"),
+        env("RAFTUP_HUB_DISCORD_CLIENT_SECRET"),
+    ) {
+        (Some(client_id), Some(client_secret)) => {
+            let redirect_uri = format!(
+                "{}/v1/oauth/discord/callback",
+                config.public_url.trim_end_matches('/')
+            );
+            Some(Arc::new(HttpDiscord::new(DiscordConfig {
+                client_id,
+                client_secret,
+                redirect_uri,
+            })))
+        }
+        _ => {
+            tracing::warn!("application Discord non réglée : connexion Discord désactivée");
+            None
+        }
+    };
+    let state = AppState::with_services(store.clone(), config, mailer, discord).await?;
 
     // Ménage des sessions et jetons expirés, une fois par heure, dans une tâche à part.
     tokio::spawn(async move {

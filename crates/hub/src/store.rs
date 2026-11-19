@@ -19,7 +19,7 @@ use crate::error::HubError;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS email_tokens (
     expires_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS email_tokens_user ON email_tokens (user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS user_identities_one_per_provider
+    ON user_identities (user_id, provider);
 CREATE INDEX IF NOT EXISTS friend_requests_to ON friend_requests (to_user);
 CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
@@ -94,10 +96,14 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (2, ""),
     // Version 3 : table `email_tokens`, créée par `SCHEMA`.
     (3, ""),
+    // Version 4 : une seule identité par fournisseur et par compte (index de `SCHEMA`).
+    (4, ""),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.
 const EMAIL_PROVIDER: &str = "email";
+/// Fournisseur « Discord » : `subject` est l'identifiant Discord du joueur.
+pub const DISCORD_PROVIDER: &str = "discord";
 
 /// Un compte, vu de l'extérieur : identifiant interne et pseudo affiché.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -927,6 +933,122 @@ impl Store {
         tx.commit().await?;
         Ok(())
     }
+}
+
+impl Store {
+    /// Compte lié à une identité (`discord`, identifiant Discord…).
+    pub async fn identity_user(
+        &self,
+        provider: &str,
+        subject: &str,
+    ) -> Result<Option<i64>, HubError> {
+        let row =
+            sqlx::query("SELECT user_id FROM user_identities WHERE provider = $1 AND subject = $2")
+                .bind(provider)
+                .bind(subject)
+                .fetch_optional(&self.pool)
+                .await?;
+        row.map(|r| r.try_get("user_id"))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    /// Fournisseurs liés à un compte (`email`, `discord`), dans l'ordre de liaison.
+    pub async fn identity_providers(&self, user_id: i64) -> Result<Vec<String>, HubError> {
+        let rows =
+            sqlx::query("SELECT provider FROM user_identities WHERE user_id = $1 ORDER BY id")
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?;
+        rows.iter()
+            .map(|row| row.try_get("provider").map_err(Into::into))
+            .collect()
+    }
+
+    /// Lie une identité externe (sans mot de passe, vérifiée par le fournisseur) à
+    /// un compte existant.
+    pub async fn link_identity(
+        &self,
+        user_id: i64,
+        provider: &str,
+        subject: &str,
+        now: i64,
+    ) -> Result<(), HubError> {
+        sqlx::query(
+            "INSERT INTO user_identities (user_id, provider, subject, secret_hash, verified, \
+             created_at) VALUES ($1, $2, $3, NULL, 1, $4)",
+        )
+        .bind(user_id)
+        .bind(provider)
+        .bind(subject)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_identity_unique)?;
+        Ok(())
+    }
+
+    /// Crée un compte dont le seul moyen de connexion est une identité externe.
+    pub async fn create_account_with_identity(
+        &self,
+        username: &str,
+        username_norm: &str,
+        provider: &str,
+        subject: &str,
+        now: i64,
+    ) -> Result<i64, HubError> {
+        let mut tx = self.pool.begin().await?;
+        let user_id: i64 = sqlx::query(
+            "INSERT INTO users (username, username_norm, created_at) VALUES ($1, $2, $3) \
+             RETURNING id",
+        )
+        .bind(username)
+        .bind(username_norm)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_unique)?
+        .try_get("id")?;
+        sqlx::query(
+            "INSERT INTO user_identities (user_id, provider, subject, secret_hash, verified, \
+             created_at) VALUES ($1, $2, $3, NULL, 1, $4)",
+        )
+        .bind(user_id)
+        .bind(provider)
+        .bind(subject)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_identity_unique)?;
+        tx.commit().await?;
+        Ok(user_id)
+    }
+
+    /// Retire une identité d'un compte ; `false` s'il n'en avait pas.
+    pub async fn unlink_identity(&self, user_id: i64, provider: &str) -> Result<bool, HubError> {
+        let result =
+            sqlx::query("DELETE FROM user_identities WHERE user_id = $1 AND provider = $2")
+                .bind(user_id)
+                .bind(provider)
+                .execute(&self.pool)
+                .await?;
+        Ok(result.rows_affected() > 0)
+    }
+}
+
+/// Violation d'unicité sur `user_identities` lors d'une liaison : soit l'identité
+/// est déjà prise par un autre compte, soit ce compte a déjà ce fournisseur.
+fn map_identity_unique(error: sqlx::Error) -> HubError {
+    if let sqlx::Error::Database(db) = &error {
+        if db.is_unique_violation() {
+            let text = format!("{} {}", db.message(), db.constraint().unwrap_or(""));
+            if text.contains("one_per_provider") || text.contains("user_identities.user_id") {
+                return HubError::AlreadyLinked;
+            }
+            return HubError::DiscordTaken;
+        }
+    }
+    HubError::Database(error)
 }
 
 fn user_row(row: &AnyRow) -> Result<UserRow, HubError> {

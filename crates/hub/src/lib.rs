@@ -4,9 +4,10 @@
 //! Aucune crate MIT/Apache ne dépend de celle-ci.
 //!
 //! L'API HTTP est versionnée (`/v1/...`) et parle JSON. Voir [`api`] pour les routes.
-//! Pas encore fait (ADR 0033) : connexion Discord, changement de pseudo.
+//! Pas encore fait (ADR 0033) : changement de pseudo, refus de toutes les demandes.
 
 pub mod api;
+pub mod discord;
 pub mod error;
 pub mod identity;
 pub mod mail;
@@ -19,6 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub use api::router;
+pub use discord::{DiscordApi, DiscordConfig, DiscordUser, FakeDiscord, HttpDiscord};
 pub use error::HubError;
 pub use mail::{DisabledMailer, Email, Mailer, MemoryMailer, SmtpMailer};
 pub use password::{HashParams, Password};
@@ -49,6 +51,10 @@ pub struct HubConfig {
     /// E-mails permis par adresse (ou par compte) dans `mail_window`.
     pub mails_per_window: u32,
     pub mail_window: Duration,
+    /// Délai pour finir une connexion Discord commencée.
+    pub oauth_ttl: Duration,
+    /// Connexions Discord en attente gardées au plus en mémoire.
+    pub oauth_max_pending: usize,
 }
 
 impl Default for HubConfig {
@@ -65,6 +71,8 @@ impl Default for HubConfig {
             password_reset_lifetime: Duration::from_secs(3600),
             mails_per_window: 3,
             mail_window: Duration::from_secs(3600),
+            oauth_ttl: Duration::from_secs(10 * 60),
+            oauth_max_pending: 10_000,
         }
     }
 }
@@ -99,6 +107,10 @@ struct Inner {
     /// Service d'envoi. `Arc<dyn Mailer>` : un objet partagé dont on ne connaît que
     /// le trait ; le vrai type (SMTP, mémoire…) est choisi au lancement.
     mailer: Arc<dyn Mailer>,
+    /// Discord, si le hub est réglé pour (sinon les routes Discord répondent 503).
+    discord: Option<Arc<dyn DiscordApi>>,
+    /// Connexions Discord commencées et pas encore finies.
+    oauth_pending: discord::PendingLogins,
     /// Hash d'un mot de passe bidon : vérifié quand l'adresse n'existe pas, pour que
     /// la réponse prenne le même temps (on ne devine pas les adresses inscrites).
     dummy_hash: String,
@@ -110,11 +122,21 @@ impl AppState {
         AppState::with_mailer(store, config, Arc::new(DisabledMailer)).await
     }
 
-    /// État avec un service d'envoi d'e-mails choisi.
+    /// État avec un service d'envoi d'e-mails choisi, sans Discord.
     pub async fn with_mailer(
         store: Store,
         config: HubConfig,
         mailer: Arc<dyn Mailer>,
+    ) -> Result<AppState, HubError> {
+        AppState::with_services(store, config, mailer, None).await
+    }
+
+    /// État complet : envoi d'e-mails et, si réglé, Discord.
+    pub async fn with_services(
+        store: Store,
+        config: HubConfig,
+        mailer: Arc<dyn Mailer>,
+        discord: Option<Arc<dyn DiscordApi>>,
     ) -> Result<AppState, HubError> {
         let params = config.hash_params;
         let dummy_hash = blocking(move || {
@@ -131,6 +153,11 @@ impl AppState {
                 ),
                 mail_limiter: RateLimiter::new(config.mails_per_window, config.mail_window),
                 mailer,
+                discord,
+                oauth_pending: discord::PendingLogins::new(
+                    config.oauth_ttl,
+                    config.oauth_max_pending,
+                ),
                 store,
                 config,
                 dummy_hash,

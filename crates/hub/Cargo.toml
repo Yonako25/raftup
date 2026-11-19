@@ -29,6 +29,12 @@ argon2 = { version = "0.5", features = ["std"] }
 # Envoi des e-mails par SMTP (MIT), en TLS avec rustls + ring comme le reste du dépôt.
 # Transport synchrone, appelé sur un thread à part (ADR 0033).
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "rustls-tls"] }
+# Client HTTPS synchrone pour parler à Discord (MIT OR Apache-2.0), déjà utilisé par le launcher.
+ureq.workspace = true
+# Paramètres encodés de l'adresse d'autorisation Discord (MIT OR Apache-2.0).
+url = "2"
+# Défi PKCE en base64 « URL » (MIT OR Apache-2.0).
+base64 = "0.22"
 # Forme normalisée des pseudos (NFKC), MIT OR Apache-2.0.
 unicode-normalization = "0.1"
 serde.workspace = true
