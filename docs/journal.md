@@ -360,3 +360,9 @@ untime2`.
 - **Pas vérifié** : trousseau macOS et Linux (keyutils) jamais essayés ; écran jamais cliqué à la main (macro seulement) ; hub injoignable regardé seulement par test ; présence « en partie » pas encore envoyée.
 - **Ne pas toucher** : `crates/hub` (session hub-serveur en parallèle) ; `docs/profils-en-attente/`.
 - **Suite** : envoyer la présence « en partie » au lancement d'un jeu (`launch`), puis l'adresse officielle du hub au déploiement.
+
+### 2026-11-19 · Fusion des 4 chantiers V2 dans `main`
+- **Fait** : adresse du registre fixée (`REGISTRY_INDEX_URL`, release GitHub `registre`) ; fusion de `v2-time-balance`, `v2-registre`, `v2-hub-serveur`, `v2-hub-client` ; conflits seulement dans le journal, l'état du projet et `Cargo.lock` (régénéré). Sur `main` : fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : rien regardé à l'écran après la fusion ; vrai SMTP, vraie application Discord, release `registre` ; rien poussé.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : créer la release `registre` ; relire les ADR 0029 à 0035 ; essais réels de la V2.
