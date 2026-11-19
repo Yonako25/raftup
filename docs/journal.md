@@ -282,3 +282,10 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+
+### 2026-11-19 · Finitions du moteur (session `moteur-finitions`)
+- **Fait** : spoiler `AP_<seed>_Spoiler.txt` dans le zip du moteur Rust seul (`generate::spoiler` : en-tête, options, placement, parcours par sphères ; niveau 0 sans spoiler, 1 sans parcours) ; `GeneratorBackend::report` (`EngineReport`) : l'écran dit à la fin quel moteur a vraiment généré ; raison du repli du moteur export affichée en direct et à la fin (avant le message d'erreur). Tests `generate`, `launcher-core`, `launcher-ui` ; workspace et clippy passent.
+- **Vu sur captures** (macro, port 38296 occupé) : APQuest « Moteur : Raftup seul » ; Slime Rancher + APQuest export « Archipelago a construit les mondes, Raftup a placé les objets » ; `local_items` → « Archipelago seul » + raison du repli en orange.
+- **Pas vérifié** : test réel `repli_sur_archipelago_seul` (assertion du rapport ajoutée, non lancé) ; spoiler non relu par un outil tiers ; `CARGO_TARGET_DIR` partagé (`agents-v2`) inutilisable en parallèle (rlib d'une autre worktree liée) : construit dans `target/agents-v2-finitions`. `ignore_eof_shutdown_et_drop_rapides` (py-bridge, non touché) a échoué une fois sous charge, passe seul.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : écrire dans le spoiler la version des apworlds (ADR 0028, § reproductibilité).

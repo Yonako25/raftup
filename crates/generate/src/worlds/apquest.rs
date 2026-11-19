@@ -66,6 +66,16 @@ impl PlayerSprite {
         }
     }
 
+    /// Nom affiché de l'apparence.
+    pub fn name(self) -> &'static str {
+        match self {
+            PlayerSprite::Human => "Human",
+            PlayerSprite::Duck => "Duck",
+            PlayerSprite::Horse => "Horse",
+            PlayerSprite::Cat => "Cat",
+        }
+    }
+
     /// Lit une valeur numérique d'option.
     pub fn from_value(value: i64) -> Option<PlayerSprite> {
         match value {
@@ -116,6 +126,26 @@ impl ApQuestOptions {
             return Err(("confetti_explosiveness", "doit être entre 0 et 10".into()));
         }
         Ok(())
+    }
+
+    /// Options lisibles pour le spoiler, avec les noms affichés d'`options.py`.
+    pub fn spoiler_options(&self) -> Vec<(&'static str, String)> {
+        let yes_no = |value: bool| if value { "Yes" } else { "No" }.to_string();
+        vec![
+            ("Hard Mode", yes_no(self.hard_mode)),
+            ("Hammer", yes_no(self.hammer)),
+            ("Extra Starting Chest", yes_no(self.extra_starting_chest)),
+            ("Trap Chance", self.trap_chance.to_string()),
+            (
+                "Start With One Confetti Cannon",
+                yes_no(self.start_with_one_confetti_cannon),
+            ),
+            (
+                "Confetti Explosiveness",
+                self.confetti_explosiveness.to_string(),
+            ),
+            ("Player Sprite", self.player_sprite.name().to_string()),
+        ]
     }
 
     /// Le `slot_data` envoyé au client (`fill_slot_data` de `world.py`).

@@ -9,6 +9,7 @@
 mod datapackage;
 pub mod imported;
 mod multidata_build;
+pub mod spoiler;
 pub mod worlds;
 pub mod yaml;
 
@@ -23,6 +24,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub use datapackage::{archipelago_package, game_package, PackageSource};
+pub use spoiler::Spoiler;
 pub use worlds::{GameOptions, SUPPORTED_GAMES};
 pub use yaml::{read_players, read_players_with_meta, Unsupported};
 
@@ -66,6 +68,8 @@ pub struct Generated {
     pub multidata: MultiData,
     /// Contenu du fichier `AP_<seed_name>.archipelago`.
     pub archipelago: Vec<u8>,
+    /// Spoiler de la partie (`AP_<seed_name>_Spoiler.txt` une fois mis en texte).
+    pub spoiler: Spoiler,
 }
 
 /// Erreurs de génération.
@@ -183,6 +187,7 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
     fill::balance(&mut world, &balancing, &start, &mut rng)?;
 
     let seed_name = seed_name(request.seed);
+    let spoiler = spoiler::build(&world, request, &seed_name, &start, &start_items);
     let multidata =
         multidata_build::build(&world, request, &seed_name, &start, &start_items, slot_data)?;
     let archipelago = multidata::write_archipelago(&multidata)?;
@@ -190,6 +195,7 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
         seed_name,
         multidata,
         archipelago,
+        spoiler,
     })
 }
 

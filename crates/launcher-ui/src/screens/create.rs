@@ -950,7 +950,7 @@ game: Slime Rancher
             take_worker_error(&worker, &mut error);
             let shared = worker.lock();
             assert!(!background(&mut form, &mut error, &worker, &shared));
-            if let generation::Generation::Failed { failure, log } = &form.generation {
+            if let generation::Generation::Failed { failure, log, .. } = &form.generation {
                 panic!("génération ratée : {failure:?}\n{log:?}")
             }
             match &form.hosting {

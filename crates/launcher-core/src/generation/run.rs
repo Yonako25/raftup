@@ -91,6 +91,12 @@ pub trait GeneratorBackend {
         true
     }
 
+    /// Qui a fait la dernière génération (à lire après `run`). Par défaut : Archipelago
+    /// seul ; le moteur Rust et le moteur « export » le précisent.
+    fn report(&self) -> super::EngineReport {
+        super::EngineReport::plain(super::EngineUsed::Python)
+    }
+
     fn run(
         &mut self,
         p: &GenerateParams,

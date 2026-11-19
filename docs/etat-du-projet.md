@@ -100,6 +100,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - En debug, macro `RAFTUP_DEV_CAPTURE=<dossier>` (+ `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) : joue « Créer une partie » et enregistre des captures PNG, sans être devant le PC
 - Case « Moteur Rust (expérimental) » dans « Créer une partie » : APQuest généré sans Python (ADR 0027), sinon Archipelago
+- Fin de génération : moteur réellement utilisé (Rust seul, export placé par Raftup, Archipelago seul) et raison d'un repli affichés ; le moteur Rust seul écrit `AP_<seed>_Spoiler.txt` dans le zip (19 novembre 2026)
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
 - Sauvegarde la partie hébergée dans un `.raftup` à côté de la seed, et la reprend au prochain hébergement (`HostOptions::disable_save` pour s'en passer, pas encore dans l'interface)
 - Fermer la fenêtre arrête la partie proprement (sauvegarde compactée), 5 s au plus

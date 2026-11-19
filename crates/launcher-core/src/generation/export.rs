@@ -29,11 +29,44 @@ use super::rust::random_seed;
 use super::GenerationError;
 use multidata::read_file_bounded;
 
+/// Le moteur qui a vraiment produit (ou tenté de produire) la seed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineUsed {
+    /// Le moteur Rust seul, sans Python (ADR 0027).
+    Rust,
+    /// Archipelago a construit les mondes et écrit la seed, Raftup a placé les objets
+    /// (ADR 0028).
+    Export,
+    /// Le générateur d'Archipelago seul.
+    Python,
+}
+
+/// Ce que le moteur dit de la dernière génération : qui l'a faite, et pourquoi le
+/// placement par Raftup a été abandonné s'il y a eu repli.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineReport {
+    pub engine: EngineUsed,
+    /// Raison lisible du repli sur Archipelago seul (moteur « export » seulement).
+    pub fallback: Option<String>,
+}
+
+impl EngineReport {
+    /// Rapport d'un moteur qui n'a jamais de repli.
+    pub fn plain(engine: EngineUsed) -> EngineReport {
+        EngineReport {
+            engine,
+            fallback: None,
+        }
+    }
+}
+
 /// Le moteur « export » : un générateur Python pour construire et écrire, Raftup pour placer.
 #[derive(Debug, Clone)]
 pub struct ExportBackend {
     /// Le générateur Python, qui sert aussi de repli.
     pub python: PythonBackend,
+    /// Raison du repli de la dernière génération (`None` : placement par Raftup).
+    last_fallback: Option<String>,
 }
 
 impl ExportBackend {
@@ -41,8 +74,14 @@ impl ExportBackend {
     pub fn new(runtime: Runtime) -> ExportBackend {
         ExportBackend {
             python: PythonBackend::new(runtime),
+            last_fallback: None,
         }
     }
+}
+
+/// Phrase du journal qui annonce le repli (gardée identique pour l'interface et les tests).
+pub fn fallback_line(reason: &str) -> String {
+    format!("Placement par Raftup impossible ({reason}) : Archipelago génère seul.")
 }
 
 /// Pourquoi la génération repasse au générateur Python seul.
@@ -66,6 +105,7 @@ impl GeneratorBackend for ExportBackend {
         // La seed doit être connue des deux côtés : on la tire ici si l'hôte n'en donne pas.
         let mut p = p.clone();
         let seed = *p.seed.get_or_insert_with(random_seed);
+        self.last_fallback = None;
         let mut bridge = self.python.start_bridge(log.clone())?;
         let outcome =
             export_then_finish(&self.python, &mut bridge, &p, seed, timeout, cancel, &log);
@@ -74,12 +114,22 @@ impl GeneratorBackend for ExportBackend {
         match outcome {
             Ok(result) => Ok(result),
             Err(Step::Fallback(Fallback::Unsupported(reason))) => {
-                let _ = log.send(format!(
-                    "Placement par Raftup impossible ({reason}) : Archipelago génère seul."
-                ));
+                let _ = log.send(fallback_line(&reason));
+                // Gardée pour le rapport de fin (`report`), même si Python échoue ensuite.
+                self.last_fallback = Some(reason);
                 self.python.run(&p, timeout, cancel, log)
             }
             Err(Step::Error(e)) => Err(e),
+        }
+    }
+
+    fn report(&self) -> EngineReport {
+        match &self.last_fallback {
+            Some(reason) => EngineReport {
+                engine: EngineUsed::Python,
+                fallback: Some(reason.clone()),
+            },
+            None => EngineReport::plain(EngineUsed::Export),
         }
     }
 }
@@ -164,4 +214,32 @@ fn export_then_finish(
     let _ = fs::remove_file(&export_path);
     let _ = fs::remove_file(&placement_path);
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn backend() -> ExportBackend {
+        // Chemins jamais lus : `report` ne lance aucun worker.
+        ExportBackend::new(Runtime::from_local("py", "archipelago", None, "0.6.8"))
+    }
+
+    #[test]
+    fn rapport_sans_repli() {
+        assert_eq!(backend().report(), EngineReport::plain(EngineUsed::Export));
+    }
+
+    #[test]
+    fn rapport_apres_repli() {
+        let mut export = backend();
+        export.last_fallback = Some("règle non traduite".to_string());
+        let report = export.report();
+        assert_eq!(report.engine, EngineUsed::Python);
+        assert_eq!(report.fallback.as_deref(), Some("règle non traduite"));
+        assert_eq!(
+            fallback_line("règle non traduite"),
+            "Placement par Raftup impossible (règle non traduite) : Archipelago génère seul."
+        );
+    }
 }

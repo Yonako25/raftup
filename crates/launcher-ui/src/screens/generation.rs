@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use egui::{RichText, Ui};
 use launcher_core::generation::{
-    pins, runtime_status, ExportBackend, GenerateOutput, GenerateRequest, GeneratorBackend,
-    PythonBackend, RuntimeStatus, RustBackend,
+    pins, runtime_status, EngineReport, EngineUsed, ExportBackend, GenerateOutput, GenerateRequest,
+    GeneratorBackend, PythonBackend, RuntimeStatus, RustBackend,
 };
 use launcher_core::party::generate_blocking;
 use launcher_core::{CancelToken, GenerationError};
@@ -44,12 +44,19 @@ pub enum Generation {
     Done {
         output: Box<GenerateOutput>,
         log: VecDeque<String>,
+        /// Le moteur qui a vraiment généré, et la raison d'un repli.
+        report: EngineReport,
     },
     Failed {
         failure: Failure,
         log: VecDeque<String>,
+        /// Absent si la génération n'a pas pu démarrer.
+        report: Option<EngineReport>,
     },
 }
+
+/// Ce que le thread renvoie à la fin : le résultat et le rapport du moteur.
+type Finished = (Result<GenerateOutput, Failure>, Option<EngineReport>);
 
 /// Qui génère la partie.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -74,7 +81,7 @@ pub struct Running {
     /// Lignes de stderr du générateur, envoyées par `py-bridge`.
     log_receiver: Receiver<String>,
     /// Le résultat, un seul message à la fin.
-    result_receiver: Receiver<Result<GenerateOutput, Failure>>,
+    result_receiver: Receiver<Finished>,
 }
 
 impl Generation {
@@ -110,6 +117,7 @@ pub fn start(
             detail: None,
         },
         log: VecDeque::new(),
+        report: None,
     };
     let paths = match load_paths() {
         Ok(paths) => paths,
@@ -152,8 +160,10 @@ pub fn start(
             log_sender,
         )
         .map_err(|e| failure(&e));
+        // Le moteur sait, après coup, qui a vraiment généré (repli compris).
+        let report = backend.report();
         // L'écran a pu disparaître (fenêtre fermée) : un envoi raté n'est pas grave.
-        let _ = result_sender.send(result);
+        let _ = result_sender.send((result, Some(report)));
         ctx.request_repaint();
     });
     let mut log = VecDeque::new();
@@ -192,10 +202,13 @@ pub(super) fn poll(generation: &mut Generation) {
     let finished = match task.result_receiver.try_recv() {
         Ok(result) => result,
         Err(TryRecvError::Empty) => return,
-        Err(TryRecvError::Disconnected) => Err(Failure {
-            message: "La génération s'est interrompue sans réponse.".into(),
-            detail: None,
-        }),
+        Err(TryRecvError::Disconnected) => (
+            Err(Failure {
+                message: "La génération s'est interrompue sans réponse.".into(),
+                detail: None,
+            }),
+            None,
+        ),
     };
     // Lignes envoyées entre-temps (le thread a fini, le canal ne grossira plus).
     while let Ok(line) = task.log_receiver.try_recv() {
@@ -204,13 +217,63 @@ pub(super) fn poll(generation: &mut Generation) {
     // `std::mem::take` : on prend le journal en laissant un journal vide à sa place,
     // parce qu'on va remplacer `*generation` et qu'on ne peut pas garder d'emprunt dessus.
     let log = std::mem::take(&mut task.log);
-    *generation = match finished {
+    let engine = task.engine;
+    let (result, report) = finished;
+    *generation = match result {
         Ok(output) => Generation::Done {
             output: Box::new(output),
             log,
+            // Pas de rapport (ne devrait pas arriver) : on se fie au moteur choisi.
+            report: report.unwrap_or_else(|| EngineReport::plain(chosen(engine))),
         },
-        Err(failure) => Generation::Failed { failure, log },
+        Err(failure) => Generation::Failed {
+            failure,
+            log,
+            report,
+        },
     };
+}
+
+/// Le moteur prévu, au sens du rapport de fin.
+fn chosen(engine: Engine) -> EngineUsed {
+    match engine {
+        Engine::Python => EngineUsed::Python,
+        Engine::Rust => EngineUsed::Rust,
+        Engine::Export => EngineUsed::Export,
+    }
+}
+
+/// Phrase qui dit quel moteur a vraiment généré la partie.
+fn engine_line(report: &EngineReport) -> &'static str {
+    match report.engine {
+        EngineUsed::Rust => "Moteur : Raftup seul (moteur Rust, sans Python).",
+        EngineUsed::Export => {
+            "Moteur : Archipelago a construit les mondes, Raftup a placé les objets."
+        }
+        EngineUsed::Python => "Moteur : Archipelago seul.",
+    }
+}
+
+/// Phrase qui explique un repli sur Archipelago seul, s'il y en a eu un.
+fn fallback_text(report: &EngineReport) -> Option<String> {
+    report.fallback.as_ref().map(|reason| {
+        format!("Raftup n'a pas pu placer les objets : {reason}. Archipelago a donc généré seul.")
+    })
+}
+
+/// Pendant la génération : la raison du repli dès qu'elle apparaît dans le journal.
+fn live_fallback(log: &VecDeque<String>) -> Option<&str> {
+    log.iter()
+        .find_map(|line| line.strip_prefix("Placement par Raftup impossible ("))
+        .and_then(|rest| rest.rsplit_once(") : ").map(|(reason, _)| reason))
+}
+
+/// Dessine le moteur utilisé et la raison d'un repli (panneaux de fin).
+fn report_view(ui: &mut Ui, report: &EngineReport) {
+    ui.label(RichText::new(engine_line(report)).size(13.0));
+    if let Some(text) = fallback_text(report) {
+        ui.label(RichText::new(text).color(theme::AMBER).size(13.0));
+    }
 }
 
 /// Dessine le panneau de la génération (rien si `Idle`).
@@ -231,6 +294,15 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
                     Engine::Export => "Archipelago construit les mondes, Raftup place les objets…",
                 };
                 ui.label(format!("{who} {}", elapsed(task.started.elapsed())));
+                if let Some(reason) = live_fallback(&task.log) {
+                    ui.label(
+                        RichText::new(format!(
+                            "Raftup ne peut pas placer les objets : {reason}. Archipelago génère seul."
+                        ))
+                        .color(theme::AMBER)
+                        .size(13.0),
+                    );
+                }
                 ui.add_space(6.0);
                 indeterminate_bar(ui, ui.available_width(), ui.input(|i| i.time));
                 ui.add_space(8.0);
@@ -246,7 +318,11 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
             // (qui ne réveillent pas l'écran d'elles-mêmes) arrivent ainsi en direct.
             ui.ctx().request_repaint_after(Duration::from_millis(50));
         }
-        Generation::Done { output, log } => {
+        Generation::Done {
+            output,
+            log,
+            report,
+        } => {
             widgets::panel(ui, "Partie générée", |ui| {
                 let count = output.players.len();
                 let plural = if count > 1 { "s" } else { "" };
@@ -258,14 +334,26 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
                     .color(theme::GREEN),
                 );
                 ui.label(widgets::dim(output.archipelago_file.display().to_string()).size(13.0));
+                ui.add_space(4.0);
+                report_view(ui, report);
                 ui.add_space(6.0);
                 egui::CollapsingHeader::new("Voir le journal")
                     .id_salt("journal-generation")
                     .show(ui, |ui| log_view(ui, log));
             });
         }
-        Generation::Failed { failure, log } => {
+        Generation::Failed {
+            failure,
+            log,
+            report,
+        } => {
             widgets::panel(ui, "Génération de la partie", |ui| {
+                // Après un repli, l'échec vient d'Archipelago seul : on dit d'abord
+                // pourquoi Raftup n'a pas placé les objets (le message d'Archipelago peut
+                // être très long).
+                if let Some(text) = report.as_ref().and_then(fallback_text) {
+                    ui.label(RichText::new(text).color(theme::AMBER).size(13.0));
+                }
                 ui.label(RichText::new(failure.message.as_str()).color(theme::RED_TEXT));
                 if let Some(detail) = &failure.detail {
                     egui::CollapsingHeader::new("Voir le détail")
@@ -562,18 +650,89 @@ mod tests {
         assert!(generation.is_busy());
         log_sender.send("ligne 2".to_string()).unwrap();
         result_sender
-            .send(Err(Failure {
-                message: "Génération annulée.".into(),
-                detail: None,
-            }))
+            .send((
+                Err(Failure {
+                    message: "Génération annulée.".into(),
+                    detail: None,
+                }),
+                None,
+            ))
             .unwrap();
         poll(&mut generation);
         match generation {
-            Generation::Failed { failure, log } => {
+            Generation::Failed { failure, log, .. } => {
                 assert_eq!(failure.message, "Génération annulée.");
                 assert_eq!(log, ["ligne 1", "ligne 2"]);
             }
             _ => panic!("la génération devait être finie"),
+        }
+    }
+
+    #[test]
+    fn moteur_affiche_a_la_fin() {
+        let rust = EngineReport::plain(EngineUsed::Rust);
+        assert!(engine_line(&rust).contains("Raftup seul"));
+        assert_eq!(fallback_text(&rust), None);
+        let export = EngineReport::plain(EngineUsed::Export);
+        assert!(engine_line(&export).contains("Raftup a placé les objets"));
+        let repli = EngineReport {
+            engine: EngineUsed::Python,
+            fallback: Some("règle « x » non traduite".into()),
+        };
+        assert_eq!(engine_line(&repli), "Moteur : Archipelago seul.");
+        assert_eq!(
+            fallback_text(&repli).as_deref(),
+            Some(
+                "Raftup n'a pas pu placer les objets : règle « x » non traduite. \
+                 Archipelago a donc généré seul."
+            )
+        );
+    }
+
+    /// La raison du repli est lue dans la ligne du journal écrite par `launcher-core`.
+    #[test]
+    fn repli_vu_pendant_la_generation() {
+        let mut log = VecDeque::new();
+        log.push_back("Mondes exportés : 3 règles Python traduites, 1 non traduites".into());
+        assert_eq!(live_fallback(&log), None);
+        log.push_back(launcher_core::generation::fallback_line(
+            "lieu (a) : règle opaque",
+        ));
+        assert_eq!(live_fallback(&log), Some("lieu (a) : règle opaque"));
+    }
+
+    /// Le rapport envoyé par le thread arrive dans l'état « Partie générée » ou « échec ».
+    #[test]
+    fn rapport_garde_apres_echec() {
+        let (_log_sender, log_receiver) = mpsc::channel::<String>();
+        let (result_sender, result_receiver) = mpsc::channel();
+        let mut generation = Generation::Running(Running {
+            started: Instant::now(),
+            engine: Engine::Export,
+            cancel: CancelToken::new(),
+            log: VecDeque::new(),
+            log_receiver,
+            result_receiver,
+        });
+        let report = EngineReport {
+            engine: EngineUsed::Python,
+            fallback: Some("placement impossible".into()),
+        };
+        result_sender
+            .send((
+                Err(Failure {
+                    message: "échec".into(),
+                    detail: None,
+                }),
+                Some(report.clone()),
+            ))
+            .unwrap();
+        poll(&mut generation);
+        match generation {
+            Generation::Failed {
+                report: Some(got), ..
+            } => assert_eq!(got, report),
+            _ => panic!("échec avec rapport attendu"),
         }
     }
 
