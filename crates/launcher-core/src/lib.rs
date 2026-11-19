@@ -12,7 +12,8 @@
 //! - [`diagnose`] : expliquer en clair un échec de connexion ;
 //! - [`readiness`] : tester « prêt ? » d'un slot par une vraie connexion (F08) ;
 //! - [`registry`] : lire et vérifier le registre de paquets signés (ADR 0032) ;
-//! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup.
+//! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup ;
+//! - [`estimate`] : durée estimée d'une seed, par joueur (ADR 0030).
 //!
 //! `launcher-ui` (egui) n'appelle que cette crate.
 
@@ -23,6 +24,7 @@ pub mod detect;
 pub mod diagnose;
 pub mod download;
 pub mod error;
+pub mod estimate;
 pub mod generation;
 pub mod hash;
 pub mod host;
@@ -53,6 +55,7 @@ pub use detect::{
 pub use diagnose::{explain, ConnectionProblem};
 pub use download::{DirFetcher, Downloader, HttpFetcher};
 pub use error::LauncherError;
+pub use estimate::{estimate, estimate_file, PlayerEstimate, SeedEstimate};
 pub use generation::{GenerationError, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use host::{Encryption, Host, HostOptions, HostStatus, NumberedEvent};
 pub use install::{install, status, InstallError, InstallOptions, InstallReport, InstallStatus};

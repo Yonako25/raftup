@@ -13,6 +13,7 @@ id = "slime-rancher"
 name = "Slime Rancher"
 ap_game = "Slime Rancher"          # vérifié : game = "Slime Rancher" dans slime_rancher/__init__.py
 status = "available"
+seconds_per_location = 240         # estimation (ADR 0030) : achats et capsules demandent de l'élevage ; à mesurer en vraie partie
 
 [game.detect]
 steam_appid = 433340               # vérifié : appmanifest_433340.acf local, installdir « Slime Rancher »
