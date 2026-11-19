@@ -1,6 +1,6 @@
 [package]
 name = "hub"
-description = "Service raftup-hub : comptes, amis et présence (ADR 0002, 0003, 0033)"
+description = "Rafthub : comptes, amis, présence et console d'admin (ADR 0002, 0003, 0033, 0036)"
 version.workspace = true
 edition.workspace = true
 # Seule crate du dépôt sous AGPL (ADR 0003). Aucune crate MIT/Apache ne doit dépendre d'elle.
@@ -14,16 +14,19 @@ publish = false
 workspace = true
 
 [[bin]]
-name = "raftup-hub"
+name = "rafthub"
 path = "src/main.rs"
 
 # Licences des dépendances vérifiées le 19 novembre 2026 : voir docs/adr/0033-hub-http-stockage-sessions.md.
 [dependencies]
 # Serveur HTTP (MIT), sur tokio comme le reste de Raftup.
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"] }
 # Accès à la base (MIT OR Apache-2.0) : SQLite (compilé avec la crate) et PostgreSQL, derrière
 # le pilote générique `any` (ADR 0033). Pas de macros : les requêtes sont vérifiées par les tests.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres"] }
+# Gabarits HTML de la console d'admin (MIT OR Apache-2.0), vérifiés à la compilation,
+# échappement HTML automatique (ADR 0036).
+askama = "0.14"
 # Hachage des mots de passe (argon2id, MIT OR Apache-2.0), sel tiré par le système.
 argon2 = { version = "0.5", features = ["std"] }
 # Envoi des e-mails par SMTP (MIT), en TLS avec rustls + ring comme le reste du dépôt.

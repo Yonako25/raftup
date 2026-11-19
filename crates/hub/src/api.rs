@@ -61,7 +61,7 @@ const MAX_BODY_BYTES: usize = 16 * 1024;
 /// Longueur maximale du nom de jeu dans la présence.
 const MAX_GAME_CHARS: usize = 64;
 
-/// Construit le routeur du hub.
+/// Construit le routeur du hub : l'API `/v1` et la console d'admin `/admin`.
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1", get(api_info))
@@ -100,6 +100,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/blocks", get(list_blocks).post(block_player))
         .route("/v1/blocks/{username}", delete(unblock_player))
+        // Pages de la console d'admin sous `/admin` (ADR 0036) : mêmes état et limite.
+        .merge(crate::web::routes())
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }

@@ -85,6 +85,23 @@ impl PresenceBoard {
         lock(&self.entries).remove(&user_id);
     }
 
+    /// Comptes en ligne en ce moment, et combien d'entre eux sont en partie
+    /// (tableau de bord de la console d'admin). Les présences expirées ne comptent pas.
+    pub fn online_counts(&self) -> (usize, usize) {
+        let entries = lock(&self.entries);
+        let mut online = 0;
+        let mut in_game = 0;
+        for entry in entries.values() {
+            if entry.updated.elapsed() <= self.ttl {
+                online += 1;
+                if entry.view.status == Status::InGame {
+                    in_game += 1;
+                }
+            }
+        }
+        (online, in_game)
+    }
+
     pub fn get(&self, user_id: i64) -> PresenceView {
         let mut entries = lock(&self.entries);
         match entries.get(&user_id) {

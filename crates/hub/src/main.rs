@@ -1,9 +1,15 @@
-//! Binaire `raftup-hub` : sert l'API du hub en HTTP.
+//! Binaire `rafthub` : sert l'API du hub et sa console d'admin en HTTP (ADR 0036).
 //!
 //! ```text
-//! raftup-hub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]
-//!            [--public-url https://hub.exemple.org]
+//! rafthub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]
+//!         [--public-url https://hub.exemple.org]
+//! rafthub admin create <e-mail> [--db …]   donne le rôle d'admin à un compte existant
+//! rafthub admin remove <e-mail> [--db …]   le lui retire (et ferme ses sessions d'admin)
 //! ```
+//!
+//! La console d'admin est sous `<public-url>/admin`. Son cookie n'a l'attribut
+//! `Secure` que si `--public-url` n'est pas en `http://127.0.0.1` (ou `localhost`) :
+//! derrière un proxy, donner l'adresse publique en `https://`.
 //!
 //! `--db` accepte aussi une base PostgreSQL : `postgres://utilisateur:motdepasse@hote/base`.
 //! Les secrets passent plutôt par l'environnement (invisibles dans la liste des process) :
@@ -26,6 +32,7 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context};
+use hub::store::Role;
 use hub::{
     AppState, DisabledMailer, DiscordApi, DiscordConfig, HttpDiscord, HubConfig, Mailer,
     SmtpMailer, Store,
@@ -35,6 +42,8 @@ struct Args {
     db: String,
     listen: String,
     public_url: Option<String>,
+    /// Commande d'admin (`admin create|remove <e-mail>`) au lieu de lancer le serveur.
+    admin: Option<(Role, String)>,
 }
 
 /// Variable d'environnement non vide.
@@ -47,7 +56,10 @@ fn parse_args() -> anyhow::Result<Args> {
         db: env("RAFTUP_HUB_DB").unwrap_or_else(|| "sqlite://raftup-hub.db".to_string()),
         listen: "127.0.0.1:8787".to_string(),
         public_url: None,
+        admin: None,
     };
+    // Mots qui ne sont pas des options (`admin`, `create`, l'adresse…).
+    let mut words = Vec::new();
     let mut iter = std::env::args().skip(1);
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -57,7 +69,9 @@ fn parse_args() -> anyhow::Result<Args> {
                 args.public_url = Some(iter.next().context("--public-url attend une URL")?)
             }
             "--help" | "-h" => {
-                println!("raftup-hub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]");
+                println!("rafthub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]");
+                println!("rafthub admin create <e-mail>   donne le rôle d'admin à un compte");
+                println!("rafthub admin remove <e-mail>   le lui retire");
                 println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
                 println!("  --public-url : adresse publique du hub, pour les liens des e-mails");
                 println!(
@@ -66,8 +80,21 @@ fn parse_args() -> anyhow::Result<Args> {
                 println!("    RAFTUP_HUB_DISCORD_CLIENT_ID, RAFTUP_HUB_DISCORD_CLIENT_SECRET");
                 std::process::exit(0);
             }
-            other => bail!("argument inconnu : {other}"),
+            other if other.starts_with('-') => bail!("option inconnue : {other}"),
+            other => words.push(other.to_string()),
         }
+    }
+    // `as_slice` + motifs de tranche : on compare la liste entière des mots d'un coup.
+    match words
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] => {}
+        ["admin", "create", email] => args.admin = Some((Role::Admin, email.to_string())),
+        ["admin", "remove", email] => args.admin = Some((Role::Player, email.to_string())),
+        _ => bail!("commande inconnue : attendu `rafthub admin create|remove <e-mail>`"),
     }
     Ok(args)
 }
@@ -81,6 +108,10 @@ async fn main() -> anyhow::Result<()> {
     let store = Store::open(&args.db)
         .await
         .context("ouverture de la base de données")?;
+
+    if let Some((role, email)) = args.admin {
+        return set_admin_role(&store, role, &email).await;
+    }
 
     let mut config = HubConfig::default();
     if let Some(url) = args.public_url {
@@ -131,12 +162,15 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = store.purge_expired_email_tokens(now).await {
                 tracing::warn!(error = %e, "ménage des jetons d'e-mail expirés raté");
             }
+            if let Err(e) = store.purge_expired_admin_sessions(now).await {
+                tracing::warn!(error = %e, "ménage des sessions d'admin expirées raté");
+            }
         }
     });
     let listener = tokio::net::TcpListener::bind(&args.listen)
         .await
         .with_context(|| format!("écoute sur {}", args.listen))?;
-    tracing::info!(adresse = %args.listen, "raftup-hub démarré");
+    tracing::info!(adresse = %args.listen, "rafthub démarré (console : /admin)");
 
     axum::serve(listener, hub::router(state))
         .with_graceful_shutdown(async {
@@ -144,5 +178,18 @@ async fn main() -> anyhow::Result<()> {
             let _ = tokio::signal::ctrl_c().await;
         })
         .await?;
+    Ok(())
+}
+
+/// `rafthub admin create|remove <e-mail>` : change le rôle d'un compte existant.
+async fn set_admin_role(store: &Store, role: Role, email: &str) -> anyhow::Result<()> {
+    let email_norm = hub::identity::normalize_email(email).context("adresse e-mail invalide")?;
+    if !store.set_role_by_email(&email_norm, role).await? {
+        bail!("aucun compte n'a cette adresse : il faut d'abord s'inscrire depuis le launcher");
+    }
+    match role {
+        Role::Admin => println!("{email_norm} est maintenant admin de ce hub."),
+        Role::Player => println!("{email_norm} n'est plus admin (sessions d'admin fermées)."),
+    }
     Ok(())
 }

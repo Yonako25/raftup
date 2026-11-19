@@ -372,3 +372,9 @@ untime2`.
 - **Pas vérifié** : vrai clic sur un lien `raftup://hub/…` depuis un navigateur (schéma enregistré en release seulement) ; changement de hub contre deux vrais hubs.
 - **Ne pas toucher** : `crates/hub` (sessions rafthub-socle et rafthub-donnees) ; `docs/profils-en-attente/`.
 - **Suite** : côté hub, servir le zip `GET /telecharger/raftup-windows.zip` avec `rafthub.toml`.
+
+### 2026-11-19 · Socle de la console d'admin Rafthub (session `rafthub-socle`, ADR 0036)
+- **Fait** : binaire `rafthub` (+ `admin create|remove <e-mail>`) ; console `/admin` en askama (menu, connexion, tableau de bord avec vrais chiffres et état base/SMTP/Discord, pages « Bientôt »), CSS et polices servies par le hub ; schéma v5 (`users.role`, `admin_sessions`) ; cookie haché 12 h, anti-CSRF, essais limités, Bearer refusé. 10 tests `tests/admin.rs` ; workspace, clippy, fmt passent ; connexion, tableau de bord et déconnexion faits dans le vrai navigateur (`5fc7209`).
+- **Pas vérifié** : PostgreSQL (seulement SQLite cette fois) ; vraie installation derrière un proxy HTTPS ; fusion avec `rafthub-donnees`, qui prend sans doute aussi la version 5 du schéma (renuméroter, voir la note de groupe `rafthub-socle.md`).
+- **Ne pas toucher** : `launcher-core` / `launcher-ui` (session `rafthub-launcher`) ; `"service": "raftup-hub"` de `GET /v1` et le service du trousseau, que le launcher teste.
+- **Suite** : après la fusion, pages Joueurs puis Réglages sur les données de `rafthub-donnees`.

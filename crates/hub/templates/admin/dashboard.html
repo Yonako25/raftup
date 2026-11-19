@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% block content %}
+<div class="page-head">
+<div>
+<h1>Tableau de bord</h1>
+<p class="muted">{{ public_url }}</p>
+</div>
+<a class="button" href="/admin/distribution">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/></svg>
+Launcher relié à ce hub
+</a>
+</div>
+
+<div class="cards">
+<div class="card" id="stat-accounts"><div class="card-label">Comptes</div><div class="card-value">{{ accounts }}</div></div>
+<div class="card" id="stat-online"><div class="card-label">En ligne</div><div class="card-value">{{ online }}</div><div class="card-note">dont {{ in_game }} en partie</div></div>
+<div class="card" id="stat-unverified"><div class="card-label">E-mails non vérifiés</div><div class="card-value">{{ unverified_emails }}</div></div>
+</div>
+
+<section class="panel" aria-label="État des services">
+<h2>Services</h2>
+{% for s in services %}
+<div class="row">
+<span class="dot dot-{{ s.state }}" aria-hidden="true"></span>
+<div class="grow"><div class="row-title">{{ s.name }}</div><div class="muted small">{{ s.detail }}</div></div>
+{% if s.needs_setup %}<a class="strong" href="/admin/reglages">Configurer</a>{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endblock %}
