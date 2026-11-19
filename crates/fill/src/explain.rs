@@ -41,13 +41,17 @@ impl fmt::Display for Blocked {
     }
 }
 
-/// Liste ce qui n'est pas atteint à la fin d'un balayage : chaque lieu (tous comptent,
-/// `accessibility: full`), puis l'objectif de chaque joueur. Vide si tout est atteint.
+/// Liste ce qui n'est pas atteint à la fin d'un balayage : chaque lieu qui doit l'être
+/// (tous avec `accessibility: full` ; sinon voir `MultiWorld::must_reach`), puis
+/// l'objectif de chaque joueur. Vide si tout est atteint.
 ///
 /// Ordre : lieux dans l'ordre de création, puis joueurs dans l'ordre.
 pub fn explain(world: &MultiWorld, result: &SweepResult) -> Vec<Blocked> {
     let mut blocked = Vec::new();
     for id in result.unreachable_locations(world) {
+        if !world.must_reach(id) {
+            continue;
+        }
         let Some(location) = world.location(id) else {
             continue;
         };

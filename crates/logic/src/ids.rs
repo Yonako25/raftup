@@ -43,3 +43,7 @@ id_type!(
     ItemGroupId,
     "Un groupe nommé de sortes d'objets d'un joueur."
 );
+id_type!(
+    ItemRuleId,
+    "Une règle d'objet (quels objets un lieu accepte), partagée entre plusieurs lieux."
+);

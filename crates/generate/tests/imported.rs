@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 /// Boss (Cave, événement Victory). Pool : Key, Rupee.
 fn base() -> Value {
     json!({
-        "format_version": 1,
+        "format_version": 2,
         "seed": 1,
         "seed_name": "1",
         "players": [{
@@ -20,13 +20,12 @@ fn base() -> Value {
                            "rule": {"t": "has", "player": 1, "item": "Key", "count": 1}}],
             "locations": [
                 {"name": "Chest", "address": 1, "region": "Menu", "rule": {"t": "true"},
-                 "progress_type": 1, "locked": false, "item": null, "default_item_rule": true},
+                 "progress_type": 1, "locked": false, "item": null},
                 {"name": "Deep", "address": 2, "region": "Cave", "rule": {"t": "true"},
-                 "progress_type": 1, "locked": false, "item": null, "default_item_rule": true},
+                 "progress_type": 1, "locked": false, "item": null},
                 {"name": "Boss", "address": null, "region": "Cave", "rule": {"t": "true"},
                  "progress_type": 1, "locked": true,
-                 "item": {"player": 1, "name": "Victory", "code": null, "classification": 1},
-                 "default_item_rule": true}
+                 "item": {"player": 1, "name": "Victory", "code": null, "classification": 1}}
             ],
             "precollected": [],
             "goal": {"t": "has", "player": 1, "item": "Victory", "count": 1},
@@ -104,11 +103,116 @@ fn regle_opaque_refusee() {
     assert!(unsupported(&v).contains("victoire"));
 }
 
-#[test]
-fn regle_d_objet_refusee() {
+/// L'export de base où « Chest » refuse la roupie (règle d'objet n° 0).
+fn with_item_rule() -> Value {
     let mut v = base();
-    v["players"][0]["locations"][0]["default_item_rule"] = json!(false);
-    assert!(unsupported(&v).contains("règle d'objet"));
+    v["item_rules"] = json!([{"allow_only": false, "list": [[1, "Rupee"]], "always": []}]);
+    v["players"][0]["locations"][0]["item_rule"] = json!(0);
+    v
+}
+
+#[test]
+fn regles_d_objet_lues_et_respectees() {
+    let v = with_item_rule();
+    let mut imported = import(&v).unwrap();
+    let w = &imported.world;
+    let alice = w.slot_ids().next().unwrap();
+    let chest = w.location_named(alice, "Chest").unwrap();
+    let deep = w.location_named(alice, "Deep").unwrap();
+    let key = w.item_named(alice, "Key").unwrap();
+    let rupee = w.item_named(alice, "Rupee").unwrap();
+    assert!(w.can_hold(chest, key));
+    assert!(!w.can_hold(chest, rupee));
+    assert!(w.can_hold(deep, rupee));
+    // Le placement respecte la règle : la roupie ne va jamais dans « Chest ».
+    let export = read_export(&bytes(&v)).unwrap();
+    for seed in 0..20 {
+        let mut again = imported.clone();
+        let lines = generate::imported::fill_imported(&mut again, &export, seed).unwrap();
+        assert!(
+            lines.contains(&(1, "Chest".to_string(), 1, "Key".to_string())),
+            "{lines:?}"
+        );
+    }
+    // « Seuls acceptés » et « toujours acceptés » : Chest exclu accepte quand même la clé.
+    let mut v = base();
+    v["item_rules"] = json!([{"allow_only": true, "list": [[1, "Rupee"]], "always": [[1, "Key"]]}]);
+    v["players"][0]["locations"][0]["item_rule"] = json!(0);
+    v["players"][0]["locations"][0]["progress_type"] = json!(3);
+    imported = import(&v).unwrap();
+    let w = &imported.world;
+    assert!(w.can_hold(chest, key), "always_allow passe l'exclusion");
+    assert!(w.can_hold(chest, rupee));
+}
+
+#[test]
+fn regles_d_objet_incoherentes_ou_non_traduites() {
+    let mut v = with_item_rule();
+    v["players"][0]["locations"][0]["item_rule"] = json!(5);
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
+    let mut v = with_item_rule();
+    v["item_rules"][0]["list"] = json!([[1, "Inconnu"]]);
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
+    let mut v = base();
+    v["players"][0]["item_rule_error"] = json!("lieu Chest : ValueError: x");
+    let reason = unsupported(&v);
+    assert!(
+        reason.contains("règle d'objet") && reason.contains("Chest"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn controle_croise_des_regles_d_objet() {
+    let mut v = with_item_rule();
+    v["checks"] = json!({"samples": [], "rules": [], "item_checks": [
+        [1, "Chest", 1, "Key", "1"], [1, "Chest", 1, "Rupee", "0"], [1, "Deep", 1, "Rupee", "1"]
+    ]});
+    import(&v).unwrap();
+    v["checks"]["item_checks"][1][4] = json!("1");
+    let reason = unsupported(&v);
+    assert!(
+        reason.contains("règle d'objet") && reason.contains("Rupee"),
+        "{reason}"
+    );
+    v["checks"]["item_checks"][1][4] = json!("e");
+    assert!(unsupported(&v).contains("plante"));
+}
+
+#[test]
+fn objets_a_placer_tot_et_accessibilite_lus() {
+    let mut v = base();
+    v["players"][0]["early_items"] = json!({"Key": 1, "Absent": 2});
+    v["players"][0]["local_early_items"] = json!({"Rupee": 1});
+    v["players"][0]["accessibility"] = json!(2);
+    let imported = import(&v).unwrap();
+    let w = &imported.world;
+    let alice = w.slot_ids().next().unwrap();
+    let key = w.item_named(alice, "Key").unwrap();
+    let rupee = w.item_named(alice, "Rupee").unwrap();
+    assert_eq!(
+        imported.early,
+        vec![
+            fill::EarlyItem {
+                item: key,
+                count: 1,
+                local: false
+            },
+            fill::EarlyItem {
+                item: rupee,
+                count: 1,
+                local: true
+            },
+        ],
+        "un objet absent du pool est ignoré"
+    );
+    assert_eq!(
+        w.slot(alice).unwrap().accessibility,
+        logic::Accessibility::Minimal
+    );
+    let mut v = base();
+    v["players"][0]["accessibility"] = json!(7);
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
 }
 
 #[test]
@@ -251,8 +355,8 @@ fn exports_incoherents_refuses() {
 #[test]
 fn format_taille_et_imbrication() {
     let mut v = base();
-    v["format_version"] = json!(2);
-    assert!(matches!(import(&v), Err(ImportError::Format(2))));
+    v["format_version"] = json!(3);
+    assert!(matches!(import(&v), Err(ImportError::Format(3))));
     let big = vec![b' '; MAX_EXPORT_BYTES + 1];
     assert!(matches!(read_export(&big), Err(ImportError::TooLarge(_))));
     // Une règle imbriquée sur 10 000 niveaux : refusée par serde_json, sans débordement.

@@ -4,9 +4,10 @@ Ce module n'est pas lance seul : le worker (raftup_worker.py) le recoit en texte
 la requete `export_worlds`, l'execute, puis appelle `export(mw, path, max_bytes)` une
 fois que les mondes ont fini `pre_fill`, juste avant le placement d'Archipelago.
 
-Le fichier ecrit (JSON, `format_version` 1) decrit, pour chaque joueur : regions,
+Le fichier ecrit (JSON, `format_version` 2) decrit, pour chaque joueur : regions,
 entrees, lieux, objets du pool, objets deja poses, inventaire de depart, condition de
-victoire et datapackage. Les regles `rule_builder` sont traduites telles quelles ; une
+victoire, accessibilite, objets a placer tot et datapackage ; et, pour les lieux, leurs
+regles d'objet sous forme de listes d'objets du pool (ADR 0029). Les regles `rule_builder` sont traduites telles quelles ; une
 regle Python ordinaire (lambda) est traduite par SONDAGE (classe Prober) ; si le sondage
 echoue, elle est marquee `opaque` et le monde reste au generateur Python.
 
@@ -24,7 +25,7 @@ MAX_QUESTIONS = 64  # questions differentes sur un chemin
 SAMPLES = 64  # inventaires du controle croise
 SAMPLE_SEED = 0x52414654  # graine fixe : meme export, memes inventaires
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2 : regles d'objet, objets a placer tot, accessibilite (ADR 0029)
 
 
 def _rule_table():
@@ -260,6 +261,20 @@ def probe(mw, rule):
     return ors[0] if len(ors) == 1 else {"t": "or", "of": ors}
 
 
+class NoState:
+    """Inventaire donne a `always_allow` : la regle ne doit pas le lire (Raftup en fait
+    une liste d'objets, sans inventaire). Toute lecture refuse l'export du monde."""
+
+    def __getattr__(self, name):
+        raise Refused("always_allow lit l'inventaire (state.%s)" % name)
+
+
+def _func_key(f):
+    """Identite d'une fonction de regle : meme fonction (meme objet) => meme resultat.
+    Une methode liee change d'objet a chaque lecture : on prend sa fonction et son objet."""
+    return (id(getattr(f, "__func__", f)), id(getattr(f, "__self__", None)))
+
+
 class Exporter:
     def __init__(self, mw):
         import BaseClasses
@@ -267,11 +282,91 @@ class Exporter:
         self.mw = mw
         self.default_rule = getattr(BaseClasses.Location, "access_rule", None)
         self.default_entrance_rule = getattr(BaseClasses.Entrance, "access_rule", None)
+        self.default_can_fill = BaseClasses.Location.can_fill
         self.table = _rule_table()
         self.opaque = 0
         self.probed = 0
         # Regles a recontroler par Rust : (genre, joueur, nom, fonction Python).
         self.checked = []
+        # Sortes d'objets du pool, dans l'ordre : (joueur, nom) -> exemplaires.
+        self.kinds = {}
+        for item in mw.itempool:
+            self.kinds.setdefault((int(item.player), str(item.name)), []).append(item)
+        # Regles d'objet (ADR 0029) : tables partagees entre les lieux.
+        self.item_rules = []
+        self._rule_index = {}  # contenu de la regle (JSON) -> index
+        self._rule_cache = {}  # identite des fonctions -> index ou None
+        self.item_rule_errors = {}  # joueur -> premiere erreur
+        self.ruled = []  # lieux vides a regle d'objet, pour le controle croise
+
+    def item_rule(self, p, loc):
+        """Index de la regle d'objet du lieu dans `item_rules`, ou None si tout objet du
+        pool passe. La regle est calculee par Archipelago lui-meme sur un exemplaire de
+        chaque sorte d'objet du pool, comme `Location.can_fill` sans l'acces :
+        `always_allow` (sauf objet non local) ou `item_rule`."""
+        if type(loc).can_fill is not self.default_can_fill:
+            self.item_rule_errors.setdefault(p, "lieu %s : can_fill redefini" % loc.name)
+            return None
+        rule = loc.item_rule
+        allow = loc.always_allow if "always_allow" in vars(loc) else None
+        key = (_func_key(rule), None if allow is None else _func_key(allow))
+        if key in self._rule_cache:
+            index = self._rule_cache[key]
+        else:
+            try:
+                index = self._compute_item_rule(rule, allow)
+            except Exception as exc:  # la regle plante, ou lit l'inventaire
+                self.item_rule_errors.setdefault(
+                    p, "lieu %s : %s: %s" % (loc.name, type(exc).__name__, exc))
+                return None
+            self._rule_cache[key] = index
+        if index is not None and loc.item is None:
+            self.ruled.append(loc)
+        return index
+
+    def _compute_item_rule(self, rule, allow):
+        allowed, forbidden, always = [], [], []
+        for (player, name), items in self.kinds.items():
+            item = items[0]
+            (allowed if rule(item) else forbidden).append([player, name])
+            if allow is not None and allow(NoState(), item):
+                if name not in self.mw.worlds[player].options.non_local_items.value:
+                    always.append([player, name])
+        if not forbidden and not always:
+            return None
+        # La liste la plus courte : refuses, ou seuls acceptes.
+        allow_only = len(allowed) < len(forbidden)
+        entry = {"allow_only": allow_only, "list": allowed if allow_only else forbidden,
+                 "always": always}
+        text = json.dumps(entry, sort_keys=True)
+        if text not in self._rule_index:
+            self._rule_index[text] = len(self.item_rules)
+            self.item_rules.append(entry)
+        return self._rule_index[text]
+
+    def item_checks(self):
+        """Controle croise des regles d'objet : `Location.can_fill` du vrai Archipelago
+        (sans l'acces) sur des paires (lieu, exemplaire) tirees au hasard, graine fixe.
+        Rust refait le calcul avec ses listes. On tire surtout parmi les lieux a regle."""
+        from BaseClasses import CollectionState
+
+        mw = self.mw
+        empty = [loc for loc in mw.get_locations() if loc.item is None]
+        if not empty or not mw.itempool:
+            return []
+        state = CollectionState(mw)
+        rng = random.Random(SAMPLE_SEED + 1)
+        out = []
+        for i in range(4 * SAMPLES):
+            pick = self.ruled if self.ruled and i % 4 else empty
+            loc = rng.choice(pick)
+            item = rng.choice(mw.itempool)
+            try:
+                bit = "1" if loc.can_fill(state, item, False) else "0"
+            except Exception:
+                bit = "e"
+            out.append([int(loc.player), str(loc.name), int(item.player), str(item.name), bit])
+        return out
 
     def rule(self, rule):
         if rule is None or rule is self.default_rule or rule is self.default_entrance_rule:
@@ -352,8 +447,6 @@ class Exporter:
                 })
                 self.check("entrance", p, exit_.name, exit_.access_rule)
             for loc in region.locations:
-                # Regle d'objet propre au lieu (item_rule ou always_allow) : non prise en charge.
-                default_item_rule = not ({"item_rule", "always_allow"} & set(vars(loc)))
                 locations.append({
                     "name": str(loc.name),
                     "address": loc.address if isinstance(loc.address, int) else None,
@@ -362,7 +455,9 @@ class Exporter:
                     "progress_type": int(loc.progress_type),
                     "locked": bool(loc.locked),
                     "item": None if loc.item is None else self.item(loc.item),
-                    "default_item_rule": default_item_rule,
+                    # Regle d'objet (item_rule, always_allow, local_items...) : index dans
+                    # `item_rules`, ou None.
+                    "item_rule": self.item_rule(p, loc),
                 })
                 self.check("location", p, loc.name, loc.access_rule)
         return {
@@ -377,9 +472,14 @@ class Exporter:
             "goal": self.rule(mw.completion_condition[p]),
             "custom_collect": custom_collect,
             "progression_balancing": int(getattr(world.options, "progression_balancing", 50)),
-            # Objets a placer tot (early_items) : place par Archipelago dans son placement,
-            # que Raftup remplace ; pas encore pris en charge.
-            "early_items": bool(mw.early_items[p] or mw.local_early_items[p]),
+            # 0 full, 1 items, 2 minimal (Options.Accessibility).
+            "accessibility": int(getattr(world.options, "accessibility", 0)),
+            # Objets a placer tot (ADR 0029) : nom -> nombre, apres les retouches de
+            # Main.py (inventaire de depart tire du pool deja retire).
+            "early_items": {str(k): int(v) for k, v in mw.early_items[p].items() if v > 0},
+            "local_early_items": {str(k): int(v) for k, v in mw.local_early_items[p].items()
+                                  if v > 0},
+            "item_rule_error": self.item_rule_errors.get(p),
             "required_client_version": list(getattr(world, "required_client_version", (0, 1, 6))),
         }
 
@@ -428,7 +528,7 @@ class Exporter:
                     results[i].append("e")
         rules = [{"kind": kind, "player": player, "name": name, "results": "".join(bits)}
                  for (kind, player, name, _), bits in zip(self.checked, results)]
-        return {"samples": samples, "rules": rules}
+        return {"samples": samples, "rules": rules, "item_checks": self.item_checks()}
 
     def export(self):
         mw = self.mw
@@ -446,6 +546,7 @@ class Exporter:
             "seed_name": str(mw.seed_name),
             "players": players,
             "pool": [self.item(i) for i in mw.itempool],
+            "item_rules": self.item_rules,
             "datapackage": packages,
             "opaque_rules": self.opaque,
             "probed_rules": self.probed,

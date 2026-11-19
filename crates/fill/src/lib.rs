@@ -15,6 +15,10 @@
 //!   échoue (ou l'entrée qui bloque sa région).
 //! - **équilibrage de progression** ([`balance`]) : après le placement, avance des objets
 //!   de progression des joueurs en retard (`progression_balancing`, ADR 0027 étape 5) ;
+//! - **règles d'objet, objets à placer tôt, accessibilité** (ADR 0029) : un objet ne va
+//!   que dans un lieu qui l'accepte (`MultiWorld::can_hold`) ; les objets à placer tôt
+//!   ([`fill_with_early`]) vont en sphère 0 ; un joueur en `accessibility: minimal` ou
+//!   `items` n'exige pas que tous ses lieux soient atteignables (`MultiWorld::must_reach`) ;
 //!
 //! Le hasard vient d'un générateur passé par l'appelant (trait `Rng` de `rand_core`) ; le
 //! mélange est écrit ici ([`shuffle`]) pour que le résultat ne dépende que de la suite de
@@ -27,5 +31,7 @@ mod shuffle;
 
 pub use balance::{balance, BalanceReport, DEFAULT_BALANCING, MAX_BALANCING};
 pub use explain::{explain, Blocked, Target};
-pub use place::{check_feasible, fill, FillError, FillReport, MAX_ATTEMPTS};
+pub use place::{
+    check_feasible, fill, fill_with_early, EarlyItem, FillError, FillReport, MAX_ATTEMPTS,
+};
 pub use shuffle::{below, shuffle};

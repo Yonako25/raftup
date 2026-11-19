@@ -1,7 +1,7 @@
 //! Mondes exportés depuis Archipelago (ADR 0028, étape 1).
 //!
 //! Le worker Python construit les mondes jusqu'à `pre_fill` puis les décrit dans un
-//! fichier JSON (`raftup_export.py`, `format_version` 1). Ce module lit ce fichier et en
+//! fichier JSON (`raftup_export.py`, `format_version` 2). Ce module lit ce fichier et en
 //! fait un [`logic::MultiWorld`] prêt à être rempli par `fill`.
 //!
 //! Le fichier vient du code d'un apworld, qu'on ne contrôle pas : on le lit comme une
@@ -11,8 +11,10 @@
 //! Ce qui n'est pas encore pris en charge rend le monde **non exportable**
 //! ([`ImportError::Unsupported`]) : la génération reste alors au générateur Python.
 //! À cette étape : règle opaque (lambda que le sondage n'a pas su traduire), règle
-//! d'objet propre à un lieu (`item_rule`), monde qui redéfinit `collect`. Les lieux
-//! prioritaires et exclus (`progress_type`) sont pris en charge.
+//! d'objet que l'export n'a pas su calculer, monde qui redéfinit `collect`. Sont pris en
+//! charge : lieux prioritaires et exclus (`progress_type`), règles d'objet (`item_rule`,
+//! `always_allow`, donc `local_items` / `non_local_items`), objets à placer tôt
+//! (`early_items`, `local_early_items`) et `accessibility` (ADR 0029).
 //!
 //! **Contrôle croisé** (ADR 0028, § 4) : l'export contient des inventaires tirés au
 //! hasard et la valeur de chaque règle calculée par le vrai Archipelago. On recalcule
@@ -22,8 +24,8 @@ use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use logic::{
-    Classification, EntranceId, ItemKindId, LocationId, LogicError, MultiWorld, Progress,
-    Reachability, RegionId, Rule, SlotId, State,
+    Accessibility, Classification, EntranceId, ItemKindId, ItemRule, ItemRuleId, LocationId,
+    LogicError, MultiWorld, Progress, Reachability, RegionId, Rule, SlotId, State,
 };
 use multidata::GamePackage;
 use serde::Deserialize;
@@ -31,8 +33,9 @@ use thiserror::Error;
 
 use crate::datapackage::{game_package, PackageSource};
 
-/// Version du format d'export comprise ici.
-pub const FORMAT_VERSION: u32 = 1;
+/// Version du format d'export comprise ici (2 : règles d'objet, objets à placer tôt,
+/// accessibilité, ADR 0029).
+pub const FORMAT_VERSION: u32 = 2;
 /// Taille maximale du fichier d'export (comme une seed, NF08).
 pub const MAX_EXPORT_BYTES: usize = 64 * 1024 * 1024;
 /// Nombre maximal d'éléments (régions, entrées, lieux, objets) dans un export.
@@ -77,10 +80,25 @@ pub struct Export {
     pub seed_name: String,
     pub players: Vec<PlayerExport>,
     pub pool: Vec<ItemExport>,
+    /// Règles d'objet, partagées entre les lieux (ADR 0029).
+    #[serde(default)]
+    pub item_rules: Vec<ItemRuleExport>,
     pub datapackage: IndexMap<String, PackageExport>,
     /// Contrôle croisé ; absent seulement dans les exports écrits à la main des tests.
     #[serde(default)]
     pub checks: Option<Checks>,
+}
+
+/// Une règle d'objet : quelles sortes d'objets du pool un lieu accepte, calculé par
+/// Archipelago (`item_rule`, `always_allow`) sur chaque sorte. Objets : `(joueur, nom)`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ItemRuleExport {
+    /// Vrai : seuls les objets de `list` sont acceptés ; faux : ils sont refusés.
+    pub allow_only: bool,
+    pub list: Vec<(u32, String)>,
+    /// Objets toujours acceptés (`always_allow`), même dans un lieu exclu.
+    #[serde(default)]
+    pub always: Vec<(u32, String)>,
 }
 
 /// Inventaires du contrôle croisé et résultats du vrai Archipelago.
@@ -89,6 +107,11 @@ pub struct Checks {
     /// Chaque inventaire : `(joueur, objet, nombre)`.
     pub samples: Vec<Vec<(u32, String, u32)>>,
     pub rules: Vec<CheckedRule>,
+    /// Contrôle des règles d'objet : `(joueur du lieu, lieu, joueur de l'objet, objet,
+    /// résultat)`, le résultat étant `Location.can_fill` d'Archipelago sans l'accès
+    /// (`'1'`, `'0'`, ou `'e'` si Python a planté).
+    #[serde(default)]
+    pub item_checks: Vec<(u32, String, u32, String, String)>,
 }
 
 /// Une règle et sa valeur sur chaque inventaire : `'1'` vraie, `'0'` fausse, `'e'` la
@@ -121,9 +144,19 @@ pub struct PlayerExport {
     /// Option `progression_balancing` du joueur (0 à 99, 50 par défaut).
     #[serde(default = "default_balancing")]
     pub progression_balancing: u8,
-    /// Le joueur a des objets à placer tôt (`early_items`) : pas encore pris en charge.
+    /// Option `accessibility` : 0 `full`, 1 `items`, 2 `minimal`.
     #[serde(default)]
-    pub early_items: bool,
+    pub accessibility: u8,
+    /// Objets à placer tôt, n'importe où (`early_items`) : nom → nombre.
+    #[serde(default)]
+    pub early_items: BTreeMap<String, u32>,
+    /// Objets à placer tôt chez le joueur (`local_early_items`) : nom → nombre.
+    #[serde(default)]
+    pub local_early_items: BTreeMap<String, u32>,
+    /// Une règle d'objet que l'export n'a pas su calculer (exception, `always_allow` qui
+    /// lit l'inventaire, `can_fill` redéfini) : le monde reste en Python.
+    #[serde(default)]
+    pub item_rule_error: Option<String>,
     pub required_client_version: Vec<u32>,
 }
 
@@ -152,8 +185,10 @@ pub struct LocationExport {
     pub locked: bool,
     /// Objet déjà posé (événement, objet verrouillé par le monde).
     pub item: Option<ItemExport>,
-    /// Faux si le lieu a sa propre règle d'objet (`item_rule`, `always_allow`).
-    pub default_item_rule: bool,
+    /// Index de la règle d'objet du lieu dans [`Export::item_rules`] ; `None` : tout objet
+    /// du pool est accepté.
+    #[serde(default)]
+    pub item_rule: Option<u32>,
 }
 
 /// Un objet (un exemplaire).
@@ -298,6 +333,11 @@ pub fn read_export(bytes: &[u8]) -> Result<Export, ImportError> {
             .players
             .iter()
             .map(|p| p.regions.len() + p.entrances.len() + p.locations.len() + p.precollected.len())
+            .sum::<usize>()
+        + export
+            .item_rules
+            .iter()
+            .map(|r| r.list.len() + r.always.len())
             .sum::<usize>();
     if elements > MAX_ELEMENTS {
         return Err(invalid(format!("{elements} éléments (max {MAX_ELEMENTS})")));
@@ -317,6 +357,8 @@ pub struct Imported {
     pub start: State,
     /// Objets de départ de chaque joueur, dans l'ordre des slots.
     pub start_items: Vec<Vec<ItemKindId>>,
+    /// Objets à placer tôt (`early_items`, `local_early_items`), pour `fill`.
+    pub early: Vec<fill::EarlyItem>,
     /// Datapackage de chaque jeu, `checksum` recalculé par Raftup.
     pub packages: IndexMap<String, GamePackage>,
 }
@@ -386,7 +428,13 @@ pub fn fill_imported(
         .filter(|id| world.location(*id).is_some_and(|l| l.item.is_none()))
         .collect();
     let mut rng = crate::stream("fill", seed, 0);
-    fill::fill(world, imported.pool.clone(), &imported.start, &mut rng)?;
+    fill::fill_with_early(
+        world,
+        imported.pool.clone(),
+        &imported.start,
+        &imported.early,
+        &mut rng,
+    )?;
     let balancing: Vec<u8> = export
         .players
         .iter()
@@ -437,6 +485,22 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
     }
 
     add_item_kinds(export, &mut world, &mut names)?;
+    let item_rules = add_item_rules(export, &mut world, &names)?;
+    for player in &export.players {
+        // `Options.Accessibility` d'Archipelago : 0 full, 1 items, 2 minimal.
+        let accessibility = match player.accessibility {
+            0 => Accessibility::Full,
+            1 => Accessibility::Items,
+            2 => Accessibility::Minimal,
+            other => {
+                return Err(invalid(format!(
+                    "{} : accessibility {other} inconnue",
+                    player.name
+                )))
+            }
+        };
+        world.set_accessibility(names.slot(player.slot)?, accessibility)?;
+    }
 
     // Régions, puis entrées et lieux avec une règle provisoire : une règle peut citer un
     // lieu créé plus tard (`CanReachLocation`), on pose donc les règles à la fin.
@@ -482,6 +546,15 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
                 }
             };
             world.set_progress(id, progress)?;
+            if let Some(index) = location.item_rule {
+                let rule = item_rules.get(index as usize).copied().ok_or_else(|| {
+                    invalid(format!(
+                        "lieu « {} » : règle d'objet n° {index} inconnue",
+                        location.name
+                    ))
+                })?;
+                world.set_item_rule(id, Some(rule))?;
+            }
             if let Some(item) = &location.item {
                 world.place(id, names.item(item.player, &item.name)?)?;
             }
@@ -523,9 +596,12 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
         start.collect(&world, *item);
     }
 
+    let early = early_items(export, &names)?;
+
     world.validate()?;
     if let Some(checks) = &export.checks {
         cross_check(export, checks, &world, &names)?;
+        cross_check_items(export, checks, &world, &names)?;
     }
     let packages = packages(export)?;
     Ok(Imported {
@@ -533,8 +609,112 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
         pool,
         start,
         start_items,
+        early,
         packages,
     })
+}
+
+/// Range les règles d'objet de l'export dans le monde, dans l'ordre ; rend leurs index.
+fn add_item_rules(
+    export: &Export,
+    world: &mut MultiWorld,
+    names: &Names,
+) -> Result<Vec<ItemRuleId>, ImportError> {
+    let ids = |list: &[(u32, String)]| {
+        list.iter()
+            .map(|(player, name)| names.item(*player, name))
+            .collect::<Result<Vec<_>, _>>()
+    };
+    let mut out = Vec::with_capacity(export.item_rules.len());
+    for rule in &export.item_rules {
+        let list = ids(&rule.list)?;
+        let always = ids(&rule.always)?;
+        let rule = if rule.allow_only {
+            ItemRule::allow_only(list, always)
+        } else {
+            ItemRule::forbid(list, always)
+        };
+        out.push(world.add_item_rule(rule)?);
+    }
+    Ok(out)
+}
+
+/// Objets à placer tôt de chaque joueur. Un nom absent du pool est ignoré, comme dans
+/// Archipelago (il n'y a aucun exemplaire à placer).
+fn early_items(export: &Export, names: &Names) -> Result<Vec<fill::EarlyItem>, ImportError> {
+    let mut out = Vec::new();
+    for player in &export.players {
+        let lists = [
+            (&player.early_items, false),
+            (&player.local_early_items, true),
+        ];
+        for (list, local) in lists {
+            // `BTreeMap` : parcours trié par nom, donc reproductible.
+            for (name, count) in list {
+                if *count == 0 {
+                    continue;
+                }
+                let Some(item) = names.items.get(&(player.slot, name.clone())) else {
+                    continue;
+                };
+                out.push(fill::EarlyItem {
+                    item: *item,
+                    count: *count,
+                    local,
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Nombre maximal de paires (lieu, objet) lues pour le contrôle des règles d'objet.
+pub const MAX_ITEM_CHECKS: usize = 4096;
+
+/// Compare chaque paire (lieu, objet) contrôlée par Archipelago (`can_fill` sans l'accès)
+/// avec [`MultiWorld::can_hold`] ; au moindre désaccord, le monde reste en Python.
+fn cross_check_items(
+    export: &Export,
+    checks: &Checks,
+    world: &MultiWorld,
+    names: &Names,
+) -> Result<(), ImportError> {
+    if checks.item_checks.len() > MAX_ITEM_CHECKS {
+        return Err(invalid(format!(
+            "{} contrôles de règles d'objet",
+            checks.item_checks.len()
+        )));
+    }
+    for (player, location, item_player, item, result) in &checks.item_checks {
+        let loc = lookup(&names.locations, *player, location)?;
+        let kind = names.item(*item_player, item)?;
+        let ours = world.can_hold(loc, kind);
+        let agree = match result.as_str() {
+            "1" => ours,
+            "0" => !ours,
+            _ => false,
+        };
+        if !agree {
+            let owner = export
+                .players
+                .iter()
+                .find(|p| p.slot == *player)
+                .ok_or_else(|| invalid(format!("joueur {player} inconnu")))?;
+            let what = if result == "e" {
+                "la règle Python plante".to_string()
+            } else {
+                format!("Raftup dit {ours}, Archipelago le contraire")
+            };
+            return Err(ImportError::Unsupported {
+                player: owner.name.clone(),
+                game: owner.game.clone(),
+                reason: format!(
+                    "contrôle croisé de la règle d'objet du lieu « {location} » pour « {item} » : {what}"
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Index d'un élément créé plus haut (toujours présent ; erreur plutôt que panique).
@@ -579,18 +759,8 @@ fn check_supported(export: &Export) -> Result<(), ImportError> {
                 "le monde change la façon de ramasser les objets (collect)".to_string(),
             ));
         }
-        if player.early_items {
-            return Err(refuse(
-                "objets à placer tôt (early_items) pas encore pris en charge".to_string(),
-            ));
-        }
-        for location in &player.locations {
-            if !location.default_item_rule {
-                return Err(refuse(format!(
-                    "le lieu « {} » a sa propre règle d'objet",
-                    location.name
-                )));
-            }
+        if let Some(why) = &player.item_rule_error {
+            return Err(refuse(format!("règle d'objet non traduite ({why})")));
         }
     }
     Ok(())

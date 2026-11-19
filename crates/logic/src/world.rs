@@ -11,7 +11,8 @@ use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-use crate::ids::{EntranceId, ItemGroupId, ItemKindId, LocationId, RegionId, SlotId};
+use crate::ids::{EntranceId, ItemGroupId, ItemKindId, ItemRuleId, LocationId, RegionId, SlotId};
+use crate::item_rule::{Accessibility, ItemRule};
 use crate::rule::Rule;
 
 /// Erreurs de construction ou de validation d'un monde.
@@ -29,6 +30,8 @@ pub enum LogicError {
     UnknownItem(u32),
     #[error("groupe d'objets inconnu : n° {0}")]
     UnknownGroup(u32),
+    #[error("règle d'objet inconnue : n° {0}")]
+    UnknownItemRule(u32),
     #[error("{kind} « {name} » en double pour le joueur {slot}")]
     DuplicateName {
         slot: String,
@@ -100,6 +103,8 @@ pub struct Slot {
     pub origin: Option<RegionId>,
     /// Condition de victoire (vraie par défaut, comme dans Archipelago).
     pub goal: Rule,
+    /// Ce que le placement doit garantir à ce joueur (`Full` par défaut).
+    pub accessibility: Accessibility,
 }
 
 /// Une région.
@@ -132,6 +137,9 @@ pub struct Location {
     pub item: Option<ItemKindId>,
     /// Normal, prioritaire ou exclu (`LocationProgressType` d'Archipelago).
     pub progress: Progress,
+    /// Règle d'objet du lieu ; `None` : tout objet est accepté (voir
+    /// [`MultiWorld::can_hold`]).
+    pub item_rule: Option<ItemRuleId>,
 }
 
 /// Ce que le placement a le droit de mettre dans un lieu.
@@ -183,6 +191,7 @@ pub struct MultiWorld {
     locations: Vec<Location>,
     item_kinds: Vec<ItemKind>,
     item_groups: Vec<ItemGroup>,
+    item_rules: Vec<ItemRule>,
     names: Vec<SlotNames>,
 }
 
@@ -211,6 +220,7 @@ impl MultiWorld {
             game: game.into(),
             origin: None,
             goal: Rule::True,
+            accessibility: Accessibility::Full,
         });
         self.names.push(SlotNames::default());
         Ok(id)
@@ -290,6 +300,7 @@ impl MultiWorld {
             rule,
             item: None,
             progress: Progress::Default,
+            item_rule: None,
         });
         Ok(id)
     }
@@ -412,6 +423,100 @@ impl MultiWorld {
         Ok(())
     }
 
+    /// Fixe l'accessibilité du joueur (voir [`Accessibility`]).
+    pub fn set_accessibility(
+        &mut self,
+        slot: SlotId,
+        accessibility: Accessibility,
+    ) -> Result<(), LogicError> {
+        let slot = self
+            .slots
+            .get_mut(slot.index())
+            .ok_or(LogicError::UnknownSlot(slot.raw()))?;
+        slot.accessibility = accessibility;
+        Ok(())
+    }
+
+    /// Range une règle d'objet ; plusieurs lieux peuvent ensuite la partager.
+    pub fn add_item_rule(&mut self, rule: ItemRule) -> Result<ItemRuleId, LogicError> {
+        for item in rule.items() {
+            self.item_or_err(item)?;
+        }
+        let id = ItemRuleId(next_index(&self.item_rules, "règle d'objet")?);
+        self.item_rules.push(rule);
+        Ok(id)
+    }
+
+    /// Donne une règle d'objet à un lieu (`None` : tout objet est accepté).
+    pub fn set_item_rule(
+        &mut self,
+        location: LocationId,
+        rule: Option<ItemRuleId>,
+    ) -> Result<(), LogicError> {
+        if let Some(rule) = rule {
+            if self.item_rule(rule).is_none() {
+                return Err(LogicError::UnknownItemRule(rule.raw()));
+            }
+        }
+        let location = self
+            .locations
+            .get_mut(location.index())
+            .ok_or(LogicError::UnknownLocation(location.raw()))?;
+        location.item_rule = rule;
+        Ok(())
+    }
+
+    /// Le lieu a-t-il le droit de recevoir cet objet ? Comme `Location.can_fill`
+    /// d'Archipelago, sans regarder si le lieu est atteignable :
+    ///
+    /// - un objet de `always_allow` passe toujours (même dans un lieu exclu) ;
+    /// - sinon, un lieu exclu refuse la progression et les objets utiles ;
+    /// - sinon, la règle d'objet du lieu décide (tout passe s'il n'en a pas).
+    ///
+    /// Un lieu ou un objet inconnu donne `false`.
+    pub fn can_hold(&self, location: LocationId, item: ItemKindId) -> bool {
+        let (Some(location), Some(kind)) = (self.location(location), self.item_kind(item)) else {
+            return false;
+        };
+        let rule = location.item_rule.and_then(|id| self.item_rule(id));
+        if rule.is_some_and(|r| r.always_allows(item)) {
+            return true;
+        }
+        let important = kind.classification.progression || kind.classification.useful;
+        if location.progress == Progress::Excluded && important {
+            return false;
+        }
+        rule.is_none_or(|r| r.allows(item))
+    }
+
+    /// Le lieu doit-il être atteignable à la fin du placement ? Comme
+    /// `MultiWorld.fulfills_accessibility` d'Archipelago :
+    ///
+    /// - oui si son joueur est en accessibilité `Full` ;
+    /// - sinon, seulement s'il garde un objet de progression d'un joueur qui n'est pas en
+    ///   `Minimal` (un objet nécessaire à quelqu'un qui veut tout atteindre).
+    pub fn must_reach(&self, location: LocationId) -> bool {
+        let Some(location) = self.location(location) else {
+            return false;
+        };
+        let accessibility = |slot: SlotId| self.slot(slot).map(|s| s.accessibility);
+        if accessibility(location.slot) == Some(Accessibility::Full) {
+            return true;
+        }
+        location
+            .item
+            .and_then(|item| self.item_kind(item))
+            .is_some_and(|kind| {
+                kind.classification.progression
+                    && accessibility(kind.slot) != Some(Accessibility::Minimal)
+            })
+    }
+
+    /// Le monde a au moins une règle d'objet.
+    pub fn has_item_rules(&self) -> bool {
+        !self.item_rules.is_empty()
+    }
+
     /// Place un objet (de n'importe quel joueur) dans un lieu vide.
     pub fn place(&mut self, location: LocationId, item: ItemKindId) -> Result<(), LogicError> {
         if self.item_kind(item).is_none() {
@@ -479,6 +584,9 @@ impl MultiWorld {
     pub fn item_group(&self, id: ItemGroupId) -> Option<&ItemGroup> {
         self.item_groups.get(id.index())
     }
+    pub fn item_rule(&self, id: ItemRuleId) -> Option<&ItemRule> {
+        self.item_rules.get(id.index())
+    }
 
     /// Identifiants des joueurs, dans l'ordre.
     pub fn slot_ids(&self) -> impl Iterator<Item = SlotId> + '_ {
@@ -533,6 +641,10 @@ impl MultiWorld {
             self.check_rule(&location.rule)?;
             if let Some(item) = location.item {
                 self.item_or_err(item)?;
+            }
+            if let Some(rule) = location.item_rule {
+                self.item_rule(rule)
+                    .ok_or(LogicError::UnknownItemRule(rule.raw()))?;
             }
         }
         Ok(())

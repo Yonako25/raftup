@@ -451,6 +451,57 @@ class TestSondage(unittest.TestCase):
         self.refus(lambda s: sum(s.has(str(i), 1) for i in range(13)) >= 13, "chemins")
 
 
+class TestReglesObjet(unittest.TestCase):
+    """Regles d'objet de raftup_export.py (ADR 0029), sans Archipelago."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(ICI, "raftup_export.py"), encoding="utf-8") as f:
+            cls.ns = {"__name__": "raftup_export"}
+            exec(compile(f.read(), "raftup_export.py", "exec"), cls.ns)
+
+    def exporteur(self, non_local=()):
+        class Objet:
+            def __init__(self, player, name):
+                self.player, self.name = player, name
+
+        class Valeur:
+            value = set(non_local)
+
+        class Options:
+            non_local_items = Valeur()
+
+        class Monde:
+            options = Options()
+
+        class MW:
+            worlds = {1: Monde()}
+
+        e = self.ns["Exporter"].__new__(self.ns["Exporter"])
+        e.mw = MW()
+        e.kinds = {(1, n): [Objet(1, n)] for n in ("Key", "Coin", "Gem")}
+        e.item_rules, e._rule_index = [], {}
+        return e
+
+    def test_listes(self):
+        e = self.exporteur()
+        self.assertIsNone(e._compute_item_rule(lambda i: True, None))
+        a = e._compute_item_rule(lambda i: i.name != "Key", None)
+        self.assertEqual(e.item_rules[a], {"allow_only": False, "list": [[1, "Key"]], "always": []})
+        b = e._compute_item_rule(lambda i: i.name == "Coin", None)
+        self.assertEqual(e.item_rules[b], {"allow_only": True, "list": [[1, "Coin"]], "always": []})
+        # Meme contenu, meme index.
+        self.assertEqual(e._compute_item_rule(lambda i: i.name not in ("Key",), None), a)
+
+    def test_toujours_acceptes(self):
+        e = self.exporteur(non_local={"Gem"})
+        r = e._compute_item_rule(lambda i: False, lambda state, i: i.name in ("Key", "Gem"))
+        # Gem est non local : always_allow ne le laisse pas passer (Location.can_fill).
+        self.assertEqual(e.item_rules[r]["always"], [[1, "Key"]])
+        with self.assertRaises(self.ns["Refused"]):
+            e._compute_item_rule(lambda i: True, lambda state, i: state.has("Key", 1))
+
+
 class TestBlocageReseau(unittest.TestCase):
     """block_network() (RAFTUP_BLOCK_NETWORK=1) : refuse le sortant, garde la boucle locale."""
 

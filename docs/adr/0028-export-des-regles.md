@@ -63,7 +63,7 @@ Pour chaque joueur :
 
 - `progress_type` des lieux : **exclu** (que du remplissage : ni progression ni utile, comme Archipelago) et **prioritaire** (progression d'abord) ;
 - les règles de `rule_builder` qui manquent (section 3) ;
-- les règles d'objet par lieu (`item_rule`) ne sont **pas** prises en charge au départ : un lieu dont `item_rule` n'est pas celle par défaut rend le monde non exportable (il reste en Python). Slime Rancher n'en a pas.
+- les règles d'objet par lieu (`item_rule`) ne sont **pas** prises en charge au départ : un lieu dont `item_rule` n'est pas celle par défaut rend le monde non exportable (il reste en Python). Slime Rancher n'en a pas. *(Pris en charge depuis l'ADR 0029, avec `early_items` et `accessibility`.)*
 
 ### 7. Reproductibilité
 

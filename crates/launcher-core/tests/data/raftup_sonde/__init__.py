@@ -4,6 +4,8 @@ aucun code tiers. Jamais distribue aux joueurs : il ne sert qu'aux tests.
 
 Menu --(Sword)--> Forest --(Lamp ou 2 Gem)--> Cave
 Menu --(Sword et 2 Key)--> Castle (Victory)
+
+Options `early_items` et `item_rules` : objets a placer tot et regles d'objet (ADR 0029).
 """
 from dataclasses import dataclass
 
@@ -26,9 +28,22 @@ class BadRule(Toggle):
     display_name = "Bad Rule"
 
 
+class EarlyItems(Toggle):
+    """Objets a placer tot (ADR 0029) : Coin n'importe ou, Sword chez le joueur."""
+    display_name = "Early Items"
+
+
+class ItemRules(Toggle):
+    """Regles d'objet (ADR 0029) : pas de Coin dans Cave Pool ; Forest Stump (exclu)
+    accepte toujours une Gem du joueur."""
+    display_name = "Item Rules"
+
+
 @dataclass
 class SondeOptions(PerGameCommonOptions):
     bad_rule: BadRule
+    early_items: EarlyItems
+    item_rules: ItemRules
 
 
 class SondeItem(Item):
@@ -52,6 +67,13 @@ class SondeWorld(World):
     item_name_to_id = ITEMS
     location_name_to_id = LOCATIONS
     item_name_groups = {"Shiny": {"Gem", "Lamp"}}
+
+    def generate_early(self):
+        if self.options.early_items:
+            # Une seule place en sphere 0 (Start Chest, prioritaire) : Sword (local) la
+            # prend ; Coin (pas de progression) n'a pas droit aux lieux prioritaires.
+            self.multiworld.early_items[self.player]["Coin"] = 1
+            self.multiworld.local_early_items[self.player]["Sword"] = 1
 
     def create_item(self, name):
         kind = ItemClassification.progression if name in PROGRESSION else ItemClassification.filler
@@ -105,6 +127,12 @@ class SondeWorld(World):
         mw.get_location("Start Chest", p).progress_type = LocationProgressType.PRIORITY
         mw.get_location("Forest Stump", p).progress_type = LocationProgressType.EXCLUDED
         mw.completion_condition[p] = lambda s: s.has("Victory", p)
+        if self.options.item_rules:
+            pool = mw.get_location("Cave Pool", p)
+            # (Interdire Key ici rendait le monde a un joueur impossible a remplir.)
+            pool.item_rule = lambda item: not (item.name == "Coin" and item.player == p)
+            mw.get_location("Forest Stump", p).always_allow = \
+                lambda state, item: item.name == "Gem" and item.player == p
 
     def fill_slot_data(self):
         return {"bad_rule": bool(self.options.bad_rule)}

@@ -321,3 +321,57 @@ fn validation_d_un_identifiant_inconnu() {
         Err(LogicError::UnknownRegion(1))
     ));
 }
+
+#[test]
+fn regles_d_objet_et_accessibilite() {
+    use logic::{Accessibility, ItemRule, Progress};
+    let mut w = MultiWorld::new();
+    let a = w.add_slot("A", "Test").unwrap();
+    let b = w.add_slot("B", "Test").unwrap();
+    let key = w.add_item_kind(a, "Key", Some(1), PROG).unwrap();
+    let boots = w
+        .add_item_kind(a, "Boots", Some(2), Classification::USEFUL)
+        .unwrap();
+    let coin = w
+        .add_item_kind(b, "Coin", Some(3), Classification::FILLER)
+        .unwrap();
+    let ra = w.add_region(a, "Menu").unwrap();
+    let rb = w.add_region(b, "Menu").unwrap();
+    let la = w.add_location(ra, "Chest", Some(10), Rule::True).unwrap();
+    let lb = w.add_location(rb, "Chest", Some(20), Rule::True).unwrap();
+    // Sans règle : tout passe.
+    assert!(w.can_hold(la, key) && w.can_hold(la, coin));
+    // Règle « refuse la clé », sauf qu'elle est aussi « toujours acceptée » : acceptée.
+    let rule = w
+        .add_item_rule(ItemRule::forbid(vec![key, boots], vec![key]))
+        .unwrap();
+    w.set_item_rule(la, Some(rule)).unwrap();
+    assert!(w.can_hold(la, key));
+    assert!(!w.can_hold(la, boots));
+    assert!(w.can_hold(la, coin));
+    // Lieu exclu : ni progression ni utile, sauf `always`.
+    w.set_progress(lb, Progress::Excluded).unwrap();
+    assert!(!w.can_hold(lb, key) && !w.can_hold(lb, boots) && w.can_hold(lb, coin));
+    // Règle qui cite un objet inconnu, ou index inconnu : refusés.
+    let mut other = MultiWorld::new();
+    let o = other.add_slot("O", "Test").unwrap();
+    let r = other.add_region(o, "Menu").unwrap();
+    let l = other.add_location(r, "X", Some(1), Rule::True).unwrap();
+    assert!(other
+        .add_item_rule(ItemRule::forbid(vec![key], vec![]))
+        .is_err());
+    assert!(other.set_item_rule(l, Some(rule)).is_err());
+    // Accessibilité : en `full`, tout lieu compte ; en `minimal`, seulement s'il garde la
+    // progression d'un joueur qui n'est pas en `minimal`.
+    assert!(w.must_reach(lb));
+    w.set_accessibility(b, Accessibility::Minimal).unwrap();
+    assert!(!w.must_reach(lb), "lieu vide d'un joueur minimal");
+    w.place(lb, key).unwrap();
+    assert!(w.must_reach(lb), "il garde la clé de A (full)");
+    w.set_accessibility(a, Accessibility::Minimal).unwrap();
+    assert!(
+        !w.must_reach(lb),
+        "la clé de A (minimal) peut rester hors d'atteinte"
+    );
+    assert!(w.validate().is_ok());
+}
