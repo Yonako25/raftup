@@ -31,6 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
+- [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
 
 ## Crates
 
@@ -128,6 +129,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 - **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
+- **0029** : moteur « export » : règles d'objet en listes calculées par Archipelago (contrôle croisé), objets à placer tôt en sphère 0, `accessibility` (accepté en autonomie, à relire)
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

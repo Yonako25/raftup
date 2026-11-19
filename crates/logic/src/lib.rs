@@ -17,12 +17,14 @@
 //! future crate `fill`.
 
 mod ids;
+mod item_rule;
 mod rule;
 mod state;
 mod sweep;
 mod world;
 
-pub use ids::{EntranceId, ItemGroupId, ItemKindId, LocationId, RegionId, SlotId};
+pub use ids::{EntranceId, ItemGroupId, ItemKindId, ItemRuleId, LocationId, RegionId, SlotId};
+pub use item_rule::{Accessibility, ItemRule};
 pub use rule::Rule;
 pub use state::State;
 pub use sweep::{sweep, Reachability, SweepResult};

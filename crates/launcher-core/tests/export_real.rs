@@ -197,6 +197,135 @@ fn regle_non_monotone_refusee() {
     }
 }
 
+/// YAML de Sam avec les options de l'ADR 0029 : objets à placer tôt, règles d'objet, et
+/// des lignes en plus sous `Raftup Sonde:` (par exemple `accessibility: minimal`).
+fn sonde_yaml_0029(extra: &str) -> String {
+    format!(
+        "name: Sam\ngame: Raftup Sonde\nRaftup Sonde:\n  bad_rule: false\n  early_items: true\n  item_rules: true\n{extra}"
+    )
+}
+
+/// Le deuxième joueur (Alice) d'un monde importé.
+fn alice_slot(imported: &Imported) -> SlotId {
+    imported.world.slot_ids().nth(1).unwrap()
+}
+
+/// Monde `raftup_sonde` avec règles d'objet, objets à placer tôt et `accessibility:
+/// minimal` : exporté sans repli, contrôle croisé des règles d'objet réussi, et placement
+/// Raftup qui respecte tout (ADR 0029).
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn regles_d_objet_et_objets_tot_exportes() {
+    let Some(runtime) = runtime() else { return };
+    install_sonde(&runtime);
+    let work = tempfile::tempdir().unwrap();
+    // Avec Alice (APQuest) : seul, le petit monde de test n'ouvre presque rien au départ et
+    // ne se remplit pas (Archipelago y échoue aussi, voir `repli_sur_archipelago_seul`).
+    let yamls = [
+        sonde_yaml_0029("  accessibility: minimal\n"),
+        yaml("Alice", &ApQuestOptions::default()),
+    ];
+    let (result, imported) = export_raw(&runtime, work.path(), &yamls, 3);
+    assert_eq!(result.opaque_rules, 0);
+    let imported = imported.unwrap();
+    let w = &imported.world;
+    let sam = w.slot_ids().next().unwrap();
+    assert_eq!(
+        w.slot(sam).unwrap().accessibility,
+        logic::Accessibility::Minimal
+    );
+    let id = |n: &str| w.item_named(sam, n).unwrap();
+    let at = |n: &str| w.location_named(sam, n).unwrap();
+    assert!(!w.can_hold(at("Cave Pool"), id("Coin")));
+    assert!(w.can_hold(at("Cave Pool"), id("Key")));
+    // Forest Stump est exclu, mais accepte toujours une Gem (always_allow).
+    assert!(w.can_hold(at("Forest Stump"), id("Gem")));
+    assert!(!w.can_hold(at("Forest Stump"), id("Lamp")));
+    assert!(w.can_hold(at("Forest Stump"), id("Coin")));
+    let early: BTreeSet<(String, u32, bool)> = imported
+        .early
+        .iter()
+        .map(|e| (w.item_kind(e.item).unwrap().name.clone(), e.count, e.local))
+        .collect();
+    assert_eq!(
+        early,
+        BTreeSet::from([
+            ("Coin".to_string(), 1, false),
+            ("Sword".to_string(), 1, true)
+        ])
+    );
+
+    // Placement Raftup sur 30 seeds : la seule place de la sphère 0 (Start Chest,
+    // prioritaire) prend Sword ; Coin n'a pas droit à un lieu prioritaire et va plus loin ;
+    // la pièce n'est jamais dans Cave Pool. (Un premier essai avec Lamp locale montrait la
+    // limite connue : Lamp prenait la seule place et Sword n'en avait plus.)
+    let bytes = std::fs::read(work.path().join("out/export.json")).unwrap();
+    let export = read_export(&bytes).unwrap();
+    for seed in 0..30 {
+        let mut again = imported.clone();
+        let lines = generate::imported::fill_imported(&mut again, &export, seed)
+            .unwrap_or_else(|e| panic!("seed {seed} : {e}"));
+        // (joueur de l'objet, objet) posé dans ce lieu de Sam.
+        let held = |l: &str| {
+            lines
+                .iter()
+                .find(|x| x.0 == 1 && x.1 == l)
+                .map(|x| (x.2, x.3.clone()))
+                .unwrap()
+        };
+        assert_eq!(held("Start Chest"), (1, "Sword".to_string()), "seed {seed}");
+        assert_ne!(held("Cave Pool"), (1, "Coin".to_string()), "seed {seed}");
+        // Lieu exclu : du remplissage (de Sam ou d'Alice), ou une Gem de Sam (always_allow).
+        let (owner, stump) = held("Forest Stump");
+        if owner == 1 {
+            assert!(stump == "Coin" || stump == "Gem", "seed {seed} : {stump}");
+        } else {
+            let kind = again.world.item_named(alice_slot(&again), &stump).unwrap();
+            let class = again.world.item_kind(kind).unwrap().classification;
+            assert!(!class.progression && !class.useful, "seed {seed} : {stump}");
+        }
+    }
+}
+
+/// Génération complète à deux joueurs avec `non_local_items`, objets à placer tôt et
+/// `accessibility: minimal` : le moteur « export » la prend sans repli.
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn generation_complete_avec_les_options_0029() {
+    let Some(runtime) = runtime() else { return };
+    let work = tempfile::tempdir().unwrap();
+    let sam = sonde_yaml_0029("  non_local_items: [Coin]\n");
+    let alice = yaml("Alice", &ApQuestOptions::default()) + "  accessibility: minimal\n";
+    let yamls = [("sam.yaml", sam), ("alice.yaml", alice)];
+    for seed in [7, 8, 9] {
+        let work = work.path().join(format!("s{seed}"));
+        std::fs::create_dir_all(&work).unwrap();
+        let (output, log) = generate_with_export(&runtime, &work, &yamls, seed);
+        assert!(
+            log.iter()
+                .any(|l| l.contains("Placement des objets par Raftup")),
+            "{log:#?}"
+        );
+        assert!(
+            !log.iter().any(|l| l.contains("Archipelago génère seul")),
+            "{log:#?}"
+        );
+        let bytes = std::fs::read(&output.archipelago_file).unwrap();
+        let md = multidata::load_archipelago(&bytes, &multidata::ArchiveLimits::default()).unwrap();
+        let sam_slot = md.connect_names["Sam"].1;
+        let sam_locs = &md.locations[&sam_slot];
+        // Numéros du monde de test : Sword 1, Coin 5 ; Start Chest 1.
+        let sword = sam_locs[&1];
+        assert_eq!((sword.item, sword.player), (1, sam_slot), "seed {seed}");
+        assert!(
+            !sam_locs
+                .values()
+                .any(|p| p.item == 5 && p.player == sam_slot),
+            "seed {seed} : pièce de Sam restée chez Sam (non_local_items)"
+        );
+    }
+}
+
 fn yaml(name: &str, o: &ApQuestOptions) -> String {
     format!(
         "name: {name}\ngame: APQuest\nAPQuest:\n  hard_mode: {}\n  hammer: {}\n  extra_starting_chest: {}\n  start_with_one_confetti_cannon: {}\n  trap_chance: 0\n",

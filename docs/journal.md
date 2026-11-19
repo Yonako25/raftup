@@ -282,3 +282,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+
+### 2026-11-19 · Règles d'objet, objets à placer tôt et accessibilité (ADR 0029, session early-items)
+- **Fait** : ADR 0029 (accepté en autonomie, à relire). `logic` : `ItemRule` (arène), `can_hold`, `Accessibility`, `must_reach` ; `fill` : `fill_with_early` (sphère 0 d'après `distribute_early_items`), règles d'objet respectées au placement et à l'équilibrage, `minimal` / `items` ; export format 2 : règles d'objet en listes calculées par Archipelago, contrôle croisé `can_fill`, `early_items`, `accessibility`. Monde `raftup_sonde` : options `early_items`, `item_rules`. Tests `fill` (8), import, Python (41), réels `export_real` (2 nouveaux).
+- **Pas vérifié** : un monde tiers qui pose des règles d'objet ou des objets tôt ; gros multiworld (coût du calcul en Python) ; pas d'échange façon `remaining_fill` (échec ⇒ repli Python).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : relecture de l'ADR 0029 par l'utilisatrice ; essai sur un apworld qui se sert de `local_items` ou d'`early_items`.

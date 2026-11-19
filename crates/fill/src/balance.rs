@@ -15,7 +15,7 @@
 //!   un résultat identique sur tous les systèmes ;
 //! - les lieux sont parcourus dans l'ordre de création (index croissant), pas dans l'ordre
 //!   d'un `set` Python ; le hasard vient du même flux que le placement ;
-//! - il n'y a pas de règle d'objet par lieu (`item_rule`) dans le modèle ; comme dans
+//! - un échange respecte les règles d'objet des deux lieux (ADR 0029) ; comme dans
 //!   Archipelago, un objet posé dans un lieu **prioritaire** ne bouge pas, et un lieu
 //!   **exclu** ne reçoit jamais l'objet de progression avancé ;
 //! - un lieu « verrouillé » est un lieu sans numéro réseau (un événement) ;
@@ -524,13 +524,21 @@ fn pair_up<R: Rng + ?Sized>(
     items.sort();
     shuffle(rng, &mut items);
     let mut pairs = Vec::new();
-    // Tout lieu accepte tout objet (pas de règle d'objet) : le premier lieu libre convient.
+    // Le premier lieu visité qui accepte l'objet avancé, et dont l'objet peut prendre la
+    // place laissée (règles d'objet, ADR 0029). Sans règle d'objet, c'est le premier lieu.
+    let world = b.world;
     while let Some(old) = items.pop() {
-        if replacement.is_empty() {
+        let moving = world.location(old).and_then(|l| l.item);
+        let fits = |new: &LocationId| {
+            let displaced = world.location(*new).and_then(|l| l.item);
+            moving.is_some_and(|m| world.can_hold(*new, m))
+                && displaced.is_none_or(|d| world.can_hold(old, d))
+        };
+        let Some(index) = replacement.iter().position(fits) else {
             report.not_moved += 1;
             continue;
-        }
-        let new = replacement.remove(0);
+        };
+        let new = replacement.remove(index);
         pairs.push((old, new));
     }
     pairs
