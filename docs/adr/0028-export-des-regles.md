@@ -98,3 +98,14 @@ Pour chaque joueur :
 | 5 | Export transmis par fichier JSON (64 Mio au plus) plutôt que par une ligne de `py-bridge` | Fichier |
 | 6 | `item_rule` non pris en charge au départ ; `progress_type` (exclu, prioritaire) ajouté | Oui |
 | 7 | Ordre des étapes 1 à 5 ci-dessus, APQuest exporté comparé au portage Rust en premier | Oui |
+
+## Mise en œuvre de l'étape 1 (19 novembre 2026)
+
+- **Arrêt avant le placement** : le worker remplace `Main.distribute_items_restrictive` (et `flood_items`) par une fonction qui lève une exception portant le `MultiWorld`. Toutes les étapes d'Archipelago jusqu'à `pre_fill` tournent donc exactement comme dans le générateur officiel (inventaire de départ, `local_items`, exclusions, liens d'objets…), sans rien recopier de `Main.py`.
+- **Module d'export** : `raftup_export.py` est envoyé en texte dans la requête `export_worlds`, puis exécuté par le worker. Le worker passe par `python -c`, dont la ligne de commande est limitée : il reste sous 16 Ko (test `test_taille_script`). Nouvelle erreur `-32013` (export échoué).
+- **Règles `rule_builder`** : reconnues par **type exact** de la classe `Resolved` ; une règle propre à un monde (sous-classe) reste opaque. `HasFromList` et `HasGroup` (somme des exemplaires) deviennent un groupe d'objets anonyme (`raftup:liste N`). `HasFromListUnique`, `HasGroupUnique` et `AtLeast` deviennent un `Or` de `And` sur les combinaisons, 256 au plus ; au-delà, export refusé. `logic` gagne seulement `set_entrance_rule` et `set_location_rule`, pour poser les règles une fois tout créé.
+- **Datapackage** : le `checksum` est recalculé par Raftup et comparé à celui d'Archipelago à chaque import. Un écart refuse l'export.
+- **Vérifié en vrai** (`launcher-core/tests/export_real.rs`, Archipelago 0.6.8) : APQuest exporté est identique au portage Rust pour les 16 combinaisons d'options et pour 2 joueurs. Sont comparés : régions, entrées, lieux, numéros, événements, pool, inventaire de départ, datapackage, et ce qui est atteignable pour 300 inventaires. Aucune règle opaque.
+- **Point ouvert, reproductibilité (§ 7)** : `PYTHONHASHSEED=0` est sans effet, parce que le worker est lancé avec `-I`, qui ignore les variables `PYTHON*` (ADR 0016). C'est à régler à l'étape 4.
+- **À décider à l'étape 4** : au lieu de faire écrire le `.archipelago` par Rust (§ 1, point 4), le worker pourrait reprendre `Main.main` avec le placement de Rust, et laisser Archipelago écrire lui-même la seed (indices, `slot_data`, fichiers de sortie). Ce serait plus fidèle et demanderait moins de code. Cela change le § 1 : à proposer avant de coder.
+

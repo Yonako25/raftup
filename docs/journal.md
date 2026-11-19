@@ -245,3 +245,10 @@ untime2`.
 - **Pas vérifié** : sondage jamais essayé sur une vraie lambda ; durée de l'aller-retour Python.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : ADR 0028, étape 1 : `export_worlds` sur APQuest, relu en `logic::MultiWorld` et comparé au portage Rust.
+
+### 2026-11-19 · ADR 0028, étape 1 : export des mondes
+- **Fait** : méthode `export_worlds` du worker (arrêt avant le placement d'Archipelago, module `raftup_export.py` envoyé en texte), `generate::imported` (JSON lu comme une donnée hostile, `rule_builder` traduit, `checksum` vérifié), `generate::build`. En vrai : APQuest exporté identique au portage Rust (16 combinaisons, 2 joueurs). Faux Archipelago des tests Python réparé (`settings.py` manquait depuis `b14af43`). Workspace, clippy, 30 tests Python passent.
+- **Pas vérifié** : un monde à lambdas (toutes opaques pour l'instant) ; reproductibilité de l'export (`PYTHONHASHSEED` sans effet avec `-I`).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : ADR 0028, étape 2 : sondeur de lambdas et contrôle croisé, sur un monde de test du dépôt.
+

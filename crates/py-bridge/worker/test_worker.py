@@ -303,6 +303,65 @@ class TestGenerate(unittest.TestCase):
         self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
 
 
+FAUX_EXPORT = """
+import json
+def export(mw, path, max_bytes):
+    if mw.player_name[1] == "ExportPlante":
+        raise ValueError("export impossible")
+    text = json.dumps({"format_version": 1, "joueurs": [mw.player_name[i] for i in mw.player_ids]})
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return {"bytes": len(text), "opaque_rules": 3}
+"""
+
+
+class TestExport(unittest.TestCase):
+    """`export_worlds` (ADR 0028) : arret juste avant le placement, module d'export recu en texte."""
+
+    # Memes preparatifs que TestGenerate, sans heriter de ses tests.
+    setUp = TestGenerate.setUp
+    yaml = TestGenerate.yaml
+    params = TestGenerate.params
+
+    def exp(self, id_=1, **extra):
+        p = self.params()
+        p.update({"export_path": os.path.join(self.sortie, "export.json"), "exporter": FAUX_EXPORT})
+        p.update(extra)
+        return req(id_, "export_worlds", p)
+
+    def test_export_normal(self):
+        self.yaml("Alice")
+        sortie, code = echanger(self.exp() + req(2, "ping"))
+        r = sortie[0]["result"]
+        self.assertEqual(r["players"], [{"slot": 1, "name": "Alice", "game": "FakeGame"}])
+        self.assertEqual(r["opaque_rules"], 3)
+        with open(r["export"], encoding="utf-8") as f:
+            self.assertEqual(json.load(f)["joueurs"], ["Alice"])
+        # Le placement a ete interrompu : pas de zip ecrit.
+        self.assertEqual([n for n in os.listdir(self.sortie) if n.endswith(".zip")], [])
+        self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
+        self.assertEqual(code, 0)
+
+    def test_export_qui_plante(self):
+        self.yaml("ExportPlante")
+        sortie, _ = echanger(self.exp())
+        self.assertEqual(sortie[0]["error"]["code"], -32013)
+        self.assertIn("export impossible", sortie[0]["error"]["message"])
+
+    def test_placement_jamais_atteint(self):
+        self.yaml("NoFill")
+        sortie, _ = echanger(self.exp())
+        self.assertEqual(sortie[0]["error"]["code"], -32010)
+
+    def test_params_export(self):
+        self.yaml("Alice")
+        sortie, _ = echanger(self.exp(1, exporter="") + self.exp(2, export_path="relatif.json")
+                             + self.exp(3))
+        self.assertEqual(sortie[0]["error"]["code"], -32602)
+        self.assertEqual(sortie[1]["error"]["code"], -32602)
+        self.assertIn("result", sortie[2])  # les refus n'ont pas consomme le process
+
+
 class TestBlocageReseau(unittest.TestCase):
     """block_network() (RAFTUP_BLOCK_NETWORK=1) : refuse le sortant, garde la boucle locale."""
 

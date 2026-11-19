@@ -14,6 +14,12 @@ pub const ERR_GENERATION_FAILED: i64 = -32010;
 pub const ERR_IMPORT_FAILED: i64 = -32011;
 /// Un seul `generate` par process : ce worker a déjà servi.
 pub const ERR_ALREADY_USED: i64 = -32012;
+/// L'export des mondes (ADR 0028) a échoué après la construction des mondes.
+pub const ERR_EXPORT_FAILED: i64 = -32013;
+
+/// Module Python d'export (ADR 0028), envoyé en texte dans la requête `export_worlds` :
+/// le worker passe par `python -c`, dont la ligne de commande est limitée en taille.
+pub const EXPORTER_SCRIPT: &str = include_str!("../worker/raftup_export.py");
 
 /// Paramètres de `generate`. Les chemins doivent être absolus (le worker change de dossier courant).
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -77,4 +83,46 @@ impl PyBridge {
         serde_json::from_value(value)
             .map_err(|e| BridgeError::InvalidResponse(format!("résultat de generate : {e}")))
     }
+
+    /// Construit les mondes jusqu'à `pre_fill`, sans placement, et les décrit dans le
+    /// fichier JSON `export_path` (ADR 0028). Comme `generate`, une seule fois par process.
+    pub fn export_worlds_cancellable(
+        &mut self,
+        p: &ExportParams,
+        timeout: Duration,
+        cancel: &crate::cancel::CancelToken,
+    ) -> Result<ExportResult, BridgeError> {
+        let params = serde_json::to_value(p)
+            .map_err(|e| BridgeError::InvalidResponse(format!("paramètres illisibles : {e}")))?;
+        let value = self.call_cancellable("export_worlds", params, timeout, cancel)?;
+        serde_json::from_value(value)
+            .map_err(|e| BridgeError::InvalidResponse(format!("résultat de export_worlds : {e}")))
+    }
+}
+
+/// Paramètres de `export_worlds` : ceux de `generate`, plus le fichier à écrire et le
+/// module d'export.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ExportParams {
+    /// `flatten` : les champs de `GenerateParams` sont écrits au même niveau que les autres.
+    #[serde(flatten)]
+    pub generate: GenerateParams,
+    /// Chemin absolu du JSON à écrire.
+    pub export_path: PathBuf,
+    /// Source du module d'export, en général [`EXPORTER_SCRIPT`].
+    pub exporter: String,
+}
+
+/// Résultat de `export_worlds`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ExportResult {
+    pub export: PathBuf,
+    pub seed_name: String,
+    pub ap_version: String,
+    pub players: Vec<GeneratedPlayer>,
+    /// Taille du JSON écrit.
+    pub bytes: u64,
+    /// Nombre de règles que l'export n'a pas su traduire.
+    pub opaque_rules: u64,
+    pub seconds: f64,
 }

@@ -145,7 +145,15 @@ def block_network():
     socket.gethostbyname_ex = lambda host: refuse("gethostbyname_ex %r" % (host,))
 
 
-def generate(params):
+class Captured(BaseException):
+    """Leve a la place du placement d'Archipelago (export_worlds, ADR 0028)."""
+
+    def __init__(self, mw):
+        BaseException.__init__(self)
+        self.mw = mw
+
+
+def generate(params, capture=False):
     global used
     a = check_params(params)
     if used:
@@ -181,8 +189,20 @@ def generate(params):
         import Main
         import Utils
 
+        if capture:
+            # Main.main s'arrete juste avant le placement : on garde le MultiWorld.
+            def stop(multiworld, *args, **kwargs):
+                raise Captured(multiworld)
+            Main.distribute_items_restrictive = stop
+            Main.flood_items = stop
         erargs, seed = Generate.main()
         mw = Main.main(erargs, seed)
+        if capture:
+            raise RpcFail(-32010, "le placement n'a pas ete atteint")
+    except Captured as got:
+        return got.mw, Utils, t0
+    except RpcFail:
+        raise
     except ImportError as exc:
         raise RpcFail(-32011, "import impossible : %s" % exc, {"type": type(exc).__name__, "traceback": tb_text()})
     except BaseException as exc:  # SystemExit, EOFError (input) et erreurs de generation
@@ -204,6 +224,30 @@ def generate(params):
             "seconds": round(time.time() - t0, 3)}
 
 
+def export_worlds(params):
+    """Mondes construits jusqu'a pre_fill, decrits dans un fichier JSON (ADR 0028)."""
+    code = params.get("exporter")
+    if not isinstance(code, str) or not code:
+        raise RpcFail(-32602, "parametre invalide : exporter")
+    path = params.get("export_path")
+    if not isinstance(path, str) or not os.path.isabs(path):
+        raise RpcFail(-32602, "parametre invalide : export_path")
+    mw, Utils, t0 = generate(params, capture=True)
+    try:
+        ns = {"__name__": "raftup_export"}
+        exec(compile(code, "raftup_export.py", "exec"), ns)
+        info = ns["export"](mw, path, 64 * 1024 * 1024)
+        players = [{"slot": int(i), "name": str(mw.player_name[i]), "game": str(mw.game[i])}
+                   for i in sorted(mw.player_ids)]
+    except BaseException as exc:
+        raise RpcFail(-32013, "export echoue : %s: %s" % (type(exc).__name__, exc),
+                      {"type": type(exc).__name__, "traceback": tb_text()})
+    return {"export": path, "seed_name": str(mw.seed_name),
+            "ap_version": str(getattr(Utils, "__version__", "inconnue")), "players": players,
+            "bytes": info["bytes"], "opaque_rules": info["opaque_rules"],
+            "seconds": round(time.time() - t0, 3)}
+
+
 def call(method, params):
     if method == "ping":
         return "pong"
@@ -218,6 +262,8 @@ def call(method, params):
         return params
     if method == "generate":
         return generate(params)
+    if method == "export_worlds":
+        return export_worlds(params)
     raise MethodNotFound(method)
 
 

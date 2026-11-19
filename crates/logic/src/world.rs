@@ -354,6 +354,35 @@ impl MultiWorld {
         Ok(())
     }
 
+    /// Remplace la règle d'une entrée. Utile quand les règles se citent entre elles
+    /// (`CanReachLocation` d'un lieu créé plus tard) : on crée tout, puis on pose les règles.
+    pub fn set_entrance_rule(
+        &mut self,
+        entrance: EntranceId,
+        rule: Rule,
+    ) -> Result<(), LogicError> {
+        let entrance = self
+            .entrances
+            .get_mut(entrance.index())
+            .ok_or(LogicError::UnknownEntrance(entrance.raw()))?;
+        entrance.rule = rule;
+        Ok(())
+    }
+
+    /// Remplace la règle d'un lieu (voir [`MultiWorld::set_entrance_rule`]).
+    pub fn set_location_rule(
+        &mut self,
+        location: LocationId,
+        rule: Rule,
+    ) -> Result<(), LogicError> {
+        let location = self
+            .locations
+            .get_mut(location.index())
+            .ok_or(LogicError::UnknownLocation(location.raw()))?;
+        location.rule = rule;
+        Ok(())
+    }
+
     /// Place un objet (de n'importe quel joueur) dans un lieu vide.
     pub fn place(&mut self, location: LocationId, item: ItemKindId) -> Result<(), LogicError> {
         if self.item_kind(item).is_none() {

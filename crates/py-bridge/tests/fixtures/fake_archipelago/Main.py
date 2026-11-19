@@ -16,6 +16,10 @@ class FauxMultiWorld:
         self.game = {i: j.get("game", "?") for i, j in zip(self.player_ids, joueurs)}
 
 
+def distribute_items_restrictive(multiworld, *args, **kwargs):
+    """Faux placement : le worker le remplace pour export_worlds (ADR 0028)."""
+
+
 def main(args, seed):
     noms = [j.get("name") for j in args.players]
     logging.info("faux generateur : seed %s", seed)
@@ -24,6 +28,8 @@ def main(args, seed):
     if "BadImport" in noms:
         import module_qui_nexiste_pas  # noqa: F401
     seed_name = str(seed)
+    if "NoFill" not in noms:
+        distribute_items_restrictive(FauxMultiWorld(seed_name, args.players))
     if "Escape" in noms:
         # Un nom qui remonte hors de output_dir ("AP_x/../../escape.zip").
         os.makedirs(os.path.join(args.outputpath, "AP_x"), exist_ok=True)

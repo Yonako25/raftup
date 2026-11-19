@@ -7,16 +7,18 @@
 //! donnerait le générateur Python pour le même numéro (ADR 0027, § 4).
 
 mod datapackage;
+pub mod imported;
 mod multidata_build;
 pub mod worlds;
 pub mod yaml;
 
 use std::collections::BTreeSet;
 
-use logic::{LogicError, MultiWorld, State};
+use logic::{ItemKindId, LogicError, MultiWorld, State};
 use multidata::{MultiData, WriteError};
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -114,8 +116,23 @@ pub fn stream(label: &str, seed: u64, slot: u32) -> ChaCha20Rng {
     ChaCha20Rng::from_seed(key)
 }
 
-/// Génère une partie.
-pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
+/// Mondes construits, objets pas encore placés.
+#[derive(Debug, Clone)]
+pub struct Built {
+    pub world: MultiWorld,
+    /// Objets à placer (un élément par exemplaire).
+    pub pool: Vec<ItemKindId>,
+    /// Inventaire de départ, déjà ramassé.
+    pub start: State,
+    /// Objets de départ de chaque joueur, dans l'ordre des slots.
+    pub start_items: Vec<Vec<ItemKindId>>,
+    /// `slot_data` de chaque joueur.
+    pub slot_data: Vec<Value>,
+}
+
+/// Construit les mondes de la demande, sans rien placer (sert aussi à comparer un monde
+/// porté en Rust avec le même monde exporté depuis Python, ADR 0028).
+pub fn build(request: &GenerateRequest) -> Result<Built, GenerateError> {
     check_players(request)?;
 
     let mut world = MultiWorld::new();
@@ -137,6 +154,24 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
     for item in start_items.iter().flatten() {
         start.collect(&world, *item);
     }
+    Ok(Built {
+        world,
+        pool,
+        start,
+        start_items,
+        slot_data,
+    })
+}
+
+/// Génère une partie.
+pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
+    let Built {
+        mut world,
+        pool,
+        start,
+        start_items,
+        slot_data,
+    } = build(request)?;
     let mut rng = stream("fill", request.seed, 0);
     fill::fill(&mut world, pool, &start, &mut rng)?;
     // Équilibrage de progression (ADR 0027, étape 5), avec la suite du même flux.

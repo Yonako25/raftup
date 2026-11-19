@@ -46,6 +46,8 @@ winreg.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+# Test réel de l'export des mondes (ADR 0028) : comparaison des mondes de `logic`.
+logic.workspace = true
 # Signer un faux binaire dans les tests de update.rs.
 minisign.workspace = true
 # Certificat auto-signé pour le test du diagnostic TLS (diagnose.rs).
