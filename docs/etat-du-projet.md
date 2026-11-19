@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **18 novembre 2026** (V2 démarrée).
+Mis à jour le **19 novembre 2026** (8 chantiers V2 fusionnés : ADR 0029 à 0034, CI multi-OS, finitions du moteur).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -38,6 +38,9 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
 - [ ] **Durée estimée et équilibrage par temps** (ADR 0030, à relire) : estimation par joueur affichée après génération (`launcher_core::estimate`, panneau de « Créer une partie »), `fill::time_balance` écrit et testé, désactivé ; reste à le brancher derrière une option et à mesurer les temps par lieu en vraie partie
 - [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
+- [ ] **Relire les ADR 0029 à 0034** (acceptés en autonomie le 19 novembre 2026)
+- [ ] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (écrit de mémoire, à remplacer par celui de gnu.org)
+- [ ] **CI macOS et Linux** jamais lancée (rien poussé)
 
 ## Crates
 

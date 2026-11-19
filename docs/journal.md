@@ -332,7 +332,7 @@ untime2`.
 - **Suite** : faire relire l'ADR 0031 (noms des commandes, vote qui passe outre `release_mode`) ; regarder « Partie en cours » avec un absent et un vote.
 
 ### 2026-11-19 · Fusion des 8 branches V2
-- **Fait** : 8 branches d'agents fusionnées dans `main` (CI multi-OS, finitions du moteur, ADR 0029 à 0034) ; conflits du journal, de l'état, de `Cargo.toml`, d'`export.rs` et de `launcher-core/src/lib.rs` résolus. Sur le code fusionné : fmt, clippy `-D warnings`, 95 suites de tests, 41 tests Python, 15 tests réels (génération, export, Slime Rancher) passent. Repli du bac à sable ajouté : pose impossible (FAT32, réseau) ⇒ worker sans bac à sable, dit dans le journal (ADR 0034 révisé, 2 tests).
+- **Fait** : 8 branches d'agents fusionnées dans `main` (CI multi-OS, finitions du moteur, ADR 0029 à 0034) ; conflits du journal, de l'état, de `Cargo.toml`, d'`export.rs` et de `launcher-core/src/lib.rs` résolus. Sur le code fusionné : fmt, clippy `-D warnings`, 95 suites de tests, 41 tests Python, 15 tests réels (génération, export, Slime Rancher) passent. Repli du bac à sable ajouté : pose impossible (FAT32, réseau) ⇒ worker sans bac à sable, dit dans le journal (ADR 0034 révisé, 2 tests). `main` avancé en `2964870` ; copies de travail et branches des agents supprimées (plus 6 anciennes déjà fusionnées).
 - **Pas vérifié** : CI sous macOS et Linux (rien poussé) ; `crates/hub/LICENSE-AGPL` écrit de mémoire par l'agent, à remplacer par le texte officiel de gnu.org ; les ADR 0029 à 0034 sont « acceptés en autonomie », à relire par l'utilisatrice.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : remplacer le texte de l'AGPL ; essais en jeu quand l'utilisatrice sera devant le PC.
