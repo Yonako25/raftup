@@ -1,0 +1,105 @@
+"""Monde de test de Raftup (ADR 0028, etape 2) : des regles en lambdas Python variees,
+pour essayer le sondage sur le vrai Archipelago. Ecrit pour Raftup (MIT / Apache-2.0),
+aucun code tiers. Jamais distribue aux joueurs : il ne sert qu'aux tests.
+
+Menu --(Sword)--> Forest --(Lamp ou 2 Gem)--> Cave
+Menu --(Sword et 2 Key)--> Castle (Victory)
+"""
+from dataclasses import dataclass
+
+from BaseClasses import Item, ItemClassification, Location, Region
+from Options import PerGameCommonOptions, Toggle
+from worlds.AutoWorld import World
+
+GAME = "Raftup Sonde"
+ITEMS = {"Sword": 1, "Key": 2, "Lamp": 3, "Gem": 4, "Coin": 5}
+PROGRESSION = {"Sword", "Key", "Lamp", "Gem"}
+LOCATIONS = {
+    "Start Chest": 1, "Forest Stump": 2, "Forest Tree": 3, "Cave Pool": 4,
+    "Cave Crystal": 5, "Castle Gate": 6, "Castle Throne": 7, "Castle Vault": 8,
+    "Bad Spot": 9,
+}
+
+
+class BadRule(Toggle):
+    """Ajoute un lieu a regle non monotone : le sondage doit la refuser."""
+    display_name = "Bad Rule"
+
+
+@dataclass
+class SondeOptions(PerGameCommonOptions):
+    bad_rule: BadRule
+
+
+class SondeItem(Item):
+    game = GAME
+
+
+class SondeLocation(Location):
+    game = GAME
+
+
+def has_light(state, player):
+    """Petite fonction d'aide, comme dans beaucoup de mondes."""
+    return state.has("Lamp", player) or state.has("Gem", player, 2)
+
+
+class SondeWorld(World):
+    """Monde de test du sondage des regles (Raftup)."""
+    game = GAME
+    options_dataclass = SondeOptions
+    options: SondeOptions
+    item_name_to_id = ITEMS
+    location_name_to_id = LOCATIONS
+    item_name_groups = {"Shiny": {"Gem", "Lamp"}}
+
+    def create_item(self, name):
+        kind = ItemClassification.progression if name in PROGRESSION else ItemClassification.filler
+        return SondeItem(name, kind, ITEMS[name], self.player)
+
+    def create_regions(self):
+        p, mw = self.player, self.multiworld
+        regions = {}
+        for name in ("Menu", "Forest", "Cave", "Castle"):
+            regions[name] = Region(name, p, mw)
+            mw.regions.append(regions[name])
+
+        def add(region, name):
+            regions[region].locations.append(SondeLocation(p, name, LOCATIONS[name], regions[region]))
+
+        for region, name in (("Menu", "Start Chest"), ("Forest", "Forest Stump"),
+                             ("Forest", "Forest Tree"), ("Cave", "Cave Pool"),
+                             ("Cave", "Cave Crystal"), ("Castle", "Castle Gate"),
+                             ("Castle", "Castle Throne"), ("Castle", "Castle Vault")):
+            add(region, name)
+        if self.options.bad_rule:
+            add("Menu", "Bad Spot")
+        regions["Menu"].connect(regions["Forest"], "Menu -> Forest", lambda s: s.has("Sword", p))
+        regions["Forest"].connect(regions["Cave"], "Forest -> Cave", lambda s: has_light(s, p))
+        regions["Menu"].connect(regions["Castle"], "Menu -> Castle",
+                                lambda s: s.has_all(["Key", "Sword"], p) and s.count("Key", p) >= 2)
+        victory = SondeLocation(p, "Victory", None, regions["Castle"])
+        victory.place_locked_item(SondeItem("Victory", ItemClassification.progression, None, p))
+        regions["Castle"].locations.append(victory)
+
+    def create_items(self):
+        names = ["Sword", "Key", "Key", "Lamp", "Gem", "Gem", "Gem"]
+        total = len(LOCATIONS) - (0 if self.options.bad_rule else 1)
+        names += ["Coin"] * (total - len(names))
+        self.multiworld.itempool += [self.create_item(n) for n in names]
+
+    def set_rules(self):
+        p, mw = self.player, self.multiworld
+        mw.get_location("Forest Tree", p).access_rule = lambda s: s.has_any(["Lamp", "Key"], p)
+        mw.get_location("Cave Crystal", p).access_rule = lambda s: s.has_group("Shiny", p, 3)
+        mw.get_location("Castle Throne", p).access_rule = \
+            lambda s: s.can_reach("Cave", "Region", p) or s.has_from_list(["Gem"], p, 3)
+        mw.get_location("Castle Vault", p).access_rule = \
+            lambda s: s.count("Gem", p) > 1 and (s.has("Lamp", p) or s.can_reach_location("Cave Pool", p))
+        if self.options.bad_rule:
+            mw.get_location("Bad Spot", p).access_rule = lambda s: not s.has("Lamp", p)
+        mw.get_location("Victory", p).access_rule = lambda s: s.has("Key", p, 2)
+        mw.completion_condition[p] = lambda s: s.has("Victory", p)
+
+    def fill_slot_data(self):
+        return {"bad_rule": bool(self.options.bad_rule)}

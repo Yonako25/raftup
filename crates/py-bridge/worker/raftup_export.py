@@ -7,10 +7,22 @@ fois que les mondes ont fini `pre_fill`, juste avant le placement d'Archipelago.
 Le fichier ecrit (JSON, `format_version` 1) decrit, pour chaque joueur : regions,
 entrees, lieux, objets du pool, objets deja poses, inventaire de depart, condition de
 victoire et datapackage. Les regles `rule_builder` sont traduites telles quelles ; une
-regle Python ordinaire (lambda) est marquee `opaque` (le sondage viendra a l'etape 2).
+regle Python ordinaire (lambda) est traduite par SONDAGE (classe Prober) ; si le sondage
+echoue, elle est marquee `opaque` et le monde reste au generateur Python.
+
+Pour le controle croise (ADR 0028, section 4), l'export contient aussi des inventaires
+tires au hasard et, pour chaque regle, sa valeur calculee par le VRAI Archipelago ; Rust
+evalue ses regles traduites sur les memes inventaires et compare.
 Bibliotheque standard seule.
 """
 import json
+import random
+from collections import Counter
+
+MAX_PATHS = 4096  # feuilles de l'arbre de decision d'une regle
+MAX_QUESTIONS = 64  # questions differentes sur un chemin
+SAMPLES = 64  # inventaires du controle croise
+SAMPLE_SEED = 0x52414654  # graine fixe : meme export, memes inventaires
 
 FORMAT_VERSION = 1
 
@@ -44,6 +56,202 @@ def _describe(rule):
     return "%s.%s" % (module, name)
 
 
+class Refused(Exception):
+    """Le sondage ne peut pas traduire cette regle : elle restera opaque."""
+
+
+class ProbeCount:
+    """Resultat de state.count(...) : seule une comparaison a un nombre est comprise."""
+
+    def __init__(self, state, player, item):
+        self.state, self.player, self.item = state, player, item
+
+    def at_least(self, n):
+        return True if n <= 0 else self.state.ask(("has", self.player, self.item, int(n)))
+
+    def __ge__(self, n):
+        return self.at_least(n)
+
+    def __gt__(self, n):
+        return self.at_least(n + 1)
+
+    def __le__(self, n):
+        return not self.at_least(n + 1)
+
+    def __lt__(self, n):
+        return not self.at_least(n)
+
+    def __eq__(self, n):
+        return self.at_least(n) and not self.at_least(n + 1)
+
+    def __ne__(self, n):
+        return not self.__eq__(n)
+
+    def __bool__(self):
+        return self.at_least(1)
+
+    def __getattr__(self, name):
+        raise Refused("calcul sur un compteur (%s)" % name)
+
+    __hash__ = None
+
+
+class ProbeState:
+    """Faux CollectionState : chaque question posee par la regle est notee, et la
+    reponse vient du sondeur. Toute autre methode ou attribut refuse le sondage."""
+
+    def __init__(self, mw, answers):
+        self._mw = mw
+        self._answers = answers  # reponses imposees, dans l'ordre des nouvelles questions
+        self._used = 0
+        self.asked = {}  # question -> reponse, dans l'ordre (dict garde l'ordre)
+
+    def ask(self, question):
+        if question in self.asked:
+            return self.asked[question]
+        if len(self.asked) >= MAX_QUESTIONS:
+            raise Refused("plus de %d questions" % MAX_QUESTIONS)
+        if self._used < len(self._answers):
+            answer = self._answers[self._used]
+        else:
+            answer = False
+        self._used += 1
+        self.asked[question] = answer
+        return answer
+
+    def __getattr__(self, name):
+        raise Refused("state.%s" % name)
+
+    def has(self, item, player, count=1):
+        return True if count <= 0 else self.ask(("has", player, item, int(count)))
+
+    def has_all(self, items, player):
+        return self.ask(("has_all", player, tuple(items)))
+
+    def has_any(self, items, player):
+        return self.ask(("has_any", player, tuple(items)))
+
+    def has_all_counts(self, item_counts, player):
+        return self.ask(("has_all_counts", player, tuple((k, int(v)) for k, v in item_counts.items())))
+
+    def has_any_count(self, item_counts, player):
+        return self.ask(("has_any_count", player, tuple((k, int(v)) for k, v in item_counts.items())))
+
+    def has_from_list(self, items, player, count):
+        return True if count <= 0 else self.ask(("has_from_list", player, tuple(items), int(count)))
+
+    def has_from_list_unique(self, items, player, count):
+        return True if count <= 0 else self.ask(("has_from_list_unique", player, tuple(items), int(count)))
+
+    def _group(self, group, player):
+        return tuple(self._mw.worlds[player].item_name_groups[group])
+
+    def has_group(self, item_name_group, player, count=1):
+        if count <= 0:
+            return True
+        return self.ask(("has_from_list", player, self._group(item_name_group, player), int(count)))
+
+    def has_group_unique(self, item_name_group, player, count=1):
+        if count <= 0:
+            return True
+        return self.ask(("has_from_list_unique", player, self._group(item_name_group, player), int(count)))
+
+    def count(self, item, player):
+        return ProbeCount(self, player, item)
+
+    def can_reach(self, spot, resolution_hint=None, player=None):
+        if isinstance(spot, str):
+            if not isinstance(player, int):
+                raise Refused("can_reach sans joueur")
+            kind = {"Location": "location", "Entrance": "entrance"}.get(resolution_hint, "region")
+            return self.ask(("can_reach_" + kind, player, spot))
+        import BaseClasses
+        for cls, kind in ((BaseClasses.Location, "location"), (BaseClasses.Entrance, "entrance"),
+                          (BaseClasses.Region, "region")):
+            if isinstance(spot, cls):
+                return self.ask(("can_reach_" + kind, int(spot.player), spot.name))
+        raise Refused("can_reach sur %r" % type(spot).__name__)
+
+    def can_reach_location(self, spot, player):
+        return self.ask(("can_reach_location", player, spot))
+
+    def can_reach_entrance(self, spot, player):
+        return self.ask(("can_reach_entrance", player, spot))
+
+    def can_reach_region(self, spot, player):
+        return self.ask(("can_reach_region", player, spot))
+
+
+def _atom_json(q):
+    """Question du sondeur -> regle JSON (le vocabulaire de rule_builder)."""
+    kind, player = q[0], int(q[1])
+    if kind == "has":
+        return {"t": "has", "player": player, "item": q[2], "count": q[3]}
+    if kind in ("has_all", "has_any"):
+        return {"t": kind, "player": player, "items": list(q[2])}
+    if kind in ("has_all_counts", "has_any_count"):
+        return {"t": kind, "player": player, "items": [[k, v] for k, v in q[2]]}
+    if kind in ("has_from_list", "has_from_list_unique"):
+        return {"t": kind, "player": player, "items": list(q[2]), "count": q[3]}
+    field = kind[len("can_reach_"):]
+    return {"t": kind, "player": player, field: q[2]}
+
+
+def probe(mw, rule):
+    """Arbre de decision de `rule` par exploration en profondeur, puis regle « ou » de
+    « et ». Leve Refused si la regle sort de ce qu'on sait traduire.
+
+    Le sondeur impose les reponses aux questions dans l'ordre ou elles sont posees ;
+    une question nouvelle recoit Faux, puis on revient essayer Vrai. Comme `and` et `or`
+    de Python s'arretent des qu'ils connaissent le resultat, on suit exactement les
+    chemins que la regle emprunte.
+    """
+    pending = [[]]
+    leaves = []  # (vraies, fausses, resultat)
+    while pending:
+        answers = pending.pop()
+        state = ProbeState(mw, answers)
+        try:
+            result = rule(state)
+        except Refused:
+            raise
+        except Exception as exc:  # la regle a plante avec nos reponses
+            raise Refused("%s: %s" % (type(exc).__name__, exc))
+        if isinstance(result, ProbeCount):
+            result = bool(result)
+        if not isinstance(result, bool):
+            raise Refused("resultat %r" % type(result).__name__)
+        asked = list(state.asked.items())
+        # Meme chemin rejoue : meme resultat (pas de hasard ni d'etat cache).
+        again = ProbeState(mw, [a for _, a in asked])
+        if rule(again) != result or list(again.asked.items()) != asked:
+            raise Refused("resultat instable")
+        leaves.append(({q for q, a in asked if a}, {q for q, a in asked if not a}, result))
+        if len(leaves) > MAX_PATHS:
+            raise Refused("plus de %d chemins" % MAX_PATHS)
+        # Les questions posees au-dela des reponses imposees ont recu Faux : on
+        # programme le meme debut avec Vrai a leur place.
+        for i in range(len(answers), len(asked)):
+            pending.append([a for _, a in asked[:i]] + [True])
+    terms = [frozenset(t) for t, _, r in leaves if r]
+    # Regle monotone (avoir un objet de plus ne la rend jamais fausse) : chaque feuille
+    # fausse doit contredire chaque terme vrai par une de ses reponses Faux.
+    for _, false_set, r in leaves:
+        if not r:
+            for term in terms:
+                if not (term & false_set):
+                    raise Refused("regle non monotone")
+    # Termes minimaux seulement, dans un ordre stable.
+    terms = sorted(set(terms), key=lambda t: (len(t), sorted(map(repr, t))))
+    minimal = [t for t in terms if not any(o < t for o in terms)]
+    if not minimal:
+        return {"t": "false"}
+    if any(len(t) == 0 for t in minimal):
+        return {"t": "true"}
+    ors = [{"t": "and", "of": [_atom_json(q) for q in sorted(t, key=repr)]} for t in minimal]
+    return ors[0] if len(ors) == 1 else {"t": "or", "of": ors}
+
+
 class Exporter:
     def __init__(self, mw):
         import BaseClasses
@@ -53,12 +261,23 @@ class Exporter:
         self.default_entrance_rule = getattr(BaseClasses.Entrance, "access_rule", None)
         self.table = _rule_table()
         self.opaque = 0
+        self.probed = 0
+        # Regles a recontroler par Rust : (genre, joueur, nom, fonction Python).
+        self.checked = []
 
     def rule(self, rule):
         if rule is None or rule is self.default_rule or rule is self.default_entrance_rule:
             return {"t": "true"}
         kind = self.table.get(type(rule))
         if kind is None:
+            if callable(rule):
+                try:
+                    out = probe(self.mw, rule)
+                    self.probed += 1
+                    return out
+                except Refused as why:
+                    self.opaque += 1
+                    return {"t": "opaque", "why": "%s (%s)" % (_describe(rule), why)}
             self.opaque += 1
             return {"t": "opaque", "why": _describe(rule)}
         player = int(getattr(rule, "player", 0))
@@ -107,6 +326,12 @@ class Exporter:
         mw = self.mw
         world = mw.worlds[p]
         regions, entrances, locations = [], [], []
+        from worlds.AutoWorld import World
+
+        # Un monde qui change ce que « ramasser un objet » veut dire (objets progressifs
+        # renommes, compteurs maison) ne colle pas au modele de Raftup : refuse.
+        custom_collect = any(getattr(type(world), name, None) is not getattr(World, name, None)
+                             for name in ("collect", "collect_item", "remove"))
         for region in mw.get_regions(p):
             regions.append(region.name)
             for exit_ in region.exits:
@@ -117,6 +342,7 @@ class Exporter:
                     "to": None if target is None else target.name,
                     "rule": self.rule(exit_.access_rule),
                 })
+                self.check("entrance", p, exit_.name, exit_.access_rule)
             for loc in region.locations:
                 # Regle d'objet propre au lieu (item_rule ou always_allow) : non prise en charge.
                 default_item_rule = not ({"item_rule", "always_allow"} & set(vars(loc)))
@@ -130,6 +356,7 @@ class Exporter:
                     "item": None if loc.item is None else self.item(loc.item),
                     "default_item_rule": default_item_rule,
                 })
+                self.check("location", p, loc.name, loc.access_rule)
         return {
             "slot": int(p),
             "name": str(mw.player_name[p]),
@@ -140,12 +367,62 @@ class Exporter:
             "locations": locations,
             "precollected": [self.item(i) for i in mw.precollected_items[p]],
             "goal": self.rule(mw.completion_condition[p]),
+            "custom_collect": custom_collect,
             "required_client_version": list(getattr(world, "required_client_version", (0, 1, 6))),
         }
+
+    def check(self, kind, player, name, rule):
+        if rule is None or rule is self.default_rule or rule is self.default_entrance_rule:
+            return
+        self.checked.append((kind, int(player), str(name), rule))
+
+    def samples(self):
+        """Inventaires tires au hasard (graine fixe) et valeur de chaque regle calculee par
+        le vrai Archipelago : Rust refera le calcul avec ses regles traduites."""
+        from BaseClasses import CollectionState
+
+        mw = self.mw
+        names = {}
+        for p in sorted(mw.player_ids):
+            world = mw.worlds[p]
+            known = set(world.item_name_to_id)
+            for region in mw.get_regions(p):
+                for loc in region.locations:
+                    if loc.item is not None:
+                        names.setdefault(loc.item.player, set()).add(loc.item.name)
+            names.setdefault(p, set()).update(known)
+        rng = random.Random(SAMPLE_SEED)
+        samples, results = [], [[] for _ in self.checked]
+        for _ in range(SAMPLES):
+            density = rng.choice((0.05, 0.2, 0.5, 0.8, 0.95))
+            sample = []
+            for p in sorted(names):
+                for name in sorted(names[p]):
+                    if rng.random() < density:
+                        roll = rng.random()
+                        count = 1 if roll < 0.6 else rng.randint(2, 5) if roll < 0.85 else rng.randint(6, 40)
+                        sample.append([p, name, count])
+            samples.append(sample)
+            state = CollectionState(mw)
+            state.prog_items = {p: Counter() for p in mw.get_all_ids()}
+            for p, name, count in sample:
+                state.prog_items[p][name] = count
+            for p in state.stale:
+                state.stale[p] = True
+            for i, (_, _, _, rule) in enumerate(self.checked):
+                try:
+                    results[i].append("1" if rule(state) else "0")
+                except Exception:
+                    results[i].append("e")
+        rules = [{"kind": kind, "player": player, "name": name, "results": "".join(bits)}
+                 for (kind, player, name, _), bits in zip(self.checked, results)]
+        return {"samples": samples, "rules": rules}
 
     def export(self):
         mw = self.mw
         players = [self.player(p) for p in sorted(mw.player_ids)]
+        for p in sorted(mw.player_ids):
+            self.check("goal", p, mw.player_name[p], mw.completion_condition[p])
         games = sorted({str(mw.worlds[p].game) for p in mw.player_ids})
         packages = {}
         for game in games:
@@ -159,6 +436,8 @@ class Exporter:
             "pool": [self.item(i) for i in mw.itempool],
             "datapackage": packages,
             "opaque_rules": self.opaque,
+            "probed_rules": self.probed,
+            "checks": self.samples(),
         }
 
 
@@ -169,4 +448,5 @@ def export(mw, path, max_bytes):
         raise ValueError("export trop gros : %d octets (max %d)" % (len(text), max_bytes))
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
-    return {"bytes": len(text), "opaque_rules": data["opaque_rules"]}
+    return {"bytes": len(text), "opaque_rules": data["opaque_rules"],
+            "probed_rules": data["probed_rules"]}

@@ -124,5 +124,7 @@ pub struct ExportResult {
     pub bytes: u64,
     /// Nombre de règles que l'export n'a pas su traduire.
     pub opaque_rules: u64,
+    /// Nombre de règles Python (lambdas) traduites par sondage.
+    pub probed_rules: u64,
     pub seconds: f64,
 }

@@ -362,6 +362,67 @@ class TestExport(unittest.TestCase):
         self.assertIn("result", sortie[2])  # les refus n'ont pas consomme le process
 
 
+class TestSondage(unittest.TestCase):
+    """probe() de raftup_export.py (ADR 0028, etape 2), sans Archipelago."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(ICI, "raftup_export.py"), encoding="utf-8") as f:
+            cls.ns = {"__name__": "raftup_export"}
+            exec(compile(f.read(), "raftup_export.py", "exec"), cls.ns)
+
+    def sonde(self, rule):
+        return self.ns["probe"](None, rule)
+
+    def refus(self, rule, mot):
+        with self.assertRaises(self.ns["Refused"]) as ctx:
+            self.sonde(rule)
+        self.assertIn(mot, str(ctx.exception))
+
+    def test_et_ou(self):
+        r = self.sonde(lambda s: s.has("A", 1) and (s.has("B", 1) or s.has("C", 1, 2)))
+        self.assertEqual(r, {"t": "or", "of": [
+            {"t": "and", "of": [{"t": "has", "player": 1, "item": "A", "count": 1},
+                                {"t": "has", "player": 1, "item": "B", "count": 1}]},
+            {"t": "and", "of": [{"t": "has", "player": 1, "item": "A", "count": 1},
+                                {"t": "has", "player": 1, "item": "C", "count": 2}]},
+        ]})
+
+    def test_constantes(self):
+        self.assertEqual(self.sonde(lambda s: True), {"t": "true"})
+        self.assertEqual(self.sonde(lambda s: False), {"t": "false"})
+        # Une question qui ne change rien au resultat disparait.
+        self.assertEqual(self.sonde(lambda s: s.has("A", 1) or True), {"t": "true"})
+
+    def test_compteur_compare(self):
+        r = self.sonde(lambda s: s.count("Gem", 2) >= 3)
+        self.assertEqual(r, {"t": "and", "of": [{"t": "has", "player": 2, "item": "Gem", "count": 3}]})
+        r = self.sonde(lambda s: s.count("Gem", 2) > 1)
+        self.assertEqual(r["of"][0]["count"], 2)
+
+    def test_reach_et_listes(self):
+        r = self.sonde(lambda s: s.can_reach("Cave", "Region", 1)
+                       or s.has_from_list(["G", "H"], 1, 3))
+        atomes = sorted(t["of"][0]["t"] for t in r["of"])
+        self.assertEqual(atomes, ["can_reach_region", "has_from_list"])
+
+    def test_refus(self):
+        self.refus(lambda s: not s.has("A", 1), "non monotone")
+        self.refus(lambda s: s.prog_items[1]["A"] > 0, "state.prog_items")
+        self.refus(lambda s: s.count("A", 1) + s.count("B", 1) >= 2, "TypeError")
+        self.refus(lambda s: 3, "resultat")
+        compteur = [0]
+
+        def instable(s):
+            compteur[0] += 1
+            return compteur[0] % 2 == 0
+
+        self.refus(instable, "instable")
+
+    def test_trop_de_chemins(self):
+        self.refus(lambda s: sum(s.has(str(i), 1) for i in range(13)) >= 13, "chemins")
+
+
 class TestBlocageReseau(unittest.TestCase):
     """block_network() (RAFTUP_BLOCK_NETWORK=1) : refuse le sortant, garde la boucle locale."""
 

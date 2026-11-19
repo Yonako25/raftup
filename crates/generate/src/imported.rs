@@ -10,15 +10,20 @@
 //!
 //! Ce qui n'est pas encore pris en charge rend le monde **non exportable**
 //! ([`ImportError::Unsupported`]) : la génération reste alors au générateur Python.
-//! À cette étape : règle opaque (lambda Python), règle d'objet propre à un lieu
-//! (`item_rule`), lieu prioritaire ou exclu (`progress_type`, étape 3).
+//! À cette étape : règle opaque (lambda que le sondage n'a pas su traduire), règle
+//! d'objet propre à un lieu (`item_rule`), lieu prioritaire ou exclu (`progress_type`,
+//! étape 3), monde qui redéfinit `collect`.
+//!
+//! **Contrôle croisé** (ADR 0028, § 4) : l'export contient des inventaires tirés au
+//! hasard et la valeur de chaque règle calculée par le vrai Archipelago. On recalcule
+//! chaque valeur avec la règle traduite ; au moindre désaccord, le monde reste en Python.
 
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use logic::{
-    Classification, EntranceId, ItemKindId, LocationId, LogicError, MultiWorld, RegionId, Rule,
-    SlotId, State,
+    Classification, EntranceId, ItemKindId, LocationId, LogicError, MultiWorld, Reachability,
+    RegionId, Rule, SlotId, State,
 };
 use multidata::GamePackage;
 use serde::Deserialize;
@@ -71,6 +76,29 @@ pub struct Export {
     pub players: Vec<PlayerExport>,
     pub pool: Vec<ItemExport>,
     pub datapackage: IndexMap<String, PackageExport>,
+    /// Contrôle croisé ; absent seulement dans les exports écrits à la main des tests.
+    #[serde(default)]
+    pub checks: Option<Checks>,
+}
+
+/// Inventaires du contrôle croisé et résultats du vrai Archipelago.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Checks {
+    /// Chaque inventaire : `(joueur, objet, nombre)`.
+    pub samples: Vec<Vec<(u32, String, u32)>>,
+    pub rules: Vec<CheckedRule>,
+}
+
+/// Une règle et sa valeur sur chaque inventaire : `'1'` vraie, `'0'` fausse, `'e'` la
+/// règle Python a levé une exception.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CheckedRule {
+    /// `entrance`, `location` ou `goal`.
+    pub kind: String,
+    pub player: u32,
+    /// Nom de l'entrée ou du lieu (du joueur, pour `goal`).
+    pub name: String,
+    pub results: String,
 }
 
 /// Un joueur.
@@ -85,6 +113,9 @@ pub struct PlayerExport {
     pub locations: Vec<LocationExport>,
     pub precollected: Vec<ItemExport>,
     pub goal: RuleExport,
+    /// Le monde redéfinit `collect`, `collect_item` ou `remove`.
+    #[serde(default)]
+    pub custom_collect: bool,
     pub required_client_version: Vec<u32>,
 }
 
@@ -422,6 +453,9 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
     }
 
     world.validate()?;
+    if let Some(checks) = &export.checks {
+        cross_check(export, checks, &world, &names)?;
+    }
     let packages = packages(export)?;
     Ok(Imported {
         world,
@@ -468,6 +502,11 @@ fn check_supported(export: &Export) -> Result<(), ImportError> {
             return Err(refuse(format!(
                 "condition de victoire non traduite ({why})"
             )));
+        }
+        if player.custom_collect {
+            return Err(refuse(
+                "le monde change la façon de ramasser les objets (collect)".to_string(),
+            ));
         }
         for location in &player.locations {
             if !location.default_item_rule {
@@ -719,6 +758,90 @@ fn combinations(
         combinations(rules, k, i + 1, chosen, out);
         chosen.pop();
     }
+}
+
+/// Nombre maximal d'inventaires lus pour le contrôle croisé.
+pub const MAX_SAMPLES: usize = 256;
+
+/// Recalcule chaque règle contrôlée sur chaque inventaire et compare au vrai Archipelago.
+fn cross_check(
+    export: &Export,
+    checks: &Checks,
+    world: &MultiWorld,
+    names: &Names,
+) -> Result<(), ImportError> {
+    if checks.samples.len() > MAX_SAMPLES {
+        return Err(invalid(format!(
+            "{} inventaires de contrôle",
+            checks.samples.len()
+        )));
+    }
+    // Chaque règle contrôlée, retrouvée dans le monde construit.
+    let mut rules = Vec::new();
+    for checked in &checks.rules {
+        let rule = match checked.kind.as_str() {
+            "entrance" => {
+                let id = lookup(&names.entrances, checked.player, &checked.name)?;
+                world.entrance(id).map(|e| &e.rule)
+            }
+            "location" => {
+                let id = lookup(&names.locations, checked.player, &checked.name)?;
+                world.location(id).map(|l| &l.rule)
+            }
+            "goal" => world.slot(names.slot(checked.player)?).map(|s| &s.goal),
+            other => return Err(invalid(format!("contrôle de genre « {other} »"))),
+        };
+        let rule = rule.ok_or_else(|| invalid(format!("« {} » introuvable", checked.name)))?;
+        if checked.results.len() != checks.samples.len() {
+            return Err(invalid(format!(
+                "contrôle de « {} » : {} résultats pour {} inventaires",
+                checked.name,
+                checked.results.len(),
+                checks.samples.len()
+            )));
+        }
+        rules.push((checked, rule));
+    }
+    for (index, sample) in checks.samples.iter().enumerate() {
+        let mut state = State::new(world);
+        for (player, item, count) in sample {
+            // Un objet qu'aucune règle ne cite n'a pas de sorte dans le monde : sans effet.
+            if let Some(id) = names.items.get(&(*player, item.clone())) {
+                state.add(*id, *count);
+            }
+        }
+        let reach = Reachability::compute(world, &state);
+        for (checked, rule) in &rules {
+            let expected = checked.results.as_bytes().get(index).copied();
+            let ours = rule.eval(world, &state, &reach);
+            let agree = match expected {
+                Some(b'1') => ours,
+                Some(b'0') => !ours,
+                _ => false,
+            };
+            if !agree {
+                let player = export
+                    .players
+                    .iter()
+                    .find(|p| p.slot == checked.player)
+                    .ok_or_else(|| invalid(format!("joueur {} inconnu", checked.player)))?;
+                let what = if expected == Some(b'e') {
+                    "la règle Python plante".to_string()
+                } else {
+                    format!("Raftup dit {ours}, Archipelago le contraire")
+                };
+                return Err(ImportError::Unsupported {
+                    player: player.name.clone(),
+                    game: player.game.clone(),
+                    reason: format!(
+                        "contrôle croisé de « {} » ({}) sur l'inventaire n° {index} : {what}",
+                        checked.name, checked.kind
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Datapackages, `checksum` recalculé par Raftup et comparé à celui de Python.

@@ -252,3 +252,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : ADR 0028, étape 2 : sondeur de lambdas et contrôle croisé, sur un monde de test du dépôt.
 
+### 2026-11-19 · ADR 0028, étape 2 : sondage des lambdas
+- **Fait** : sondeur (`probe`, arbre de décision, monotonie vérifiée exactement, plafonds), contrôle croisé de toutes les règles sur 64 inventaires du vrai Archipelago (vérifié côté Rust), refus des mondes à `collect` personnalisé. Monde de test `raftup_sonde` : en vrai, 9 lambdas sondées, contrôle réussi, règle non monotone refusée. 36 tests Python, 14 tests d'import Rust, 4 tests réels ; workspace et clippy passent.
+- **Pas vérifié** : un vrai monde tiers à lambdas (Slime Rancher, étape 5) ; durée du sondage sur un gros monde.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : ADR 0028, étape 3 : `progress_type` (lieux exclus et prioritaires) dans `logic` et `fill`.
+

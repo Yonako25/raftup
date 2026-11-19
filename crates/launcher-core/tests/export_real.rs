@@ -14,14 +14,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use generate::imported::{build_world, read_export, Imported};
+use generate::imported::{build_world, read_export, ImportError, Imported};
 use generate::worlds::apquest::ApQuestOptions;
 use generate::{build, Built, GameOptions, GenerateRequest, PlayerRequest};
 use launcher_core::generation::{pins, runtime_status, Runtime, RuntimeStatus};
 use launcher_core::Paths;
 use logic::{MultiWorld, Reachability, SlotId, State};
 use py_bridge::{
-    BridgeOptions, CancelToken, ExportParams, GenerateParams, PyBridge, EXPORTER_SCRIPT,
+    BridgeOptions, CancelToken, ExportParams, ExportResult, GenerateParams, PyBridge,
+    EXPORTER_SCRIPT,
 };
 
 fn runtime() -> Option<Runtime> {
@@ -35,8 +36,20 @@ fn runtime() -> Option<Runtime> {
     }
 }
 
-/// Lance `export_worlds` sur ces YAML et relit le JSON.
+/// Lance `export_worlds` sur ces YAML et relit le JSON ; exige zéro règle opaque.
 fn export(runtime: &Runtime, work: &Path, yamls: &[String], seed: u64) -> Imported {
+    let (result, imported) = export_raw(runtime, work, yamls, seed);
+    assert_eq!(result.opaque_rules, 0, "règles opaques");
+    imported.unwrap()
+}
+
+/// Lance `export_worlds` et rend son résultat et l'import (réussi ou non).
+fn export_raw(
+    runtime: &Runtime,
+    work: &Path,
+    yamls: &[String],
+    seed: u64,
+) -> (ExportResult, Result<Imported, ImportError>) {
     let players = work.join("players");
     let out = work.join("out");
     std::fs::create_dir_all(&players).unwrap();
@@ -75,12 +88,97 @@ fn export(runtime: &Runtime, work: &Path, yamls: &[String], seed: u64) -> Import
         .unwrap();
     let _ = bridge.shutdown();
     assert_eq!(result.ap_version, "0.6.8");
-    assert_eq!(
-        result.opaque_rules, 0,
-        "APQuest n'a que des règles rule_builder"
-    );
     let bytes = std::fs::read(&path).unwrap();
-    build_world(&read_export(&bytes).unwrap()).unwrap()
+    let export = read_export(&bytes).unwrap();
+    assert!(export.checks.is_some(), "contrôle croisé absent");
+    (result, build_world(&export))
+}
+
+/// Installe le monde de test `raftup_sonde` (tests/data) dans `custom_worlds` du runtime de
+/// test, sous forme d'`.apworld`. Pas de suppression ensuite : chaque génération du
+/// launcher vide ce dossier (ADR 0017, décision 8).
+fn install_sonde(runtime: &Runtime) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/raftup_sonde");
+    let dir = runtime.archipelago_dir.join("custom_worlds");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = std::fs::File::create(dir.join("raftup_sonde.apworld")).unwrap();
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for name in ["__init__.py", "archipelago.json"] {
+        zip.start_file(format!("raftup_sonde/{name}"), options)
+            .unwrap();
+        std::io::Write::write_all(&mut zip, &std::fs::read(source.join(name)).unwrap()).unwrap();
+    }
+    zip.finish().unwrap();
+}
+
+fn sonde_yaml(bad_rule: bool) -> String {
+    format!("name: Sam\ngame: Raftup Sonde\nRaftup Sonde:\n  bad_rule: {bad_rule}\n")
+}
+
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn lambdas_sondees_et_controlees() {
+    let Some(runtime) = runtime() else { return };
+    install_sonde(&runtime);
+    let work = tempfile::tempdir().unwrap();
+    let (result, imported) = export_raw(&runtime, work.path(), &[sonde_yaml(false)], 3);
+    assert_eq!(result.opaque_rules, 0);
+    // 3 entrées, 5 lieux à règle (dont « Victory ») et la condition de victoire.
+    assert_eq!(result.probed_rules, 9, "{result:?}");
+    // L'import a passé le contrôle croisé sur les 64 inventaires du vrai Archipelago.
+    let imported = imported.unwrap();
+    let w = &imported.world;
+    let sam = w.slot_ids().next().unwrap();
+    let id = |n: &str| w.item_named(sam, n).unwrap();
+    let reach = |items: &[(&str, u32)], location: &str| {
+        let mut state = State::new(w);
+        for (name, n) in items {
+            state.add(id(name), *n);
+        }
+        Reachability::compute(w, &state).location(w.location_named(sam, location).unwrap())
+    };
+    // Cave : Sword puis Lamp, ou Sword puis 2 Gem.
+    assert!(!reach(&[("Sword", 1)], "Cave Pool"));
+    assert!(reach(&[("Sword", 1), ("Lamp", 1)], "Cave Pool"));
+    assert!(reach(&[("Sword", 1), ("Gem", 2)], "Cave Pool"));
+    // Castle : Sword et 2 Key (count >= 2).
+    assert!(!reach(&[("Sword", 1), ("Key", 1)], "Castle Gate"));
+    assert!(reach(&[("Sword", 1), ("Key", 2)], "Castle Gate"));
+    // Groupe « Shiny » (Gem, Lamp) : 3 au total.
+    assert!(reach(
+        &[("Sword", 1), ("Gem", 2), ("Lamp", 1)],
+        "Cave Crystal"
+    ));
+    assert!(!reach(&[("Sword", 1), ("Gem", 2)], "Cave Crystal"));
+    // Tout le pool en main : tout s'ouvre, victoire comprise.
+    let mut state = imported.start.clone();
+    for item in &imported.pool {
+        state.collect(w, *item);
+    }
+    let result = logic::sweep(w, state);
+    assert!(result.unreachable_locations(w).is_empty());
+    assert!(result.all_goals_reached(w));
+}
+
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn regle_non_monotone_refusee() {
+    let Some(runtime) = runtime() else { return };
+    install_sonde(&runtime);
+    let work = tempfile::tempdir().unwrap();
+    let (result, imported) = export_raw(&runtime, work.path(), &[sonde_yaml(true)], 3);
+    assert_eq!(result.opaque_rules, 1);
+    match imported {
+        Err(ImportError::Unsupported { reason, .. }) => {
+            assert!(
+                reason.contains("Bad Spot") && reason.contains("non monotone"),
+                "{reason}"
+            );
+        }
+        other => panic!("attendu Unsupported : {other:?}"),
+    }
 }
 
 fn yaml(name: &str, o: &ApQuestOptions) -> String {

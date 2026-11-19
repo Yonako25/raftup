@@ -109,3 +109,13 @@ Pour chaque joueur :
 - **Point ouvert, reproductibilité (§ 7)** : `PYTHONHASHSEED=0` est sans effet, parce que le worker est lancé avec `-I`, qui ignore les variables `PYTHON*` (ADR 0016). C'est à régler à l'étape 4.
 - **À décider à l'étape 4** : au lieu de faire écrire le `.archipelago` par Rust (§ 1, point 4), le worker pourrait reprendre `Main.main` avec le placement de Rust, et laisser Archipelago écrire lui-même la seed (indices, `slot_data`, fichiers de sortie). Ce serait plus fidèle et demanderait moins de code. Cela change le § 1 : à proposer avant de coder.
 
+## Mise en œuvre de l'étape 2 (19 novembre 2026)
+
+- **Sondeur** (`raftup_export.py`, `probe`) : un faux `CollectionState` (`ProbeState`) répond aux questions `has`, `has_all`, `has_any`, `has_all_counts`, `has_any_count`, `has_from_list(_unique)`, `has_group(_unique)` (groupe remplacé par sa liste d'objets), `count` comparé à un nombre (`>=`, `>`, `<`, `<=`, `==`), `can_reach` (nom ou objet) et `can_reach_region/location/entrance`. L'arbre est exploré en profondeur ; les termes vrais minimaux donnent la règle « ou » de « et ».
+- **Monotonie** : vérifiée exactement. Chaque feuille fausse doit contredire chaque terme vrai par une de ses réponses « Faux ».
+- **Refus** : méthode ou attribut inconnu (`state.prog_items`…), calcul sur un compteur, exception, résultat non booléen, chemin rejoué qui ne donne pas le même résultat, plus de 4 096 chemins ou de 64 questions.
+- **Contrôle croisé** : 64 inventaires, graine fixe, densités de 5 % à 95 %, de 1 à 40 exemplaires. Le vrai `CollectionState` est évalué avec `prog_items` remplacé par l'inventaire. Le contrôle porte sur **toutes** les règles (entrées, lieux, conditions de victoire), pas seulement celles qui ont été sondées : il vérifie aussi la traduction de `rule_builder`. Rust refuse le monde au premier désaccord, ou si la règle Python plante (`'e'`).
+- **`collect` personnalisé** : un monde qui redéfinit `collect`, `collect_item` ou `remove` (objets progressifs renommés, compteurs maison) est refusé. Le modèle de Raftup compte chaque objet par son nom.
+- **Monde de test** `raftup_sonde` (`launcher-core/tests/data`, écrit pour Raftup) : 9 règles en lambdas, avec fonction d'aide, `count`, groupe, `can_reach` et liste. En vrai : 9 règles sondées, 0 opaque, contrôle croisé réussi, monde jouable. Avec l'option `bad_rule` (`not state.has(...)`), la règle est refusée (« non monotone ») et le monde reste au générateur Python.
+- **Reste** : `checks` est facultatif dans le JSON, pour les exports écrits à la main des tests ; le branchement de l'étape 4 l'exigera.
+

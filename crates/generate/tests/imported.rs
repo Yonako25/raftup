@@ -277,3 +277,60 @@ fn checksum_du_datapackage_verifie() {
     let imported = import(&v).unwrap();
     assert_eq!(imported.packages["Test"].checksum, good);
 }
+
+/// L'export de base avec un contrôle croisé : deux inventaires (vide, une clé).
+fn with_checks(door: &str, goal: &str) -> Value {
+    let mut v = base();
+    v["checks"] = json!({
+        "samples": [[], [[1, "Key", 1]]],
+        "rules": [
+            {"kind": "entrance", "player": 1, "name": "Door", "results": door},
+            {"kind": "location", "player": 1, "name": "Deep", "results": "11"},
+            {"kind": "goal", "player": 1, "name": "Alice", "results": goal}
+        ]
+    });
+    v
+}
+
+#[test]
+fn controle_croise_d_accord() {
+    import(&with_checks("01", "00")).unwrap();
+}
+
+#[test]
+fn controle_croise_en_desaccord() {
+    // Archipelago dit la porte ouverte sans clé : Raftup ne dit pas pareil.
+    let reason = unsupported(&with_checks("11", "00"));
+    assert!(
+        reason.contains("contrôle croisé") && reason.contains("Door"),
+        "{reason}"
+    );
+    assert!(reason.contains("n° 0"), "{reason}");
+    // La condition de victoire est contrôlée aussi.
+    assert!(unsupported(&with_checks("01", "01")).contains("goal"));
+    // Une règle Python qui plante sur un inventaire : refusée.
+    assert!(unsupported(&with_checks("0e", "00")).contains("plante"));
+}
+
+#[test]
+fn controle_croise_incoherent() {
+    // Pas autant de résultats que d'inventaires.
+    assert!(matches!(
+        import(&with_checks("0", "00")),
+        Err(ImportError::Invalid(_))
+    ));
+    // Règle contrôlée introuvable.
+    let mut v = with_checks("01", "00");
+    v["checks"]["rules"][0]["name"] = json!("Fenêtre");
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
+    let mut v = with_checks("01", "00");
+    v["checks"]["rules"][0]["kind"] = json!("region");
+    assert!(matches!(import(&v), Err(ImportError::Invalid(_))));
+}
+
+#[test]
+fn collect_personnalise_refuse() {
+    let mut v = base();
+    v["players"][0]["custom_collect"] = json!(true);
+    assert!(unsupported(&v).contains("collect"));
+}

@@ -245,6 +245,7 @@ def export_worlds(params):
     return {"export": path, "seed_name": str(mw.seed_name),
             "ap_version": str(getattr(Utils, "__version__", "inconnue")), "players": players,
             "bytes": info["bytes"], "opaque_rules": info["opaque_rules"],
+            "probed_rules": info.get("probed_rules", 0),
             "seconds": round(time.time() - t0, 3)}
 
 
