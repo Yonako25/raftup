@@ -342,3 +342,9 @@ untime2`.
 - **Pas vérifié** : temps par lieu jamais mesuré en vraie partie ; coût sur une grosse partie ; case jamais regardée à l'écran (macro : `RAFTUP_DEV_TEMPS=1`) ; moteur export avec l'option jamais lancé en réel (test unitaire seulement) ; profils du registre pas pris en compte.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `launcher-core::registry`, Bibliothèque, `crates/hub` (autres sessions).
 - **Suite** : mesurer le temps par lieu en vraie partie (Slime Rancher, APQuest) et corriger les profils.
+
+### 2026-11-19 · Registre de paquets signés terminé (session `v2-registre`)
+- **Fait** : vraie clé du registre (`A3D76747B9BA50E2`, secrète dans le dossier des clés hors dépôt) ; `registre/registre.toml` (apworld Slime Rancher, références chez l'auteur) et procédure `registre/README.md` ; `publish` + `verify` lancés pour de vrai avec la clé, sha256 identique au profil ; `fetch_registry`, `apply_registry`, `install_apworld` ; Bibliothèque : jeux du registre marqués, « Mondes du registre », échec discret (ADR 0032 mis à jour). Workspace, clippy, fmt passent ; captures regardées (registre local signé, et 404 réel).
+- **Pas vérifié** : clic « Installer » dans la vraie fenêtre (fonction testée seule) ; release GitHub `registre` pas créée (rien poussé) : à faire par l'utilisatrice.
+- **Ne pas toucher** : `crates/hub`, `fill`, `generate`, écran « Créer une partie » (autres sessions V2).
+- **Suite** : créer la release `registre` et y envoyer `index.json` + `index.json.minisig` (voir `registre/README.md`).

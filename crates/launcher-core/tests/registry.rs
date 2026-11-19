@@ -8,8 +8,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use launcher_core::download::DirFetcher;
+use launcher_core::profile::StepKind;
 use launcher_core::registry::{
-    add_registry_profiles, fetch_package, fetch_verified_index, verify_apworld, RegistryLoadError,
+    add_registry_profiles, apply_registry, apworld_path, fetch_package, fetch_registry,
+    fetch_verified_index, install_apworld, verify_apworld, ApworldInstall, RegistryLoadError,
     REGISTRY_PUBLIC_KEY,
 };
 use launcher_core::Catalog;
@@ -102,8 +104,9 @@ fn index_publie_puis_verifie_par_le_launcher() {
 }
 
 #[test]
-fn cle_vide_du_launcher_refuse_tout() {
-    // Tant que la vraie clé n'est pas générée, le launcher n'accepte aucun index.
+fn cle_du_launcher_refuse_un_index_signe_par_une_autre_cle() {
+    // La vraie clé embarquée se lit (sinon ce serait `BadPublicKey`) et refuse un index
+    // signé par une clé de test : seule la clé secrète de la mainteneuse fait foi.
     let p = publier();
     let resultat = fetch_verified_index(
         &fetcher(&p),
@@ -113,9 +116,123 @@ fn cle_vide_du_launcher_refuse_tout() {
     assert!(matches!(
         resultat,
         Err(RegistryLoadError::Registry(
-            RegistryError::PublicKeyNotConfigured
+            RegistryError::SignatureMismatch
         ))
     ));
+}
+
+#[test]
+fn registre_lu_pour_la_bibliotheque() {
+    let p = publier();
+    let mut catalogue = Catalog::embedded().unwrap();
+    let lu = fetch_registry(
+        &fetcher(&p),
+        &format!("{BASE}/index.json"),
+        &p.cle,
+        &catalogue,
+    )
+    .unwrap();
+    // Slime Rancher est embarqué : son profil du registre n'est même pas téléchargé.
+    assert_eq!(
+        lu.files.keys().collect::<Vec<_>>(),
+        ["autre-jeu", "troisieme"]
+    );
+    assert!(lu.failed.is_empty());
+
+    let rapport = apply_registry(&mut catalogue, &lu);
+    assert_eq!(rapport.added, ["autre-jeu", "troisieme"]);
+    assert_eq!(rapport.kept_embedded, ["slime-rancher"]);
+    assert!(rapport.missing.is_empty() && rapport.rejected.is_empty());
+    assert!(catalogue.get("troisieme").is_some());
+}
+
+#[test]
+fn profil_introuvable_chez_l_auteur_n_empeche_pas_le_reste() {
+    let p = publier();
+    // Le fichier de `troisieme` a disparu : seul ce jeu manque, avec sa raison.
+    fs::remove_file(p.dist.join("troisieme.toml")).unwrap();
+    let mut catalogue = Catalog::embedded().unwrap();
+    let lu = fetch_registry(
+        &fetcher(&p),
+        &format!("{BASE}/index.json"),
+        &p.cle,
+        &catalogue,
+    )
+    .unwrap();
+    assert_eq!(lu.failed.len(), 1);
+    let rapport = apply_registry(&mut catalogue, &lu);
+    assert_eq!(rapport.added, ["autre-jeu"]);
+    assert!(rapport.missing.is_empty());
+    assert_eq!(rapport.rejected.len(), 1);
+    assert_eq!(rapport.rejected[0].0, "troisieme");
+}
+
+#[test]
+fn registre_injoignable_ou_faux_rend_une_erreur() {
+    let p = publier();
+    let catalogue = Catalog::embedded().unwrap();
+    // Pas de réseau : le faux client ne connaît aucune adresse.
+    let rien = DirFetcher::new();
+    let resultat = fetch_registry(&rien, &format!("{BASE}/index.json"), &p.cle, &catalogue);
+    assert!(matches!(resultat, Err(RegistryLoadError::Download(_))));
+    // Mauvaise clé : erreur de signature, le catalogue embarqué n'est pas touché.
+    let resultat = fetch_registry(
+        &fetcher(&p),
+        &format!("{BASE}/index.json"),
+        REGISTRY_PUBLIC_KEY,
+        &catalogue,
+    );
+    assert!(resultat.is_err());
+}
+
+#[test]
+fn apworld_du_registre_installee_puis_gardee() {
+    let p = publier();
+    let index = fetch_verified_index(&fetcher(&p), &format!("{BASE}/index.json"), &p.cle).unwrap();
+    let mondes = tempfile::tempdir().unwrap();
+    let dossier = mondes.path().join("0.6.8");
+
+    let pose = install_apworld(&fetcher(&p), &index, "monde", &dossier).unwrap();
+    let chemin = apworld_path(&dossier, "monde");
+    assert_eq!(pose, ApworldInstall::Installed(chemin.clone()));
+    assert_eq!(fs::read(&chemin).unwrap(), b"faux zip");
+    // Pas de fichier temporaire laissé derrière.
+    assert_eq!(fs::read_dir(&dossier).unwrap().count(), 1);
+
+    // Deuxième fois : déjà là, rien n'est téléchargé (le faux client compte les accès).
+    let f = fetcher(&p);
+    let acces = f.open_counter();
+    let encore = install_apworld(&f, &index, "monde", &dossier).unwrap();
+    assert_eq!(encore, ApworldInstall::AlreadyThere(chemin));
+    assert_eq!(acces.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+#[test]
+fn apworld_differente_jamais_ecrasee() {
+    let p = publier();
+    let index = fetch_verified_index(&fetcher(&p), &format!("{BASE}/index.json"), &p.cle).unwrap();
+    let mondes = tempfile::tempdir().unwrap();
+    let chemin = apworld_path(mondes.path(), "monde");
+    fs::write(&chemin, b"autre version").unwrap();
+    assert!(matches!(
+        install_apworld(&fetcher(&p), &index, "monde", mondes.path()),
+        Err(RegistryLoadError::OtherApworldPresent { .. })
+    ));
+    assert_eq!(fs::read(&chemin).unwrap(), b"autre version");
+    assert!(matches!(
+        install_apworld(&fetcher(&p), &index, "absente", mondes.path()),
+        Err(RegistryLoadError::UnknownApworld(_))
+    ));
+}
+
+#[test]
+fn apworld_modifiee_chez_l_auteur_pas_posee() {
+    let p = publier();
+    let index = fetch_verified_index(&fetcher(&p), &format!("{BASE}/index.json"), &p.cle).unwrap();
+    fs::write(p.dist.join("monde.apworld"), b"faux zap").unwrap();
+    let mondes = tempfile::tempdir().unwrap();
+    assert!(install_apworld(&fetcher(&p), &index, "monde", mondes.path()).is_err());
+    assert!(!apworld_path(mondes.path(), "monde").exists());
 }
 
 #[test]
@@ -219,4 +336,49 @@ fn profil_modifie_refuse_sans_casser_le_reste() {
     assert_eq!(rapport.rejected[0].0, "troisieme");
     assert!(rapport.rejected[0].1.contains("sha256"));
     assert!(catalogue.get("troisieme").is_none());
+}
+
+/// Le vrai fichier source du registre (`registre/registre.toml`) reste cohérent avec le
+/// catalogue embarqué : adresses acceptées, et une apworld déjà fournie par un profil a la
+/// même adresse et la même version que lui.
+#[test]
+fn source_du_registre_coherente_avec_le_catalogue() {
+    let racine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../registre");
+    let texte = fs::read_to_string(racine.join("registre.toml")).unwrap();
+    let source: toml::Table = toml::from_str(&texte).unwrap();
+    assert_eq!(source["format_version"].as_integer(), Some(1));
+    let paquets = source["package"].as_array().unwrap();
+    assert!(!paquets.is_empty(), "au moins une entrée réelle");
+
+    let catalogue = Catalog::embedded().unwrap();
+    let mut verifies = 0;
+    for paquet in paquets {
+        let nom = paquet["name"].as_str().unwrap();
+        let url = paquet["url"].as_str().unwrap();
+        let version = paquet["version"].as_str().unwrap();
+        registry::index::check_url(url).unwrap();
+        if paquet["kind"].as_str() != Some("apworld") {
+            continue;
+        }
+        // Le fichier posé s'appelle `<nom>.apworld` : l'adresse chez l'auteur aussi.
+        assert!(url.ends_with(&format!("/{nom}.apworld")), "{url}");
+        let etapes = catalogue.games().flat_map(|p| p.steps.iter());
+        for etape in etapes.filter(|e| e.kind == StepKind::Apworld) {
+            if etape.source.resolve(&etape.version) != url {
+                continue;
+            }
+            assert_eq!(etape.version, version, "version de {nom}");
+            // Si la copie locale est là (poste de la mainteneuse), son sha256 est celui
+            // du profil : l'index publié ne contredira pas le catalogue embarqué.
+            let copie = racine.join(paquet["file"].as_str().unwrap());
+            if let Ok(octets) = fs::read(&copie) {
+                assert_eq!(registry::sha256_hex(&octets), etape.sha256.to_string());
+            }
+            verifies += 1;
+        }
+    }
+    assert!(
+        verifies >= 1,
+        "l'apworld de Slime Rancher est comparée au profil"
+    );
 }

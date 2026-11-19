@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **19 novembre 2026** (8 chantiers V2 fusionnés : ADR 0029 à 0034, CI multi-OS, finitions du moteur).
+Mis à jour le **19 novembre 2026** (registre de paquets signés branché dans la Bibliothèque, vraie clé ; release `registre` à créer).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -32,7 +32,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
 - [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
-- [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; adresse de publication fixée (`REGISTRY_INDEX_URL`, release GitHub `registre`) ; reste : vraie clé (`REGISTRY_PUBLIC_KEY` vide), source `registre.toml`, création de la release, branchement dans la Bibliothèque
+- [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; vraie clé `A3D76747B9BA50E2` (secrète dans `C:\Users\ionak\.raftup-keys`, à sauvegarder hors ligne) ; source `registre/registre.toml` (apworld Slime Rancher) et procédure dans `registre/README.md` ; branché dans la Bibliothèque (jeux en plus marqués « Registre », « Mondes du registre » avec « Installer », échec discret) ; **reste à l'utilisatrice : créer la release GitHub `registre` et y envoyer `index.json` + `index.json.minisig`** (d'ici là : « Registre indisponible »)
 - [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
 - [x] **Bac à sable du générateur** (V2, ADR 0034, 19 novembre 2026) : worker en intégrité basse sous Windows, activé par défaut, refus s'il n'est pas appliqué ; tests réels de génération et d'export passent avec ; hors Windows, repli sans bac à sable
 - [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
@@ -57,7 +57,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
 | `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe, amis, présence ; API HTTP `/v1` (V2) | **Commencé** : SQLite seul, pas de Discord ni de client dans le launcher (ADR 0033) |
-| `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** pour le cœur (ADR 0032) |
+| `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** (ADR 0032), branché dans la Bibliothèque ; release `registre` à créer |
 
 ## Ce que fait chaque crate
 
@@ -112,6 +112,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Fenêtre sans bordure redimensionnable par ses bords et ses coins (`resize.rs`)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - En debug, macro `RAFTUP_DEV_CAPTURE=<dossier>` (+ `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) : joue « Créer une partie » et enregistre des captures PNG, sans être devant le PC
+- Registre : `RAFTUP_NO_REGISTRY` coupe sa lecture ; en debug, `RAFTUP_DEV_REGISTRE=<dossier>` lit un registre signé local (`index.json`, `.minisig` et paquets nommés comme le dernier segment de leur adresse)
 - Case « Moteur Rust (expérimental) » dans « Créer une partie » : APQuest généré sans Python (ADR 0027), sinon Archipelago
 - Fin de génération : moteur réellement utilisé (Rust seul, export placé par Raftup, Archipelago seul) et raison d'un repli affichés ; le moteur Rust seul écrit `AP_<seed>_Spoiler.txt` dans le zip (19 novembre 2026)
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**

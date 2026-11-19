@@ -7,24 +7,32 @@
 //! 3. [`add_registry_profiles`] ajoute au catalogue les profils du registre pour des jeux
 //!    absents du catalogue embarqué : **le catalogue embarqué gagne toujours**.
 //!
-//! Rien n'est installé ni exécuté ici.
+//! 4. [`fetch_registry`] puis [`apply_registry`] font les trois à la suite pour la
+//!    Bibliothèque ;
+//! 5. [`install_apworld`] pose une apworld vérifiée dans le dossier des mondes.
+//!
+//! Rien n'est exécuté ici : une apworld posée n'est lue que par le générateur.
 //!
 //! Note : la crate s'appelle aussi `registry`. On écrit `::registry::…` (chemin qui part de
 //! la liste des crates) pour ne pas la confondre avec ce module, `crate::registry`.
 
 use std::collections::BTreeMap;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
-use ::registry::{check_package, verify_index, Index, Package, PackageKind, RegistryError};
+use ::registry::{check_package, verify_index, RegistryError};
+// `pub use` : l'interface (`launcher-ui`) ne dépend que de `launcher-core` ; elle trouve ici
+// les types de l'index sans dépendre elle-même de la crate `registry`.
+pub use ::registry::{Index, Package, PackageKind};
 
 use crate::catalog::Catalog;
 use crate::download::{DownloadError, Fetcher};
 use crate::profile::Profile;
 
-/// Clé publique minisign du registre (ligne base64 « RW… »), **distincte** de celle des
-/// mises à jour (ADR 0032). Vide tant que la mainteneuse n'a pas lancé
-/// `raftup-registry keygen` : toute vérification échoue alors (`PublicKeyNotConfigured`).
-pub const REGISTRY_PUBLIC_KEY: &str = "";
+/// Clé publique minisign du registre (ligne base64 « RW… », identifiant `A3D76747B9BA50E2`),
+/// **distincte** de celle des mises à jour (ADR 0032). Créée le 19 novembre 2026 par
+/// `raftup-registry keygen` ; la clé secrète reste hors du dépôt, chez la mainteneuse.
+pub const REGISTRY_PUBLIC_KEY: &str = "RWTiULq5R2fXo7ZsQfse7x6oTpfcKN7HDCRlg4v7c1JyGe0EZuTjWszy";
 
 /// Adresse de publication de l'index (ADR 0032) : une release GitHub à étiquette fixe,
 /// `registre`, distincte des releases du launcher. Republier = remplacer ses deux fichiers
@@ -49,6 +57,19 @@ pub enum RegistryLoadError {
     /// Adresse refusée (HTTPS, liste blanche).
     #[error("adresse du registre refusée : « {url} » : {reason}")]
     BadUrl { url: String, reason: String },
+    /// Apworld demandée absente de l'index.
+    #[error("apworld « {0} » absente du registre")]
+    UnknownApworld(String),
+    /// Un autre fichier porte déjà ce nom dans le dossier des mondes : on ne l'écrase pas
+    /// (il peut venir d'un profil de la Bibliothèque, qui garde un reçu de ce fichier).
+    #[error("un autre fichier « {} » est déjà installé : Raftup ne l'écrase pas", path.display())]
+    OtherApworldPresent { path: PathBuf },
+    /// Lecture ou écriture d'un fichier local.
+    #[error("{} : {source}", path.display())]
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 /// Ce que [`add_registry_profiles`] a fait de chaque profil de l'index (noms triés).
@@ -100,9 +121,9 @@ pub fn verify_apworld<'a>(
     data: &[u8],
 ) -> Result<&'a Package, RegistryLoadError> {
     // `'a` : l'entrée rendue est empruntée à `index`, elle vit aussi longtemps que lui.
-    let package = index.get(PackageKind::Apworld, name).ok_or_else(|| {
-        RegistryError::InvalidIndex(format!("apworld « {name} » absente du registre"))
-    })?;
+    let package = index
+        .get(PackageKind::Apworld, name)
+        .ok_or_else(|| RegistryLoadError::UnknownApworld(name.to_string()))?;
     check_package(package, data)?;
     Ok(package)
 }
@@ -150,6 +171,125 @@ pub fn add_registry_profiles(
     report.missing.sort();
     report.rejected.sort();
     report
+}
+
+/// Ce que [`fetch_registry`] a rapporté du réseau, prêt à être fusionné au catalogue.
+#[derive(Debug, Clone)]
+pub struct RegistryFetch {
+    /// Index vérifié (signature puis contenu).
+    pub index: Index,
+    /// Octets vérifiés (taille + sha256) des profils de jeux absents du catalogue.
+    pub files: BTreeMap<String, Vec<u8>>,
+    /// Profils dont le téléchargement ou le contrôle a échoué : (nom, raison).
+    pub failed: Vec<(String, String)>,
+}
+
+/// Lit le registre pour la Bibliothèque : l'index vérifié, puis les profils des jeux que
+/// `catalog` n'a pas encore. Les jeux déjà présents ne sont même pas téléchargés.
+///
+/// Seule une erreur sur l'index fait échouer l'appel ; un profil qui ne se télécharge pas
+/// est noté dans `failed` et le reste continue.
+pub fn fetch_registry(
+    fetcher: &dyn Fetcher,
+    index_url: &str,
+    public_key: &str,
+    catalog: &Catalog,
+) -> Result<RegistryFetch, RegistryLoadError> {
+    let index = fetch_verified_index(fetcher, index_url, public_key)?;
+    let mut files = BTreeMap::new();
+    let mut failed = Vec::new();
+    for package in index.of_kind(PackageKind::Profile) {
+        if catalog.get(&package.name).is_some() {
+            continue;
+        }
+        match fetch_package(fetcher, package) {
+            Ok(data) => {
+                files.insert(package.name.clone(), data);
+            }
+            Err(e) => failed.push((package.name.clone(), e.to_string())),
+        }
+    }
+    failed.sort();
+    Ok(RegistryFetch {
+        index,
+        files,
+        failed,
+    })
+}
+
+/// Ajoute au catalogue les profils lus par [`fetch_registry`]. Un échec de téléchargement
+/// apparaît dans `rejected` (avec sa raison) plutôt que dans `missing`.
+pub fn apply_registry(catalog: &mut Catalog, fetched: &RegistryFetch) -> MergeReport {
+    let mut report = add_registry_profiles(catalog, &fetched.index, &fetched.files);
+    for (name, reason) in &fetched.failed {
+        report.missing.retain(|m| m != name);
+        report.rejected.push((name.clone(), reason.clone()));
+    }
+    report.rejected.sort();
+    report
+}
+
+/// Résultat de [`install_apworld`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApworldInstall {
+    /// Apworld téléchargée, vérifiée et posée à ce chemin.
+    Installed(PathBuf),
+    /// Le même fichier (même sha256) était déjà là : rien n'a été téléchargé.
+    AlreadyThere(PathBuf),
+}
+
+/// Chemin où une apworld du registre est posée : `<worlds_dir>/<nom>.apworld`.
+///
+/// Archipelago importe une apworld sous le nom de son fichier : le nom du paquet est donc
+/// celui du dossier du monde dans le zip (`slime_rancher`). Il est sûr comme nom de
+/// fichier : l'index n'accepte que `[a-z0-9_-]` (ADR 0032).
+pub fn apworld_path(worlds_dir: &Path, name: &str) -> PathBuf {
+    worlds_dir.join(format!("{name}.apworld"))
+}
+
+/// Télécharge l'apworld `name` de l'index, contrôle taille et sha256, puis l'écrit dans
+/// `worlds_dir` (fichier temporaire puis renommage : jamais de fichier à moitié écrit).
+///
+/// Un fichier identique déjà présent est gardé tel quel ; un fichier différent du même nom
+/// n'est **jamais** écrasé (erreur `OtherApworldPresent`).
+pub fn install_apworld(
+    fetcher: &dyn Fetcher,
+    index: &Index,
+    name: &str,
+    worlds_dir: &Path,
+) -> Result<ApworldInstall, RegistryLoadError> {
+    let package = index
+        .get(PackageKind::Apworld, name)
+        .ok_or_else(|| RegistryLoadError::UnknownApworld(name.to_string()))?;
+    let target = apworld_path(worlds_dir, name);
+    if target.exists() {
+        let present = std::fs::read(&target).map_err(io_error(&target))?;
+        return if check_package(package, &present).is_ok() {
+            Ok(ApworldInstall::AlreadyThere(target))
+        } else {
+            Err(RegistryLoadError::OtherApworldPresent { path: target })
+        };
+    }
+    let data = fetch_package(fetcher, package)?;
+    // Second contrôle, par le nom cette fois : les octets posés sont bien ceux de l'index.
+    verify_apworld(index, name, &data)?;
+    std::fs::create_dir_all(worlds_dir).map_err(io_error(worlds_dir))?;
+    let mut tmp = target.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, &data).map_err(io_error(&tmp))?;
+    std::fs::rename(&tmp, &target).map_err(io_error(&target))?;
+    Ok(ApworldInstall::Installed(target))
+}
+
+/// Fabrique la conversion d'une erreur d'entrée-sortie en `RegistryLoadError::Io`.
+/// `impl Fn` : on rend une fermeture qui garde sa propre copie du chemin.
+fn io_error(path: &Path) -> impl Fn(std::io::Error) -> RegistryLoadError {
+    let path = path.to_path_buf();
+    move |source| RegistryLoadError::Io {
+        path: path.clone(),
+        source,
+    }
 }
 
 /// Lit au plus `max` octets ; au-delà, refus (un serveur ne remplit pas la mémoire).

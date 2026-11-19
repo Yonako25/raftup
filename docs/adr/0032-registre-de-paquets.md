@@ -57,7 +57,7 @@ Règle inchangée : Raftup ne redistribue **jamais** de jeu, de ROM, d'asset ni 
 
 - **Une signature pour tout l'index** (minisign pré-haché, signatures « legacy » refusées, comme l'ADR 0022), sur les octets exacts de `index.json`. Chaque paquet est signé **par transitivité** : son sha256 est dans l'index signé. Pas de signature par paquet au MVP du registre.
 - Paire de clés **distincte** de celle des mises à jour : une fuite de l'une n'ouvre pas l'autre. `raftup-registry keygen <dossier>` la crée hors du dépôt et refuse d'écraser.
-- La clé publique est la constante `launcher_core::registry::REGISTRY_PUBLIC_KEY`, **vide aujourd'hui** : tant qu'elle l'est, toute vérification échoue (`PublicKeyNotConfigured`) plutôt que d'accepter n'importe quoi.
+- La clé publique est la constante `launcher_core::registry::REGISTRY_PUBLIC_KEY` (identifiant `A3D76747B9BA50E2`, créée le 19 novembre 2026). La clé secrète est hors du dépôt, à côté de celle des mises à jour (`raftup-registry.key`, dossier des clés de la mainteneuse). Une clé vide ferait tout refuser (`PublicKeyNotConfigured`) plutôt que d'accepter n'importe quoi.
 - `publish` relit l'index écrit et le vérifie avec la clé publique tirée de la clé secrète : un index que le launcher refuserait n'est jamais produit.
 - Rotation : même règle que l'ADR 0022 (une version du launcher qui embarque la nouvelle clé).
 
@@ -67,14 +67,28 @@ Règle inchangée : Raftup ne redistribue **jamais** de jeu, de ROM, d'asset ni 
 
 Adresse de publication (décidée le 19 novembre 2026) : une release GitHub du dépôt à étiquette fixe `registre`, distincte des releases du launcher (`launcher_core::registry::REGISTRY_INDEX_URL` = `https://github.com/Yonako25/raftup/releases/download/registre/index.json`). Republier = remplacer les deux fichiers de cette release ; l'adresse ne change pas. Pourquoi : gratuit, déjà dans la liste blanche (ADR 0015), même hébergeur que les mises à jour (ADR 0022) ; une adresse en `latest` obligerait à joindre l'index à chaque release du launcher. L'envoi reste manuel : `raftup-registry` n'envoie rien.
 
+Fichier source : `registre/registre.toml` dans le dépôt, relu à la main ; les copies locales des paquets (`registre/fichiers/`) et l'index produit (`registre/sortie/`) ne sont jamais commités. La procédure pas à pas (télécharger chez l'auteur, comparer le sha256, `publish`, `verify`, puis remplacer les deux fichiers de la release `registre`) est dans `registre/README.md`. Première entrée réelle : l'apworld de Slime Rancher, même adresse, version et sha256 que le profil embarqué ; un test (`source_du_registre_coherente_avec_le_catalogue`) garde les deux alignés.
+
+Pour une apworld, `name` est le nom du dossier du monde dans le zip : le launcher la pose sous `<name>.apworld`, le nom sous lequel Archipelago l'importe.
+
 ### Côté launcher (`launcher-core::registry`)
 
 - `fetch_verified_index` : télécharge `index.json` et `index.json.minisig` (mêmes règles d'adresse, taille bornée), vérifie la signature **avant** de lire le JSON.
 - `add_registry_profiles` : pour chaque profil de l'index dont on a les octets, contrôle taille et sha256, lit le profil (`Profile::parse`, mêmes règles que le catalogue embarqué) et vérifie `game.id == name`. **Le catalogue embarqué gagne** (ADR 0001) : un profil du registre ne remplace jamais un profil embarqué, il ne fait qu'ajouter un jeu absent. Un paquet faux est écarté avec sa raison, sans casser le reste du catalogue.
 - `verify_apworld` : contrôle des octets d'une apworld par rapport à son entrée.
+- `fetch_registry` puis `apply_registry` : ce que fait la Bibliothèque. Index vérifié, puis seuls les profils des jeux **absents** du catalogue sont téléchargés ; un profil introuvable chez son auteur est écarté avec sa raison, sans faire échouer le reste.
+- `install_apworld` : télécharge l'apworld (bornée à sa taille), contrôle sha256, l'écrit dans le dossier des mondes (fichier temporaire puis renommage). Un fichier identique déjà là est gardé sans rien télécharger ; un fichier **différent** du même nom n'est jamais écrasé (il peut appartenir à un profil, qui en garde le reçu).
+
+### Dans la Bibliothèque (`launcher-ui`, `screens/registry_panel.rs`)
+
+- À la première ouverture, un thread à part lit le registre (`REGISTRY_INDEX_URL`, `REGISTRY_PUBLIC_KEY`). Les jeux ajoutés portent la mention « Registre » sur leur carte, et leur fiche dit « Profil du registre signé » (ou « Profil du catalogue de Raftup ») ; la détection des jeux est relancée pour eux.
+- Une erreur de réseau, de signature ou d'index ne bloque rien : une ligne discrète « Registre indisponible : catalogue embarqué seul. », la raison en survol.
+- « Mondes du registre » liste les apworlds (jeu, version, auteurs, licence) avec « Installer » (thread à part, `install_apworld`) ou « Installée ».
+- `RAFTUP_NO_REGISTRY` désactive la lecture ; en debug, `RAFTUP_DEV_REGISTRE=<dossier>` lit un registre local (signature vérifiée pareil) pour regarder l'écran avant la mise en ligne.
 
 ## Conséquences
 
 - La relecture humaine reste la seule vraie confiance : la signature prouve que l'index vient de la mainteneuse, pas que le code d'une apworld est sain. Les niveaux de confiance par CI viendront en V3.
-- Pas encore fait : génération de la vraie clé, création de la release `registre` sur GitHub, téléchargement et installation d'une apworld du registre depuis l'interface, affichage des jeux venus du registre dans la Bibliothèque.
+- Pas encore fait : création de la release `registre` sur GitHub et premier envoi de `index.json` + `index.json.minisig` (geste de la mainteneuse, voir `registre/README.md`). Tant qu'elle manque, la Bibliothèque affiche « Registre indisponible » et marche avec son catalogue embarqué.
+- Le registre est relu à chaque ouverture du launcher, sans cache : hors ligne, seuls les jeux embarqués s'affichent.
 - Nouvelle dépendance : aucune hors workspace (`minisign`, `minisign-verify`, `sha2`, `serde_json`, `toml`, `anyhow` y sont déjà).

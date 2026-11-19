@@ -16,6 +16,7 @@ use launcher_core::{
     Downloader, GameState, HttpFetcher, InstallOptions, InstallStatus, Paths, Profile, Store,
 };
 
+use super::registry_panel::{self, RegistryPanel};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -93,6 +94,10 @@ pub struct LibraryState {
     /// Debug seulement (`RAFTUP_DEV_INSTALLER=1`) : lancer l'installation du jeu
     /// sélectionné dès qu'elle est possible, pour vérifier la progression sans cliquer.
     dev_auto_install: bool,
+    /// Registre de paquets signés (ADR 0032) : jeux en plus et apworlds.
+    registry: RegistryPanel,
+    /// Le registre a ajouté des jeux pendant une détection : en relancer une à la fin.
+    rescan_pending: bool,
 }
 
 impl LibraryState {
@@ -112,6 +117,8 @@ impl LibraryState {
             pending_pick: None,
             dev_auto_install: cfg!(debug_assertions)
                 && std::env::var_os("RAFTUP_DEV_INSTALLER").is_some(),
+            registry: RegistryPanel::new(),
+            rescan_pending: false,
         }
     }
 
@@ -430,6 +437,11 @@ impl LibraryState {
                 Ok(scan) => {
                     self.scan = Some(scan);
                     self.scanning = None;
+                    // Des jeux du registre sont arrivés pendant la détection : on refait
+                    // une détection qui les connaît.
+                    if std::mem::take(&mut self.rescan_pending) {
+                        self.start_scan(ctx);
+                    }
                 }
                 Err(TryRecvError::Empty) => {}
                 Err(TryRecvError::Disconnected) => {
@@ -654,6 +666,7 @@ pub fn show(
         state.start_scan(&ctx);
     }
     state.poll(&ctx);
+    poll_registry(state, &ctx);
     prefill(&mut state.form, shared);
 
     super::page(ui, |ui| {
@@ -683,8 +696,10 @@ pub fn show(
             None => {}
         }
 
+        let worlds_dir = state.paths.as_ref().ok().map(|p| p.worlds_dir(AP_VERSION));
         if state.game_count() == 0 {
             empty_state(ui);
+            registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
             return;
         }
         // Premier jeu sélectionné par défaut.
@@ -703,6 +718,7 @@ pub fn show(
                     ui.set_width(list_width);
                     grid(ui, state);
                     missing_game_note(ui);
+                    registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
                 });
                 ui.vertical(|ui| detail(ui, state, shared, &ctx));
             });
@@ -711,9 +727,28 @@ pub fn show(
             ui.add_space(12.0);
             detail(ui, state, shared, &ctx);
             missing_game_note(ui);
+            registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
         }
     });
     None
+}
+
+/// Lance la lecture du registre (une fois) et ajoute au catalogue les jeux qu'il apporte.
+/// Rien ne se passe si le catalogue embarqué est illisible : l'écran affiche déjà l'erreur.
+fn poll_registry(state: &mut LibraryState, ctx: &egui::Context) {
+    let Ok(catalog) = &mut state.catalog else {
+        return;
+    };
+    state.registry.start(ctx, catalog);
+    let worlds_dir = state.paths.as_ref().ok().map(|p| p.worlds_dir(AP_VERSION));
+    if state.registry.poll(catalog, worlds_dir.as_deref()) {
+        // Nouveaux jeux : il faut les chercher sur le PC.
+        if state.scanning.is_some() {
+            state.rescan_pending = true;
+        } else {
+            state.start_scan(ctx);
+        }
+    }
 }
 
 /// Recopie l'adresse de la partie hébergée, une seule fois par partie.
@@ -871,7 +906,8 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
             let view = view(profile, found, status);
             let selected = state.selected.as_deref() == Some(id.as_str());
             let busy = state.task.as_ref().filter(|t| &t.game_id == id);
-            if card(ui, profile, &view, selected, busy) {
+            let from_registry = state.registry.is_from_registry(id);
+            if card(ui, profile, &view, selected, busy, from_registry) {
                 clicked = Some(id.clone());
             }
         }
@@ -901,6 +937,7 @@ fn card(
     view: &GameView,
     selected: bool,
     busy: Option<&Task>,
+    from_registry: bool,
 ) -> bool {
     const WIDTH: f32 = 150.0;
     // Jaquette en portrait (2:3), comme les couvertures de la maquette.
@@ -948,6 +985,10 @@ fn card(
                 None => (view.label.clone(), tone_color(view.tone)),
             };
             ui.label(RichText::new(text).color(color).size(13.0));
+            // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
+            if from_registry {
+                ui.label(widgets::caps("Registre").color(theme::ITEM));
+            }
         })
         .response
         // `interact` rend toute la carte cliquable, pas seulement son texte.
@@ -979,6 +1020,12 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             ui.vertical(|ui| {
                 ui.label(widgets::title(&profile.game.name, 26.0));
                 ui.label(RichText::new(&view.label).color(tone_color(view.tone)));
+                let origin = if state.registry.is_from_registry(&id) {
+                    "Profil du registre signé"
+                } else {
+                    "Profil du catalogue de Raftup"
+                };
+                ui.label(widgets::dim(origin).size(12.0));
             });
         });
         ui.add_space(10.0);
