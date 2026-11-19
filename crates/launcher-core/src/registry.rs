@@ -26,6 +26,13 @@ use crate::profile::Profile;
 /// `raftup-registry keygen` : toute vérification échoue alors (`PublicKeyNotConfigured`).
 pub const REGISTRY_PUBLIC_KEY: &str = "";
 
+/// Adresse de publication de l'index (ADR 0032) : une release GitHub à étiquette fixe,
+/// `registre`, distincte des releases du launcher. Republier = remplacer ses deux fichiers
+/// (`index.json` et `index.json.minisig`) ; l'adresse ne change jamais. C'est la signature,
+/// pas l'adresse, qui protège l'index.
+pub const REGISTRY_INDEX_URL: &str =
+    "https://github.com/Yonako25/raftup/releases/download/registre/index.json";
+
 /// Suffixe ajouté à l'adresse de l'index pour trouver sa signature.
 pub const SIGNATURE_SUFFIX: &str = ".minisig";
 
@@ -182,6 +189,14 @@ mod tests {
     #[test]
     fn meme_liste_blanche_que_les_profils() {
         assert_eq!(::registry::ALLOWED_HOSTS, crate::profile::ALLOWED_HOSTS);
+    }
+
+    #[test]
+    fn adresse_de_publication_acceptee() {
+        // L'adresse figée dans le code doit passer les mêmes règles que toute autre
+        // (HTTPS, liste blanche), sinon le launcher ne pourrait jamais lire le registre.
+        assert!(check_url(REGISTRY_INDEX_URL).is_ok());
+        assert_ne!(REGISTRY_INDEX_URL, crate::update::UPDATE_MANIFEST_URL);
     }
 
     #[test]

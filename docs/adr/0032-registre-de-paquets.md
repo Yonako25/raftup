@@ -65,6 +65,8 @@ Règle inchangée : Raftup ne redistribue **jamais** de jeu, de ROM, d'asset ni 
 
 `raftup-registry publish <source.toml> <clé-secrète> <dossier-de-sortie>`. Le fichier source liste les paquets avec un champ `file` (chemin local, relatif au fichier source) : l'outil calcule sha256 et taille depuis ce fichier, valide tout, trie, écrit l'index puis la signature (fichier temporaire puis renommage). La clé secrète n'est jamais affichée.
 
+Adresse de publication (décidée le 19 novembre 2026) : une release GitHub du dépôt à étiquette fixe `registre`, distincte des releases du launcher (`launcher_core::registry::REGISTRY_INDEX_URL` = `https://github.com/Yonako25/raftup/releases/download/registre/index.json`). Republier = remplacer les deux fichiers de cette release ; l'adresse ne change pas. Pourquoi : gratuit, déjà dans la liste blanche (ADR 0015), même hébergeur que les mises à jour (ADR 0022) ; une adresse en `latest` obligerait à joindre l'index à chaque release du launcher. L'envoi reste manuel : `raftup-registry` n'envoie rien.
+
 ### Côté launcher (`launcher-core::registry`)
 
 - `fetch_verified_index` : télécharge `index.json` et `index.json.minisig` (mêmes règles d'adresse, taille bornée), vérifie la signature **avant** de lire le JSON.
@@ -74,5 +76,5 @@ Règle inchangée : Raftup ne redistribue **jamais** de jeu, de ROM, d'asset ni 
 ## Conséquences
 
 - La relecture humaine reste la seule vraie confiance : la signature prouve que l'index vient de la mainteneuse, pas que le code d'une apworld est sain. Les niveaux de confiance par CI viendront en V3.
-- Pas encore fait : génération de la vraie clé, adresse de publication de l'index, téléchargement et installation d'une apworld du registre depuis l'interface, affichage des jeux venus du registre dans la Bibliothèque.
+- Pas encore fait : génération de la vraie clé, création de la release `registre` sur GitHub, téléchargement et installation d'une apworld du registre depuis l'interface, affichage des jeux venus du registre dans la Bibliothèque.
 - Nouvelle dépendance : aucune hors workspace (`minisign`, `minisign-verify`, `sha2`, `serde_json`, `toml`, `anyhow` y sont déjà).
