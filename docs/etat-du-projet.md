@@ -31,6 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
+- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
 
 ## Crates
 
@@ -46,6 +47,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
+| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe, amis, présence ; API HTTP `/v1` (V2) | **Commencé** : SQLite seul, pas de Discord ni de client dans le launcher (ADR 0033) |
 
 ## Ce que fait chaque crate
 
@@ -128,6 +130,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 - **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
+- **0033** : `raftup-hub` : axum, sqlx + SQLite (PostgreSQL prévu), jetons de session opaques hachés et révocables (accepté en autonomie, à relire)
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

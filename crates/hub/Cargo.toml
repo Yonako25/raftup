@@ -1,0 +1,46 @@
+[package]
+name = "hub"
+description = "Service raftup-hub : comptes, amis et présence (ADR 0002, 0003, 0033)"
+version.workspace = true
+edition.workspace = true
+# Seule crate du dépôt sous AGPL (ADR 0003). Aucune crate MIT/Apache ne doit dépendre d'elle.
+# Texte de la licence : `LICENSE-AGPL`, à côté de ce fichier.
+license = "AGPL-3.0-or-later"
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "raftup-hub"
+path = "src/main.rs"
+
+# Licences des dépendances vérifiées le 19 novembre 2026 : voir docs/adr/0033-hub-http-stockage-sessions.md.
+[dependencies]
+# Serveur HTTP (MIT), sur tokio comme le reste de Raftup.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+# Accès à la base (MIT OR Apache-2.0). SQLite seul pour l'instant (SQLite compilé avec la crate),
+# PostgreSQL prévu (ADR 0033). Pas de macros : les requêtes sont vérifiées par les tests.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite"] }
+# Hachage des mots de passe (argon2id, MIT OR Apache-2.0), sel tiré par le système.
+argon2 = { version = "0.5", features = ["std"] }
+# Forme normalisée des pseudos (NFKC), MIT OR Apache-2.0.
+unicode-normalization = "0.1"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "sync"] }
+tracing.workspace = true
+# Binaire seulement.
+anyhow.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# `oneshot` : envoie une requête au routeur sans ouvrir de port (MIT).
+tower = { version = "0.5", default-features = false, features = ["util"] }
+tempfile.workspace = true
+# Test de l'ADR 0003 : lecture des Cargo.toml du dépôt.
+toml.workspace = true
