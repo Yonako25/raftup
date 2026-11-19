@@ -1,0 +1,35 @@
+# 0034 — Bac à sable du générateur Python
+
+- Statut : accepté en autonomie le 2026-11-19, à relire par l'utilisatrice
+- Date : 2026-11-19
+- Prolonge la SPEC (§ risques : « sandbox par OS en V2 »), les ADR 0016, 0017 (décision 12) et 0019 (décision 3).
+
+## Contexte
+
+- Un apworld est du code Python arbitraire. Il tourne dans le worker de `py-bridge`, sur le PC de l'hôte, avec tous ses droits : il peut modifier ses documents, le runtime de Raftup, la base de registre (`Run`, démarrage automatique) ou piloter les fenêtres du launcher.
+- Le blocage réseau (`RAFTUP_BLOCK_NETWORK=1`) n'est pas un bac à sable : `ctypes` ou un sous-process le contournent.
+- Contrainte : `unsafe_code = "forbid"` dans tout Raftup. Un jeton restreint (`CreateRestrictedToken` + `CreateProcessAsUser`) ou un AppContainer (`PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES`) demandent des appels Win32 `unsafe`, ou `CommandExt::raw_attribute`, lui aussi `unsafe`. Aucune crate déjà présente dans le dépôt ne les offre en API sûre (`win32job` ne gère que les Job Objects ; ses limites n'ont ni interdiction de sous-process ni restrictions d'interface), et ajouter une crate peu connue pour du code de sécurité est un risque en soi.
+- Règle de Windows (contrôle d'intégrité obligatoire) : un programme démarre avec l'intégrité **la plus basse** entre celle de son parent et celle de son fichier `.exe`. Un `.exe` étiqueté « bas » démarre donc en intégrité basse, sans aucun appel `unsafe`. Vérifié sur ce PC le 19 novembre 2026 : copie de `python.exe` étiquetée par `icacls`, le process annonce `S-1-16-4096` (« Niveau obligatoire faible ») et ne peut écrire que dans un dossier étiqueté « bas ».
+
+## Décision
+
+| # | Sujet | Décision |
+| --- | --- | --- |
+| 1 | Mécanisme Windows | **Intégrité basse**. `py-bridge` copie `python.exe` à côté de lui (`python-raftup-low.exe`, pour qu'il retrouve sa DLL et `Lib/`), étiquette la copie « bas » avec `%SystemRoot%\System32\icacls.exe` (chemin absolu, jamais le `PATH`), et lance la copie. Copie écrite sous un nom temporaire, étiquetée, puis renommée : le nom final ne désigne jamais une copie sans étiquette ; réutilisée si son contenu est identique à `python.exe` |
+| 2 | Où le worker écrit | Seulement dans le dossier de la génération (`generations/<horodatage>/`), étiqueté `(OI)(CI)low` pendant l'appel (contenu existant compris, `/T`). `TEMP`, `TMP` et `TMPDIR` pointent sur `<génération>/tmp` (Archipelago y écrit le contenu du zip avant de le compresser) |
+| 3 | Après l'arrêt du worker | Le dossier de la génération et son contenu repassent en intégrité « moyenne » (`/setintegritylevel medium /T`) : un worker suivant ne peut plus toucher à cette seed ni à sa sauvegarde `.raftup` |
+| 4 | Vérification | Le worker annonce son niveau dans `version` (`integrity`, lu dans le SID `S-1-16-x` de `%SystemRoot%\System32\whoami.exe /groups`, lancé sans fenêtre et seulement quand `RAFTUP_SANDBOX` est posé ; `ctypes` aurait fait dépasser au script la limite de 16 Kio de `python -c`). Si le pont a demandé le bac à sable et que le niveau n'est pas `low` (ou `untrusted`), le worker est arrêté : `BridgeError::SandboxNotApplied`. On ne croit pas la préparation sur parole |
+| 5 | Échec de mise en place | **Refus** (`BridgeError::SandboxSetup`) : pas de repli silencieux sans bac à sable sous Windows. `PythonBackend::sandbox` (public, `true` par défaut, comme `block_network`) permet de le couper |
+| 6 | Droits sur les fichiers | Poser une étiquette demande le droit « changer le propriétaire ». Sur un disque où l'on n'a que « modifier » (cas du disque `Z:` de ce PC), `py-bridge` ajoute `OWNER RIGHTS (S-1-3-4) : contrôle total` **sur la copie et le dossier de la génération seulement** (ils appartiennent à Raftup), puis réessaie. Rien n'est changé ailleurs : ni stratégie Windows, ni pare-feu, ni ACL hors des dossiers de Raftup |
+| 7 | Archipelago en lecture seule | Le dossier d'Archipelago reste « moyen », donc en lecture seule pour le worker. Le launcher pose un `host.yaml` vide s'il manque (Archipelago le lit comme « valeurs par défaut ») ; le worker met `settings.skip_autosave = True` quand `RAFTUP_SANDBOX` est posé ; les `__pycache__` ne sont pas écrits (Python l'ignore sans erreur) |
+| 8 | Hors Windows | **Repli documenté** : rien n'est appliqué. Le pont journalise un avertissement, `sandbox_applied()` vaut `false`, le launcher écrit « Bac à sable indisponible sur ce système » dans le journal de génération. Restent le process séparé et le blocage réseau. Pistes pour plus tard : Linux avec bubblewrap (s'il est installé) ou Landlock ; macOS avec `sandbox-exec` (déprécié par Apple) |
+| 9 | Où vit le code | `crates/py-bridge/src/sandbox.rs` (`Sandbox`, `BridgeOptions::sandbox`, `PyBridge::sandbox_applied`) ; branchement dans `launcher-core::generation::run` (`PythonBackend::start_bridge`, utilisé aussi par le moteur export). Aucune dépendance nouvelle |
+
+## Conséquences
+
+- Ce que l'intégrité basse empêche : écrire hors du dossier de la génération (documents, runtime, apworlds installés, autres générations), écrire dans `HKCU` (sauf `Software\AppDataLow`), donc s'installer au démarrage ; envoyer des messages ou des touches aux fenêtres du launcher et des autres programmes « moyens » ; ouvrir le process du launcher pour y injecter du code.
+- Ce qu'elle n'empêche **pas** : **lire** les fichiers de l'utilisatrice (pas de « no-read-up » sur ses fichiers) ; le réseau (seul `RAFTUP_BLOCK_NETWORK`, contournable, le gêne) ; consommer du processeur ou de la mémoire. Un apworld malveillant peut donc encore lire et tenter d'envoyer des données. L'avertissement de l'interface sur les apworlds reste obligatoire. Un AppContainer fermerait la lecture et le réseau : à reprendre si une crate sûre, maintenue et sous licence compatible apparaît, ou si l'on accepte une petite crate interne avec `unsafe` (ce qui demanderait de revoir `unsafe_code = "forbid"`).
+- Un apworld qui écrit ailleurs (cache dans `%LOCALAPPDATA%`, fichiers à côté de lui) échoue à la génération. Aucun cas vu : APQuest, le monde de test `raftup_sonde` et Slime Rancher passent.
+- Coût : environ 4 appels à `icacls` par génération (une fraction de seconde) et une copie de `python.exe` (une fois par version de Python). Sur un runtime neuf, les `.pyc` d'Archipelago ne sont jamais écrits par le worker : chaque génération recompile en mémoire (environ 4 s de plus mesurés à la première génération, ADR 0017). Piste : `compileall` à l'installation du runtime (ADR 0017, décision 11).
+- Les tests de `py-bridge` lancent vraiment le faux worker en intégrité basse (`tests/sandbox.rs`) ; les tests réels de génération et d'export passent avec le bac à sable activé.
+- Un disque qui ne gère pas les étiquettes (FAT32, exFAT, partage réseau) fait échouer la génération (décision 5) ; il faudra alors une case dans l'interface, pas prévue pour l'instant.

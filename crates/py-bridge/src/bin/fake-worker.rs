@@ -17,6 +17,9 @@
 //! `stderr-progress` (écrit « étape 1 », « étape 2 », « étape 3 » sur stderr, avec flush,
 //! puis répond), `spawn-grandchild` (lance un petit-fils qui hérite de stderr et dort 60 s,
 //! puis se comporte comme `slow`), `sleep-with-stderr` (le petit-fils lui-même).
+//! Bac à sable (ADR 0034) : méthode `write` (écrit `params.path`) ; avec
+//! `RAFTUP_FAKE_PROBE_DIR`, `version` annonce `integrity` (`low` si l'écriture dans ce
+//! dossier est refusée, `medium` sinon).
 //! Binaire de test : volontairement simple, il travaille avec `serde_json::Value`.
 
 use std::io::{self, BufRead, Write};
@@ -121,6 +124,22 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
+/// Niveau d'intégrité « deviné » sans `unsafe` : avec `RAFTUP_FAKE_PROBE_DIR`, on essaie
+/// d'écrire dans ce dossier (non étiqueté). Refusé → `low` ; accepté → `medium`.
+/// Sans la variable : `None` (le faux worker ne dit rien, comme un vieux worker).
+fn probe_integrity() -> Option<&'static str> {
+    let dir = std::env::var_os("RAFTUP_FAKE_PROBE_DIR")?;
+    let file = std::path::Path::new(&dir).join(format!("sonde-{}.txt", std::process::id()));
+    match std::fs::write(&file, b"x") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&file);
+            Some("medium")
+        }
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => Some("low"),
+        Err(_) => None,
+    }
+}
+
 /// Construit la réponse JSON pour une requête, selon le mode (`active` : mode défaillant actif).
 fn build_reply(mode: &str, active: bool, req: &Value) -> Value {
     let id = req.get("id").cloned().unwrap_or(Value::Null);
@@ -142,9 +161,26 @@ fn build_reply(mode: &str, active: bool, req: &Value) -> Value {
         "version" if mode == "bad-version" && active => json!({"x": 1}),
         "version" => {
             let protocol = if mode == "old-protocol" { 0 } else { 1 };
-            json!({"python": "3.12.0", "implementation": "Fake", "protocol": protocol})
+            let mut v = json!({"python": "3.12.0", "implementation": "Fake", "protocol": protocol});
+            if let Some(level) = probe_integrity() {
+                v["integrity"] = json!(level);
+            }
+            v
         }
         "echo" => req.get("params").cloned().unwrap_or(Value::Null),
+        "write" => {
+            // Écrit `params.path` : sert à vérifier où le bac à sable laisse écrire.
+            let path = req
+                .pointer("/params/path")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            match std::fs::write(path, b"x") {
+                Ok(()) => json!("ok"),
+                Err(e) => {
+                    return json!({"id": id, "error": {"code": -32000, "message": e.to_string()}});
+                }
+            }
+        }
         _ => {
             return json!({"id": id, "error": {"code": -32601, "message": "méthode inconnue"}});
         }

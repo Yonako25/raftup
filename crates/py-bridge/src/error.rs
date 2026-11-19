@@ -88,6 +88,14 @@ pub enum BridgeError {
 
     #[error("le pont est fermé")]
     Closed,
+
+    /// Le bac à sable (ADR 0034) n'a pas pu être mis en place : le worker n'est pas lancé.
+    #[error("bac à sable du générateur impossible à mettre en place : {0}")]
+    SandboxSetup(String),
+
+    /// Le worker a démarré, mais pas en intégrité basse : il est arrêté (ADR 0034).
+    #[error("le générateur ne tourne pas dans son bac à sable (intégrité annoncée : {})", integrity.as_deref().unwrap_or("inconnue"))]
+    SandboxNotApplied { integrity: Option<String> },
 }
 
 impl BridgeError {

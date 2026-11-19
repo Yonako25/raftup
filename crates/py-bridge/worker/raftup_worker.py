@@ -154,6 +154,23 @@ class Abandon(BaseException):
 SESSION = {}
 
 
+def integrity_level():
+    """Integrite Windows (ADR 0034) d'apres `whoami /groups` (SID S-1-16-x), ou None."""
+    if os.name != "nt" or not os.environ.get("RAFTUP_SANDBOX"):
+        return None
+    import re
+    import subprocess
+    try:
+        exe = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32", "whoami.exe")
+        out = subprocess.run([exe, "/groups"], capture_output=True, stdin=subprocess.DEVNULL,
+                             timeout=10, creationflags=0x08000000).stdout  # sans fenetre
+        m = re.search(r"S-1-16-(\d+)", out.decode("ascii", "replace"))
+        rid = int(m.group(1))
+    except Exception:
+        return None
+    return "untrusted" if rid < 4096 else "low" if rid < 8192 else "medium" if rid < 12288 else "high"
+
+
 def failed(exc, tb):
     return RpcFail(-32010, "generation echouee : %s: %s" % (type(exc).__name__, exc),
                    {"type": type(exc).__name__, "traceback": tb})
@@ -196,6 +213,10 @@ def generate(params, capture=False):
         import logging
         import settings
 
+        if os.environ.get("RAFTUP_SANDBOX"):
+            # Bac a sable (ADR 0034) : le dossier d'Archipelago est en lecture seule pour
+            # nous ; host.yaml ne doit pas etre reecrit a la sortie.
+            settings.skip_autosave = True
         # Sans cela, un monde qui demande un fichier absent (ROM du joueur) ouvre une
         # boite de dialogue invisible et la generation attend jusqu'au delai : on veut
         # un FileNotFoundError tout de suite.
@@ -333,6 +354,8 @@ def call(method, params):
             "protocol": PROTOCOL,
             # 0 si PYTHONHASHSEED=0 : ordre des set de chaines reproductible (ADR 0028).
             "hash_randomization": int(sys.flags.hash_randomization),
+            # Bac a sable (ADR 0034) : "low" attendu quand le pont l'a demande.
+            "integrity": integrity_level(),
         }
     if method == "echo":
         return params

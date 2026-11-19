@@ -282,3 +282,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+### 2026-11-19 · Bac à sable du générateur (ADR 0034)
+- **Fait** : ADR 0034 (accepté en autonomie, à relire). Sous Windows, le worker est lancé en intégrité basse : copie `python-raftup-low.exe` étiquetée par `icacls`, écriture permise seulement dans `generations/<horodatage>/` (TEMP compris), remis à « moyen » après l'arrêt ; le worker annonce son niveau (`whoami /groups`) et le pont refuse un worker qui n'est pas en intégrité basse. Activé par défaut (`PythonBackend::sandbox`), aussi pour le moteur export. Sans `unsafe`, sans nouvelle crate. Tests `py-bridge/tests/sandbox.rs` (faux worker vraiment lancé en intégrité basse) ; tests réels de génération (5) et d'export (8, dont Slime Rancher) passent avec le bac à sable ; 39 tests Python.
+- **Pas vérifié** : repli hors Windows (rien appliqué, seulement écrit et relu) ; disque sans étiquettes (FAT32, réseau : la génération échoue) ; runtime neuf (`.pyc` jamais écrits par le worker, coût non mesuré) ; durée comparée à avant (export réel : 846 s pour 8 tests, sans mesure avant). Builds dans un `target` à part (`agents-v2-bac-a-sable`, puis `v2-bac-a-sable`) : le `target` commun mélangeait les worktrees.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : relire l'ADR 0034 ; plus tard, AppContainer (lecture et réseau) et bac à sable Linux/macOS.
+
