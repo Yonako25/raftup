@@ -3,6 +3,7 @@
 
 pub mod create;
 pub mod estimate;
+pub mod friends;
 pub mod generation;
 pub mod generator_setup;
 pub mod hosting;

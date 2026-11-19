@@ -8,7 +8,7 @@
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
-//!   `heberger`, `en-cours`, `salon`, `generateur-absent` : une seule capture de l'écran,
+//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis`, `generateur-absent` : une seule capture de l'écran,
 //!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
 //!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
 //!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`
@@ -62,6 +62,9 @@ impl Scenario {
             Some("salon") => Scenario::Screen("1-salon"),
             // Une seule capture, quand un lien reçu (argument ou 2e instance) est affiché.
             Some("rejoindre") => Scenario::Screen("1-rejoindre"),
+            // Écran « Amis » (avec `RAFTUP_DEV_PAGE=amis`, `RAFTUP_DEV_HUB` et, pour la
+            // vue connectée, `RAFTUP_DEV_HUB_LOGIN`).
+            Some("amis") => Scenario::Screen("1-amis"),
             Some("generateur-absent") => Scenario::NoGenerator,
             _ => Scenario::Create,
         }

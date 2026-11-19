@@ -74,6 +74,10 @@ percent-encoding = "2.3"
 # (qui sait signer) ne sert que dans les tests.
 minisign-verify = "0.3"
 semver = "1"
+# Jeton de session du hub rangé dans le trousseau du système (ADR 0002, 0035) :
+# Gestionnaire d'identification Windows, Trousseau macOS, keyutils du noyau Linux
+# (en Rust pur, sans D-Bus). MIT OR Apache-2.0.
+keyring = { version = "3.6", default-features = false, features = ["windows-native", "apple-native", "linux-native"] }
 minisign = "0.10"
 # Hasard reproductible du générateur Rust (ADR 0027, § 4) : ChaCha, versions épinglées
 # (MIT OR Apache-2.0). `fill` ne voit que le trait `Rng` de rand_core.

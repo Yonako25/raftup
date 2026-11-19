@@ -336,3 +336,9 @@ untime2`.
 - **Pas vérifié** : CI sous macOS et Linux (rien poussé) ; `crates/hub/LICENSE-AGPL` écrit de mémoire par l'agent, à remplacer par le texte officiel de gnu.org ; les ADR 0029 à 0034 sont « acceptés en autonomie », à relire par l'utilisatrice.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : remplacer le texte de l'AGPL ; essais en jeu quand l'utilisatrice sera devant le PC.
+
+### 2026-11-19 · Client du hub et écran « Amis » (session `v2-hub-client`, ADR 0035)
+- **Fait** : ADR 0035 (accepté en autonomie, à relire). `launcher_core::hub_client` : client `ureq` de toute l'API `/v1`, types redéfinis (aucune dépendance au hub AGPL), erreurs typées avec le code du hub, jeton par adresse de hub dans le trousseau (`keyring` 3.6), adresse par défaut `http://127.0.0.1:8787` (`hub_url` dans `config.toml`). Écran « Amis » dans `launcher-ui` (connexion, inscription, présence, demandes, ajout par pseudo, adresse du hub), appels dans un thread, présence toutes les 60 s ; cartes de la barre branchées. 14 tests contre un faux serveur, scénario réel contre `raftup-hub` (`#[ignore]`) et trousseau Windows réel passent ; vu sur captures (scénario `amis`, connecté et déconnecté). Workspace, clippy et fmt passent.
+- **Pas vérifié** : trousseau macOS et Linux (keyutils) jamais essayés ; écran jamais cliqué à la main (macro seulement) ; hub injoignable regardé seulement par test ; présence « en partie » pas encore envoyée.
+- **Ne pas toucher** : `crates/hub` (session hub-serveur en parallèle) ; `docs/profils-en-attente/`.
+- **Suite** : envoyer la présence « en partie » au lancement d'un jeu (`launch`), puis l'adresse officielle du hub au déploiement.

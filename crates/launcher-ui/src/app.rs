@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{create, join, library, matches, running, setup, soon};
+use crate::screens::{create, friends, join, library, matches, running, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -20,6 +20,8 @@ pub enum Page {
     Create,
     /// « Rejoindre » : lire un lien d'invitation avant de continuer vers la Bibliothèque.
     Join,
+    /// « Amis » : compte sur le hub, amis et demandes (ADR 0035).
+    Friends,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
     /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
     Soon(&'static str),
@@ -33,6 +35,8 @@ pub struct App {
     running: running::RunningState,
     library: library::LibraryState,
     join: join::JoinState,
+    /// Compte sur le hub, amis, présence (ADR 0035).
+    friends: friends::FriendsState,
     /// Vérification et installation de la mise à jour du launcher (F12).
     update: crate::update_ui::UpdateState,
     /// Erreur à montrer en rouge en haut de l'écran.
@@ -73,6 +77,7 @@ impl App {
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
             join,
+            friends: friends::FriendsState::new(),
             update: crate::update_ui::UpdateState::new(),
             error: None,
             instance_dir,
@@ -122,6 +127,7 @@ fn start_page() -> Page {
         Some("partie") => Page::Hosted,
         Some("creer") => Page::Create,
         Some("rejoindre") => Page::Join,
+        Some("amis") => Page::Friends,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
         Some("catalogue") => Page::Soon("Catalogue"),
@@ -175,6 +181,9 @@ impl eframe::App for App {
             self.error = Some(message);
         }
 
+        // Session du hub, présence et liste d'amis, quel que soit l'écran affiché.
+        friends::background(&mut self.friends, &ctx);
+
         // Le verrou est tenu le temps du dessin : le worker attend au plus une image.
         let shared = self.worker.lock();
         let hosting = shared.status.is_some();
@@ -215,8 +224,9 @@ impl eframe::App for App {
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
+                        let summary = self.friends.summary();
                         if let Some(page) =
-                            sidebar(ui, &self.page, &shared, self.library.game_count())
+                            sidebar(ui, &self.page, &shared, self.library.game_count(), &summary)
                         {
                             goto = Some(page);
                         }
@@ -243,6 +253,7 @@ impl eframe::App for App {
                     create::show(ui, &mut self.create, &mut self.error, &self.worker, &shared)
                 }
                 Page::Join => join::show(ui, &mut self.join, &mut self.library),
+                Page::Friends => friends::show(ui, &mut self.friends),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
@@ -296,6 +307,7 @@ fn sidebar(
     current: &Page,
     shared: &crate::worker::Shared,
     games: usize,
+    friends: &friends::Summary,
 ) -> Option<Page> {
     let mut goto = None;
     ui.set_width(SIDEBAR_WIDTH);
@@ -369,11 +381,11 @@ fn sidebar(
     }
     let top = ui.cursor().top();
     ui.spacing_mut().item_spacing.y = 10.0;
-    if side_card(ui, friends_card) {
-        goto = Some(Page::Soon("Amis"));
+    if side_card(ui, |ui| friends_card(ui, friends)) {
+        goto = Some(Page::Friends);
     }
-    if side_card(ui, profile_card) {
-        goto = Some(Page::Soon("Mon profil"));
+    if side_card(ui, |ui| profile_card(ui, friends.username.as_deref())) {
+        goto = Some(Page::Friends);
     }
     if side_card(ui, |ui| server_card(ui, shared)) {
         goto = Some(Page::Hosted);
@@ -441,8 +453,8 @@ fn side_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> bool {
     clicked
 }
 
-/// Carte « Amis » : les comptes et la présence arrivent avec le hub, après le MVP.
-fn friends_card(ui: &mut Ui) {
+/// Carte « Amis » : nombre d'amis présents, ou invitation à se connecter.
+fn friends_card(ui: &mut Ui, friends: &friends::Summary) {
     ui.horizontal(|ui| {
         ui.label(
             RichText::new("Amis")
@@ -450,34 +462,59 @@ fn friends_card(ui: &mut Ui) {
                 .family(theme::bold_family())
                 .color(theme::TEXT),
         );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(widgets::dim("bientôt").size(12.0));
-        });
+        ui.with_layout(
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| match (&friends.username, friends.online) {
+                (None, _) => {
+                    ui.label(widgets::dim("se connecter").size(12.0));
+                }
+                (Some(_), 0) => {
+                    ui.label(widgets::dim("personne en ligne").size(12.0));
+                }
+                (Some(_), n) => {
+                    ui.label(
+                        RichText::new(format!("● {n} en ligne"))
+                            .size(12.0)
+                            .color(theme::GREEN),
+                    );
+                }
+            },
+        );
     });
 }
 
-/// Carte du profil : pas encore de compte, on montre un joueur local.
-fn profile_card(ui: &mut Ui) {
+/// Carte du profil : le pseudo du compte du hub, ou « Joueur » sans compte.
+fn profile_card(ui: &mut Ui, username: Option<&str>) {
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), Sense::hover());
         ui.painter()
             .rect_filled(rect, CornerRadius::same(theme::RADIUS), theme::ITEM);
+        // Initiale du pseudo, ou « ? » sans compte.
+        let initial: String = username
+            .and_then(|name| name.chars().next())
+            .map(|c| c.to_uppercase().collect())
+            .unwrap_or_else(|| "?".to_string());
         ui.painter().text(
             rect.center(),
             Align2::CENTER_CENTER,
-            "?",
+            initial,
             theme::title_font(16.0),
             theme::FIELD,
         );
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             ui.label(
-                RichText::new("Joueur")
+                RichText::new(username.unwrap_or("Joueur"))
                     .strong()
                     .family(theme::bold_family())
                     .color(theme::TEXT),
             );
-            ui.label(widgets::dim("Mon profil").size(12.0));
+            let subtitle = if username.is_some() {
+                "Compte Raftup"
+            } else {
+                "Sans compte"
+            };
+            ui.label(widgets::dim(subtitle).size(12.0));
         });
     });
 }

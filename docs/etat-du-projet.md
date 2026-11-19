@@ -31,14 +31,15 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
-- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
+- [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, déploiement
+- [x] **Client du hub et écran « Amis »** (ADR 0035, accepté en autonomie le 19 novembre 2026, à relire) : `launcher_core::hub_client` (API `/v1` par `ureq`, sans dépendre du hub), jeton dans le trousseau (`keyring`), adresse par défaut `http://127.0.0.1:8787` modifiable ; écran « Amis » (connexion, inscription, amis et présence, demandes, ajout par pseudo), appels dans un thread à part, présence renvoyée toutes les 60 s ; vu sur captures (macro, scénario `amis`) et essayé contre un vrai `raftup-hub` ; reste la présence « en partie » et l'adresse officielle
 - [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; adresse de publication fixée (`REGISTRY_INDEX_URL`, release GitHub `registre`) ; reste : vraie clé (`REGISTRY_PUBLIC_KEY` vide), source `registre.toml`, création de la release, branchement dans la Bibliothèque
 - [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
 - [x] **Bac à sable du générateur** (V2, ADR 0034, 19 novembre 2026) : worker en intégrité basse sous Windows, activé par défaut, refus s'il n'est pas appliqué ; tests réels de génération et d'export passent avec ; hors Windows, repli sans bac à sable
 - [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
 - [ ] **Durée estimée et équilibrage par temps** (ADR 0030, à relire) : estimation par joueur affichée après génération (`launcher_core::estimate`, panneau de « Créer une partie »), `fill::time_balance` écrit et testé, désactivé ; reste à le brancher derrière une option et à mesurer les temps par lieu en vraie partie
 - [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
-- [ ] **Relire les ADR 0029 à 0034** (acceptés en autonomie le 19 novembre 2026)
+- [ ] **Relire les ADR 0029 à 0035** (acceptés en autonomie le 19 novembre 2026)
 - [ ] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (écrit de mémoire, à remplacer par celui de gnu.org)
 - [ ] **CI macOS et Linux** jamais lancée (rien poussé)
 
@@ -56,7 +57,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
-| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe, amis, présence ; API HTTP `/v1` (V2) | **Commencé** : SQLite seul, pas de Discord ni de client dans le launcher (ADR 0033) |
+| `hub` | Service `raftup-hub` (AGPL) : comptes e-mail + mot de passe, amis, présence ; API HTTP `/v1` (V2) | **Commencé** : SQLite seul, pas de Discord (ADR 0033) ; client dans le launcher (ADR 0035) |
 | `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** pour le cœur (ADR 0032) |
 
 ## Ce que fait chaque crate
@@ -103,6 +104,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 - `host` : héberger une partie, la suivre (`status`, fil d'événements), l'arrêter
 - `seed` : résumé d'une seed ; `logs` : journal en mémoire, filtré
+- `hub_client` (ADR 0035) : client bloquant de l'API `/v1` du hub (inscription, connexion, déconnexion, amis, demandes, présence), erreurs typées avec le code stable du hub, jeton par adresse de hub dans le trousseau ; testé contre un faux serveur HTTP, et contre un vrai hub (`#[ignore]`, `RAFTUP_HUB_TEST_URL`)
 
 **launcher-ui** (ADR 0011)
 
@@ -112,6 +114,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - Fenêtre sans bordure redimensionnable par ses bords et ses coins (`resize.rs`)
 - Écran « Bibliothèque » : jeux du catalogue, détection, Installer / Lancer / Désinstaller dans un thread à part ; en debug, `RAFTUP_DEV_PAGE`, `RAFTUP_DEV_PROFILS`, `RAFTUP_DEV_RACINE` pour les captures
 - En debug, macro `RAFTUP_DEV_CAPTURE=<dossier>` (+ `RAFTUP_DEV_YAML`, `RAFTUP_DEV_PORT`) : joue « Créer une partie » et enregistre des captures PNG, sans être devant le PC
+- Écran « Amis » (ADR 0035) : connexion ou nouveau compte, amis triés par présence, demandes reçues (Accepter / Refuser) et envoyées (Annuler), ajout par pseudo, retrait confirmé, adresse du hub ; cartes « Amis » et profil de la barre latérale branchées ; en debug `RAFTUP_DEV_HUB` (jeton en mémoire) et `RAFTUP_DEV_HUB_LOGIN=<e-mail>:<mot de passe>`
 - Case « Moteur Rust (expérimental) » dans « Créer une partie » : APQuest généré sans Python (ADR 0027), sinon Archipelago
 - Fin de génération : moteur réellement utilisé (Rust seul, export placé par Raftup, Archipelago seul) et raison d'un repli affichés ; le moteur Rust seul écrit `AP_<seed>_Spoiler.txt` dans le zip (19 novembre 2026)
 - `cargo run -p launcher-ui` démarre sans erreur ; **rendu, boîtes de fichiers et presse-papiers jamais contrôlés à l'œil**
@@ -147,6 +150,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0034** : bac à sable du générateur : sous Windows, worker en intégrité basse (copie de `python.exe` étiquetée par `icacls`), écriture seulement dans le dossier de la génération ; rien hors Windows (à relire par l'utilisatrice)
 - **0029** : moteur « export » : règles d'objet en listes calculées par Archipelago (contrôle croisé), objets à placer tôt en sphère 0, `accessibility` (accepté en autonomie, à relire)
 - **0030** : durée estimée par joueur (temps par lieu dans le profil, sphères de la seed) et équilibrage par temps de jeu (`fill::time_balance`, désactivé par défaut) ; accepté en autonomie, à relire
+- **0035** : client du hub dans le launcher : sans dépendre de la crate AGPL, `ureq` bloquant hors du thread d'interface, jeton dans le trousseau (`keyring`), adresse par défaut locale, HTTPS sauf vers ce PC (accepté en autonomie, à relire)
 - **0031** : suivi async (option de la salle, désactivée par défaut) : absence, résumé de retour, release par vote à la majorité, fil d'activité, `.raftup` version 2
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)

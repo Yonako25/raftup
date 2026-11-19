@@ -13,7 +13,8 @@
 //! - [`readiness`] : tester « prêt ? » d'un slot par une vraie connexion (F08) ;
 //! - [`registry`] : lire et vérifier le registre de paquets signés (ADR 0032) ;
 //! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup ;
-//! - [`estimate`] : durée estimée d'une seed, par joueur (ADR 0030).
+//! - [`estimate`] : durée estimée d'une seed, par joueur (ADR 0030) ;
+//! - [`hub_client`] : client du hub de comptes et d'amis, par son API HTTP (ADR 0035).
 //!
 //! `launcher-ui` (egui) n'appelle que cette crate.
 
@@ -28,6 +29,7 @@ pub mod estimate;
 pub mod generation;
 pub mod hash;
 pub mod host;
+pub mod hub_client;
 pub mod install;
 pub mod instance;
 pub mod invite;
