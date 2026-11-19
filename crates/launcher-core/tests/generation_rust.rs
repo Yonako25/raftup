@@ -42,7 +42,7 @@ fn seed_apquest_sans_python() {
         seed: Some(12345),
         ..GenerateRequest::default()
     };
-    assert_eq!(rust_support(&request.player_files), Ok(()));
+    assert_eq!(rust_support(&request.player_files, None), Ok(()));
 
     let (log, lines) = channel();
     let output = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
@@ -67,7 +67,7 @@ fn jeu_non_porte_refuse_avec_la_raison() {
     let tmp = tempfile::tempdir().unwrap();
     let paths = Paths::under(tmp.path());
     let file = yaml(tmp.path(), "a.yaml", "name: A\ngame: Slime Rancher\n");
-    let reason = rust_support(std::slice::from_ref(&file)).unwrap_err();
+    let reason = rust_support(std::slice::from_ref(&file), None).unwrap_err();
     assert!(reason.contains("Slime Rancher"), "{reason}");
 
     let request = GenerateRequest {
@@ -83,4 +83,43 @@ fn jeu_non_porte_refuse_avec_la_raison() {
     // Le dossier de cette génération ratée a été retiré.
     let left = std::fs::read_dir(paths.generations_dir()).unwrap().count();
     assert_eq!(left, 0);
+}
+
+#[test]
+fn meta_yaml_du_prereglage() {
+    let _serial = serial();
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths::under(tmp.path());
+    let file = yaml(tmp.path(), "a.yaml", "name: A\ngame: APQuest\n");
+    // « Long » : compris par le moteur Rust, la génération réussit.
+    let long = "meta_description: Raftup, partie longue\nnull:\n  progression_balancing: 20\n  accessibility: full\n";
+    assert_eq!(
+        rust_support(std::slice::from_ref(&file), Some(long)),
+        Ok(())
+    );
+    let request = GenerateRequest {
+        player_files: vec![file.clone()],
+        meta_yaml: Some(long.to_string()),
+        seed: Some(7),
+        ..GenerateRequest::default()
+    };
+    let (log, _) = channel();
+    generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+
+    // « Rapide » (accès minimal) : refusé avec la raison, jamais ignoré en silence.
+    let rapide =
+        "meta_description: x\nnull:\n  progression_balancing: 80\n  accessibility: minimal\n";
+    assert!(rust_support(std::slice::from_ref(&file), Some(rapide))
+        .unwrap_err()
+        .contains("accessibility"));
+    let request = GenerateRequest {
+        meta_yaml: Some(rapide.to_string()),
+        ..request
+    };
+    let (log, _) = channel();
+    let err = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap_err();
+    assert!(
+        matches!(&err, GenerationError::GeneratorFailed { kind, .. } if kind == "Unsupported"),
+        "{err:?}"
+    );
 }

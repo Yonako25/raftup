@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use generate::worlds::apquest::{ApQuestOptions, PlayerSprite};
-use generate::{read_players, GameOptions};
+use generate::{read_players, read_players_with_meta, GameOptions};
 
 fn files(texts: &[&str]) -> Vec<(String, String)> {
     texts
@@ -101,4 +101,67 @@ fn ce_qui_passe_au_python() {
     assert!(reason(&["name: A\ngame: APQuest\ntriggers: []\n"]).contains("triggers"));
     assert!(reason(&["name: [\n"]).contains("illisible"));
     assert!(reason(&[""]).contains("aucun joueur"));
+}
+
+/// `progression_balancing` lu pour chaque joueur.
+fn balancing(texts: &[&str], meta: Option<&str>) -> Vec<u8> {
+    read_players_with_meta(&files(texts), meta, 3)
+        .unwrap()
+        .iter()
+        .map(|p| p.progression_balancing)
+        .collect()
+}
+
+#[test]
+fn equilibrage_lu_dans_la_section_du_jeu() {
+    let with = |value: &str| {
+        format!("name: A\ngame: APQuest\nAPQuest:\n  progression_balancing: {value}\n")
+    };
+    assert_eq!(balancing(&["name: A\ngame: APQuest\n"], None), [50]);
+    assert_eq!(balancing(&[&with("0")], None), [0]);
+    assert_eq!(balancing(&[&with("99")], None), [99]);
+    assert_eq!(balancing(&[&with("disabled")], None), [0]);
+    assert_eq!(balancing(&[&with("normal")], None), [50]);
+    assert_eq!(balancing(&[&with("extreme")], None), [99]);
+    assert_eq!(balancing(&[&with("\"25\"")], None), [25]);
+    // Poids, puis `random` : reproductible à seed égale, toujours dans 0..=99.
+    let weighted = with("{10: 0, 70: 5}");
+    assert_eq!(balancing(&[&weighted], None), [70]);
+    let random = with("random");
+    let drawn = balancing(&[&random], None);
+    assert!(drawn[0] <= 99);
+    assert_eq!(balancing(&[&random], None), drawn);
+    // Hors bornes ou forme de hasard inconnue : le générateur Python s'en charge.
+    assert!(reason(&[&with("100")]).contains("progression_balancing"));
+    assert!(reason(&[&with("random-low")]).contains("progression_balancing"));
+}
+
+#[test]
+fn meta_yaml_des_prereglages() {
+    let a = "name: A\ngame: APQuest\nAPQuest:\n  progression_balancing: 10\n";
+    let b = "name: B\ngame: APQuest\n";
+    // Préréglage « Long » (ADR 0023) : sa valeur écrase celle des joueurs.
+    let long = "meta_description: Raftup, partie longue\nnull:\n  progression_balancing: 20\n  accessibility: full\n";
+    assert_eq!(balancing(&[a, b], Some(long)), [20, 20]);
+    // Meta sans équilibrage : les valeurs des joueurs restent.
+    let only_description = "meta_description: rien\n";
+    assert_eq!(balancing(&[a, b], Some(only_description)), [10, 50]);
+    // Le meta ne change pas les tirages des joueurs.
+    let random = "name: A\ngame: APQuest\nAPQuest:\n  hard_mode: random\n";
+    assert_eq!(
+        read_players(&files(&[random]), 9).unwrap(),
+        read_players_with_meta(&files(&[random]), Some(only_description), 9).unwrap()
+    );
+    // Préréglage « Rapide » (accès minimal) et autres réglages : Python.
+    let meta_reason = |meta: &str| {
+        read_players_with_meta(&files(&[b]), Some(meta), 0)
+            .unwrap_err()
+            .0
+    };
+    let rapide =
+        "meta_description: x\nnull:\n  progression_balancing: 80\n  accessibility: minimal\n";
+    assert!(meta_reason(rapide).contains("accessibility"));
+    assert!(meta_reason("meta_description: x\nnull:\n  hint_cost: 5\n").contains("hint_cost"));
+    assert!(meta_reason("meta_description: x\nAPQuest:\n  hammer: true\n").contains("APQuest"));
+    assert!(meta_reason("null: [\n").contains("illisible"));
 }

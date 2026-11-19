@@ -417,7 +417,11 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage.
             prefs::remember(host.webhook.as_ref(), Some(form.preset));
             form.hosting = hosting::Hosting::Idle;
-            let (engine, note) = choose_engine(form.rust_engine, &request.player_files);
+            let (engine, note) = choose_engine(
+                form.rust_engine,
+                &request.player_files,
+                request.meta_yaml.as_deref(),
+            );
             if engine == generation::Engine::Rust {
                 // Pas de Python : rien à installer.
                 form.setup = generator_setup::Setup::Ready;
@@ -447,11 +451,15 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
 /// Moteur de la génération : Rust seulement si l'hôte l'a demandé et que le moteur Rust
 /// comprend tous les fichiers joueurs ; sinon Python, avec la raison en première ligne
 /// du journal.
-fn choose_engine(wanted: bool, player_files: &[PathBuf]) -> (generation::Engine, Option<String>) {
+fn choose_engine(
+    wanted: bool,
+    player_files: &[PathBuf],
+    meta: Option<&str>,
+) -> (generation::Engine, Option<String>) {
     if !wanted {
         return (generation::Engine::Python, None);
     }
-    match rust_support(player_files) {
+    match rust_support(player_files, meta) {
         Ok(()) => (generation::Engine::Rust, None),
         Err(reason) => (
             generation::Engine::Python,
@@ -665,14 +673,25 @@ game: Slime Rancher
         .unwrap();
 
         assert_eq!(
-            choose_engine(false, std::slice::from_ref(&apquest)),
+            choose_engine(false, std::slice::from_ref(&apquest), None),
             (generation::Engine::Python, None)
         );
         assert_eq!(
-            choose_engine(true, std::slice::from_ref(&apquest)),
+            choose_engine(true, std::slice::from_ref(&apquest), None),
             (generation::Engine::Rust, None)
         );
-        let (engine, note) = choose_engine(true, &[apquest, other]);
+        // Préréglage « Long » (équilibrage 20, accès complet) : le moteur Rust le comprend.
+        let long = super::super::presets::meta_yaml(Preset::Long);
+        assert_eq!(
+            choose_engine(true, std::slice::from_ref(&apquest), long.as_deref()),
+            (generation::Engine::Rust, None)
+        );
+        // Préréglage « Rapide » (accès minimal) : pas encore pris en charge, Python.
+        let rapide = super::super::presets::meta_yaml(Preset::Rapide);
+        let (engine, note) = choose_engine(true, std::slice::from_ref(&apquest), rapide.as_deref());
+        assert_eq!(engine, generation::Engine::Python);
+        assert!(note.unwrap().contains("accessibility"));
+        let (engine, note) = choose_engine(true, &[apquest, other], None);
         assert_eq!(engine, generation::Engine::Python);
         assert!(note.unwrap().contains("Slime Rancher"));
     }

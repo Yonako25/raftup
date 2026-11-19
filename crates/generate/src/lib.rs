@@ -22,7 +22,7 @@ use thiserror::Error;
 
 pub use datapackage::{archipelago_package, game_package, PackageSource};
 pub use worlds::{GameOptions, SUPPORTED_GAMES};
-pub use yaml::{read_players, Unsupported};
+pub use yaml::{read_players, read_players_with_meta, Unsupported};
 
 /// Longueur maximale d'un nom de joueur, comme Archipelago.
 pub const MAX_NAME_LEN: usize = 16;
@@ -32,6 +32,19 @@ pub const MAX_NAME_LEN: usize = 16;
 pub struct PlayerRequest {
     pub name: String,
     pub options: GameOptions,
+    /// `progression_balancing` : 0 (aucun) à 99 ; 50 par défaut, comme Archipelago.
+    pub progression_balancing: u8,
+}
+
+impl PlayerRequest {
+    /// Un joueur avec l'équilibrage par défaut.
+    pub fn new(name: impl Into<String>, options: GameOptions) -> PlayerRequest {
+        PlayerRequest {
+            name: name.into(),
+            options,
+            progression_balancing: fill::DEFAULT_BALANCING,
+        }
+    }
 }
 
 /// Ce qu'il faut pour générer une partie.
@@ -126,6 +139,13 @@ pub fn generate(request: &GenerateRequest) -> Result<Generated, GenerateError> {
     }
     let mut rng = stream("fill", request.seed, 0);
     fill::fill(&mut world, pool, &start, &mut rng)?;
+    // Équilibrage de progression (ADR 0027, étape 5), avec la suite du même flux.
+    let balancing: Vec<u8> = request
+        .players
+        .iter()
+        .map(|p| p.progression_balancing)
+        .collect();
+    fill::balance(&mut world, &balancing, &start, &mut rng)?;
 
     let seed_name = seed_name(request.seed);
     let multidata =

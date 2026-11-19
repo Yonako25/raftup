@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill` et 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) faites ; reste équilibrage, export des règles
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill`, 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) et 5 équilibrage de progression faites ; reste : vraie partie APQuest sur seed Rust (avant de rendre le moteur Rust par défaut), étape 6 export des règles (ADR à part)
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -44,7 +44,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
 | `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
-| `fill` | Placement des objets (supposé), faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour l'étape 3 de l'ADR 0027 |
+| `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
 
 ## Ce que fait chaque crate

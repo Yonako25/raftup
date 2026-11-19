@@ -12,6 +12,10 @@
 //! - une valeur simple, ou des poids (`hard_mode: {true: 30, false: 70}`), ou `random` ;
 //! - les sections d'autres jeux (quand `game` est tiré au hasard), ignorées.
 //!
+//! Un `meta.yaml` (préréglages « Rapide » et « Long », ADR 0023) est compris s'il ne
+//! règle que `progression_balancing` et `accessibility` dans sa catégorie `null:` (tous
+//! les jeux) : ses valeurs écrasent celles des joueurs, comme dans Archipelago.
+//!
 //! Les tirages (poids, `random`) utilisent un flux propre à chaque joueur, dérivé de la
 //! seed : même seed et mêmes fichiers ⇒ mêmes options.
 
@@ -50,6 +54,20 @@ pub fn read_players(
     files: &[(String, String)],
     seed: u64,
 ) -> Result<Vec<PlayerRequest>, Unsupported> {
+    read_players_with_meta(files, None, seed)
+}
+
+/// Comme [`read_players`], avec le contenu d'un `meta.yaml` s'il y en a un.
+pub fn read_players_with_meta(
+    files: &[(String, String)],
+    meta: Option<&str>,
+    seed: u64,
+) -> Result<Vec<PlayerRequest>, Unsupported> {
+    // Le meta a son propre flux (slot 0) : il ne change pas les tirages des joueurs.
+    let balancing = match meta {
+        Some(text) => read_meta(text, &mut stream("meta", seed, 0))?,
+        None => None,
+    };
     let mut players = Vec::new();
     for (file, text) in files {
         let docs = YamlLoader::load_from_str(text)
@@ -64,7 +82,92 @@ pub fn read_players(
     if players.is_empty() {
         return Err(unsupported("aucun joueur dans les fichiers"));
     }
+    if let Some(value) = balancing {
+        for player in &mut players {
+            player.progression_balancing = value;
+        }
+    }
     Ok(players)
+}
+
+/// Lit un `meta.yaml` ; renvoie la valeur de `progression_balancing` imposée à tous, s'il
+/// y en a une. Tout autre réglage demande le générateur Python.
+fn read_meta<R: Rng + ?Sized>(text: &str, rng: &mut R) -> Result<Option<u8>, Unsupported> {
+    let docs = YamlLoader::load_from_str(text)
+        .map_err(|e| unsupported(format!("meta.yaml illisible ({e})")))?;
+    let mut balancing = None;
+    for doc in docs {
+        let Yaml::Hash(root) = doc else {
+            return Err(unsupported("meta.yaml : le document n'est pas une table"));
+        };
+        for (key, value) in &root {
+            match key {
+                Yaml::String(k) if k == "meta_description" => {}
+                // `null:` en YAML : la catégorie qui vaut pour tous les jeux.
+                Yaml::Null => {
+                    let Yaml::Hash(options) = value else {
+                        return Err(unsupported("meta.yaml : catégorie « null » mal formée"));
+                    };
+                    for (option, raw) in options {
+                        let name = match option {
+                            Yaml::String(o) => o.as_str(),
+                            _ => "",
+                        };
+                        let bad = |what: &str| {
+                            unsupported(format!("meta.yaml : option « {name} » : {what}"))
+                        };
+                        match name {
+                            "progression_balancing" => {
+                                balancing = Some(
+                                    progression_balancing(raw, rng)
+                                        .ok_or_else(|| bad("0 à 99 attendu"))?,
+                                );
+                            }
+                            "accessibility" => {
+                                if !is_full(raw, rng)? {
+                                    return Err(bad(
+                                        "seule la valeur « full » est prise en charge",
+                                    ));
+                                }
+                            }
+                            _ => return Err(bad("pas encore prise en charge par le moteur Rust")),
+                        }
+                    }
+                }
+                Yaml::String(k) => {
+                    return Err(unsupported(format!(
+                    "meta.yaml : catégorie « {k} » pas encore prise en charge par le moteur Rust"
+                )))
+                }
+                _ => return Err(unsupported("meta.yaml : clé non textuelle")),
+            }
+        }
+    }
+    Ok(balancing)
+}
+
+/// `accessibility` vaut `full` (nom ou numéro 0) ?
+fn is_full<R: Rng + ?Sized>(raw: &Yaml, rng: &mut R) -> Result<bool, Unsupported> {
+    let value = pick(raw, rng)?;
+    Ok(
+        matches!(&value, Yaml::String(s) if s.eq_ignore_ascii_case("full"))
+            || matches!(value, Yaml::Integer(0)),
+    )
+}
+
+/// `progression_balancing` : 0 à 99, `disabled` (0), `normal` (50), `extreme` (99) ou
+/// `random`. Les autres formes de hasard (`random-low`…) demandent le générateur Python.
+fn progression_balancing<R: Rng + ?Sized>(raw: &Yaml, rng: &mut R) -> Option<u8> {
+    let value = pick(raw, rng).ok()?;
+    if let Yaml::String(s) = &value {
+        match s.to_ascii_lowercase().as_str() {
+            "disabled" => return Some(0),
+            "normal" => return Some(fill::DEFAULT_BALANCING),
+            "extreme" => return Some(fill::MAX_BALANCING),
+            _ => {}
+        }
+    }
+    range_value(value, 0, fill::MAX_BALANCING, rng)
 }
 
 fn read_player<R: Rng + ?Sized>(
@@ -116,11 +219,29 @@ fn read_player<R: Rng + ?Sized>(
             )))
         }
     };
+    let mut common = Common::default();
     let options = match game.as_str() {
-        apquest::GAME => GameOptions::ApQuest(read_apquest(&name, section, rng)?),
+        apquest::GAME => GameOptions::ApQuest(read_apquest(&name, section, rng, &mut common)?),
         _ => return Err(unsupported(format!("jeu « {game} » non pris en charge"))),
     };
-    Ok(PlayerRequest { name, options })
+    Ok(PlayerRequest {
+        name,
+        options,
+        progression_balancing: common.progression_balancing,
+    })
+}
+
+/// Options communes à tous les jeux, lues dans la section du jeu.
+struct Common {
+    progression_balancing: u8,
+}
+
+impl Default for Common {
+    fn default() -> Self {
+        Common {
+            progression_balancing: fill::DEFAULT_BALANCING,
+        }
+    }
 }
 
 /// Lit la section APQuest. Les options absentes gardent leur valeur par défaut.
@@ -128,6 +249,7 @@ fn read_apquest<R: Rng + ?Sized>(
     player: &str,
     section: &Yaml,
     rng: &mut R,
+    common: &mut Common,
 ) -> Result<ApQuestOptions, Unsupported> {
     let mut o = ApQuestOptions::default();
     let Yaml::Hash(entries) = section else {
@@ -158,14 +280,12 @@ fn read_apquest<R: Rng + ?Sized>(
             "player_sprite" => {
                 o.player_sprite = sprite(raw, rng).ok_or_else(|| bad("apparence inconnue"))?
             }
-            // L'équilibrage de progression n'est pas encore fait (ADR 0027, étape 5) :
-            // la valeur est acceptée et sans effet pour l'instant.
-            "progression_balancing" => {}
+            "progression_balancing" => {
+                common.progression_balancing =
+                    progression_balancing(raw, rng).ok_or_else(|| bad("0 à 99 attendu"))?
+            }
             "accessibility" => {
-                let value = pick(raw, rng)?;
-                let full = matches!(&value, Yaml::String(s) if s.eq_ignore_ascii_case("full"))
-                    || matches!(value, Yaml::Integer(0));
-                if !full {
+                if !is_full(raw, rng)? {
                     return Err(bad("seule la valeur « full » est prise en charge"));
                 }
             }
@@ -237,6 +357,11 @@ fn toggle<R: Rng + ?Sized>(raw: &Yaml, rng: &mut R) -> Option<bool> {
 /// Option numérique bornée (`Range`) ; `random` tire uniformément entre les bornes.
 fn range<R: Rng + ?Sized>(raw: &Yaml, min: u8, max: u8, rng: &mut R) -> Option<u8> {
     let value = pick(raw, rng).ok()?;
+    range_value(value, min, max, rng)
+}
+
+/// Comme [`range`], pour une valeur déjà tirée.
+fn range_value<R: Rng + ?Sized>(value: Yaml, min: u8, max: u8, rng: &mut R) -> Option<u8> {
     if is_random(&value) {
         let span = u64::from(max - min) + 1;
         return u8::try_from(u64::from(min) + fill::below(rng, span)).ok();

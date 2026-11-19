@@ -233,3 +233,9 @@ untime2`.
 - **Pas vérifié** : partie jouée avec le vrai client APQuest sur une seed Rust ; seed Rust hébergée par `MultiServer` et comparée sur `Connect` (banc différentiel) ; spoiler et `meta.yaml` ignorés par le moteur Rust.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : étape 5 de l'ADR 0027 : équilibrage de progression (`progression_balancing`).
+
+### 2026-11-19 · V2 étape 5 : équilibrage de progression
+- **Fait** : `fill::balance` (d'après `Fill.py` 0.6.8, parts comparées sans virgule), `progression_balancing` et `meta.yaml` (préréglage « Long ») compris par le moteur Rust (ADR 0027, étape 5). Bug trouvé : la description des préréglages (`Raftup : partie…`) n'était pas du YAML valide, même pour PyYAML ; corrigée. Effet mesuré sur 200 seeds. `cargo test --workspace` et clippy passent.
+- **Pas vérifié** : comparaison avec le vrai `balance_multiworld_progression` (algorithme relu, pas rejoué) ; partie jouée avec le vrai client APQuest sur une seed Rust ; préréglage « Rapide » (`accessibility: minimal`) toujours au Python.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : jouer une vraie partie APQuest sur une seed Rust, puis étape 6 (export des règles depuis un apworld, ADR à part).

@@ -109,4 +109,17 @@ Choix pris en codant, dans le cadre des décisions ci-dessus :
 - **Nom de seed** : le numéro de seed sur 20 chiffres (`00000000000000012345`).
 - **YAML** : lus par `yaml-rust2` 0.13 (MIT / Apache-2.0). Le moteur Rust ne prend la génération que s'il comprend tout : jeu porté, options connues, valeurs simples, poids ou `random` ; `accessibility: full` ; options communes avancées vides ; pas de substitution dans les noms. Sinon la raison est écrite en tête du journal et Archipelago génère.
 - **Launcher** : `RustBackend` remplit le même contrat que `PythonBackend` (zip `AP_<seed>.zip` dans le dossier de sortie) ; il ne touche ni aux apworlds ni au dossier d'Archipelago, et ne demande pas l'installation de Python. Case « Moteur Rust (expérimental) » dans « Créer une partie », décochée par défaut.
-- **Ignoré pour l'instant** : `progression_balancing` (étape 5), le spoiler, le `meta.yaml` des préréglages.
+- **Ignoré pour l'instant** : le spoiler. (`progression_balancing` et le `meta.yaml` des préréglages sont faits à l'étape 5, ci-dessous.)
+
+## Mise en œuvre de l'étape 5 (19 novembre 2026)
+
+Équilibrage de progression (`fill::balance`), d'après `balance_multiworld_progression` d'Archipelago 0.6.8 :
+
+- **Principe** : on parcourt la partie sphère par sphère ; un joueur sous sa barre (`meilleure part × réglage / 100`) voit ses objets de progression posés chez les autres échangés avec des objets sans importance de sphères déjà visitées. Le pool ne change pas : les objets ne font qu'échanger leur place.
+- **Sans virgule** : les parts sont comparées par produit en croix d'entiers (`u128`), pour le même résultat sur tous les systèmes (NF12).
+- **Ordre** : lieux parcourus par index croissant, hasard tiré dans le flux de `fill` ; pas l'ordre d'un `set` Python (même écart assumé qu'au § 4).
+- **Écarts voulus** : pas de règle d'objet par lieu ni de lieu prioritaire dans le modèle ; un lieu « verrouillé » est un lieu sans numéro réseau (événement).
+- **Sûreté** : après les échanges, balayage complet ; si la partie n'est plus jouable, le monde est remis comme avant et l'erreur est expliquée.
+- **YAML** : `progression_balancing` lu (0 à 99, `disabled`, `normal`, `extreme`, poids, `random`) ; 50 par défaut. Un `meta.yaml` est compris s'il ne règle que `progression_balancing` et `accessibility: full` dans `null:` (préréglage « Long ») ; « Rapide » (accès minimal) reste au générateur Python. La description des préréglages ne contient plus « : » : PyYAML refusait l'ancien texte, donc le préréglage cassait aussi le générateur officiel.
+- **Mesure** : sur 200 seeds à 3 joueurs, le joueur le plus en retard atteint la moitié de ses lieux plus tôt avec l'équilibrage que sans (test `le_joueur_le_plus_en_retard_avance_plus_tot`).
+- **Moteur par défaut** : non changé. Le moteur Rust reste sur option tant qu'une vraie partie d'APQuest n'a pas été jouée sur une seed Rust (section 8).

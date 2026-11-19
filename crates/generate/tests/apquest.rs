@@ -20,10 +20,7 @@ fn official(name: &str) -> MultiData {
 }
 
 fn player(name: &str, options: ApQuestOptions) -> PlayerRequest {
-    PlayerRequest {
-        name: name.into(),
-        options: GameOptions::ApQuest(options),
-    }
+    PlayerRequest::new(name, GameOptions::ApQuest(options))
 }
 
 fn tout() -> ApQuestOptions {
@@ -222,4 +219,40 @@ fn noms_et_options_refuses() {
             ..
         }
     ));
+}
+
+/// L'équilibrage change le placement de certaines seeds, sans rien casser : toujours
+/// jouable (vérifié par `generate`), mêmes octets deux fois de suite.
+#[test]
+fn equilibrage_de_progression() {
+    let with = |value: u8| {
+        let mut players = vec![
+            player("A", tout()),
+            player("B", tout()),
+            player("C", tout()),
+        ];
+        for p in &mut players {
+            p.progression_balancing = value;
+        }
+        players
+    };
+    let mut changed = false;
+    for seed in 0..60 {
+        let without = generate(&GenerateRequest {
+            seed,
+            players: with(0),
+        })
+        .unwrap();
+        let request = GenerateRequest {
+            seed,
+            players: with(99),
+        };
+        let balanced = generate(&request).unwrap();
+        assert_eq!(
+            generate(&request).unwrap().archipelago,
+            balanced.archipelago
+        );
+        changed |= without.multidata.locations != balanced.multidata.locations;
+    }
+    assert!(changed, "l'équilibrage n'a jamais rien changé");
 }

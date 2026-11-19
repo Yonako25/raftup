@@ -2,8 +2,8 @@
 //!
 //! Il ne prend une génération que si tous les joueurs jouent à un monde porté en Rust,
 //! avec des options qu'il comprend ([`rust_support`]) ; sinon l'interface garde le
-//! générateur Python. Il est sur option tant que l'équilibrage de progression n'est pas
-//! fait (étape 5).
+//! générateur Python. L'équilibrage de progression (étape 5) est fait ; un `meta.yaml`
+//! (préréglages) est compris s'il ne règle que l'équilibrage et `accessibility: full`.
 
 use std::collections::hash_map::RandomState;
 use std::fs;
@@ -30,12 +30,25 @@ pub struct RustBackend;
 /// Le moteur Rust sait-il générer ces fichiers joueurs ? `Err` donne la raison lisible
 /// (jeu non porté, option avancée…) : la génération passe alors en Python.
 ///
+/// `meta` : contenu du `meta.yaml` de la demande (préréglage), s'il y en a un.
+///
 /// Les tirages ne servent ici qu'à vérifier : la seed 0 suffit.
-pub fn rust_support(player_files: &[PathBuf]) -> Result<(), String> {
+pub fn rust_support(player_files: &[PathBuf], meta: Option<&str>) -> Result<(), String> {
     let files = read_files(player_files).map_err(|e| e.to_string())?;
-    generate::read_players(&files, 0)
+    generate::read_players_with_meta(&files, meta, 0)
         .map(|_| ())
         .map_err(|e| e.0)
+}
+
+/// Contenu de `meta.yaml` dans le dossier des joueurs, s'il existe.
+fn meta_in(dir: &Path) -> Result<Option<String>, GenerationError> {
+    let path = dir.join("meta.yaml");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|source| GenerationError::Io { path, source })
 }
 
 fn read_files(paths: &[PathBuf]) -> Result<Vec<(String, String)>, GenerationError> {
@@ -119,8 +132,9 @@ impl GeneratorBackend for RustBackend {
         let seed = p.seed.unwrap_or_else(random_seed);
         let _ = log.send(format!("{} : seed {seed}", engine_name()));
 
-        let players =
-            generate::read_players(&files, seed).map_err(|e| failed("Unsupported", e.0))?;
+        let meta = meta_in(&p.player_files_dir)?;
+        let players = generate::read_players_with_meta(&files, meta.as_deref(), seed)
+            .map_err(|e| failed("Unsupported", e.0))?;
         if cancel.is_cancelled() {
             return Err(GenerationError::Cancelled);
         }

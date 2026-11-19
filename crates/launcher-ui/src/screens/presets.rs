@@ -68,9 +68,11 @@ impl Preset {
 /// `minimal`). Ces valeurs écrasent celles des YAML des joueurs.
 pub fn meta_yaml(preset: Preset) -> Option<String> {
     let (balancing, accessibility, description) = match preset {
-        Preset::Rapide => (80, "minimal", "Raftup : partie rapide"),
+        // Pas de « : » dans la description : en YAML, « a: b : c » est refusé (par
+        // PyYAML aussi), et tout le meta.yaml serait illisible.
+        Preset::Rapide => (80, "minimal", "Raftup, partie rapide"),
         Preset::Standard => return None,
-        Preset::Long => (20, "full", "Raftup : partie longue"),
+        Preset::Long => (20, "full", "Raftup, partie longue"),
     };
     Some(format!(
         "meta_description: {description}\nnull:\n  progression_balancing: {balancing}\n  accessibility: {accessibility}\n"

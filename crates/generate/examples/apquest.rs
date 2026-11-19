@@ -13,10 +13,10 @@ fn main() -> anyhow::Result<()> {
     let seed = args.next().map(|s| s.parse()).transpose()?.unwrap_or(1);
     let generated = generate(&GenerateRequest {
         seed,
-        players: vec![PlayerRequest {
-            name: "Alice".into(),
-            options: GameOptions::ApQuest(ApQuestOptions::default()),
-        }],
+        players: vec![PlayerRequest::new(
+            "Alice",
+            GameOptions::ApQuest(ApQuestOptions::default()),
+        )],
     })?;
     let path = std::path::Path::new(&dir).join(format!("AP_{}.archipelago", generated.seed_name));
     std::fs::write(&path, &generated.archipelago)?;

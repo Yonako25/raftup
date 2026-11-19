@@ -13,15 +13,19 @@
 //!   atteindre (`accessibility: full`) ; sinon erreur, jamais de seed injouable ;
 //! - **explication** ([`Blocked`]) : pour chaque lieu inatteignable, la clause de règle qui
 //!   échoue (ou l'entrée qui bloque sa région).
+//! - **équilibrage de progression** ([`balance`]) : après le placement, avance des objets
+//!   de progression des joueurs en retard (`progression_balancing`, ADR 0027 étape 5) ;
 //!
 //! Le hasard vient d'un générateur passé par l'appelant (trait `Rng` de `rand_core`) ; le
 //! mélange est écrit ici ([`shuffle`]) pour que le résultat ne dépende que de la suite de
 //! nombres tirés : même générateur, même graine ⇒ même placement.
 
+mod balance;
 mod explain;
 mod place;
 mod shuffle;
 
+pub use balance::{balance, BalanceReport, DEFAULT_BALANCING, MAX_BALANCING};
 pub use explain::{explain, Blocked, Target};
 pub use place::{check_feasible, fill, FillError, FillReport, MAX_ATTEMPTS};
 pub use shuffle::{below, shuffle};
