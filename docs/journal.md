@@ -384,3 +384,9 @@ untime2`.
 - **Pas vérifié** : migration 4 → 5 essayée sur SQLite seulement ; aucune page HTML (session `rafthub-socle`) ; vrai SMTP et vraie application Discord ; le launcher n'envoie pas encore de code d'invitation. `launcher-core/tests/host.rs` (`sauvegarde_puis_reprise`) échoue si deux `cargo test` tournent en même temps (dossier fixe).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; pages `/admin`, `users.role`, `admin_sessions` (session `rafthub-socle`) ; launcher (session `rafthub-launcher`).
 - **Suite** : fusion avec `rafthub-socle` (renuméroter sa version de schéma en 6) puis brancher les pages sur `console.rs`.
+
+### 2026-11-20 · Fusion des 3 branches Rafthub dans `main` (ADR 0036)
+- **Fait** : fusion de `rafthub-launcher`, `rafthub-socle`, `rafthub-donnees` ; schéma renuméroté (5 : `users.role`, 6 : `users.suspended_at`, `SCHEMA_VERSION` = 6) ; `store/admin.rs` du socle renommé `store/admin_auth.rs` (rôles, sessions d'admin), un seul `dashboard_counts(now)` ; tableau de bord relit SMTP, Discord et adresse publique dans les réglages (`AppState::mailer` / `discord` en `pub(crate)`). Sur `main` : fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : console jamais ouverte dans un navigateur ; PostgreSQL ; migration d'une base réelle de la version 4 à 6 (seulement par les tests).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub trouvées dans main avant fusion Rafthub » (non commité, inutile à la compilation, à jeter sur accord de l'utilisatrice).
+- **Suite** : pages Joueurs, Distribution du launcher (zip + `rafthub.toml`), Réglages et Journaux de la console.
