@@ -66,7 +66,7 @@ impl GeneratorBackend for ExportBackend {
         // La seed doit être connue des deux côtés : on la tire ici si l'hôte n'en donne pas.
         let mut p = p.clone();
         let seed = *p.seed.get_or_insert_with(random_seed);
-        let mut bridge = self.python.start_bridge(log.clone())?;
+        let mut bridge = self.python.start_bridge(&p, log.clone())?;
         let outcome =
             export_then_finish(&self.python, &mut bridge, &p, seed, timeout, cancel, &log);
         // Un worker par génération : fermé dans tous les cas (erreur de fermeture ignorée).

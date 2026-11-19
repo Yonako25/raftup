@@ -10,6 +10,7 @@ pub mod generate;
 mod job;
 pub mod line;
 pub mod protocol;
+pub mod sandbox;
 
 pub use bridge::{BridgeOptions, PyBridge, WorkerVersion};
 pub use cancel::CancelToken;
@@ -21,6 +22,7 @@ pub use generate::{
 };
 pub use line::{read_bounded_bytes, read_bounded_line, LineError};
 pub use protocol::{decode_response, encode_request};
+pub use sandbox::{Sandbox, SANDBOX_SUPPORTED};
 
 /// Script Python du worker, embarqué dans le binaire (livré via `python -c`, rien sur le disque).
 pub const WORKER_SCRIPT: &str = include_str!("../worker/raftup_worker.py");

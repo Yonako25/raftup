@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use py_bridge::{
     BridgeError, BridgeOptions, CancelToken, GenerateParams, GenerateResult, GeneratedPlayer,
-    PyBridge, ERR_GENERATION_FAILED, ERR_IMPORT_FAILED,
+    PyBridge, Sandbox, ERR_GENERATION_FAILED, ERR_IMPORT_FAILED,
 };
 
 use super::GenerationError;
@@ -138,21 +138,31 @@ pub struct PythonBackend {
     /// Refuse toute connexion réseau sortante du worker (`RAFTUP_BLOCK_NETWORK=1`).
     /// Activé par défaut (ADR 0019, décision 3) ; ce n'est pas un bac à sable.
     pub block_network: bool,
+    /// Bac à sable du worker (ADR 0034) : sous Windows, intégrité basse, écriture permise
+    /// seulement dans le dossier de la génération. Activé par défaut ; hors Windows, sans effet.
+    pub sandbox: bool,
 }
 
 impl PythonBackend {
-    /// Backend avec les réglages par défaut : réseau bloqué.
+    /// Backend avec les réglages par défaut : réseau bloqué, bac à sable.
     pub fn new(runtime: Runtime) -> PythonBackend {
         PythonBackend {
             runtime,
             block_network: true,
+            sandbox: true,
         }
     }
 }
 
 impl PythonBackend {
     /// Lance un worker neuf (ADR 0017, décision 5) ; ses lignes de stderr vont dans `log`.
-    pub(super) fn start_bridge(&self, log: Sender<String>) -> Result<PyBridge, GenerationError> {
+    /// Avec le bac à sable, le worker n'écrit que dans le dossier de la génération : le
+    /// parent de `p.output_dir` (`generations/<horodatage>/`).
+    pub(super) fn start_bridge(
+        &self,
+        p: &GenerateParams,
+        log: Sender<String>,
+    ) -> Result<PyBridge, GenerationError> {
         let mut options = BridgeOptions::new(&self.runtime.python_exe);
         options.working_dir = Some(self.runtime.archipelago_dir.clone());
         // Archipelago ne doit ni lancer pip ni toucher au réseau.
@@ -164,8 +174,22 @@ impl PythonBackend {
                 .env
                 .insert("RAFTUP_BLOCK_NETWORK".to_string(), "1".to_string());
         }
-        options.stderr_lines = Some(log);
-        Ok(PyBridge::start(options)?)
+        if self.sandbox {
+            let work_dir = p.output_dir.parent().unwrap_or(&p.output_dir);
+            options.sandbox = Some(Sandbox::new(work_dir));
+            ensure_host_yaml(&self.runtime.archipelago_dir)?;
+        }
+        options.stderr_lines = Some(log.clone());
+        let bridge = PyBridge::start(options)?;
+        if bridge.sandbox_applied() {
+            let _ = log.send("Bac à sable : générateur en intégrité basse".to_string());
+        } else if self.sandbox {
+            let _ = log.send(
+                "Bac à sable indisponible sur ce système : le générateur garde vos droits"
+                    .to_string(),
+            );
+        }
+        Ok(bridge)
     }
 
     /// Complète les paramètres avec ce que seul le runtime connaît.
@@ -190,7 +214,7 @@ impl GeneratorBackend for PythonBackend {
         cancel: &CancelToken,
         log: Sender<String>,
     ) -> Result<GenerateResult, GenerationError> {
-        let mut bridge = self.start_bridge(log)?;
+        let mut bridge = self.start_bridge(p, log)?;
         let params = self.complete(p);
         let result = bridge.generate_cancellable(&params, timeout, cancel);
         // Un worker neuf par génération : on le ferme dans tous les cas (erreur de fermeture ignorée).
@@ -223,6 +247,20 @@ impl Drop for LockGuard {
     fn drop(&mut self) {
         ACTIVE.store(false, Ordering::SeqCst);
     }
+}
+
+/// Dans le bac à sable, Archipelago ne peut pas créer son `host.yaml` (son dossier est en
+/// lecture seule pour lui) : on pose un fichier vide s'il manque. Archipelago le lit comme
+/// « aucun réglage », donc avec ses valeurs par défaut, comme un fichier qu'il aurait créé.
+fn ensure_host_yaml(archipelago_dir: &Path) -> Result<(), GenerationError> {
+    if archipelago_dir.as_os_str().is_empty() || !archipelago_dir.is_dir() {
+        return Ok(());
+    }
+    let host = archipelago_dir.join("host.yaml");
+    if !host.exists() {
+        fs::write(&host, "").map_err(|e| io_err(&host, e))?;
+    }
+    Ok(())
 }
 
 fn io_err(path: &Path, source: std::io::Error) -> GenerationError {

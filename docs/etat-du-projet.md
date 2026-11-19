@@ -34,6 +34,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Hub `raftup-hub`** (ADR 0002, 0003, 0033) : crate `hub` en AGPL, comptes, amis, présence, testés sur SQLite ; reste PostgreSQL, Discord, e-mails (vérification, mot de passe oublié), blocages, RGPD, client et panneau d'amis du launcher, déploiement
 - [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; reste : vraie clé (`REGISTRY_PUBLIC_KEY` vide), source `registre.toml`, adresse de publication, branchement dans la Bibliothèque
 - [ ] **NF11 / NF12, CI multi-OS** (19 novembre 2026) : `ci.yml` en matrice Windows, macOS, Linux ; test d'empreinte sha256 d'une seed APQuest du moteur Rust (`generate/tests/empreinte.rs`) ; rfd en `xdg-portal` sous Linux ; runtime Python Windows seulement (repli : moteur Rust) ; jamais lancé sous macOS ni Linux
+- [x] **Bac à sable du générateur** (V2, ADR 0034, 19 novembre 2026) : worker en intégrité basse sous Windows, activé par défaut, refus s'il n'est pas appliqué ; tests réels de génération et d'export passent avec ; hors Windows, repli sans bac à sable
 
 ## Crates
 
@@ -45,7 +46,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `server` | Serveur WebSocket + binaire `raftup-server` | **Complet** pour J2 |
 | `launcher-core` | Héberger, profils et installation, détection, lancement, runtime Python, `generate`, `generate_and_host` | **Logique complète** pour J3 (reste le catalogue réel) |
 | `launcher-ui` | Application egui, binaire `raftup` | Commencé (J3) |
-| `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows | **Complet** pour le MVP |
+| `py-bridge` | Pont JSON-RPC vers le worker Python (`ping`, `version`, `echo`, `generate`), annulation, Job Object Windows, bac à sable en intégrité basse (ADR 0034) | **Complet** pour le MVP |
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
@@ -135,6 +136,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
 - **0033** : `raftup-hub` : axum, sqlx + SQLite (PostgreSQL prévu), jetons de session opaques hachés et révocables (accepté en autonomie, à relire)
 - **0032** : registre de paquets signés : index JSON versionné (URL + sha256), une signature minisign pour l'index, clé distincte des mises à jour, catalogue embarqué prioritaire (accepté en autonomie, à relire)
+- **0034** : bac à sable du générateur : sous Windows, worker en intégrité basse (copie de `python.exe` étiquetée par `icacls`), écriture seulement dans le dossier de la génération ; rien hors Windows (à relire par l'utilisatrice)
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

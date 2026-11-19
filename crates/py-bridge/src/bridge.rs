@@ -22,6 +22,7 @@ use crate::error::BridgeError;
 use crate::job::KillGuard;
 use crate::line::{read_bounded_bytes, read_bounded_line, LineError};
 use crate::protocol::{decode_response, encode_request};
+use crate::sandbox::{self, LabelGuard, Sandbox, SANDBOX_SUPPORTED};
 use crate::{DEFAULT_MAX_LINE_BYTES, WORKER_PROTOCOL_VERSION, WORKER_SCRIPT};
 
 /// Nombre maximal de lignes de stderr gardées, et taille maximale cumulée.
@@ -56,6 +57,11 @@ pub struct BridgeOptions {
     /// Si présent, chaque ligne de stderr y est aussi envoyée (en plus du tail et de `tracing`).
     /// Un récepteur disparu est ignoré : cela ne bloque jamais la lecture.
     pub stderr_lines: Option<Sender<String>>,
+    /// Bac à sable du worker (ADR 0034) ; `None` par défaut. Sous Windows, le worker est
+    /// lancé en intégrité basse et `start` échoue s'il ne l'est pas vraiment. Ailleurs, rien
+    /// n'est appliqué (un avertissement est journalisé) ; seuls `TEMP`, `TMP` et `TMPDIR`
+    /// pointent sur le dossier temporaire du bac à sable.
+    pub sandbox: Option<Sandbox>,
 }
 
 impl BridgeOptions {
@@ -70,6 +76,7 @@ impl BridgeOptions {
             shutdown_grace: Duration::from_secs(2),
             max_line_bytes: DEFAULT_MAX_LINE_BYTES,
             stderr_lines: None,
+            sandbox: None,
         }
     }
 }
@@ -84,6 +91,10 @@ pub struct WorkerVersion {
     /// `None` pour un worker plus ancien qui ne le dit pas.
     #[serde(default)]
     pub hash_randomization: Option<u32>,
+    /// Niveau d'intégrité Windows du worker (`low`, `medium`…), ADR 0034. `None` hors
+    /// Windows ou pour un worker qui ne le dit pas.
+    #[serde(default)]
+    pub integrity: Option<String>,
 }
 
 /// Ce que le thread de lecture de stdout transmet au pont.
@@ -154,6 +165,10 @@ pub struct PyBridge {
     options: BridgeOptions,
     // Job Object Windows : le fermer tue le worker et sa descendance (voir `job.rs`).
     job: Option<KillGuard>,
+    // Bac à sable (ADR 0034) : le lâcher remet le dossier de travail en intégrité normale.
+    // Déclaré APRÈS `job` : les champs sont lâchés dans cet ordre, donc après la descendance.
+    sandbox_guard: Option<LabelGuard>,
+    sandbox_applied: bool,
 }
 
 impl PyBridge {
@@ -173,7 +188,28 @@ impl PyBridge {
                 got: version.protocol,
             });
         }
+        if bridge.options.sandbox.is_some() {
+            if SANDBOX_SUPPORTED {
+                // On ne croit pas la préparation sur parole : le worker dit lui-même son niveau.
+                if !sandbox::is_low_integrity(version.integrity.as_deref()) {
+                    bridge.close();
+                    return Err(BridgeError::SandboxNotApplied {
+                        integrity: version.integrity,
+                    });
+                }
+                bridge.sandbox_applied = true;
+            } else {
+                tracing::warn!(
+                    "bac à sable indisponible sur ce système : le worker garde les droits de l'utilisateur (ADR 0034)"
+                );
+            }
+        }
         Ok(bridge)
+    }
+
+    /// Vrai si le worker tourne vraiment dans son bac à sable (vérifié au démarrage).
+    pub fn sandbox_applied(&self) -> bool {
+        self.sandbox_applied
     }
 
     /// Lance le process sans vérifier la version (la poignée de main est faite par `start`).
@@ -188,7 +224,22 @@ impl PyBridge {
                 });
             }
         }
-        let mut command = Command::new(&options.python);
+        // Bac à sable (ADR 0034) : on lance une copie étiquetée de Python, et le dossier de
+        // travail devient le seul où il peut écrire.
+        let (program, sandbox_guard) = match &options.sandbox {
+            Some(sb) => {
+                if !options.python.is_file() {
+                    return Err(BridgeError::PythonNotFound {
+                        path: options.python.clone(),
+                    });
+                }
+                let prepared =
+                    sandbox::prepare(&options.python, sb).map_err(BridgeError::SandboxSetup)?;
+                (prepared.program, Some(prepared.guard))
+            }
+            None => (options.python.clone(), None),
+        };
+        let mut command = Command::new(&program);
         // Isolation (ADR 0016, décision 4, révisée par l'ADR 0028) : `-s` (pas de dossier
         // `site` de l'utilisateur) et `-P` (pas de dossier courant dans `sys.path`), comme
         // `-I`, mais SANS `-E` : on retire nous-mêmes toutes les variables `PYTHON*`, puis
@@ -212,6 +263,19 @@ impl PyBridge {
             .stderr(Stdio::piped());
         if let Some(dir) = &options.working_dir {
             command.current_dir(dir);
+        }
+        if let Some(sb) = &options.sandbox {
+            // Python (`tempfile`) écrit ses fichiers temporaires ici, et pas dans le TEMP de
+            // l'utilisatrice, où un worker en intégrité basse ne peut pas écrire.
+            let tmp = sb.temp_dir();
+            command
+                .env("TEMP", &tmp)
+                .env("TMP", &tmp)
+                .env("TMPDIR", &tmp);
+            if SANDBOX_SUPPORTED {
+                // Le worker sait alors qu'il ne peut pas réécrire `host.yaml`.
+                command.env("RAFTUP_SANDBOX", "low");
+            }
         }
         #[cfg(windows)]
         {
@@ -334,6 +398,8 @@ impl PyBridge {
             closed: false,
             options,
             job: Some(job),
+            sandbox_guard,
+            sandbox_applied: false,
         })
     }
 
@@ -523,6 +589,8 @@ impl PyBridge {
         self.job = None;
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // Process arrêté : le dossier de travail retrouve son étiquette normale.
+        self.sandbox_guard = None;
     }
 
     /// Attend la fin du process pendant `grace`, puis le tue.

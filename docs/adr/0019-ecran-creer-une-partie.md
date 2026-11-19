@@ -18,5 +18,5 @@ Le contrat de l'écran « Créer une partie » laissait trois questions ouvertes
 
 - Aucune sauvegarde perdue par surprise ; en échange, `generations/` grossit tant que l'utilisatrice ne fait pas le ménage.
 - Moins de code : pas de surveillance de dossier. Les grosses parties demandent de sélectionner plusieurs fichiers d'un coup.
-- Le blocage réseau gêne un apworld malveillant naïf, mais ce n'est **pas** un bac à sable (ctypes ou un sous-process le contournent) : l'avertissement sur les apworlds reste obligatoire.
+- Le blocage réseau gêne un apworld malveillant naïf, mais ce n'est **pas** un bac à sable (ctypes ou un sous-process le contournent) : l'avertissement sur les apworlds reste obligatoire. *Complété le 19 novembre 2026 : bac à sable Windows en intégrité basse, ADR 0034.*
 - Un apworld qui a vraiment besoin du réseau échouera à la génération ; il faudra alors une option dans l'interface (pas prévue au MVP).
