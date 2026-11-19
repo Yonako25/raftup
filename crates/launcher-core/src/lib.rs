@@ -39,6 +39,7 @@ pub mod logs;
 pub mod party;
 pub mod paths;
 pub mod profile;
+pub mod rafthub;
 pub mod readiness;
 pub mod record;
 pub mod registry;

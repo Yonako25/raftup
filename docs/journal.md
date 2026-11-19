@@ -366,3 +366,9 @@ untime2`.
 - **Pas vérifié** : rien regardé à l'écran après la fusion ; vrai SMTP, vraie application Discord, release `registre` ; rien poussé.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : créer la release `registre` ; relire les ADR 0029 à 0035 ; essais réels de la V2.
+
+### 2026-11-19 · Launcher relié à Rafthub (ADR 0036, côté launcher)
+- **Fait** : module `launcher_core::rafthub` (adoption unique de `rafthub.toml`, liens `raftup://hub/<hôte>`), boîte « Passer sur le hub … ? » et hôte du Rafthub dans « Amis » ; bandeau effacé par la reprise de session corrigé (trouvé en capture, test ajouté) ; tests, clippy, fmt et captures (`changer-de-hub`, lien refusé) passent.
+- **Pas vérifié** : vrai clic sur un lien `raftup://hub/…` depuis un navigateur (schéma enregistré en release seulement) ; changement de hub contre deux vrais hubs.
+- **Ne pas toucher** : `crates/hub` (sessions rafthub-socle et rafthub-donnees) ; `docs/profils-en-attente/`.
+- **Suite** : côté hub, servir le zip `GET /telecharger/raftup-windows.zip` avec `rafthub.toml`.
