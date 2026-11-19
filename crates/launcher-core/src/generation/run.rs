@@ -186,7 +186,7 @@ impl PythonBackend {
             ensure_host_yaml(&self.runtime.archipelago_dir)?;
         }
         options.stderr_lines = Some(log.clone());
-        let bridge = PyBridge::start(options)?;
+        let bridge = start_with_sandbox_fallback(options, &log, PyBridge::start)?;
         if bridge.sandbox_applied() {
             let _ = log.send("Bac à sable : générateur en intégrité basse".to_string());
         } else if self.sandbox {
@@ -205,6 +205,32 @@ impl PythonBackend {
             params.site_packages = self.runtime.site_packages.clone();
         }
         params
+    }
+}
+
+/// Lance le worker ; si le bac à sable ne peut pas être posé (disque sans étiquettes
+/// d'intégrité : FAT32, lecteur réseau…), relance sans lui et le dit dans le journal,
+/// comme hors Windows. Raftup n'avait pas de bac à sable avant l'ADR 0034 : on ne bloque
+/// pas la génération pour autant. Toute autre erreur est rendue telle quelle.
+///
+/// Générique sur `T` (le pont démarré) pour être testée avec un faux démarrage : `start`
+/// est une fonction qui reçoit les réglages (`FnMut` : elle peut être appelée deux fois).
+pub(super) fn start_with_sandbox_fallback<T>(
+    options: BridgeOptions,
+    log: &Sender<String>,
+    mut start: impl FnMut(BridgeOptions) -> Result<T, BridgeError>,
+) -> Result<T, BridgeError> {
+    // `clone` : on garde les réglages pour pouvoir relancer sans bac à sable.
+    match start(options.clone()) {
+        Err(BridgeError::SandboxSetup(reason)) if options.sandbox.is_some() => {
+            let _ = log.send(format!(
+                "Bac à sable impossible ici ({reason}) : le générateur garde vos droits"
+            ));
+            let mut options = options;
+            options.sandbox = None;
+            start(options)
+        }
+        other => other,
     }
 }
 
@@ -737,6 +763,70 @@ fn extract_archipelago(zip: &Path, output_dir: &Path) -> Result<PathBuf, Generat
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    /// Faux démarrage : échoue avec `first` au premier appel, réussit au second ; note
+    /// chaque fois si le bac à sable était demandé.
+    fn fake_start(
+        first: BridgeError,
+        calls: &mut Vec<bool>,
+    ) -> impl FnMut(BridgeOptions) -> Result<&'static str, BridgeError> + '_ {
+        let mut first = Some(first);
+        move |options: BridgeOptions| {
+            calls.push(options.sandbox.is_some());
+            match first.take() {
+                Some(e) => Err(e),
+                None => Ok("démarré"),
+            }
+        }
+    }
+
+    fn with_sandbox() -> BridgeOptions {
+        let mut options = BridgeOptions::new("python.exe");
+        options.sandbox = Some(Sandbox::new("generations/1"));
+        options
+    }
+
+    #[test]
+    fn bac_a_sable_impossible_relance_sans_lui() {
+        let (log, lines) = std::sync::mpsc::channel();
+        let mut calls = Vec::new();
+        let started = start_with_sandbox_fallback(
+            with_sandbox(),
+            &log,
+            fake_start(
+                BridgeError::SandboxSetup("icacls : FAT32".into()),
+                &mut calls,
+            ),
+        );
+        assert_eq!(started.unwrap(), "démarré");
+        assert_eq!(calls, [true, false], "relancé une fois, sans bac à sable");
+        let line = lines.try_recv().unwrap();
+        assert!(
+            line.contains("Bac à sable impossible") && line.contains("FAT32"),
+            "{line}"
+        );
+    }
+
+    #[test]
+    fn autre_erreur_rendue_sans_relance() {
+        let (log, lines) = std::sync::mpsc::channel();
+        let mut calls = Vec::new();
+        let started = start_with_sandbox_fallback(
+            with_sandbox(),
+            &log,
+            fake_start(
+                BridgeError::SandboxNotApplied { integrity: None },
+                &mut calls,
+            ),
+        );
+        // Un worker qui démarre hors de son bac à sable reste une erreur : pas de repli.
+        assert!(matches!(
+            started,
+            Err(BridgeError::SandboxNotApplied { .. })
+        ));
+        assert_eq!(calls, [true]);
+        assert!(lines.try_recv().is_err());
+    }
 
     #[test]
     fn remove_generation_dir_refuse_un_dossier_hors_de_generations() {
