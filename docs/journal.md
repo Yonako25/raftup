@@ -336,3 +336,9 @@ untime2`.
 - **Pas vérifié** : CI sous macOS et Linux (rien poussé) ; `crates/hub/LICENSE-AGPL` écrit de mémoire par l'agent, à remplacer par le texte officiel de gnu.org ; les ADR 0029 à 0034 sont « acceptés en autonomie », à relire par l'utilisatrice.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : remplacer le texte de l'AGPL ; essais en jeu quand l'utilisatrice sera devant le PC.
+
+### 2026-11-19 · Équilibrage par temps branché (session `v2-time-balance`, ADR 0030 révisé)
+- **Fait** : case « Équilibrer par temps de jeu » sous « Moteur Rust » (décochée par défaut, grisée sans lui) ; `generate::GenerateRequest::time_balance` et `imported::fill_imported_with` (moteurs Rust et export), secondes par slot depuis les profils embarqués, ligne de journal avant → après ; échange refusé s'il viole une règle d'objet (`can_hold`). Tests : désactivé = même seed (empreinte inchangée), activé = reproductible et utile, chemin export, réglages des profils, moteur du launcher. Workspace, clippy et fmt passent.
+- **Pas vérifié** : temps par lieu jamais mesuré en vraie partie ; coût sur une grosse partie ; case jamais regardée à l'écran (macro : `RAFTUP_DEV_TEMPS=1`) ; moteur export avec l'option jamais lancé en réel (test unitaire seulement) ; profils du registre pas pris en compte.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `launcher-core::registry`, Bibliothèque, `crates/hub` (autres sessions).
+- **Suite** : mesurer le temps par lieu en vraie partie (Slime Rancher, APQuest) et corriger les profils.

@@ -101,7 +101,7 @@ fn same_as_official(ours: &MultiData, theirs: &MultiData, merge_filler: bool) {
 }
 
 fn run(players: Vec<PlayerRequest>, seed: u64) -> MultiData {
-    let generated = generate(&GenerateRequest { seed, players }).unwrap();
+    let generated = generate(&GenerateRequest::new(seed, players)).unwrap();
     // L'archive écrite se relit et redonne le même modèle.
     let back = load_archipelago(&generated.archipelago, &ArchiveLimits::default()).unwrap();
     assert_eq!(back, generated.multidata);
@@ -169,6 +169,7 @@ fn toutes_les_combinaisons_et_reproductible() {
             let request = GenerateRequest {
                 seed,
                 players: vec![player("A", options), player("B", tout())],
+                time_balance: Default::default(),
             };
             // `generate` vérifie lui-même la faisabilité ; une erreur ferait échouer ici.
             let first = generate(&request).unwrap();
@@ -188,7 +189,7 @@ fn seeds_differentes_placements_differents() {
 
 #[test]
 fn noms_et_options_refuses() {
-    let err = |players| generate(&GenerateRequest { seed: 0, players }).unwrap_err();
+    let err = |players| generate(&GenerateRequest::new(0, players)).unwrap_err();
     assert!(matches!(err(vec![]), GenerateError::NoPlayers));
     assert!(matches!(
         err(vec![player("", ApQuestOptions::default())]),
@@ -241,11 +242,13 @@ fn equilibrage_de_progression() {
         let without = generate(&GenerateRequest {
             seed,
             players: with(0),
+            time_balance: Default::default(),
         })
         .unwrap();
         let request = GenerateRequest {
             seed,
             players: with(99),
+            time_balance: Default::default(),
         };
         let balanced = generate(&request).unwrap();
         assert_eq!(

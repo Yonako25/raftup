@@ -45,7 +45,14 @@ fn seed_apquest_sans_python() {
     assert_eq!(rust_support(&request.player_files, None), Ok(()));
 
     let (log, lines) = channel();
-    let output = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+    let output = generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
     assert_eq!(output.seed_name, "00000000000000012345");
     assert!(output.zip_file.is_file());
     assert!(output.archipelago_file.is_file());
@@ -57,7 +64,14 @@ fn seed_apquest_sans_python() {
     // Même seed, mêmes fichiers ⇒ même seed écrite.
     let first = std::fs::read(&output.archipelago_file).unwrap();
     let (log, _) = channel();
-    let again = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+    let again = generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
     assert_eq!(std::fs::read(&again.archipelago_file).unwrap(), first);
 }
 
@@ -96,7 +110,14 @@ fn spoiler_dans_le_zip_selon_le_niveau() {
     };
     // Niveau par défaut (3) : spoiler complet, parcours compris.
     let (log, _) = channel();
-    let output = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+    let output = generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
     let spoiler = "AP_00000000000000000099_Spoiler.txt";
     let mut names = zip_entries(&output.zip_file);
     names.sort();
@@ -116,7 +137,7 @@ fn spoiler_dans_le_zip_selon_le_niveau() {
     let (log, _) = channel();
     let output = generate(
         &paths,
-        &mut RustBackend,
+        &mut RustBackend::default(),
         &request1,
         &CancelToken::new(),
         log,
@@ -133,7 +154,7 @@ fn spoiler_dans_le_zip_selon_le_niveau() {
     let (log, _) = channel();
     let output = generate(
         &paths,
-        &mut RustBackend,
+        &mut RustBackend::default(),
         &request0,
         &CancelToken::new(),
         log,
@@ -148,7 +169,7 @@ fn spoiler_dans_le_zip_selon_le_niveau() {
 #[test]
 fn rapport_du_moteur_rust() {
     use launcher_core::generation::{EngineUsed, GeneratorBackend};
-    let report = RustBackend.report();
+    let report = RustBackend::default().report();
     assert_eq!(report.engine, EngineUsed::Rust);
     assert_eq!(report.fallback, None);
 }
@@ -167,7 +188,14 @@ fn jeu_non_porte_refuse_avec_la_raison() {
         ..GenerateRequest::default()
     };
     let (log, _) = channel();
-    let err = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap_err();
+    let err = generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap_err();
     assert!(
         matches!(&err, GenerationError::GeneratorFailed { kind, .. } if kind == "Unsupported"),
         "{err:?}"
@@ -196,7 +224,14 @@ fn meta_yaml_du_prereglage() {
         ..GenerateRequest::default()
     };
     let (log, _) = channel();
-    generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap();
+    generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap();
 
     // « Rapide » (accès minimal) : refusé avec la raison, jamais ignoré en silence.
     let rapide =
@@ -209,9 +244,54 @@ fn meta_yaml_du_prereglage() {
         ..request
     };
     let (log, _) = channel();
-    let err = generate(&paths, &mut RustBackend, &request, &CancelToken::new(), log).unwrap_err();
+    let err = generate(
+        &paths,
+        &mut RustBackend::default(),
+        &request,
+        &CancelToken::new(),
+        log,
+    )
+    .unwrap_err();
     assert!(
         matches!(&err, GenerationError::GeneratorFailed { kind, .. } if kind == "Unsupported"),
         "{err:?}"
     );
+}
+
+/// Moteur Rust avec l'équilibrage par temps (ADR 0030) : le journal le dit, la seed est
+/// reproductible ; sans l'option, pas de ligne de journal.
+#[test]
+fn equilibrage_par_temps_sur_option() {
+    let _serial = serial();
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths::under(tmp.path());
+    let alice = yaml(
+        tmp.path(),
+        "alice.yaml",
+        "name: Alice\ngame: APQuest\nAPQuest:\n  hammer: true\n",
+    );
+    let bob = yaml(tmp.path(), "bob.yaml", "name: Bob\ngame: APQuest\n");
+    let request = GenerateRequest {
+        player_files: vec![alice, bob],
+        seed: Some(777),
+        ..GenerateRequest::default()
+    };
+
+    let (log, lines) = channel();
+    let mut off = RustBackend::default();
+    generate(&paths, &mut off, &request, &CancelToken::new(), log).unwrap();
+    assert!(!lines
+        .try_iter()
+        .any(|l| l.contains("Équilibrage par temps")));
+
+    let mut on = RustBackend { time_balance: true };
+    let (log, lines) = channel();
+    let first = generate(&paths, &mut on, &request, &CancelToken::new(), log).unwrap();
+    assert!(lines
+        .try_iter()
+        .any(|l| l.contains("Équilibrage par temps")));
+    let first = std::fs::read(&first.archipelago_file).unwrap();
+    let (log, _) = channel();
+    let again = generate(&paths, &mut on, &request, &CancelToken::new(), log).unwrap();
+    assert_eq!(std::fs::read(&again.archipelago_file).unwrap(), first);
 }

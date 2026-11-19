@@ -1,6 +1,6 @@
 # 0030 — Durée estimée par joueur et équilibrage par temps de jeu
 
-- Statut : **accepté en autonomie le 19 novembre 2026, à relire par l'utilisatrice**
+- Statut : **accepté en autonomie le 19 novembre 2026, à relire par l'utilisatrice** ; révisé le même jour (§ 5 : équilibrage par temps branché)
 - Date : 2026-11-19
 
 ## Contexte
@@ -38,11 +38,21 @@
 - **Échanges** : au plus `max_swaps` (32 par défaut) fois, on prend le joueur qui attend le plus, on cherche un objet de progression à lui visité **après** le début de son attente (16 candidats au plus, du plus tôt au plus tard) et un lieu sans progression visité **avant** (4 au plus, du plus tard au plus tôt). L'échange n'est gardé que s'il fait baisser `(attente totale, heure de fin)` ; sinon il est défait.
 - Mêmes garde-fous que `balance` : un lieu prioritaire garde son objet, un lieu exclu ne reçoit pas de progression, `skip_balancing` est respecté, le pool ne change pas, balayage complet à la fin et retour à l'état d'avant si la partie n'était plus jouable.
 - Pas de hasard : ordre fixe des candidats, même monde et mêmes réglages ⇒ même placement (NF12).
-- **Désactivé par défaut** (`TimeBalance::default().enabled == false`) et **pas encore branché** dans `generate` : il le sera derrière une option (case de l'interface ou option YAML propre à Raftup, à décider), les secondes par slot venant des profils par le launcher (`generate` ne dépend pas de `launcher-core`).
+- **Désactivé par défaut** (`TimeBalance::default().enabled == false`). Branché derrière une option : voir § 5.
+
+### 5. Branchement (révision)
+
+- **Case de l'interface**, pas d'option YAML : c'est un choix de l'hôte pour toute la partie, pas d'un joueur, et une option YAML inconnue d'Archipelago casserait le repli sur le générateur Python. Case « Équilibrer par temps de jeu » sous « Moteur Rust », **décochée par défaut**, grisée (et ignorée) sans le moteur Rust : Archipelago seul ne la connaît pas.
+- `generate::GenerateRequest::time_balance` (`fill::TimeBalance`, réexporté par `generate`) : appliqué **après** l'équilibrage de progression, et seulement s'il est activé (désactivé, aucune simulation). Il ne tire pas de hasard : la suite du flux `fill` ne change pas. Désactivé, la seed est octet pour octet celle d'avant (test d'empreinte `generate/tests/empreinte.rs` inchangé).
+- Chemin export (ADR 0028) : `generate::imported::fill_imported_with`, même règle ; `fill_imported` garde son comportement (sans équilibrage par temps).
+- Secondes par slot : `launcher_core::time_balance_settings` / `time_balance_embedded`, avec les profils **embarqués** (pas encore ceux du registre) et les mêmes bornes que l'estimation (1 à 3600 s, 120 s par défaut). Les moteurs `RustBackend { time_balance }` et `ExportBackend::time_balance` les calculent depuis les jeux des joueurs.
+- Le journal de génération dit ce qui a été fait : objets avancés, attente totale et fin simulées avant → après.
+- Un échange respecte maintenant les règles d'objet (`MultiWorld::can_hold`, ADR 0029) dans les deux sens : la limite notée plus bas est levée.
+- Reste à faire : **mesurer le temps par lieu en vraie partie** (Slime Rancher 240 s et le défaut 120 s sont des estimations) ; coût sur une grosse partie toujours pas mesuré.
 
 ## Conséquences
 
 - L'hôte voit, après la génération, un ordre de grandeur de la durée de chaque joueur et de l'attente possible.
 - Les chiffres ne valent que ce que vaut le temps par lieu : sans mesure en vraie partie, c'est une estimation. Le texte du panneau le dit.
 - L'équilibrage par temps coûte une simulation par essai (au plus 32 × 16 × 4 simulations, chacune en O(lieux²) au pire) : acceptable pour quelques milliers de lieux, à mesurer avant de l'activer sur une grosse partie.
-- Limites connues : la simulation suppose qu'un joueur joue sans pause et visite tous ses lieux ; elle ignore les règles d'objet par lieu (`item_rule`, en cours dans la session `early-items`) : quand elles arrivent dans `logic`, `time_balance` devra refuser un échange qui les viole.
+- Limites connues : la simulation suppose qu'un joueur joue sans pause et visite tous ses lieux. Les règles d'objet par lieu (`item_rule`, ADR 0029) sont respectées depuis la révision (§ 5).

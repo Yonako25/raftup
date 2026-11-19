@@ -104,12 +104,14 @@ impl Generation {
 /// Avec Python, le runtime est relu sur le disque (petit fichier, appel rapide) : on vient
 /// de vérifier qu'il est prêt, mais il faut son chemin exact pour le `PythonBackend`.
 /// `note` est une première ligne de journal (par exemple : pourquoi le moteur Rust n'a pas
-/// pu servir).
+/// pu servir). `time_balance` : équilibrage par temps de jeu (ADR 0030), pris en compte par
+/// les moteurs Rust et export seulement (Archipelago seul ne le connaît pas).
 pub fn start(
     ctx: &egui::Context,
     request: GenerateRequest,
     engine: Engine,
     note: Option<String>,
+    time_balance: bool,
 ) -> Generation {
     let fail = |message: String| Generation::Failed {
         failure: Failure {
@@ -126,7 +128,7 @@ pub fn start(
     // `Box<dyn …>` : une boîte qui contient l'un ou l'autre moteur ; `Send` permet de
     // l'envoyer dans le thread de génération.
     let mut backend: Box<dyn GeneratorBackend + Send> = match engine {
-        Engine::Rust => Box::new(RustBackend),
+        Engine::Rust => Box::new(RustBackend { time_balance }),
         Engine::Python | Engine::Export => {
             let pins = match pins() {
                 Ok(pins) => pins,
@@ -134,7 +136,9 @@ pub fn start(
             };
             match runtime_status(&paths, &pins) {
                 RuntimeStatus::Ready(runtime) if engine == Engine::Export => {
-                    Box::new(ExportBackend::new(runtime))
+                    let mut backend = ExportBackend::new(runtime);
+                    backend.time_balance = time_balance;
+                    Box::new(backend)
                 }
                 RuntimeStatus::Ready(runtime) => Box::new(PythonBackend::new(runtime)),
                 _ => return fail(

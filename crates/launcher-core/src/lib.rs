@@ -55,7 +55,10 @@ pub use detect::{
 pub use diagnose::{explain, ConnectionProblem};
 pub use download::{DirFetcher, Downloader, HttpFetcher};
 pub use error::LauncherError;
-pub use estimate::{estimate, estimate_file, PlayerEstimate, SeedEstimate};
+pub use estimate::{
+    estimate, estimate_file, time_balance_embedded, time_balance_settings, PlayerEstimate,
+    SeedEstimate,
+};
 pub use generation::{GenerationError, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use host::{Encryption, Host, HostOptions, HostStatus, NumberedEvent};
 pub use install::{install, status, InstallError, InstallOptions, InstallReport, InstallStatus};

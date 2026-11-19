@@ -19,6 +19,7 @@ fn request(seed: u64) -> GenerateRequest {
             ),
             PlayerRequest::new("Bob", GameOptions::ApQuest(ApQuestOptions::default())),
         ],
+        time_balance: Default::default(),
     }
 }
 

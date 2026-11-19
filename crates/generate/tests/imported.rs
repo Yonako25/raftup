@@ -86,6 +86,44 @@ fn export_simple_relu_et_jouable() {
     assert!(result.all_goals_reached(w));
 }
 
+/// Chemin export avec l'équilibrage par temps (ADR 0030) : désactivé, même placement que
+/// `fill_imported` et pas de rapport ; activé, un rapport, le même placement à chaque fois.
+#[test]
+fn equilibrage_par_temps_sur_un_export() {
+    use generate::imported::{fill_imported, fill_imported_with};
+    use generate::TimeBalance;
+
+    let v = base();
+    let export = read_export(&bytes(&v)).unwrap();
+    let imported = import(&v).unwrap();
+    let on = TimeBalance {
+        enabled: true,
+        seconds_per_location: vec![60],
+        ..TimeBalance::default()
+    };
+    for seed in 0..10 {
+        let plain = fill_imported(&mut imported.clone(), &export, seed).unwrap();
+        let (off, report) = fill_imported_with(
+            &mut imported.clone(),
+            &export,
+            seed,
+            &TimeBalance::default(),
+        )
+        .unwrap();
+        assert_eq!(off, plain);
+        assert!(report.is_none());
+
+        let (first, report) =
+            fill_imported_with(&mut imported.clone(), &export, seed, &on).unwrap();
+        let (again, _) = fill_imported_with(&mut imported.clone(), &export, seed, &on).unwrap();
+        assert_eq!(first, again);
+        // Un seul joueur : personne n'attend, rien ne bouge.
+        let report = report.unwrap();
+        assert_eq!(report.moved, 0);
+        assert_eq!(first, plain);
+    }
+}
+
 #[test]
 fn regle_opaque_refusee() {
     let v = with_deep_rule(json!({"t": "opaque", "why": "worlds.test.<lambda>"}));

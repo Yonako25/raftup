@@ -4,7 +4,8 @@
 
 use fill::{simulate, time_balance, TimeBalance, TimeBalanceReport, DEFAULT_SECONDS_PER_LOCATION};
 use logic::{
-    sweep, Classification, ItemKindId, LocationId, MultiWorld, Progress, Rule, SlotId, State,
+    sweep, Classification, ItemKindId, ItemRule, LocationId, MultiWorld, Progress, Rule, SlotId,
+    State,
 };
 
 const PROG: Classification = Classification::PROGRESSION;
@@ -192,6 +193,25 @@ fn un_lieu_exclu_ne_recoit_pas_la_cle() {
 fn un_lieu_prioritaire_garde_son_objet() {
     let (mut w, _, a3) = bob_attend();
     w.set_progress(a3, Progress::Priority).unwrap();
+    let before = placement(&w);
+    let report = {
+        let start = State::new(&w);
+        time_balance(&mut w, &enabled(vec![100, 10]), &start).unwrap()
+    };
+    assert_eq!(report.moved, 0);
+    assert_eq!(placement(&w), before);
+}
+
+#[test]
+fn un_lieu_qui_refuse_la_cle_ne_la_recoit_pas() {
+    // Règle d'objet (ADR 0029) sur S : « Key B » interdite. S était la seule place
+    // possible : l'échange n'est pas tenté.
+    let (mut w, s, _) = bob_attend();
+    let key_b = w.item_named(slot(&w, 1), "Key B").unwrap();
+    let rule = w
+        .add_item_rule(ItemRule::forbid(vec![key_b], Vec::new()))
+        .unwrap();
+    w.set_item_rule(s, Some(rule)).unwrap();
     let before = placement(&w);
     let report = {
         let start = State::new(&w);

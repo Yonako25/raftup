@@ -25,8 +25,13 @@ pub fn engine_name() -> String {
 }
 
 /// Le générateur écrit en Rust.
+///
+/// `RustBackend::default()` : sans équilibrage par temps, comme avant l'ADR 0030.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct RustBackend;
+pub struct RustBackend {
+    /// Équilibrage par temps de jeu (ADR 0030), avec les temps par lieu des profils.
+    pub time_balance: bool,
+}
 
 /// Le moteur Rust sait-il générer ces fichiers joueurs ? `Err` donne la raison lisible
 /// (jeu non porté, option avancée…) : la génération passe alors en Python.
@@ -144,11 +149,20 @@ impl GeneratorBackend for RustBackend {
             return Err(GenerationError::Cancelled);
         }
         let _ = log.send("Placement des objets".to_string());
+        let time_balance = if self.time_balance {
+            crate::estimate::time_balance_embedded(players.iter().map(|p| p.options.game()))
+        } else {
+            generate::TimeBalance::default()
+        };
         let generated = generate::generate(&generate::GenerateRequest {
             seed,
             players: players.clone(),
+            time_balance,
         })
         .map_err(|e| failed("RustGenerator", e.to_string()))?;
+        if let Some(report) = &generated.time_balance {
+            let _ = log.send(time_balance_line(report));
+        }
         if cancel.is_cancelled() {
             return Err(GenerationError::Cancelled);
         }
@@ -186,6 +200,19 @@ impl GeneratorBackend for RustBackend {
             seconds: started.elapsed().as_secs_f64(),
         })
     }
+}
+
+/// Ligne de journal après l'équilibrage par temps : objets avancés, attente et fin
+/// simulées avant → après, en minutes (arrondies vers le bas).
+pub fn time_balance_line(report: &generate::TimeBalanceReport) -> String {
+    format!(
+        "Équilibrage par temps : {} objet(s) avancé(s), attente totale {} → {} min, fin {} → {} min (simulation)",
+        report.moved,
+        report.idle_before / 60,
+        report.idle_after / 60,
+        report.makespan_before / 60,
+        report.makespan_after / 60,
+    )
 }
 
 /// Écrit `AP_<seed>.zip` avec la seed et, s'il est demandé, le spoiler, comme le
