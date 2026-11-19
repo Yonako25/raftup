@@ -11,6 +11,7 @@
 //! - [`launch`] : préparer et lancer le jeu ;
 //! - [`diagnose`] : expliquer en clair un échec de connexion ;
 //! - [`readiness`] : tester « prêt ? » d'un slot par une vraie connexion (F08) ;
+//! - [`registry`] : lire et vérifier le registre de paquets signés (ADR 0032) ;
 //! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup.
 //!
 //! `launcher-ui` (egui) n'appelle que cette crate.
@@ -36,6 +37,7 @@ pub mod paths;
 pub mod profile;
 pub mod readiness;
 pub mod record;
+pub mod registry;
 pub mod seed;
 pub mod template;
 pub mod uninstall;

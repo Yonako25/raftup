@@ -282,3 +282,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+### 2026-11-19 · Registre de paquets signés (session `registre`, ADR 0032)
+- **Fait** : ADR 0032 (accepté en autonomie, à relire) ; crate `registry` (MIT OR Apache-2.0) : `index.json` versionné, trié, une version par paquet, URL + sha256 + taille + licence + auteurs (rien n'est hébergé) ; signature minisign vérifiée avant lecture ; binaire `raftup-registry` (`keygen`, `publish`, `verify`) qui écrit en local et n'envoie rien. `launcher-core::registry` : index et paquets téléchargés bornés et vérifiés, profils du registre ajoutés au catalogue sans jamais remplacer l'embarqué. 21 tests `registry`, 10 `launcher-core` ; workspace, clippy et fmt passent.
+- **Pas vérifié** : vraie clé du registre (`REGISTRY_PUBLIC_KEY` vide : tout est refusé), adresse de publication, binaire jamais lancé sur une vraie apworld ; rien dans l'interface (Bibliothèque, installation d'une apworld du registre).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : générer la clé (`raftup-registry keygen`, hors du dépôt), écrire le `registre.toml` source, brancher le registre dans la Bibliothèque.
+

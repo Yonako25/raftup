@@ -31,6 +31,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] « Créer une partie » reprend seul les apworlds installés par la Bibliothèque (vérifié avec Slime Rancher par la macro)
 - [x] « Lancer le jeu » sans adresse ni slot : le jeu démarre sans connexion (`plan_launch_offline`)
 - [x] Relire le code de `launcher-ui` (fait le 18 novembre 2026 ; reste à vérifier le redimensionnement de la fenêtre sans bordure)
+- [ ] **V2, registre de paquets signés** (ADR 0032, à relire) : crate `registry` + binaire `raftup-registry` (`keygen`, `publish`, `verify`, local, n'envoie rien), lecture vérifiée par `launcher-core::registry` ; reste : vraie clé (`REGISTRY_PUBLIC_KEY` vide), source `registre.toml`, adresse de publication, branchement dans la Bibliothèque
 
 ## Crates
 
@@ -46,6 +47,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `logic` | Modèle d'un multiworld, règles, balayage par sphères (V2) | **Fait** pour l'étape 1 de l'ADR 0027 |
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
+| `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** pour le cœur (ADR 0032) |
 
 ## Ce que fait chaque crate
 
@@ -128,6 +130,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
 - **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
+- **0032** : registre de paquets signés : index JSON versionné (URL + sha256), une signature minisign pour l'index, clé distincte des mises à jour, catalogue embarqué prioritaire (accepté en autonomie, à relire)
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 
