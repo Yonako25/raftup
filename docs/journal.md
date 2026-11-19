@@ -239,3 +239,9 @@ untime2`.
 - **Pas vérifié** : comparaison avec le vrai `balance_multiworld_progression` (algorithme relu, pas rejoué) ; partie jouée avec le vrai client APQuest sur une seed Rust ; préréglage « Rapide » (`accessibility: minimal`) toujours au Python.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : jouer une vraie partie APQuest sur une seed Rust, puis étape 6 (export des règles depuis un apworld, ADR à part).
+
+### 2026-11-19 · ADR de l'export des mondes Python
+- **Fait** : ADR 0028 rédigé (`5a1fb05`) puis accepté tel que recommandé : export en deux appels au worker, sondage des lambdas, contrôle croisé sur 64 inventaires, repli Python pour toute règle opaque, `progress_type` ajouté, `item_rule` pas encore. Aucun code.
+- **Pas vérifié** : sondage jamais essayé sur une vraie lambda ; durée de l'aller-retour Python.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : ADR 0028, étape 1 : `export_worlds` sur APQuest, relu en `logic::MultiWorld` et comparé au portage Rust.

@@ -14,7 +14,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
-- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill`, 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) et 5 équilibrage de progression faites ; reste : vraie partie APQuest sur seed Rust (avant de rendre le moteur Rust par défaut), étape 6 export des règles (ADR à part)
+- [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill`, 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) et 5 équilibrage de progression faites ; reste : vraie partie APQuest sur seed Rust (avant de rendre le moteur Rust par défaut), étape 6 export des mondes Python (ADR 0028, accepté le 19 novembre 2026 : 5 sous-étapes, APQuest exporté d'abord)
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
 - [x] **Règle de conservation de `generations/`** : purge manuelle dans l'interface (ADR 0019)
@@ -126,6 +126,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0018** : ordre des indices comme un `set` Python (module `pyset`)
 - **0019** : écran « Créer une partie » : purge manuelle, YAML par sélecteur, réseau du générateur bloqué par défaut
 - **0020** : rejoindre par lien `raftup://`, sans mot de passe, instance unique
+- **0028** : export des mondes Python vers le moteur Rust : `export_worlds` / `finish_worlds`, sondage des lambdas, contrôle croisé, repli Python
 - **0027** : générateur Rust (V2) : crates `logic` / `fill` / `generate`, sortie `.archipelago`, seed reproductible dans Raftup (ChaCha), APQuest en premier monde, Python en secours
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)

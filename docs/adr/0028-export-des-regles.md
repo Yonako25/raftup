@@ -1,6 +1,6 @@
 # 0028 — Export des mondes Python vers le moteur Rust (V2, étape 6)
 
-- Statut : **proposé** (à valider par l'utilisatrice, voir « Décisions à valider » en bas)
+- Statut : **accepté** le 19 novembre 2026 (les 7 décisions du bas, telles que recommandées)
 - Date : 2026-11-19
 - Prolonge l'ADR 0027 (§ 7, étape 6) et la SPEC § 4 V2 : « export des règles depuis les apworlds : module de règles déclaratives d'abord, puis traçage des lambdas, sinon règle opaque ».
 
@@ -14,7 +14,7 @@
   - `fill_slot_data` tire au hasard (`self.random`) et lit `multiworld.seed`.
 - Il faut donc faire tourner le code de l'apworld (sur le PC du joueur, comme aujourd'hui) et en **extraire** une description que le moteur Rust sait remplir.
 
-## Décision proposée
+## Décision
 
 ### 1. Deux appels au worker Python, le placement entre les deux en Rust
 
@@ -87,9 +87,9 @@ Pour chaque joueur :
 - Le sondeur dépend de l'API de `CollectionState` d'Archipelago : une méthode ajoutée dans une version future rend les règles qui l'utilisent opaques (le monde reste en Python). Pas de mauvaise seed, seulement un repli.
 - Le passage par Python en deux temps rend la génération plus longue qu'en Python seul pour un petit monde (deux appels, un JSON). C'est à mesurer à l'étape 4.
 
-## Décisions à valider
+## Décisions validées (19 novembre 2026)
 
-| # | Question | Recommandation |
+| # | Question | Choix |
 | --- | --- | --- |
 | 1 | Export en deux appels (`export_worlds`, puis `finish_worlds` avec le placement Rust) dans le même worker | Oui |
 | 2 | Lambdas traduites par **sondage** (arbre de décision), avec les plafonds et les cas de refus de la section 3 | Oui |
