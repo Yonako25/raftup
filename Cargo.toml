@@ -2,7 +2,7 @@
 # Les crates des jalons suivants (multidata, server, client-core…) seront ajoutées ici au fur et à mesure.
 [workspace]
 resolver = "2"
-members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge", "crates/logic", "crates/fill", "crates/generate", "crates/hub"]
+members = ["crates/ap-protocol", "crates/client-core", "crates/multidata", "crates/server", "crates/launcher-core", "crates/launcher-ui", "crates/py-bridge", "crates/logic", "crates/fill", "crates/generate", "crates/hub", "crates/registry"]
 
 # Valeurs partagées : chaque crate les reprend avec `xxx.workspace = true`.
 [workspace.package]
@@ -92,6 +92,8 @@ launcher-core = { path = "crates/launcher-core" }
 py-bridge = { path = "crates/py-bridge" }
 logic = { path = "crates/logic" }
 fill = { path = "crates/fill" }
+# Registre de paquets signés (ADR 0032) ; sans `publish` côté launcher.
+registry = { path = "crates/registry", default-features = false }
 
 # Règles du compilateur et de clippy communes à toutes les crates.
 [workspace.lints.rust]

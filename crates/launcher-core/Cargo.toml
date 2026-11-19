@@ -39,6 +39,8 @@ serde_json.workspace = true
 # Mise à jour automatique : signature minisign et versions (ADR 0022).
 minisign-verify.workspace = true
 semver.workspace = true
+# Registre de paquets signés (ADR 0032), sans la fonctionnalité `publish` (pas de signature).
+registry.workspace = true
 
 # Registre Windows : seulement compilé sous Windows.
 [target.'cfg(windows)'.dependencies]
@@ -50,6 +52,8 @@ tempfile.workspace = true
 logic.workspace = true
 # Signer un faux binaire dans les tests de update.rs.
 minisign.workspace = true
+# Tests du registre : un index produit par la vraie publication, puis relu par le launcher.
+registry = { workspace = true, features = ["publish"] }
 # Certificat auto-signé pour le test du diagnostic TLS (diagnose.rs).
 rcgen.workspace = true
 futures-util.workspace = true

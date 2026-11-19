@@ -1959,6 +1959,7 @@ dependencies = [
  "percent-encoding",
  "py-bridge",
  "rcgen",
+ "registry",
  "semver",
  "serde",
  "serde_json",
@@ -3152,6 +3153,21 @@ checksum = "60dc65c0ff1a7ae1294b0c67b9f14baf70b644404010370171787bfac1038fc0"
 dependencies = [
  "libredox",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "registry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "minisign",
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]
