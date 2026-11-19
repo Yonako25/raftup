@@ -21,22 +21,24 @@
 //! | `RAFTUP_HUB_MAIL_FROM` | expéditeur : `Raftup <no-reply@exemple.org>` |
 //! | `RAFTUP_HUB_DISCORD_CLIENT_ID` | application Discord (portail développeur) |
 //! | `RAFTUP_HUB_DISCORD_CLIENT_SECRET` | secret de cette application |
+//! | `RAFTUP_HUB_PUBLIC_URL` | adresse publique (comme `--public-url`) |
+//! | `RAFTUP_HUB_NAME` | nom du hub affiché (défaut : Rafthub) |
+//! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
+//! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
 //!
-//! Sans `RAFTUP_HUB_SMTP_URL`, aucun e-mail ne part (avertissement au journal).
-//! Sans les deux variables Discord, la connexion Discord répond `discord_disabled`.
+//! Ces réglages se changent aussi depuis la console d'admin (ADR 0036) : la valeur
+//! écrite en base passe avant la variable d'environnement, qui passe avant le défaut.
+//! SMTP et Discord sont relus à chaque usage : pas besoin de redémarrer.
+//! Sans SMTP, aucun e-mail ne part (avertissement au journal).
+//! Sans application Discord, la connexion Discord répond `discord_disabled`.
 //! L'adresse de retour à déclarer chez Discord est `<public-url>/v1/oauth/discord/callback`.
 //!
 //! Le hub parle HTTP en clair : en production, il se place derrière un proxy
 //! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
 
-use std::sync::Arc;
-
 use anyhow::{bail, Context};
 use hub::store::Role;
-use hub::{
-    AppState, DisabledMailer, DiscordApi, DiscordConfig, HttpDiscord, HubConfig, Mailer,
-    SmtpMailer, Store,
-};
+use hub::{AppState, EnvSettings, HubConfig, SettingKey, Store};
 
 struct Args {
     db: String,
@@ -113,42 +115,26 @@ async fn main() -> anyhow::Result<()> {
         return set_admin_role(&store, role, &email).await;
     }
 
-    let mut config = HubConfig::default();
+    // Réglages de l'environnement ; `--public-url` passe avant la variable.
+    let mut config = HubConfig {
+        settings_env: EnvSettings::from_env(),
+        ..HubConfig::default()
+    };
     if let Some(url) = args.public_url {
-        config.public_url = url;
+        config
+            .settings_env
+            .set(SettingKey::PublicUrl, &url)
+            .context("--public-url")?;
     }
-    let mailer: Arc<dyn Mailer> = match env("RAFTUP_HUB_SMTP_URL") {
-        Some(url) => {
-            let from = env("RAFTUP_HUB_MAIL_FROM")
-                .context("RAFTUP_HUB_MAIL_FROM est obligatoire avec RAFTUP_HUB_SMTP_URL")?;
-            Arc::new(SmtpMailer::from_url(&url, &from).context("réglage SMTP")?)
-        }
-        None => {
-            tracing::warn!("RAFTUP_HUB_SMTP_URL absent : aucun e-mail ne sera envoyé");
-            Arc::new(DisabledMailer)
-        }
-    };
-    let discord: Option<Arc<dyn DiscordApi>> = match (
-        env("RAFTUP_HUB_DISCORD_CLIENT_ID"),
-        env("RAFTUP_HUB_DISCORD_CLIENT_SECRET"),
-    ) {
-        (Some(client_id), Some(client_secret)) => {
-            let redirect_uri = format!(
-                "{}/v1/oauth/discord/callback",
-                config.public_url.trim_end_matches('/')
-            );
-            Some(Arc::new(HttpDiscord::new(DiscordConfig {
-                client_id,
-                client_secret,
-                redirect_uri,
-            })))
-        }
-        _ => {
-            tracing::warn!("application Discord non réglée : connexion Discord désactivée");
-            None
-        }
-    };
-    let state = AppState::with_services(store.clone(), config, mailer, discord).await?;
+    let state = AppState::from_settings(store.clone(), config).await?;
+    // Avertissements de départ : les réglages restent modifiables ensuite.
+    let settings = state.settings().await?;
+    if settings.smtp_mailer().is_none() {
+        tracing::warn!("SMTP non réglé : aucun e-mail ne sera envoyé");
+    }
+    if settings.discord_config().is_none() {
+        tracing::warn!("application Discord non réglée : connexion Discord désactivée");
+    }
 
     // Ménage des sessions et jetons expirés, une fois par heure, dans une tâche à part.
     tokio::spawn(async move {

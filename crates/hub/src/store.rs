@@ -17,15 +17,20 @@ use sqlx::{AnyPool, Row};
 
 use crate::error::HubError;
 
-// Méthodes de la console d'admin (rôles, sessions d'admin, chiffres du tableau de
-// bord), rangées à part dans `store/admin.rs`. Un module enfant voit les champs
-// privés de `Store`, comme le reste de ce fichier.
+// Méthodes de la console d'admin, dans deux fichiers à part (des modules enfants
+// voient les champs privés de `Store`) :
+// - `store/admin_auth.rs` : rôles et sessions d'admin (connexion à la console) ;
+// - `store/admin.rs` : suspension, réglages, invitations, journal, liste des joueurs.
 mod admin;
-pub use admin::{DashboardCounts, Role};
+mod admin_auth;
+pub use admin::{
+    AdminEvent, DashboardCounts, InviteRow, Page, PlayerFilter, PlayerSummary, MAX_PAGE_SIZE,
+};
+pub use admin_auth::Role;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -41,7 +46,8 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL,
     username_norm TEXT NOT NULL UNIQUE,
     created_at BIGINT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'player'
+    role TEXT NOT NULL DEFAULT 'player',
+    suspended_at BIGINT
 );
 CREATE TABLE IF NOT EXISTS user_identities (
     id {id},
@@ -99,7 +105,30 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
     created_at BIGINT NOT NULL,
     expires_at BIGINT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS admin_sessions_user ON admin_sessions (user_id)
+CREATE INDEX IF NOT EXISTS admin_sessions_user ON admin_sessions (user_id);
+CREATE TABLE IF NOT EXISTS settings (
+    name TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invites (
+    id {id},
+    code_hash TEXT NOT NULL UNIQUE,
+    created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    created_at BIGINT NOT NULL,
+    expires_at BIGINT NOT NULL,
+    used_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+    used_at BIGINT
+);
+CREATE TABLE IF NOT EXISTS admin_events (
+    id {id},
+    created_at BIGINT NOT NULL,
+    actor_id BIGINT,
+    kind TEXT NOT NULL,
+    target_id BIGINT,
+    detail TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_events_created ON admin_events (created_at)
 ";
 
 /// Migrations d'une version à la suivante : `(version atteinte, instructions)`.
@@ -118,6 +147,9 @@ const MIGRATIONS: &[(i64, &str)] = &[
         5,
         "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'player'",
     ),
+    // Version 6 (console Rafthub, ADR 0036) : suspension des comptes. Les tables
+    // `settings`, `invites` et `admin_events` sont créées par `SCHEMA`.
+    (6, "ALTER TABLE users ADD COLUMN suspended_at BIGINT"),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.
@@ -223,6 +255,26 @@ pub struct Store {
     backend: Backend,
 }
 
+/// Pour une instruction `ALTER TABLE <table> ADD COLUMN <colonne> …` : la colonne
+/// existe-t-elle déjà ? (SQLite n'a pas `ADD COLUMN IF NOT EXISTS`.) Toute autre
+/// instruction répond `false`.
+async fn added_column_exists(pool: &AnyPool, statement: &str) -> bool {
+    let words: Vec<&str> = statement.split_whitespace().collect();
+    let [alter, table_kw, table, add, column_kw, column, ..] = words.as_slice() else {
+        return false;
+    };
+    let is_add_column = alter.eq_ignore_ascii_case("ALTER")
+        && table_kw.eq_ignore_ascii_case("TABLE")
+        && add.eq_ignore_ascii_case("ADD")
+        && column_kw.eq_ignore_ascii_case("COLUMN");
+    // Noms tirés de nos propres migrations (constantes), jamais d'une saisie.
+    is_add_column
+        && sqlx::query(&format!("SELECT {column} FROM {table} LIMIT 0"))
+            .fetch_optional(pool)
+            .await
+            .is_ok()
+}
+
 /// Paire rangée pour la table `friendships` (`user_a < user_b`).
 fn ordered(a: i64, b: i64) -> (i64, i64) {
     if a < b {
@@ -322,11 +374,19 @@ impl Store {
             Some(v) if v == SCHEMA_VERSION => {}
             Some(v) if v < SCHEMA_VERSION => {
                 for (target, statements) in MIGRATIONS.iter().filter(|(t, _)| *t > v) {
-                    let mut tx = pool.begin().await?;
+                    // Colonnes déjà là (base ramenée à une version plus ancienne,
+                    // migration rejouée) : vérifié avant la transaction, car une
+                    // requête en échec annule toute la transaction sous PostgreSQL.
+                    let mut todo = Vec::new();
                     for statement in statements.split(';').map(str::trim) {
-                        if !statement.is_empty() {
-                            sqlx::query(statement).execute(&mut *tx).await?;
+                        if statement.is_empty() || added_column_exists(&pool, statement).await {
+                            continue;
                         }
+                        todo.push(statement);
+                    }
+                    let mut tx = pool.begin().await?;
+                    for statement in todo {
+                        sqlx::query(statement).execute(&mut *tx).await?;
                     }
                     sqlx::query("UPDATE schema_version SET version = $1")
                         .bind(*target)
@@ -350,12 +410,17 @@ impl Store {
     }
 
     /// Crée un compte et son identité « e-mail », dans une seule transaction.
+    ///
+    /// `invite_hash` : empreinte d'un code d'invitation (mode d'inscription `invite`).
+    /// Le code est consommé dans la même transaction : s'il est faux, expiré ou déjà
+    /// pris, rien n'est créé ([`HubError::InvalidInvite`]).
     pub async fn create_account(
         &self,
         username: &str,
         username_norm: &str,
         email_norm: &str,
         password_hash: &str,
+        invite_hash: Option<&str>,
         now: i64,
     ) -> Result<i64, HubError> {
         let mut tx = self.pool.begin().await?;
@@ -384,6 +449,9 @@ impl Store {
         .execute(&mut *tx)
         .await
         .map_err(map_unique)?;
+        if let Some(hash) = invite_hash {
+            admin::consume_invite(&mut tx, hash, user_id, now).await?;
+        }
         tx.commit().await?;
         Ok(user_id)
     }
@@ -456,14 +524,17 @@ impl Store {
         Ok(())
     }
 
-    /// Compte d'une session encore valide.
+    /// Compte d'une session encore valide. Un compte suspendu n'a plus de session
+    /// (elles sont supprimées à la suspension) ; la jointure le vérifie quand même.
     pub async fn session_user(&self, token_hash: &str, now: i64) -> Result<Option<i64>, HubError> {
-        let row =
-            sqlx::query("SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > $2")
-                .bind(token_hash)
-                .bind(now)
-                .fetch_optional(&self.pool)
-                .await?;
+        let row = sqlx::query(
+            "SELECT s.user_id FROM sessions s JOIN users u ON u.id = s.user_id \
+             WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.suspended_at IS NULL",
+        )
+        .bind(token_hash)
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await?;
         row.map(|r| r.try_get("user_id"))
             .transpose()
             .map_err(Into::into)
@@ -575,13 +646,14 @@ impl Store {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Amis d'un compte, rangés par pseudo normalisé (ordre stable).
+    /// Amis d'un compte, rangés par pseudo normalisé (ordre stable). Les comptes
+    /// suspendus sont cachés (ADR 0036), comme dans les demandes et les blocages.
     pub async fn friends_of(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         // `$1` sert trois fois : on ne le lie qu'une fois.
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friendships f \
              JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END \
-             WHERE f.user_a = $1 OR f.user_b = $1 \
+             WHERE (f.user_a = $1 OR f.user_b = $1) AND u.suspended_at IS NULL \
              ORDER BY u.username_norm, u.id",
         )
         .bind(user_id)
@@ -594,7 +666,7 @@ impl Store {
     pub async fn incoming_requests(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friend_requests r JOIN users u ON u.id = r.from_user \
-             WHERE r.to_user = $1 ORDER BY r.created_at, u.id",
+             WHERE r.to_user = $1 AND u.suspended_at IS NULL ORDER BY r.created_at, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -606,7 +678,7 @@ impl Store {
     pub async fn outgoing_requests(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friend_requests r JOIN users u ON u.id = r.to_user \
-             WHERE r.from_user = $1 ORDER BY r.created_at, u.id",
+             WHERE r.from_user = $1 AND u.suspended_at IS NULL ORDER BY r.created_at, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -672,7 +744,7 @@ impl Store {
     pub async fn blocked_by(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM blocks b JOIN users u ON u.id = b.blocked \
-             WHERE b.blocker = $1 ORDER BY u.username_norm, u.id",
+             WHERE b.blocker = $1 AND u.suspended_at IS NULL ORDER BY u.username_norm, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -804,12 +876,25 @@ impl Store {
     ///
     /// Une seule ligne effacée suffit : les autres tables pointent vers `users` avec
     /// `ON DELETE CASCADE` (identités, sessions, amitiés, demandes, blocages).
+    /// Le journal de la console (`admin_events`) n'a pas de clé étrangère : on y
+    /// efface à la main l'identifiant du compte, pour qu'aucune ligne ne le désigne
+    /// encore (et qu'un futur compte au même numéro n'hérite pas de son passé).
     /// Renvoie `false` si le compte n'existait pas.
     pub async fn delete_account(&self, user_id: i64) -> Result<bool, HubError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("UPDATE admin_events SET actor_id = NULL WHERE actor_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE admin_events SET target_id = NULL WHERE target_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
         let result = sqlx::query("DELETE FROM users WHERE id = $1")
             .bind(user_id)
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await?;
+        tx.commit().await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -824,7 +909,9 @@ impl Store {
              (SELECT COUNT(*) FROM friend_requests WHERE from_user = $1 OR to_user = $1) + \
              (SELECT COUNT(*) FROM friendships WHERE user_a = $1 OR user_b = $1) + \
              (SELECT COUNT(*) FROM blocks WHERE blocker = $1 OR blocked = $1) + \
-             (SELECT COUNT(*) FROM email_tokens WHERE user_id = $1) AS total",
+             (SELECT COUNT(*) FROM email_tokens WHERE user_id = $1) + \
+             (SELECT COUNT(*) FROM admin_events WHERE actor_id = $1 OR target_id = $1) + \
+             (SELECT COUNT(*) FROM invites WHERE created_by = $1 OR used_by = $1) AS total",
         )
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -1009,12 +1096,15 @@ impl Store {
     }
 
     /// Crée un compte dont le seul moyen de connexion est une identité externe.
+    ///
+    /// `invite_hash` : comme pour [`Store::create_account`].
     pub async fn create_account_with_identity(
         &self,
         username: &str,
         username_norm: &str,
         provider: &str,
         subject: &str,
+        invite_hash: Option<&str>,
         now: i64,
     ) -> Result<i64, HubError> {
         let mut tx = self.pool.begin().await?;
@@ -1040,6 +1130,9 @@ impl Store {
         .execute(&mut *tx)
         .await
         .map_err(map_identity_unique)?;
+        if let Some(hash) = invite_hash {
+            admin::consume_invite(&mut tx, hash, user_id, now).await?;
+        }
         tx.commit().await?;
         Ok(user_id)
     }

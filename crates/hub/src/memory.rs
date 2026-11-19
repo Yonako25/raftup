@@ -102,6 +102,11 @@ impl PresenceBoard {
         (online, in_game)
     }
 
+    /// Nombre de comptes en ligne (présence encore fraîche), pour le tableau de bord.
+    pub fn online_count(&self) -> usize {
+        self.online_counts().0
+    }
+
     pub fn get(&self, user_id: i64) -> PresenceView {
         let mut entries = lock(&self.entries);
         match entries.get(&user_id) {

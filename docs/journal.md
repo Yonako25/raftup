@@ -378,3 +378,9 @@ untime2`.
 - **Pas vérifié** : PostgreSQL (seulement SQLite cette fois) ; vraie installation derrière un proxy HTTPS ; fusion avec `rafthub-donnees`, qui prend sans doute aussi la version 5 du schéma (renuméroter, voir la note de groupe `rafthub-socle.md`).
 - **Ne pas toucher** : `launcher-core` / `launcher-ui` (session `rafthub-launcher`) ; `"service": "raftup-hub"` de `GET /v1` et le service du trousseau, que le launcher teste.
 - **Suite** : après la fusion, pages Joueurs puis Réglages sur les données de `rafthub-donnees`.
+
+### 2026-11-19 · Rafthub, couche données de la console (session `rafthub-donnees`, ADR 0036)
+- **Fait** : schéma en version 5 ; suspension (sessions fermées, connexion refusée par mot de passe et Discord, caché des autres joueurs) ; réglages en base > environnement > défaut, secrets jamais relus, SMTP et Discord relus à chaque usage (`AppState::from_settings`) ; mode d'inscription `open` / `invite` / `closed` et codes d'invitation ; journal `admin_events` ; liste des joueurs et compteurs (`console.rs`, `store/admin.rs`, `settings.rs`). ADR 0036 précisé. Tests du hub sur SQLite et sur un PostgreSQL 18 jetable ; workspace (`--no-fail-fast`), clippy et fmt passent.
+- **Pas vérifié** : migration 4 → 5 essayée sur SQLite seulement ; aucune page HTML (session `rafthub-socle`) ; vrai SMTP et vraie application Discord ; le launcher n'envoie pas encore de code d'invitation. `launcher-core/tests/host.rs` (`sauvegarde_puis_reprise`) échoue si deux `cargo test` tournent en même temps (dossier fixe).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pages `/admin`, `users.role`, `admin_sessions` (session `rafthub-socle`) ; launcher (session `rafthub-launcher`).
+- **Suite** : fusion avec `rafthub-socle` (renuméroter sa version de schéma en 6) puis brancher les pages sur `console.rs`.

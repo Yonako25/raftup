@@ -33,7 +33,7 @@ struct DashboardPage {
 
 /// `GET /admin`.
 pub async fn show(State(state): State<AppState>, session: AdminSession) -> Response {
-    let counts = match state.store().dashboard_counts().await {
+    let counts = match state.store().dashboard_counts(crate::now_unix()).await {
         Ok(counts) => counts,
         Err(error) => return internal_error(error),
     };
@@ -59,7 +59,20 @@ pub async fn show(State(state): State<AppState>, session: AdminSession) -> Respo
             }
         }
     };
-    let smtp = if state.inner.mailer.is_configured() {
+    // SMTP et Discord se règlent dans la console (ADR 0036) : on les relit ici.
+    let mailer = match state.mailer().await {
+        Ok(mailer) => mailer,
+        Err(error) => return internal_error(error),
+    };
+    let discord_on = match state.discord().await {
+        Ok(discord) => discord.is_some(),
+        Err(error) => return internal_error(error),
+    };
+    let public_url = match state.settings().await {
+        Ok(settings) => settings.public().public_url,
+        Err(error) => return internal_error(error),
+    };
+    let smtp = if mailer.is_configured() {
         ServiceRow {
             name: "E-mails (SMTP)",
             detail: "Configuré",
@@ -74,7 +87,7 @@ pub async fn show(State(state): State<AppState>, session: AdminSession) -> Respo
             needs_setup: true,
         }
     };
-    let discord = if state.inner.discord.is_some() {
+    let discord = if discord_on {
         ServiceRow {
             name: "Connexion Discord",
             detail: "Configurée",
@@ -94,11 +107,11 @@ pub async fn show(State(state): State<AppState>, session: AdminSession) -> Respo
         StatusCode::OK,
         &DashboardPage {
             layout: Layout::new(&session, "dashboard"),
-            public_url: state.inner.config.public_url.clone(),
+            public_url,
             accounts: counts.accounts,
             online,
             in_game,
-            unverified_emails: counts.unverified_emails,
+            unverified_emails: counts.unverified,
             services: vec![database, smtp, discord],
         },
     )

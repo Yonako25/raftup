@@ -31,6 +31,11 @@
 //! | `POST /v1/blocks` | bloquer (`username`) : retire l'amitié et les demandes |
 //! | `DELETE /v1/blocks/{username}` | lever un blocage |
 //!
+//! Inscription (`POST /v1/accounts` et `/v1/oauth/discord/register`) : selon le
+//! réglage `registration_mode` (ADR 0036), ouverte, sur code d'invitation
+//! (`invite_code` dans le corps) ou fermée. Un compte suspendu ne peut plus se
+//! connecter et n'apparaît plus chez les autres joueurs.
+//!
 //! Les routes sauf `/v1`, l'inscription, la connexion, la vérification d'adresse et
 //! le mot de passe oublié, et la connexion Discord demandent l'en-tête
 //! `Authorization: Bearer <jeton>`.
@@ -44,13 +49,15 @@ use axum::{Json, Router};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::console::EventKind;
 use crate::discord::{code_challenge, Outcome, Pending, ReturnTo};
 use crate::error::HubError;
 use crate::identity::{normalize_email, normalize_username, parse_username};
 use crate::mail::{password_reset_email, verification_email};
 use crate::memory::{PresenceView, Status};
 use crate::password::{hash_password, verify_password, Password};
-use crate::session::{new_token, token_hash};
+use crate::session::{new_token, normalize_invite_code, token_hash};
+use crate::settings::{RegistrationMode, Settings};
 use crate::store::{AccountExport, TokenPurpose, UserRow, DISCORD_PROVIDER};
 use crate::{blocking, now_unix, AppState};
 
@@ -114,6 +121,9 @@ pub struct RegisterBody {
     pub email: String,
     pub password: Password,
     pub username: String,
+    /// Code d'invitation, demandé seulement en mode `invite`.
+    #[serde(default)]
+    pub invite_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +216,9 @@ pub struct DiscordFinishBody {
     /// Seulement pour `/register` : le pseudo choisi.
     #[serde(default)]
     pub username: Option<String>,
+    /// Seulement pour `/register`, en mode `invite` : le code d'invitation.
+    #[serde(default)]
+    pub invite_code: Option<String>,
 }
 
 impl std::fmt::Debug for DiscordFinishBody {
@@ -224,6 +237,9 @@ pub struct DiscordFinishView {
     pub session: Option<SessionView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggested_username: Option<String>,
+    /// Avec `needs_username` : le hub demande aussi un code d'invitation.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub invite_required: bool,
 }
 
 /// Jeton reçu par e-mail. `Debug` masqué : le jeton est un secret.
@@ -372,6 +388,9 @@ async fn register(
     State(state): State<AppState>,
     ApiJson(body): ApiJson<RegisterBody>,
 ) -> Result<(StatusCode, Json<AccountView>), HubError> {
+    // Mode d'inscription d'abord : sur un hub fermé, inutile de lire le reste.
+    let settings = state.settings().await?;
+    let invite = registration_invite(&state, &settings, body.invite_code.as_deref()).await?;
     let username = parse_username(&body.username)?;
     let email = normalize_email(&body.email)?;
     body.password.validate()?;
@@ -399,12 +418,26 @@ async fn register(
             &username.normalized,
             &email,
             &hash,
+            invite.as_deref(),
             now_unix(),
         )
         .await?;
     // Ni l'adresse ni le mot de passe dans le journal (NF09, RGPD).
     tracing::info!(user_id, "compte créé");
-    send_verification(&state, user_id, &email, &username.display).await?;
+    let detail = if invite.is_some() {
+        "e-mail, avec invitation"
+    } else {
+        "e-mail"
+    };
+    state
+        .record_event_quietly(
+            Some(user_id),
+            EventKind::AccountCreated,
+            Some(user_id),
+            detail,
+        )
+        .await;
+    send_verification(&state, &settings, user_id, &email, &username.display).await?;
     Ok((
         StatusCode::CREATED,
         Json(AccountView {
@@ -448,13 +481,46 @@ async fn login(
     Ok(Json(open_session(&state, user_id).await?))
 }
 
+/// Vérifie qu'une inscription est permise par le mode d'inscription du hub, et
+/// renvoie l'empreinte du code d'invitation à consommer (mode `invite`).
+///
+/// Le code est seulement vérifié ici (réponse rapide) ; il est consommé dans la
+/// transaction qui crée le compte.
+async fn registration_invite(
+    state: &AppState,
+    settings: &Settings,
+    code: Option<&str>,
+) -> Result<Option<String>, HubError> {
+    match settings.registration_mode {
+        RegistrationMode::Open => Ok(None),
+        RegistrationMode::Closed => Err(HubError::RegistrationClosed),
+        RegistrationMode::Invite => {
+            let code = code
+                .map(normalize_invite_code)
+                .filter(|c| !c.is_empty())
+                .ok_or(HubError::InviteRequired)?;
+            let hash = token_hash(&code);
+            if !state.store().invite_usable(&hash, now_unix()).await? {
+                return Err(HubError::InvalidInvite);
+            }
+            Ok(Some(hash))
+        }
+    }
+}
+
 /// Ouvre une session pour un compte (connexion par mot de passe ou Discord).
+/// Un compte suspendu est refusé : l'appelant a déjà vérifié le mot de passe (ou
+/// Discord), donc la réponse n'apprend rien à quelqu'un qui ne le connaît pas.
 async fn open_session(state: &AppState, user_id: i64) -> Result<SessionView, HubError> {
     let user = state
         .store()
         .user_by_id(user_id)
         .await?
         .ok_or(HubError::InvalidCredentials)?;
+    if state.store().is_suspended(user_id).await? {
+        tracing::info!(user_id, "connexion refusée : compte suspendu");
+        return Err(HubError::AccountSuspended);
+    }
     let token = new_token();
     let now = now_unix();
     let lifetime = i64::try_from(state.inner.config.session_lifetime.as_secs()).unwrap_or(i64::MAX);
@@ -542,13 +608,17 @@ async fn list_friends(
     Ok(Json(views))
 }
 
-/// Cherche un autre joueur par son pseudo.
+/// Cherche un autre joueur par son pseudo. Un compte suspendu répond comme un
+/// pseudo inconnu : il n'existe plus pour les autres joueurs (ADR 0036).
 async fn other_player(state: &AppState, me: i64, username: &str) -> Result<UserRow, HubError> {
     let other = state
         .store()
         .user_by_username(&normalize_username(username))
         .await?
         .ok_or(HubError::UserNotFound)?;
+    if state.store().is_suspended(other.id).await? {
+        return Err(HubError::UserNotFound);
+    }
     if other.id == me {
         return Err(HubError::SelfFriend);
     }
@@ -728,6 +798,14 @@ async fn export_account(
         .await?
         .ok_or(HubError::Unauthorized)?;
     tracing::info!(user_id = user.user_id, "export des données du compte");
+    state
+        .record_event_quietly(
+            Some(user.user_id),
+            EventKind::GdprExport,
+            Some(user.user_id),
+            "",
+        )
+        .await;
     Ok(Json(ExportView {
         format_version: EXPORT_FORMAT_VERSION,
         exported_at: now_unix(),
@@ -764,6 +842,16 @@ async fn delete_account(
     store.delete_account(user.user_id).await?;
     state.inner.presence.clear(user.user_id);
     tracing::info!(user_id = user.user_id, "compte supprimé");
+    // Le compte n'existe plus : ni acteur ni cible, pour qu'aucune ligne du journal
+    // ne le désigne encore (droit à l'effacement).
+    state
+        .record_event_quietly(
+            None,
+            EventKind::GdprDelete,
+            None,
+            "compte supprimé par son joueur",
+        )
+        .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -797,26 +885,26 @@ async fn new_email_token(
     Ok(token)
 }
 
-/// Envoie le message de vérification d'adresse.
+/// Envoie le message de vérification d'adresse. Le lien part de l'adresse publique
+/// des réglages (ADR 0036).
 async fn send_verification(
     state: &AppState,
+    settings: &Settings,
     user_id: i64,
     email: &str,
     username: &str,
 ) -> Result<(), HubError> {
     let lifetime = state.inner.config.email_verify_lifetime;
     let token = new_email_token(state, user_id, TokenPurpose::VerifyEmail, lifetime).await?;
-    let link = format!(
-        "{}/v1/email/verify?token={token}",
-        state.inner.config.public_url.trim_end_matches('/')
-    );
-    state.send_mail(verification_email(
-        email,
-        username,
-        &link,
-        lifetime.as_secs() / 3600,
-    ));
-    Ok(())
+    let link = format!("{}/v1/email/verify?token={token}", settings.public_url);
+    state
+        .send_mail(verification_email(
+            email,
+            username,
+            &link,
+            lifetime.as_secs() / 3600,
+        ))
+        .await
 }
 
 /// Vérifie l'adresse avec le jeton du message.
@@ -895,7 +983,8 @@ async fn resend_verification(
         .await?
         .ok_or(HubError::Unauthorized)?
         .username;
-    send_verification(&state, user.user_id, &email, &username).await?;
+    let settings = state.settings().await?;
+    send_verification(&state, &settings, user.user_id, &email, &username).await?;
     Ok(StatusCode::ACCEPTED)
 }
 
@@ -920,12 +1009,14 @@ async fn forgot_password(
             .unwrap_or_default();
         let lifetime = state.inner.config.password_reset_lifetime;
         let token = new_email_token(&state, user_id, TokenPurpose::ResetPassword, lifetime).await?;
-        state.send_mail(password_reset_email(
-            &email,
-            &username,
-            &token,
-            lifetime.as_secs() / 60,
-        ));
+        state
+            .send_mail(password_reset_email(
+                &email,
+                &username,
+                &token,
+                lifetime.as_secs() / 60,
+            ))
+            .await?;
         tracing::info!(user_id, "code de réinitialisation envoyé");
     }
     Ok(StatusCode::ACCEPTED)
@@ -957,8 +1048,9 @@ async fn reset_password(
 
 // ---------- Connexion Discord (OAuth 2.0 + PKCE) ----------
 
-fn discord_api(state: &AppState) -> Result<std::sync::Arc<dyn crate::DiscordApi>, HubError> {
-    state.inner.discord.clone().ok_or(HubError::DiscordDisabled)
+/// Client Discord du moment (relu depuis les réglages, ADR 0036).
+async fn discord_api(state: &AppState) -> Result<std::sync::Arc<dyn crate::DiscordApi>, HubError> {
+    state.discord().await?.ok_or(HubError::DiscordDisabled)
 }
 
 /// Étape 1 : commence une connexion. Avec une session : liaison de Discord à ce compte.
@@ -967,7 +1059,7 @@ async fn discord_start(
     headers: HeaderMap,
     ApiJson(body): ApiJson<DiscordStartBody>,
 ) -> Result<Json<DiscordStartView>, HubError> {
-    let api = discord_api(&state)?;
+    let api = discord_api(&state).await?;
     let link_user = optional_auth(&headers, &state).await?.map(|u| u.user_id);
     let return_to = match body.return_port {
         Some(0) => return Err(HubError::BadRequest("return_port invalide".to_string())),
@@ -1018,7 +1110,7 @@ async fn discord_callback(
     if pending.outcome.is_some() {
         return text_error("Cette connexion est déjà revenue de Discord.");
     }
-    let outcome = match (query.get("code"), discord_api(&state)) {
+    let outcome = match (query.get("code"), discord_api(&state).await) {
         (Some(code), Ok(api)) if !query.contains_key("error") => {
             let code = code.clone();
             let verifier = pending.code_verifier.clone();
@@ -1126,6 +1218,7 @@ async fn discord_finish(
             status: "linked",
             session: None,
             suggested_username: None,
+            invite_required: false,
         }));
     }
 
@@ -1136,14 +1229,24 @@ async fn discord_finish(
                 status: "logged_in",
                 session: Some(open_session(&state, user_id).await?),
                 suggested_username: None,
+                invite_required: false,
             }))
         }
-        // Nouveau joueur : la connexion reste ouverte le temps de choisir un pseudo.
-        None => Ok(Json(DiscordFinishView {
-            status: "needs_username",
-            session: None,
-            suggested_username: suggested_username(&state, &discord).await?,
-        })),
+        // Nouveau joueur : la connexion reste ouverte le temps de choisir un pseudo
+        // (et le code d'invitation en mode `invite`). Hub fermé : on s'arrête là.
+        None => {
+            let mode = state.settings().await?.registration_mode;
+            if mode == RegistrationMode::Closed {
+                state.inner.oauth_pending.remove(&body.state);
+                return Err(HubError::RegistrationClosed);
+            }
+            Ok(Json(DiscordFinishView {
+                status: "needs_username",
+                session: None,
+                suggested_username: suggested_username(&state, &discord).await?,
+                invite_required: mode == RegistrationMode::Invite,
+            }))
+        }
     }
 }
 
@@ -1169,9 +1272,14 @@ async fn discord_register(
                 status: "logged_in",
                 session: Some(session),
                 suggested_username: None,
+                invite_required: false,
             }),
         ));
     }
+    // Code d'invitation faux ou manquant : la connexion reste ouverte, le joueur
+    // peut corriger et réessayer.
+    let settings = state.settings().await?;
+    let invite = registration_invite(&state, &settings, body.invite_code.as_deref()).await?;
     let wanted = body
         .username
         .as_deref()
@@ -1184,11 +1292,25 @@ async fn discord_register(
             &username.normalized,
             DISCORD_PROVIDER,
             &discord.id,
+            invite.as_deref(),
             now_unix(),
         )
         .await?;
     state.inner.oauth_pending.remove(&body.state);
     tracing::info!(user_id, "compte créé par Discord");
+    let detail = if invite.is_some() {
+        "Discord, avec invitation"
+    } else {
+        "Discord"
+    };
+    state
+        .record_event_quietly(
+            Some(user_id),
+            EventKind::AccountCreated,
+            Some(user_id),
+            detail,
+        )
+        .await;
     let session = open_session(&state, user_id).await?;
     Ok((
         StatusCode::CREATED,
@@ -1196,6 +1318,7 @@ async fn discord_register(
             status: "logged_in",
             session: Some(session),
             suggested_username: None,
+            invite_required: false,
         }),
     ))
 }
