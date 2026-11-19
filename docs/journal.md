@@ -366,3 +366,9 @@ untime2`.
 - **Pas vérifié** : rien regardé à l'écran après la fusion ; vrai SMTP, vraie application Discord, release `registre` ; rien poussé.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : créer la release `registre` ; relire les ADR 0029 à 0035 ; essais réels de la V2.
+
+### 2026-11-19 · Socle de la console d'admin Rafthub (session `rafthub-socle`, ADR 0036)
+- **Fait** : binaire `rafthub` (+ `admin create|remove <e-mail>`) ; console `/admin` en askama (menu, connexion, tableau de bord avec vrais chiffres et état base/SMTP/Discord, pages « Bientôt »), CSS et polices servies par le hub ; schéma v5 (`users.role`, `admin_sessions`) ; cookie haché 12 h, anti-CSRF, essais limités, Bearer refusé. 10 tests `tests/admin.rs` ; workspace, clippy, fmt passent ; connexion, tableau de bord et déconnexion faits dans le vrai navigateur (`5fc7209`).
+- **Pas vérifié** : PostgreSQL (seulement SQLite cette fois) ; vraie installation derrière un proxy HTTPS ; fusion avec `rafthub-donnees`, qui prend sans doute aussi la version 5 du schéma (renuméroter, voir la note de groupe `rafthub-socle.md`).
+- **Ne pas toucher** : `launcher-core` / `launcher-ui` (session `rafthub-launcher`) ; `"service": "raftup-hub"` de `GET /v1` et le service du trousseau, que le launcher teste.
+- **Suite** : après la fusion, pages Joueurs puis Réglages sur les données de `rafthub-donnees`.
