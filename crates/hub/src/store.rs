@@ -11,6 +11,7 @@
 //!
 //! Le reste du hub ne voit que les méthodes de [`Store`].
 
+use serde::Serialize;
 use sqlx::any::{AnyPoolOptions, AnyRow};
 use sqlx::{AnyPool, Row};
 
@@ -93,6 +94,43 @@ const EMAIL_PROVIDER: &str = "email";
 pub struct UserRow {
     pub id: i64,
     pub username: String,
+}
+
+/// Moyen de connexion, tel que l'export RGPD le montre (jamais le hash du secret).
+#[derive(Clone, Debug, Serialize)]
+pub struct IdentityExport {
+    pub provider: String,
+    pub subject: String,
+    pub verified: bool,
+    pub created_at: i64,
+}
+
+/// Session ouverte, sans son empreinte.
+#[derive(Clone, Debug, Serialize)]
+pub struct SessionExport {
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+/// Un autre joueur et la date du lien (amitié, demande, blocage).
+#[derive(Clone, Debug, Serialize)]
+pub struct LinkExport {
+    pub username: String,
+    pub since: i64,
+}
+
+/// Tout ce que la base garde sur un compte (RGPD, droit d'accès).
+#[derive(Clone, Debug, Serialize)]
+pub struct AccountExport {
+    pub user_id: i64,
+    pub username: String,
+    pub created_at: i64,
+    pub identities: Vec<IdentityExport>,
+    pub sessions: Vec<SessionExport>,
+    pub friends: Vec<LinkExport>,
+    pub requests_received: Vec<LinkExport>,
+    pub requests_sent: Vec<LinkExport>,
+    pub blocked: Vec<LinkExport>,
 }
 
 /// La base derrière le pilote générique.
@@ -588,6 +626,157 @@ impl Store {
         .fetch_all(&self.pool)
         .await?;
         rows.iter().map(user_row).collect()
+    }
+}
+
+impl Store {
+    /// Hash du mot de passe d'un compte, s'il en a un (identité « e-mail »).
+    pub async fn password_hash_of(&self, user_id: i64) -> Result<Option<String>, HubError> {
+        let row = sqlx::query(
+            "SELECT secret_hash FROM user_identities WHERE user_id = $1 AND provider = $2 \
+             ORDER BY id",
+        )
+        .bind(user_id)
+        .bind(EMAIL_PROVIDER)
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some(row) => Ok(row.try_get("secret_hash")?),
+            None => Ok(None),
+        }
+    }
+
+    /// Rassemble toutes les données d'un compte (RGPD). `None` si le compte n'existe pas.
+    pub async fn export_account(&self, user_id: i64) -> Result<Option<AccountExport>, HubError> {
+        let Some(user) = sqlx::query("SELECT id, username, created_at FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let mut identities = Vec::new();
+        for row in sqlx::query(
+            "SELECT provider, subject, verified, created_at FROM user_identities \
+             WHERE user_id = $1 ORDER BY id",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?
+        {
+            let verified: i64 = row.try_get("verified")?;
+            identities.push(IdentityExport {
+                provider: row.try_get("provider")?,
+                subject: row.try_get("subject")?,
+                verified: verified != 0,
+                created_at: row.try_get("created_at")?,
+            });
+        }
+
+        let mut sessions = Vec::new();
+        for row in sqlx::query(
+            "SELECT created_at, expires_at FROM sessions WHERE user_id = $1 \
+             ORDER BY created_at, expires_at",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?
+        {
+            sessions.push(SessionExport {
+                created_at: row.try_get("created_at")?,
+                expires_at: row.try_get("expires_at")?,
+            });
+        }
+
+        let friends = self
+            .links(
+                "SELECT u.username, f.created_at FROM friendships f \
+                 JOIN users u ON u.id = CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END \
+                 WHERE f.user_a = $1 OR f.user_b = $1 ORDER BY u.username_norm",
+                user_id,
+            )
+            .await?;
+        let requests_received = self
+            .links(
+                "SELECT u.username, r.created_at FROM friend_requests r \
+                 JOIN users u ON u.id = r.from_user WHERE r.to_user = $1 \
+                 ORDER BY r.created_at, u.username_norm",
+                user_id,
+            )
+            .await?;
+        let requests_sent = self
+            .links(
+                "SELECT u.username, r.created_at FROM friend_requests r \
+                 JOIN users u ON u.id = r.to_user WHERE r.from_user = $1 \
+                 ORDER BY r.created_at, u.username_norm",
+                user_id,
+            )
+            .await?;
+        let blocked = self
+            .links(
+                "SELECT u.username, b.created_at FROM blocks b \
+                 JOIN users u ON u.id = b.blocked WHERE b.blocker = $1 \
+                 ORDER BY u.username_norm",
+                user_id,
+            )
+            .await?;
+
+        Ok(Some(AccountExport {
+            user_id: user.try_get("id")?,
+            username: user.try_get("username")?,
+            created_at: user.try_get("created_at")?,
+            identities,
+            sessions,
+            friends,
+            requests_received,
+            requests_sent,
+            blocked,
+        }))
+    }
+
+    /// Exécute une requête qui renvoie `(username, created_at)` pour un compte.
+    async fn links(&self, sql: &str, user_id: i64) -> Result<Vec<LinkExport>, HubError> {
+        let rows = sqlx::query(sql).bind(user_id).fetch_all(&self.pool).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(LinkExport {
+                    username: row.try_get("username")?,
+                    since: row.try_get("created_at")?,
+                })
+            })
+            .collect()
+    }
+
+    /// Supprime un compte et tout ce qui s'y rattache (RGPD, droit à l'effacement).
+    ///
+    /// Une seule ligne effacée suffit : les autres tables pointent vers `users` avec
+    /// `ON DELETE CASCADE` (identités, sessions, amitiés, demandes, blocages).
+    /// Renvoie `false` si le compte n'existait pas.
+    pub async fn delete_account(&self, user_id: i64) -> Result<bool, HubError> {
+        let result = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Nombre de lignes rattachées à un compte, toutes tables confondues
+    /// (pour vérifier dans les tests que la suppression n'oublie rien).
+    pub async fn rows_of_user(&self, user_id: i64) -> Result<i64, HubError> {
+        let row = sqlx::query(
+            "SELECT \
+             (SELECT COUNT(*) FROM users WHERE id = $1) + \
+             (SELECT COUNT(*) FROM user_identities WHERE user_id = $1) + \
+             (SELECT COUNT(*) FROM sessions WHERE user_id = $1) + \
+             (SELECT COUNT(*) FROM friend_requests WHERE from_user = $1 OR to_user = $1) + \
+             (SELECT COUNT(*) FROM friendships WHERE user_a = $1 OR user_b = $1) + \
+             (SELECT COUNT(*) FROM blocks WHERE blocker = $1 OR blocked = $1) AS total",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.try_get("total")?)
     }
 }
 

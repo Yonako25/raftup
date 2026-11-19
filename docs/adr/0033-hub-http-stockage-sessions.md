@@ -57,6 +57,12 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 - Tant que le blocage dure, plus de demande : celui qui a bloqué reçoit `you_blocked` ; le joueur bloqué reçoit `user_not_found`, la même réponse qu'un pseudo inconnu, pour ne pas apprendre qu'il est bloqué. Le joueur bloqué n'est pas prévenu.
 - Lever le blocage ne rend pas l'amitié : il faut une nouvelle demande.
 
+### RGPD (ajout du 19 novembre 2026, à relire)
+
+- **Export** : `GET /v1/me/export` renvoie un seul document JSON (`format_version` 1) : compte, identités (fournisseur, adresse, vérifiée ou non), sessions (dates seulement), amis, demandes reçues et envoyées, blocages, chacun avec sa date, plus la présence du moment. Jamais de hash de mot de passe ni d'empreinte de session.
+- **Suppression** : `DELETE /v1/me`. Un compte avec mot de passe doit le redonner (`{"password": …}`) : une session volée ne suffit pas. Les échecs comptent dans la limite de la connexion (10 en 15 minutes). La suppression efface la ligne de `users` ; toutes les autres tables suivent par `ON DELETE CASCADE`. Elle est immédiate et définitive (pas de délai de grâce) ; le pseudo et l'adresse redeviennent libres tout de suite (pas de pseudo gardé en réserve, à revoir avec le changement de pseudo de l'ADR 0002).
+- Le journal du hub ne garde que l'identifiant du compte (« compte supprimé »), sans pseudo ni adresse.
+
 ### Licences des dépendances (vérifiées le 19 novembre 2026, `cargo tree -p hub -e normal,build`)
 
 Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-Clause (`subtle`, `matchit`), Zlib (`foldhash`), Unicode-3.0 (`icu_*`, `zerovec`…, via `idna` de `url`), Unlicense OR MIT (`memchr`), Apache-2.0 OR BSL-1.0 (`ryu`). Aucune dépendance sous GPL, LGPL ou licence propriétaire. Revérifié après l'ajout de PostgreSQL (même date) : en plus, BSD-2-Clause OR Apache-2.0 OR MIT, Zlib OR Apache-2.0 OR MIT, MIT AND BSD-3-Clause ; toujours compatibles.
@@ -66,7 +72,7 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 - **Discord** (OAuth 2.0 + PKCE) : pas pour l'instant ; la table `user_identities` est prête pour un fournisseur `discord`.
 - Vérification de l'adresse par lien, « mot de passe oublié » : demandent un service d'envoi d'e-mails. Tant qu'ils manquent, l'inscription révèle qu'une adresse a déjà un compte (`email_taken`).
 - Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
-- RGPD : export et suppression du compte.
+- RGPD : hébergement en Europe, politique de confidentialité, sauvegardes purgées des comptes supprimés.
 - Côté launcher : client du hub, jeton rangé dans le trousseau (`keyring`), panneau d'amis.
 - Plusieurs instances du hub (présence dans Redis), déploiement, sauvegardes.
 

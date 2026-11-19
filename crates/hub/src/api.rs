@@ -7,6 +7,8 @@
 //! | `POST /v1/sessions` | connexion (`email`, `password`) → jeton |
 //! | `DELETE /v1/sessions/current` | déconnexion (révoque le jeton) |
 //! | `GET /v1/me` | compte connecté |
+//! | `GET /v1/me/export` | toutes les données du compte, en JSON (RGPD) |
+//! | `DELETE /v1/me` | supprime le compte (`password` si le compte en a un) |
 //! | `PUT /v1/presence` | sa présence (`status`, `game`) |
 //! | `GET /v1/friends` | amis et leur présence |
 //! | `DELETE /v1/friends/{username}` | retirer un ami |
@@ -35,7 +37,7 @@ use crate::identity::{normalize_email, normalize_username, parse_username};
 use crate::memory::{PresenceView, Status};
 use crate::password::{hash_password, verify_password, Password};
 use crate::session::{new_token, token_hash};
-use crate::store::UserRow;
+use crate::store::{AccountExport, UserRow};
 use crate::{blocking, now_unix, AppState};
 
 /// Version de l'API, renvoyée par `GET /v1`.
@@ -52,7 +54,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/accounts", post(register))
         .route("/v1/sessions", post(login))
         .route("/v1/sessions/current", delete(logout))
-        .route("/v1/me", get(me))
+        .route("/v1/me", get(me).delete(delete_account))
+        .route("/v1/me/export", get(export_account))
         .route("/v1/presence", put(set_presence))
         .route("/v1/friends", get(list_friends))
         .route("/v1/friends/{username}", delete(remove_friend))
@@ -90,6 +93,27 @@ pub struct LoginBody {
     pub email: String,
     pub password: Password,
 }
+
+/// Confirmation de la suppression du compte : le mot de passe, si le compte en a un.
+#[derive(Debug, Deserialize)]
+pub struct DeleteAccountBody {
+    #[serde(default)]
+    pub password: Option<Password>,
+}
+
+/// Export RGPD : les données du compte, plus la date et la version du format.
+#[derive(Debug, Serialize)]
+pub struct ExportView {
+    pub format_version: u32,
+    pub exported_at: i64,
+    pub service: &'static str,
+    pub account: AccountExport,
+    /// La présence n'est jamais écrite en base ; elle est rappelée ici pour être complet.
+    pub presence: PresenceView,
+}
+
+/// Version du format de l'export RGPD.
+pub const EXPORT_FORMAT_VERSION: u32 = 1;
 
 #[derive(Debug, Deserialize)]
 pub struct UsernameBody {
@@ -558,5 +582,59 @@ async fn unblock_player(
     if !state.store().unblock(user.user_id, other.id).await? {
         return Err(HubError::BlockNotFound);
     }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- RGPD ----------
+
+/// Droit d'accès : tout ce que le hub garde sur le compte, en un document JSON.
+/// Ni hash de mot de passe ni empreinte de session : ils ne disent rien au joueur
+/// et ne doivent pas circuler.
+async fn export_account(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<ExportView>, HubError> {
+    let account = state
+        .store()
+        .export_account(user.user_id)
+        .await?
+        .ok_or(HubError::Unauthorized)?;
+    tracing::info!(user_id = user.user_id, "export des données du compte");
+    Ok(Json(ExportView {
+        format_version: EXPORT_FORMAT_VERSION,
+        exported_at: now_unix(),
+        service: "raftup-hub",
+        account,
+        presence: state.inner.presence.get(user.user_id),
+    }))
+}
+
+/// Droit à l'effacement : supprime le compte et tout ce qui s'y rattache.
+///
+/// Un compte avec mot de passe doit le redonner : une session volée ne suffit pas
+/// à effacer un compte. Les échecs comptent dans la même limite que la connexion.
+async fn delete_account(
+    State(state): State<AppState>,
+    user: AuthUser,
+    ApiJson(body): ApiJson<DeleteAccountBody>,
+) -> Result<StatusCode, HubError> {
+    let store = state.store();
+    if let Some(phc) = store.password_hash_of(user.user_id).await? {
+        let limiter = &state.inner.login_limiter;
+        let key = format!("delete:{}", user.user_id);
+        if limiter.is_blocked(&key) {
+            return Err(HubError::TooManyAttempts);
+        }
+        let password = body.password.ok_or(HubError::InvalidCredentials)?;
+        let matches = blocking(move || verify_password(&password, &phc)).await?;
+        if !matches {
+            limiter.hit(&key);
+            return Err(HubError::InvalidCredentials);
+        }
+        limiter.reset(&key);
+    }
+    store.delete_account(user.user_id).await?;
+    state.inner.presence.clear(user.user_id);
+    tracing::info!(user_id = user.user_id, "compte supprimé");
     Ok(StatusCode::NO_CONTENT)
 }
