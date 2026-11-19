@@ -64,6 +64,11 @@ pub struct UserConfig {
     /// Préréglage de génération choisi en dernier (nom affiché : « Rapide »…). Version 2.
     #[serde(default)]
     pub preset: Option<String>,
+    /// Adresse du hub de comptes et d'amis choisie par le joueur (ADR 0035) ; absente :
+    /// l'adresse par défaut. Champ facultatif ajouté sans changer `format_version` : un
+    /// launcher plus ancien l'ignore à la lecture.
+    #[serde(default)]
+    pub hub_url: Option<String>,
 }
 
 fn current_version() -> u32 {
@@ -79,6 +84,7 @@ impl Default for UserConfig {
             last_port: None,
             webhook_url: None,
             preset: None,
+            hub_url: None,
         }
     }
 }
@@ -226,6 +232,7 @@ impl std::fmt::Debug for UserConfig {
             .field("last_port", &self.last_port)
             .field("webhook_url", &webhook)
             .field("preset", &self.preset)
+            .field("hub_url", &self.hub_url)
             .finish()
     }
 }
@@ -240,6 +247,18 @@ impl UserConfig {
             .map(String::from);
         let changed = self.webhook_url != new;
         self.webhook_url = new;
+        changed
+    }
+
+    /// Mémorise (ou efface, avec `None` ou un texte blanc) l'adresse du hub.
+    /// Rend vrai si la configuration a changé.
+    pub fn set_hub_url(&mut self, url: Option<&str>) -> bool {
+        let new = url
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .map(String::from);
+        let changed = self.hub_url != new;
+        self.hub_url = new;
         changed
     }
 

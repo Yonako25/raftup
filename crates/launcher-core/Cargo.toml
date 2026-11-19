@@ -41,6 +41,8 @@ minisign-verify.workspace = true
 semver.workspace = true
 # Registre de paquets signés (ADR 0032), sans la fonctionnalité `publish` (pas de signature).
 registry.workspace = true
+# Client du hub (ADR 0035) : jeton de session dans le trousseau du système.
+keyring.workspace = true
 
 # Registre Windows : seulement compilé sous Windows.
 [target.'cfg(windows)'.dependencies]

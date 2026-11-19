@@ -164,3 +164,34 @@ fn debug_ne_montre_jamais_le_webhook() {
     let text = format!("{config:?}");
     assert!(!text.contains("SECRETTOKEN"), "{text}");
 }
+
+#[test]
+fn adresse_du_hub_memorisee_puis_effacee() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    let mut config = UserConfig::default();
+    assert!(config.set_hub_url(Some(" https://hub.example.org ")));
+    assert!(!config.set_hub_url(Some("https://hub.example.org")));
+    config.save(&path).unwrap();
+    let loaded = load(&path).unwrap().config;
+    assert_eq!(loaded.hub_url.as_deref(), Some("https://hub.example.org"));
+    let mut loaded = loaded;
+    assert!(loaded.set_hub_url(Some("  ")));
+    assert_eq!(loaded.hub_url, None);
+}
+
+#[test]
+fn ancienne_config_sans_hub_lisible() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    fs::write(
+        &path,
+        "format_version = 2
+player_name = \"Ioka\"
+",
+    )
+    .unwrap();
+    let loaded = load(&path).unwrap().config;
+    assert_eq!(loaded.hub_url, None);
+    assert_eq!(loaded.player_name.as_deref(), Some("Ioka"));
+}
