@@ -7,98 +7,13 @@
 
 use std::time::Duration;
 
-use axum::body::Body;
-use axum::http::{Method, Request, StatusCode};
-use axum::Router;
+use axum::http::{Method, StatusCode};
 use hub::{AppState, HubConfig, Store};
-use serde_json::{json, Value};
-use tower::ServiceExt;
+use serde_json::json;
 
 mod common;
 
-async fn app_with(config: HubConfig) -> Router {
-    let store = common::test_store().await;
-    let state = AppState::new(store, config).await.unwrap();
-    hub::router(state)
-}
-
-async fn app() -> Router {
-    app_with(HubConfig::for_tests()).await
-}
-
-/// Envoie une requête et renvoie le code HTTP et le corps JSON (`Null` si vide).
-async fn call(
-    app: &Router,
-    method: Method,
-    uri: &str,
-    token: Option<&str>,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(uri);
-    if let Some(token) = token {
-        builder = builder.header("authorization", format!("Bearer {token}"));
-    }
-    let request = match body {
-        Some(body) => builder
-            .header("content-type", "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap(),
-        None => builder.body(Body::empty()).unwrap(),
-    };
-    // `oneshot` consomme le service : on clone le routeur (bon marché).
-    let response = app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
-        .await
-        .unwrap();
-    let value = if bytes.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&bytes).unwrap()
-    };
-    (status, value)
-}
-
-async fn register(
-    app: &Router,
-    email: &str,
-    username: &str,
-    password: &str,
-) -> (StatusCode, Value) {
-    call(
-        app,
-        Method::POST,
-        "/v1/accounts",
-        None,
-        Some(json!({ "email": email, "username": username, "password": password })),
-    )
-    .await
-}
-
-async fn login(app: &Router, email: &str, password: &str) -> (StatusCode, Value) {
-    call(
-        app,
-        Method::POST,
-        "/v1/sessions",
-        None,
-        Some(json!({ "email": email, "password": password })),
-    )
-    .await
-}
-
-/// Crée un compte et renvoie son jeton de session.
-async fn account(app: &Router, username: &str) -> String {
-    let email = format!("{}@example.org", username.to_lowercase());
-    let (status, _) = register(app, &email, username, "mot de passe solide").await;
-    assert_eq!(status, StatusCode::CREATED);
-    let (status, body) = login(app, &email, "mot de passe solide").await;
-    assert_eq!(status, StatusCode::OK);
-    body["token"].as_str().unwrap().to_string()
-}
-
-fn error_code(body: &Value) -> &str {
-    body["error"].as_str().unwrap_or("")
-}
+use common::*;
 
 #[tokio::test]
 async fn version_de_l_api() {
@@ -227,23 +142,6 @@ async fn trop_d_echecs_bloque_la_connexion() {
     let (status, body) = login(&app, "F@example.org", "mot de passe solide").await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(error_code(&body), "too_many_attempts");
-}
-
-async fn send_request(app: &Router, token: &str, username: &str) -> (StatusCode, Value) {
-    call(
-        app,
-        Method::POST,
-        "/v1/friends/requests",
-        Some(token),
-        Some(json!({ "username": username })),
-    )
-    .await
-}
-
-async fn friends(app: &Router, token: &str) -> Value {
-    let (status, body) = call(app, Method::GET, "/v1/friends", Some(token), None).await;
-    assert_eq!(status, StatusCode::OK);
-    body
 }
 
 #[tokio::test]
@@ -391,18 +289,6 @@ async fn amis_ranges_par_pseudo() {
         .map(|f| f["username"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(names, ["anna", "Bruno", "zoe"]);
-}
-
-async fn set_presence(app: &Router, token: &str, presence: Value) -> StatusCode {
-    call(
-        app,
-        Method::PUT,
-        "/v1/presence",
-        Some(token),
-        Some(presence),
-    )
-    .await
-    .0
 }
 
 #[tokio::test]

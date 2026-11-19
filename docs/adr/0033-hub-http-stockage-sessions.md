@@ -50,6 +50,13 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 - Présence (`online`, `in_game` avec nom du jeu, `offline`) en mémoire, jamais en base, visible seulement dans la liste d'amis ; elle expire si le launcher ne la renouvelle pas (120 s).
 - Limites en mémoire : 10 échecs de connexion par adresse en 15 minutes, 20 demandes d'ami par compte et par minute.
 
+### Blocages (ajout du 19 novembre 2026, à relire)
+
+- Table `blocks (blocker, blocked)`, un sens par ligne (schéma version 2). Routes `GET /v1/blocks`, `POST /v1/blocks` (`username`), `DELETE /v1/blocks/{username}`.
+- Bloquer, en une transaction : retire l'amitié et les demandes dans les deux sens, puis inscrit le blocage (deux fois = sans effet). La présence n'étant visible qu'entre amis, elle disparaît dans les deux sens.
+- Tant que le blocage dure, plus de demande : celui qui a bloqué reçoit `you_blocked` ; le joueur bloqué reçoit `user_not_found`, la même réponse qu'un pseudo inconnu, pour ne pas apprendre qu'il est bloqué. Le joueur bloqué n'est pas prévenu.
+- Lever le blocage ne rend pas l'amitié : il faut une nouvelle demande.
+
 ### Licences des dépendances (vérifiées le 19 novembre 2026, `cargo tree -p hub -e normal,build`)
 
 Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-Clause (`subtle`, `matchit`), Zlib (`foldhash`), Unicode-3.0 (`icu_*`, `zerovec`…, via `idna` de `url`), Unlicense OR MIT (`memchr`), Apache-2.0 OR BSL-1.0 (`ryu`). Aucune dépendance sous GPL, LGPL ou licence propriétaire. Revérifié après l'ajout de PostgreSQL (même date) : en plus, BSD-2-Clause OR Apache-2.0 OR MIT, Zlib OR Apache-2.0 OR MIT, MIT AND BSD-3-Clause ; toujours compatibles.
@@ -58,7 +65,7 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 
 - **Discord** (OAuth 2.0 + PKCE) : pas pour l'instant ; la table `user_identities` est prête pour un fournisseur `discord`.
 - Vérification de l'adresse par lien, « mot de passe oublié » : demandent un service d'envoi d'e-mails. Tant qu'ils manquent, l'inscription révèle qu'une adresse a déjà un compte (`email_taken`).
-- Blocages, refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
+- Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
 - RGPD : export et suppression du compte.
 - Côté launcher : client du hub, jeton rangé dans le trousseau (`keyring`), panneau d'amis.
 - Plusieurs instances du hub (présence dans Redis), déploiement, sauvegardes.

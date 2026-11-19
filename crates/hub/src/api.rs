@@ -15,6 +15,9 @@
 //! | `DELETE /v1/friends/requests/{username}` | annuler sa demande |
 //! | `POST /v1/friends/requests/{username}/accept` | accepter |
 //! | `POST /v1/friends/requests/{username}/decline` | refuser |
+//! | `GET /v1/blocks` | joueurs bloqués |
+//! | `POST /v1/blocks` | bloquer (`username`) : retire l'amitié et les demandes |
+//! | `DELETE /v1/blocks/{username}` | lever un blocage |
 //!
 //! Les routes sauf `/v1`, l'inscription et la connexion demandent l'en-tête
 //! `Authorization: Bearer <jeton>`.
@@ -66,6 +69,8 @@ pub fn router(state: AppState) -> Router {
             "/v1/friends/requests/{username}/decline",
             post(decline_request),
         )
+        .route("/v1/blocks", get(list_blocks).post(block_player))
+        .route("/v1/blocks/{username}", delete(unblock_player))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
@@ -437,6 +442,14 @@ async fn send_request(
     }
     let other = other_player(&state, user.user_id, &body.username).await?;
     let store = state.store();
+    // Blocages (ADR 0033) : celui qui a bloqué le sait ; celui qui est bloqué reçoit
+    // la même réponse qu'un pseudo inconnu, pour ne pas apprendre qu'il l'est.
+    if store.has_blocked(user.user_id, other.id).await? {
+        return Err(HubError::YouBlocked);
+    }
+    if store.has_blocked(other.id, user.user_id).await? {
+        return Err(HubError::UserNotFound);
+    }
     if store.are_friends(user.user_id, other.id).await? {
         return Err(HubError::AlreadyFriends);
     }
@@ -495,6 +508,55 @@ async fn decline_request(
     let other = other_player(&state, user.user_id, &username).await?;
     if !state.store().delete_request(other.id, user.user_id).await? {
         return Err(HubError::RequestNotFound);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- Blocages ----------
+
+async fn list_blocks(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<Vec<PlayerView>>, HubError> {
+    let rows = state.store().blocked_by(user.user_id).await?;
+    Ok(Json(players(rows)))
+}
+
+/// Bloque un joueur. Effets : plus d'amitié (donc plus de présence visible dans
+/// les deux sens), plus de demandes entre les deux, et plus de nouvelle demande
+/// tant que le blocage dure.
+async fn block_player(
+    State(state): State<AppState>,
+    user: AuthUser,
+    ApiJson(body): ApiJson<UsernameBody>,
+) -> Result<StatusCode, HubError> {
+    let other = other_player(&state, user.user_id, &body.username)
+        .await
+        .map_err(|e| match e {
+            HubError::SelfFriend => HubError::SelfBlock,
+            other => other,
+        })?;
+    state
+        .store()
+        .block(user.user_id, other.id, now_unix())
+        .await?;
+    tracing::info!(user_id = user.user_id, "joueur bloqué");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unblock_player(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Path(username): Path<String>,
+) -> Result<StatusCode, HubError> {
+    let other = other_player(&state, user.user_id, &username)
+        .await
+        .map_err(|e| match e {
+            HubError::SelfFriend => HubError::BlockNotFound,
+            other => other,
+        })?;
+    if !state.store().unblock(user.user_id, other.id).await? {
+        return Err(HubError::BlockNotFound);
     }
     Ok(StatusCode::NO_CONTENT)
 }

@@ -39,6 +39,12 @@ pub enum HubError {
     AlreadyFriends,
     #[error("demande d'ami déjà envoyée")]
     RequestExists,
+    #[error("impossible de se bloquer soi-même")]
+    SelfBlock,
+    #[error("vous avez bloqué ce joueur : levez le blocage d'abord")]
+    YouBlocked,
+    #[error("ce joueur n'est pas bloqué")]
+    BlockNotFound,
     #[error("présence invalide : {0}")]
     InvalidPresence(&'static str),
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
@@ -69,6 +75,9 @@ impl HubError {
             HubError::SelfFriend => (StatusCode::BAD_REQUEST, "self_friend"),
             HubError::AlreadyFriends => (StatusCode::CONFLICT, "already_friends"),
             HubError::RequestExists => (StatusCode::CONFLICT, "request_exists"),
+            HubError::SelfBlock => (StatusCode::BAD_REQUEST, "self_block"),
+            HubError::YouBlocked => (StatusCode::CONFLICT, "you_blocked"),
+            HubError::BlockNotFound => (StatusCode::NOT_FOUND, "block_not_found"),
             HubError::InvalidPresence(_) => (StatusCode::BAD_REQUEST, "invalid_presence"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {

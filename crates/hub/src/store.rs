@@ -18,7 +18,7 @@ use crate::error::HubError;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -64,6 +64,14 @@ CREATE TABLE IF NOT EXISTS friendships (
     PRIMARY KEY (user_a, user_b),
     CHECK (user_a < user_b)
 );
+CREATE TABLE IF NOT EXISTS blocks (
+    blocker BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (blocker, blocked),
+    CHECK (blocker <> blocked)
+);
+CREATE INDEX IF NOT EXISTS blocks_blocked ON blocks (blocked);
 CREATE INDEX IF NOT EXISTS friend_requests_to ON friend_requests (to_user);
 CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
@@ -72,7 +80,10 @@ CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id)
 /// Migrations d'une version à la suivante : `(version atteinte, instructions)`.
 /// Les tables nouvelles sont déjà créées par [`SCHEMA`] (`IF NOT EXISTS`) ; une
 /// migration ne contient que ce que `SCHEMA` ne sait pas faire (ajout de colonne…).
-const MIGRATIONS: &[(i64, &str)] = &[];
+const MIGRATIONS: &[(i64, &str)] = &[
+    // Version 2 : table `blocks`, créée par `SCHEMA`.
+    (2, ""),
+];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.
 const EMAIL_PROVIDER: &str = "email";
@@ -506,6 +517,72 @@ impl Store {
         let rows = sqlx::query(
             "SELECT u.id, u.username FROM friend_requests r JOIN users u ON u.id = r.to_user \
              WHERE r.from_user = $1 ORDER BY r.created_at, u.id",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(user_row).collect()
+    }
+}
+
+impl Store {
+    /// Bloque un joueur : retire l'amitié et les demandes dans les deux sens, puis
+    /// inscrit le blocage, en une transaction. Bloquer deux fois ne change rien.
+    pub async fn block(&self, blocker: i64, blocked: i64, now: i64) -> Result<(), HubError> {
+        let (low, high) = ordered(blocker, blocked);
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM friendships WHERE user_a = $1 AND user_b = $2")
+            .bind(low)
+            .bind(high)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "DELETE FROM friend_requests WHERE (from_user = $1 AND to_user = $2) \
+             OR (from_user = $2 AND to_user = $1)",
+        )
+        .bind(blocker)
+        .bind(blocked)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO blocks (blocker, blocked, created_at) VALUES ($1, $2, $3) \
+             ON CONFLICT (blocker, blocked) DO NOTHING",
+        )
+        .bind(blocker)
+        .bind(blocked)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Lève un blocage ; renvoie `false` s'il n'existait pas. L'amitié perdue ne
+    /// revient pas : il faut une nouvelle demande.
+    pub async fn unblock(&self, blocker: i64, blocked: i64) -> Result<bool, HubError> {
+        let result = sqlx::query("DELETE FROM blocks WHERE blocker = $1 AND blocked = $2")
+            .bind(blocker)
+            .bind(blocked)
+            .execute(&self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// `blocker` a-t-il bloqué `blocked` ? (un seul sens)
+    pub async fn has_blocked(&self, blocker: i64, blocked: i64) -> Result<bool, HubError> {
+        let row = sqlx::query("SELECT 1 AS found FROM blocks WHERE blocker = $1 AND blocked = $2")
+            .bind(blocker)
+            .bind(blocked)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.is_some())
+    }
+
+    /// Joueurs bloqués par un compte, rangés par pseudo normalisé.
+    pub async fn blocked_by(&self, user_id: i64) -> Result<Vec<UserRow>, HubError> {
+        let rows = sqlx::query(
+            "SELECT u.id, u.username FROM blocks b JOIN users u ON u.id = b.blocked \
+             WHERE b.blocker = $1 ORDER BY u.username_norm, u.id",
         )
         .bind(user_id)
         .fetch_all(&self.pool)
