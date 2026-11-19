@@ -336,3 +336,9 @@ untime2`.
 - **Pas vérifié** : CI sous macOS et Linux (rien poussé) ; `crates/hub/LICENSE-AGPL` écrit de mémoire par l'agent, à remplacer par le texte officiel de gnu.org ; les ADR 0029 à 0034 sont « acceptés en autonomie », à relire par l'utilisatrice.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : remplacer le texte de l'AGPL ; essais en jeu quand l'utilisatrice sera devant le PC.
+
+### 2026-11-19 · Hub côté serveur (session `v2-hub-serveur`)
+- **Fait** : ADR 0033 complété (ajouts acceptés en autonomie, à relire). PostgreSQL par `sqlx::Any`, même SQL que SQLite (`a600c7b`) ; blocages (`171e060`) ; RGPD, export JSON et suppression du compte (`1001185`) ; e-mails de vérification et mot de passe oublié, trait `Mailer` + SMTP `lettre`, jetons à usage unique hachés (`9058792`) ; connexion Discord OAuth 2.0 + PKCE, trait `DiscordApi` (`1e51a38`). Schéma en version 4 avec migrations. Tests du hub passés sur SQLite et sur un PostgreSQL 18 jetable (`RAFTUP_HUB_TEST_POSTGRES`) ; workspace, clippy et fmt passent.
+- **Pas vérifié** : vrai fournisseur SMTP (seulement un faux serveur SMTP local) ; vraie application Discord (seulement `FakeDiscord`) ; hub lancé à la main ; aucune route existante renommée, mais le client du launcher n'a pas été essayé contre ces ajouts.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago) ; client du hub et panneau d'amis (session `v2-hub-client`).
+- **Suite** : relire les ajouts de l'ADR 0033, puis essayer avec une vraie application Discord et un vrai SMTP.

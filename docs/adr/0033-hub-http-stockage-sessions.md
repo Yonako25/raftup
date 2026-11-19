@@ -93,10 +93,10 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 - Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
 - RGPD : hébergement en Europe, politique de confidentialité, sauvegardes purgées des comptes supprimés.
 - Côté launcher : client du hub, jeton rangé dans le trousseau (`keyring`), panneau d'amis.
-- Plusieurs instances du hub (présence dans Redis), déploiement, sauvegardes.
+- Plusieurs instances du hub (présence et connexions Discord en attente dans Redis), déploiement, sauvegardes.
 
 ## Conséquences
 
 - Le hub se lance et se teste sur le PC sans rien installer : `cargo run -p hub --bin raftup-hub`, `cargo test -p hub`.
 - PostgreSQL et SQLite partagent tout le SQL de `store.rs` ; un test lancé sur les deux attrape les écarts.
-- Le binaire n'est pas exposable tel quel sur Internet : il lui faut un proxy TLS et les points ci-dessus (e-mails, RGPD) avant une instance publique.
+- Le binaire n'est pas exposable tel quel sur Internet : il lui faut un proxy TLS, un fournisseur SMTP et une application Discord réglés, une politique de confidentialité, et un essai réel de ces deux services (seulement testés avec de faux services).
