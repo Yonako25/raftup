@@ -11,6 +11,7 @@ pub mod library;
 pub mod matches;
 pub mod prefs;
 pub mod presets;
+pub mod registry_panel;
 pub mod running;
 pub mod setup;
 pub mod soon;

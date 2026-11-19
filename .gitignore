@@ -24,3 +24,7 @@ Thumbs.db
 
 # Python (scripts de test)
 __pycache__/
+
+# Registre : copies locales des paquets et index produit (jamais commités, voir registre/README.md)
+/registre/fichiers/
+/registre/sortie/
