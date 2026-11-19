@@ -185,7 +185,8 @@ pub fn show(
         if generation::show(ui, &mut form.generation) {
             on_generate(ui.ctx(), form, error);
         }
-        // Démarrage du serveur, ou échec avec « Réessayer ».
+        super::estimate::show(ui, form.generation.output()); // Durée estimée (ADR 0030).
+                                                             // Démarrage du serveur, ou échec avec « Réessayer ».
         if hosting::show(ui, &mut form.hosting) {
             retry_hosting(form, error, worker, shared);
         }

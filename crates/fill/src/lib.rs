@@ -29,3 +29,9 @@ pub use balance::{balance, BalanceReport, DEFAULT_BALANCING, MAX_BALANCING};
 pub use explain::{explain, Blocked, Target};
 pub use place::{check_feasible, fill, FillError, FillReport, MAX_ATTEMPTS};
 pub use shuffle::{below, shuffle};
+// Équilibrage par temps de jeu (ADR 0030), désactivé par défaut.
+mod time_balance;
+pub use time_balance::{
+    simulate, time_balance, PlayerTime, TimeBalance, TimeBalanceReport, Timeline,
+    DEFAULT_MAX_SWAPS, DEFAULT_SECONDS_PER_LOCATION,
+};

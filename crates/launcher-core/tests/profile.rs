@@ -123,6 +123,24 @@ fn refuse_format_version_future() {
 }
 
 #[test]
+fn temps_par_lieu_facultatif_et_borne() {
+    // Absent : le profil reste valide (format_version inchangé, ADR 0030).
+    assert_eq!(parse(VALID).unwrap().game.seconds_per_location, None);
+    let with = |value: &str| {
+        edit(
+            "status = \"available\"",
+            &format!("status = \"available\"\nseconds_per_location = {value}"),
+        )
+    };
+    assert_eq!(
+        parse(&with("90")).unwrap().game.seconds_per_location,
+        Some(90)
+    );
+    assert_invalid(&with("0"), "seconds_per_location");
+    assert_invalid(&with("3601"), "seconds_per_location");
+}
+
+#[test]
 fn refuse_champ_inconnu() {
     assert_toml_error(&format!("{VALID}\n[extra]\nx = 1\n"));
     assert_toml_error(&edit("name = \"Le mod\"", "name = \"Le mod\"\ncolour = 3"));

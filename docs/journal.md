@@ -282,3 +282,8 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : valider un lieu en jeu (acheter « Heart Module lv.1 » : +75 newbucks attendus d'après le spoiler) et vérifier le compteur du launcher.
 
+### 2026-11-19 · Durée estimée et équilibrage par temps (ADR 0030)
+- **Fait** : ADR 0030 (accepté en autonomie, à relire) ; champ facultatif `game.seconds_per_location` des profils (Slime Rancher : 240 s, défaut 120 s, `format_version` inchangé) ; `launcher_core::estimate` (temps de jeu et fin au plus tard par sphères) ; panneau « Durée estimée » (`screens/estimate.rs`, une ligne dans `create.rs`) ; `fill::time_balance` et `simulate`, désactivé par défaut, 9 tests sur des mondes écrits à la main.
+- **Pas vérifié** : temps par lieu jamais mesuré en vraie partie ; équilibrage par temps branché nulle part (ni `generate` ni interface) ; coût sur une grosse partie. Builds dans `target/agents-v2-duree` : le `target/agents-v2` partagé entre worktrees donnait un `fill` d'une autre branche.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : brancher `time_balance` derrière une option (case ou option YAML), afficher l'estimation dans « Partie en cours ».

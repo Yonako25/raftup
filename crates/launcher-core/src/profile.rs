@@ -100,6 +100,11 @@ pub struct GameInfo {
     /// Nom du jeu côté Archipelago.
     pub ap_game: String,
     pub status: GameStatus,
+    /// Temps moyen pour visiter un lieu, en secondes (facultatif, ADR 0030) : sert à
+    /// estimer la durée d'une partie. Absent : `estimate::DEFAULT_SECONDS_PER_LOCATION`.
+    /// Champ facultatif, donc `format_version` ne change pas.
+    #[serde(default)]
+    pub seconds_per_location: Option<u32>,
     #[serde(default)]
     pub detect: DetectInfo,
 }
@@ -368,6 +373,15 @@ impl Profile {
             if exe.is_empty() || exe.contains(['/', '\\', ':']) || exe.contains("..") {
                 return Err(invalid(format!(
                     "game.detect.expected_exe « {exe} » doit être un simple nom de fichier"
+                )));
+            }
+        }
+
+        if let Some(seconds) = self.game.seconds_per_location {
+            if !(1..=crate::estimate::MAX_SECONDS_PER_LOCATION).contains(&seconds) {
+                return Err(invalid(format!(
+                    "game.seconds_per_location {seconds} : entre 1 et {} secondes",
+                    crate::estimate::MAX_SECONDS_PER_LOCATION
                 )));
             }
         }
