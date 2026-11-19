@@ -368,6 +368,10 @@ class Exporter:
             "precollected": [self.item(i) for i in mw.precollected_items[p]],
             "goal": self.rule(mw.completion_condition[p]),
             "custom_collect": custom_collect,
+            "progression_balancing": int(getattr(world.options, "progression_balancing", 50)),
+            # Objets a placer tot (early_items) : place par Archipelago dans son placement,
+            # que Raftup remplace ; pas encore pris en charge.
+            "early_items": bool(mw.early_items[p] or mw.local_early_items[p]),
             "required_client_version": list(getattr(world, "required_client_version", (0, 1, 6))),
         }
 

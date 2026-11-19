@@ -97,7 +97,9 @@ class SondeWorld(World):
         mw.get_location("Castle Vault", p).access_rule = \
             lambda s: s.count("Gem", p) > 1 and (s.has("Lamp", p) or s.can_reach_location("Cave Pool", p))
         if self.options.bad_rule:
-            mw.get_location("Bad Spot", p).access_rule = lambda s: not s.has("Lamp", p)
+            # Non monotone pour le sondeur, mais toujours vraie pour Archipelago : la piece
+            # n'est pas de progression, elle n'entre jamais dans l'inventaire logique.
+            mw.get_location("Bad Spot", p).access_rule = lambda s: not s.has("Coin", p)
         mw.get_location("Victory", p).access_rule = lambda s: s.has("Key", p, 2)
         # Un lieu prioritaire et un lieu exclu (LocationProgressType).
         mw.get_location("Start Chest", p).progress_type = LocationProgressType.PRIORITY

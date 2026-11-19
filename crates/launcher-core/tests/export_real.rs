@@ -17,7 +17,9 @@ use std::time::Duration;
 use generate::imported::{build_world, read_export, ImportError, Imported};
 use generate::worlds::apquest::ApQuestOptions;
 use generate::{build, Built, GameOptions, GenerateRequest, PlayerRequest};
-use launcher_core::generation::{pins, runtime_status, Runtime, RuntimeStatus};
+use launcher_core::generation::{
+    pins, runtime_status, ExportBackend, GenerateRequest as HostRequest, Runtime, RuntimeStatus,
+};
 use launcher_core::Paths;
 use logic::{MultiWorld, Reachability, SlotId, State};
 use py_bridge::{
@@ -98,10 +100,15 @@ fn export_raw(
 /// test, sous forme d'`.apworld`. Pas de suppression ensuite : chaque génération du
 /// launcher vide ce dossier (ADR 0017, décision 8).
 fn install_sonde(runtime: &Runtime) {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/raftup_sonde");
     let dir = runtime.archipelago_dir.join("custom_worlds");
     std::fs::create_dir_all(&dir).unwrap();
-    let file = std::fs::File::create(dir.join("raftup_sonde.apworld")).unwrap();
+    write_sonde_apworld(&dir.join("raftup_sonde.apworld"));
+}
+
+/// Écrit l'`.apworld` du monde de test à cet endroit.
+fn write_sonde_apworld(path: &Path) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/raftup_sonde");
+    let file = std::fs::File::create(path).unwrap();
     let mut zip = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
@@ -403,4 +410,118 @@ fn deux_joueurs_exportes() {
     })
     .unwrap();
     compare(&imported, &built, "deux joueurs");
+}
+
+/// Génération complète par le moteur « export » (ADR 0028, étape 4) : seed écrite par
+/// Archipelago, placement fait par Raftup.
+fn generate_with_export(
+    runtime: &Runtime,
+    work: &Path,
+    yamls: &[(&str, String)],
+    seed: u64,
+) -> (launcher_core::generation::GenerateOutput, Vec<String>) {
+    let (output, log) = try_generate_with_export(runtime, work, yamls, seed);
+    (output.unwrap(), log)
+}
+
+/// Comme [`generate_with_export`], sans exiger le succès.
+fn try_generate_with_export(
+    runtime: &Runtime,
+    work: &Path,
+    yamls: &[(&str, String)],
+    seed: u64,
+) -> (
+    Result<launcher_core::generation::GenerateOutput, launcher_core::GenerationError>,
+    Vec<String>,
+) {
+    let data = Paths::under(&PathBuf::from(
+        std::env::var_os("RAFTUP_REAL_RUNTIME").unwrap(),
+    ));
+    let apworld = work.join("raftup_sonde.apworld");
+    write_sonde_apworld(&apworld);
+    let player_files = yamls
+        .iter()
+        .map(|(name, text)| {
+            let path = work.join(name);
+            std::fs::write(&path, text).unwrap();
+            path
+        })
+        .collect();
+    let request = HostRequest {
+        player_files,
+        apworlds: vec![apworld],
+        seed: Some(seed),
+        timeout: Duration::from_secs(300),
+        ..HostRequest::default()
+    };
+    let (log, lines) = std::sync::mpsc::channel();
+    let mut backend = ExportBackend::new(runtime.clone());
+    let output = launcher_core::generation::generate(
+        &data,
+        &mut backend,
+        &request,
+        &CancelToken::new(),
+        log,
+    );
+    (output, lines.try_iter().collect())
+}
+
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn seed_complete_placee_par_raftup() {
+    let Some(runtime) = runtime() else { return };
+    let work = tempfile::tempdir().unwrap();
+    let apquest = yaml("Alice", &ApQuestOptions::default());
+    let yamls = [("sam.yaml", sonde_yaml(false)), ("alice.yaml", apquest)];
+    let (output, log) = generate_with_export(&runtime, work.path(), &yamls, 99);
+    assert!(
+        log.iter()
+            .any(|l| l.contains("Placement des objets par Raftup")),
+        "{log:#?}"
+    );
+    assert!(
+        !log.iter().any(|l| l.contains("Archipelago génère seul")),
+        "{log:#?}"
+    );
+    assert_eq!(output.summary.players, 2);
+    // La seed d'Archipelago est lisible par Raftup : chaque lieu a son objet.
+    let bytes = std::fs::read(&output.archipelago_file).unwrap();
+    let md = multidata::load_archipelago(&bytes, &multidata::ArchiveLimits::default()).unwrap();
+    let placed: usize = md.locations.values().map(|l| l.len()).sum();
+    assert_eq!(placed, 8 + 6, "lieux de Sam (8) et d'Alice (6)");
+    // Même seed, mêmes fichiers : même placement (PYTHONHASHSEED=0, ChaCha).
+    let work2 = tempfile::tempdir().unwrap();
+    let (again, _) = generate_with_export(&runtime, work2.path(), &yamls, 99);
+    let bytes2 = std::fs::read(&again.archipelago_file).unwrap();
+    let md2 = multidata::load_archipelago(&bytes2, &multidata::ArchiveLimits::default()).unwrap();
+    assert_eq!(md.locations, md2.locations);
+    assert_eq!(md.slot_data, md2.slot_data);
+}
+
+#[test]
+#[ignore = "demande un runtime installé : RAFTUP_REAL_RUNTIME"]
+fn repli_sur_archipelago_seul() {
+    let Some(runtime) = runtime() else { return };
+    // Le placement d'Archipelago lui-même échoue sur certaines seeds de ce petit monde
+    // (2 lieux ouverts au départ) : on essaie quelques seeds. Le repli doit avoir lieu à
+    // chaque fois ; on vérifie la seed sur la première qu'Archipelago réussit.
+    for seed in 1..=20 {
+        let work = tempfile::tempdir().unwrap();
+        let (output, log) = try_generate_with_export(
+            &runtime,
+            work.path(),
+            &[("sam.yaml", sonde_yaml(true))],
+            seed,
+        );
+        assert!(
+            log.iter()
+                .any(|l| l.contains("Archipelago génère seul") && l.contains("Bad Spot")),
+            "seed {seed} : {log:#?}"
+        );
+        if let Ok(output) = output {
+            assert_eq!(output.summary.players, 1);
+            return;
+        }
+    }
+    panic!("Archipelago n'a réussi aucune des 20 seeds");
 }

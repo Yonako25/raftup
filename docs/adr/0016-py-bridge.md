@@ -15,7 +15,7 @@
 | 1 | Modèle d'exécution | Synchrone, threads `std`, sans tokio : un seul appel à la fois. Depuis du code async : `spawn_blocking` |
 | 2 | Protocole | JSON-RPC simplifié : `{id, method, params}` → `{id, result}` ou `{id, error:{code, message, data?}}`, une ligne JSON chacun. Pas de champ `"jsonrpc"`, ni lots, ni notifications. Codes d'erreur de JSON-RPC 2.0 |
 | 3 | Version | `version` renvoie `protocol` ; le pont refuse un worker d'une autre version au démarrage |
-| 4 | Livraison du script | `python -I -X utf8 -c <script>` : rien n'est écrit sur le disque |
+| 4 | Livraison du script | `python -s -P -X utf8 -c <script>` : rien n'est écrit sur le disque. *Révisé le 19 novembre 2026 (ADR 0028) :* au départ `-I` ; `-I` = `-E -P -s`, et `-E` empêchait de poser `PYTHONHASHSEED`. Le pont retire lui-même toutes les variables `PYTHON*` (héritées ou passées dans `env`), puis pose `PYTHONHASHSEED=0`. L'isolation est la même, et l'ordre des `set` Python devient reproductible |
 | 5 | Erreur de flux | Délai dépassé, JSON invalide, ligne trop longue ou mauvais id : le process est tué et le pont est fermé. Seule une erreur renvoyée par le worker laisse le pont utilisable |
 | 6 | Valeurs par défaut | 1 Mio par ligne, 10 s par appel, 30 s au démarrage, 2 s de grâce à l'arrêt |
 | 7 | Tests sans Python | Faux worker Rust (`[[bin]] fake-worker`), à exclure d'un futur paquet |

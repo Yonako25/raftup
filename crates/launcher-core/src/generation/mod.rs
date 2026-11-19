@@ -4,6 +4,7 @@
 //! - [`pins`] : le fichier d'épinglage `generator-pins.toml` (Python, Archipelago, wheels),
 //!   lu et validé.
 
+mod export;
 pub mod pins;
 mod run;
 pub mod runtime;
@@ -13,6 +14,7 @@ pub use runtime::{
     ensure_runtime, ensure_runtime_cancellable, runtime_status, RuntimeStatus, SetupStep,
 };
 
+pub use export::ExportBackend;
 pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use run::{
     generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,

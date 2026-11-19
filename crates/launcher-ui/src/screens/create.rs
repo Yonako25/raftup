@@ -448,9 +448,11 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
     }
 }
 
-/// Moteur de la génération : Rust seulement si l'hôte l'a demandé et que le moteur Rust
-/// comprend tous les fichiers joueurs ; sinon Python, avec la raison en première ligne
-/// du journal.
+/// Moteur de la génération, quand l'hôte a coché « Moteur Rust » : le moteur Rust seul
+/// s'il comprend tous les fichiers joueurs (aucun Python) ; sinon le moteur « export »
+/// (ADR 0028 : Archipelago construit les mondes, Raftup place les objets, et repli sur
+/// Archipelago seul si un monde ne s'y prête pas), avec la raison en tête du journal.
+/// Case décochée : Archipelago seul.
 fn choose_engine(
     wanted: bool,
     player_files: &[PathBuf],
@@ -462,9 +464,9 @@ fn choose_engine(
     match rust_support(player_files, meta) {
         Ok(()) => (generation::Engine::Rust, None),
         Err(reason) => (
-            generation::Engine::Python,
+            generation::Engine::Export,
             Some(format!(
-                "Moteur Rust impossible ({reason}) : Archipelago prend la génération."
+                "Moteur Rust seul impossible ({reason}) : Archipelago construit les mondes, Raftup place les objets."
             )),
         ),
     }
@@ -686,13 +688,14 @@ game: Slime Rancher
             choose_engine(true, std::slice::from_ref(&apquest), long.as_deref()),
             (generation::Engine::Rust, None)
         );
-        // Préréglage « Rapide » (accès minimal) : pas encore pris en charge, Python.
+        // Préréglage « Rapide » (accès minimal) : pas pour le moteur Rust seul, export.
         let rapide = super::super::presets::meta_yaml(Preset::Rapide);
         let (engine, note) = choose_engine(true, std::slice::from_ref(&apquest), rapide.as_deref());
-        assert_eq!(engine, generation::Engine::Python);
+        assert_eq!(engine, generation::Engine::Export);
         assert!(note.unwrap().contains("accessibility"));
+        // Un jeu non porté en Rust : export (Archipelago construit, Raftup place).
         let (engine, note) = choose_engine(true, &[apquest, other], None);
-        assert_eq!(engine, generation::Engine::Python);
+        assert_eq!(engine, generation::Engine::Export);
         assert!(note.unwrap().contains("Slime Rancher"));
     }
 

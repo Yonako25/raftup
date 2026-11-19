@@ -60,6 +60,8 @@ pub enum ImportError {
     },
     #[error("monde mal construit : {0}")]
     Logic(#[from] LogicError),
+    #[error("placement impossible : {0}")]
+    Fill(#[from] fill::FillError),
 }
 
 fn invalid(message: impl Into<String>) -> ImportError {
@@ -116,7 +118,17 @@ pub struct PlayerExport {
     /// Le monde redéfinit `collect`, `collect_item` ou `remove`.
     #[serde(default)]
     pub custom_collect: bool,
+    /// Option `progression_balancing` du joueur (0 à 99, 50 par défaut).
+    #[serde(default = "default_balancing")]
+    pub progression_balancing: u8,
+    /// Le joueur a des objets à placer tôt (`early_items`) : pas encore pris en charge.
+    #[serde(default)]
+    pub early_items: bool,
     pub required_client_version: Vec<u32>,
+}
+
+fn default_balancing() -> u8 {
+    fill::DEFAULT_BALANCING
 }
 
 /// Une entrée (`to` vaut `null` si elle n'est reliée à rien).
@@ -355,6 +367,52 @@ impl Names {
     }
 }
 
+/// Une ligne du placement renvoyé à Archipelago :
+/// `(joueur du lieu, lieu, joueur de l'objet, objet)`, joueurs numérotés à partir de 1.
+pub type PlacementLine = (u32, String, u32, String);
+
+/// Remplit un monde importé (placement puis équilibrage de progression, ADR 0027) et rend
+/// le placement des lieux qui étaient vides, à renvoyer au worker (`finish_worlds`).
+///
+/// `seed` : le numéro de seed de la génération ; même seed, même export ⇒ même placement.
+pub fn fill_imported(
+    imported: &mut Imported,
+    export: &Export,
+    seed: u64,
+) -> Result<Vec<PlacementLine>, ImportError> {
+    let world = &mut imported.world;
+    let empty: Vec<LocationId> = world
+        .location_ids()
+        .filter(|id| world.location(*id).is_some_and(|l| l.item.is_none()))
+        .collect();
+    let mut rng = crate::stream("fill", seed, 0);
+    fill::fill(world, imported.pool.clone(), &imported.start, &mut rng)?;
+    let balancing: Vec<u8> = export
+        .players
+        .iter()
+        .map(|p| p.progression_balancing)
+        .collect();
+    fill::balance(world, &balancing, &imported.start, &mut rng)?;
+
+    let mut lines = Vec::with_capacity(empty.len());
+    for id in empty {
+        let location = world
+            .location(id)
+            .ok_or_else(|| invalid("lieu disparu après le placement"))?;
+        let item = location
+            .item
+            .and_then(|i| world.item_kind(i))
+            .ok_or_else(|| invalid(format!("lieu « {} » resté vide", location.name)))?;
+        lines.push((
+            location.slot.raw() + 1,
+            location.name.clone(),
+            item.slot.raw() + 1,
+            item.name.clone(),
+        ));
+    }
+    Ok(lines)
+}
+
 /// Construit le monde décrit par l'export.
 pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
     check_supported(export)?;
@@ -519,6 +577,11 @@ fn check_supported(export: &Export) -> Result<(), ImportError> {
         if player.custom_collect {
             return Err(refuse(
                 "le monde change la façon de ramasser les objets (collect)".to_string(),
+            ));
+        }
+        if player.early_items {
+            return Err(refuse(
+                "objets à placer tôt (early_items) pas encore pris en charge".to_string(),
             ));
         }
         for location in &player.locations {

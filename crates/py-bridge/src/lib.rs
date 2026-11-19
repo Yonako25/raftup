@@ -15,8 +15,9 @@ pub use bridge::{BridgeOptions, PyBridge, WorkerVersion};
 pub use cancel::CancelToken;
 pub use error::{BridgeError, RpcError};
 pub use generate::{
-    ExportParams, ExportResult, GenerateParams, GenerateResult, GeneratedPlayer, ERR_ALREADY_USED,
-    ERR_EXPORT_FAILED, ERR_GENERATION_FAILED, ERR_IMPORT_FAILED, EXPORTER_SCRIPT,
+    ExportParams, ExportResult, FinishParams, GenerateParams, GenerateResult, GeneratedPlayer,
+    ERR_ALREADY_USED, ERR_EXPORT_FAILED, ERR_GENERATION_FAILED, ERR_IMPORT_FAILED, ERR_NO_EXPORT,
+    EXPORTER_SCRIPT,
 };
 pub use line::{read_bounded_bytes, read_bounded_line, LineError};
 pub use protocol::{decode_response, encode_request};

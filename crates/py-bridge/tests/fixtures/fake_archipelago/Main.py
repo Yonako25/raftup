@@ -14,6 +14,11 @@ class FauxMultiWorld:
         self.player_ids = list(range(1, len(joueurs) + 1))
         self.player_name = {i: j.get("name", "?") for i, j in zip(self.player_ids, joueurs)}
         self.game = {i: j.get("game", "?") for i, j in zip(self.player_ids, joueurs)}
+        # Rien a placer dans le faux monde (finish_worlds avec un placement vide).
+        self.itempool = []
+
+    def get_unfilled_locations(self):
+        return []
 
 
 def distribute_items_restrictive(multiworld, *args, **kwargs):

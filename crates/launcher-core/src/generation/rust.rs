@@ -96,7 +96,7 @@ fn player_files_in(dir: &Path) -> Result<Vec<PathBuf>, GenerationError> {
 ///
 /// `RandomState` est la graine aléatoire des `HashMap` de la bibliothèque standard,
 /// tirée par le système : on s'en sert comme source de hasard sans dépendance de plus.
-fn random_seed() -> u64 {
+pub(super) fn random_seed() -> u64 {
     RandomState::new().build_hasher().finish()
 }
 

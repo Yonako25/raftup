@@ -19,6 +19,8 @@ fn version_echo_shutdown() {
     let v = b.version().unwrap();
     assert!(v.python.starts_with("3."), "python = {}", v.python);
     assert_eq!(v.protocol, 1);
+    // PYTHONHASHSEED=0 posé par le pont : hachage des chaînes reproductible (ADR 0028).
+    assert_eq!(v.hash_randomization, Some(0));
 
     match b.call("methode_inconnue", json!({})) {
         Err(BridgeError::Worker(e)) => assert_eq!(e.code, -32601),

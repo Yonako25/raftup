@@ -264,3 +264,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : ADR 0028, étape 4 : `finish_worlds` et branchement ; d'abord faire valider qui écrit la seed (Archipelago ou Rust) et le réglage de `PYTHONHASHSEED`.
 
+### 2026-11-19 · ADR 0028, étape 4 : génération complète par export
+- **Fait** : choix validés (Archipelago écrit la seed ; `-s -P` + `PYTHONHASHSEED=0`, ADR 0016 révisé) ; `finish_worlds` (Main.main en attente dans un thread, placement Raftup posé), `fill_imported`, `ExportBackend` avec repli Python, moteur « export » dans l'interface. En vrai : seed 2 joueurs placée par Raftup, écrite par Archipelago, reproductible ; repli vérifié. 39 tests Python, tests réels py-bridge, export et génération.
+- **Pas vérifié** : un vrai monde tiers par ce chemin (Slime Rancher) ; écran « Créer une partie » regardé avec le moteur export ; durée totale comparée au Python seul.
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : ADR 0028, étape 5 : Slime Rancher exporté en vrai (apworld installée par la Bibliothèque), puis une partie.
+

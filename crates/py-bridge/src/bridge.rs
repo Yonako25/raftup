@@ -44,9 +44,10 @@ pub struct BridgeOptions {
     /// Script exécuté par `python -c` (le worker embarqué par défaut).
     pub script: String,
     pub working_dir: Option<PathBuf>,
-    /// Variables ajoutées à l'environnement hérité. Attention : Python est lancé avec `-I`
-    /// (mode isolé), qui IGNORE les variables `PYTHON*` (`PYTHONPATH`, `PYTHONHOME`...) ;
-    /// les autres variables (par exemple `PATH`) passent normalement.
+    /// Variables ajoutées à l'environnement hérité. Attention : toutes les variables
+    /// `PYTHON*` (`PYTHONPATH`, `PYTHONHOME`...), héritées ou données ici, sont RETIRÉES ;
+    /// seule `PYTHONHASHSEED=0` est posée par le pont. Les autres variables (par exemple
+    /// `PATH`) passent normalement.
     pub env: BTreeMap<String, String>,
     pub startup_timeout: Duration,
     pub call_timeout: Duration,
@@ -79,6 +80,10 @@ pub struct WorkerVersion {
     pub python: String,
     pub implementation: String,
     pub protocol: u32,
+    /// `sys.flags.hash_randomization` : 0 quand `PYTHONHASHSEED=0` a bien été pris en compte.
+    /// `None` pour un worker plus ancien qui ne le dit pas.
+    #[serde(default)]
+    pub hash_randomization: Option<u32>,
 }
 
 /// Ce que le thread de lecture de stdout transmet au pont.
@@ -184,10 +189,24 @@ impl PyBridge {
             }
         }
         let mut command = Command::new(&options.python);
+        // Isolation (ADR 0016, décision 4, révisée par l'ADR 0028) : `-s` (pas de dossier
+        // `site` de l'utilisateur) et `-P` (pas de dossier courant dans `sys.path`), comme
+        // `-I`, mais SANS `-E` : on retire nous-mêmes toutes les variables `PYTHON*`, puis
+        // on fixe `PYTHONHASHSEED=0` pour que l'ordre des `set` Python soit reproductible.
+        for (key, _) in std::env::vars_os() {
+            if is_python_var(&key) {
+                command.env_remove(&key);
+            }
+        }
+        let env = options
+            .env
+            .iter()
+            .filter(|(k, _)| !is_python_var(std::ffi::OsStr::new(k.as_str())));
         // Pas de shell : les arguments sont passés tels quels, sans interprétation.
         command
-            .args(["-I", "-X", "utf8", "-c", &options.script])
-            .envs(&options.env)
+            .args(["-s", "-P", "-X", "utf8", "-c", &options.script])
+            .envs(env)
+            .env("PYTHONHASHSEED", "0")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -552,6 +571,14 @@ fn recv_sliced<T>(
     }
 }
 
+/// Variable d'environnement de Python (`PYTHONPATH`, `PYTHONHOME`…), quelle que soit la
+/// casse : sous Windows, les noms de variables ne distinguent pas majuscules et minuscules.
+fn is_python_var(key: &std::ffi::OsStr) -> bool {
+    key.to_string_lossy()
+        .to_ascii_uppercase()
+        .starts_with("PYTHON")
+}
+
 fn wait_error(source: io::Error) -> BridgeError {
     BridgeError::Io {
         context: "attente de la fin du process",
@@ -581,6 +608,16 @@ impl Drop for PyBridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn variables_python_reconnues() {
+        use std::ffi::OsStr;
+        assert!(is_python_var(OsStr::new("PYTHONPATH")));
+        assert!(is_python_var(OsStr::new("pythonhome")));
+        assert!(is_python_var(OsStr::new("PYTHONHASHSEED")));
+        assert!(!is_python_var(OsStr::new("PATH")));
+        assert!(!is_python_var(OsStr::new("MY_PYTHONPATH")));
+    }
 
     #[test]
     fn ligne_de_8_kio_exactement_est_tronquee_pas_retiree() {

@@ -128,3 +128,32 @@ pub struct ExportResult {
     pub probed_rules: u64,
     pub seconds: f64,
 }
+
+/// `finish_worlds` sans export en cours dans ce worker.
+pub const ERR_NO_EXPORT: i64 = -32014;
+
+/// Paramètres de `finish_worlds` : le placement de Raftup, dans un fichier JSON (une liste
+/// de `[joueur du lieu, lieu, joueur de l'objet, objet]`).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FinishParams {
+    /// Chemin absolu du fichier de placement.
+    pub placement_path: PathBuf,
+}
+
+impl PyBridge {
+    /// Après [`PyBridge::export_worlds_cancellable`] : pose le placement de Raftup, puis
+    /// Archipelago reprend sa génération et écrit la seed (`AP_<seed>.zip`), comme
+    /// `generate` (ADR 0028).
+    pub fn finish_worlds_cancellable(
+        &mut self,
+        p: &FinishParams,
+        timeout: Duration,
+        cancel: &crate::cancel::CancelToken,
+    ) -> Result<GenerateResult, BridgeError> {
+        let params = serde_json::to_value(p)
+            .map_err(|e| BridgeError::InvalidResponse(format!("paramètres illisibles : {e}")))?;
+        let value = self.call_cancellable("finish_worlds", params, timeout, cancel)?;
+        serde_json::from_value(value)
+            .map_err(|e| BridgeError::InvalidResponse(format!("résultat de finish_worlds : {e}")))
+    }
+}

@@ -22,8 +22,8 @@ Dans le même process worker (ADR 0016, 0017), pour une génération :
 
 1. **`export_worlds`** : le worker crée le `MultiWorld` d'Archipelago avec les YAML, puis lance les étapes des mondes jusqu'à `pre_fill` compris (`generate_early`, `create_regions`, `create_items`, `set_rules`, `connect_entrances`, `generate_basic`, `pre_fill`). Il **n'appelle pas** le placement d'Archipelago. Il écrit la description de chaque monde (section 2) dans un fichier JSON.
 2. **Placement en Rust** : le JSON devient un `logic::MultiWorld` (nouveau module `generate::imported`), avec les mondes portés en Rust à côté s'il y en a ; puis `fill` place et équilibre.
-3. **`finish_worlds`** : Rust renvoie le placement (lieu → objet). Le worker pose les objets dans son `MultiWorld`, puis appelle les étapes de fin des mondes (`post_fill`, `fill_slot_data`, `extend_hint_information`, `generate_output`). Il rend `slot_data`, `er_hint_data`, les versions minimales de client et les fichiers éventuellement produits.
-4. Rust construit le `.archipelago` (ADR 0027, § 3) : le serveur et les mods ne voient aucune différence.
+3. **`finish_worlds`** : Rust renvoie le placement (lieu → objet). Le worker pose les objets dans son `MultiWorld`, puis laisse Archipelago **finir sa génération** comme d'habitude (`post_fill`, `fill_slot_data`, indices, `generate_output`, spoiler) ; son propre équilibrage est désactivé, Raftup l'a déjà fait.
+4. **Archipelago écrit la seed** (`AP_<seed>.zip`), exactement comme le générateur officiel : le serveur et les mods ne voient aucune différence. *(Révisé le 19 novembre 2026, validé par l'utilisatrice : au départ, Rust devait écrire le `.archipelago` ; laisser Archipelago l'écrire garde exact tout ce qui dépend du placement, pour beaucoup moins de code.)*
 
 Ce chemin a toujours besoin de Python et d'Archipelago, mais Archipelago n'y place plus rien. On y gagne le placement Rust (faisabilité vérifiée, erreurs expliquées, équilibrage) et le mélange avec les mondes natifs dans une même partie. Se passer de Python pour ces mondes reste l'affaire de la V3 (format natif).
 
@@ -126,4 +126,16 @@ Pour chaque joueur :
 - **Écart avec Archipelago** : il fait d'abord une passe de placement réservée aux lieux prioritaires (avec ses objets « déprioritisés »), puis la passe normale. Raftup préfère simplement un lieu prioritaire à chaque objet de progression. Mesuré : au moins 9 lieux prioritaires sur 10 reçoivent de la progression dans le monde de test de `fill`.
 - **Équilibrage** : comme Archipelago, un objet posé dans un lieu prioritaire n'est jamais avancé, et un lieu exclu ne reçoit jamais l'objet avancé.
 - **Vérifié** : 300 seeds à 2 joueurs, sans aucune progression ni objet utile dans un lieu exclu, avant comme après l'équilibrage ; lieux prioritaires inchangés par l'équilibrage ; reproductible. En vrai, le monde `raftup_sonde` exporte un lieu prioritaire et un lieu exclu, retrouvés tels quels dans le monde Rust.
+
+## Mise en œuvre de l'étape 4 (19 novembre 2026)
+
+Deux choix validés par l'utilisatrice le 19 novembre 2026 : Archipelago écrit la seed (§ 1, révisé) ; `-s -P` au lieu de `-I`, avec `PYTHONHASHSEED=0` (ADR 0016, décision 4, révisée).
+
+- **Worker** : `export_worlds` lance `Main.main` dans un thread. Le placement d'Archipelago (`distribute_items_restrictive`, `flood_items`) est remplacé par une attente : le `MultiWorld` est exporté, puis le thread attend. `finish_worlds` lit `placement.json` (`[joueur du lieu, lieu, joueur de l'objet, objet]`), pose chaque objet du pool (`push_item`), vérifie que tout est placé, puis laisse `Main.main` finir. `balance_multiworld_progression` est désactivé. Sans `finish_worlds` (arrêt du launcher), le thread meurt avec le process. Nouvelle erreur `-32014` (aucun export en cours).
+- **Export** : en plus, `progression_balancing` de chaque joueur (après le `meta.yaml`, appliqué par Archipelago) et `early_items`. Un joueur avec des objets à placer tôt est refusé : c'est le placement d'Archipelago qui s'en occupe, et Raftup le remplace.
+- **Placement** : `generate::imported::fill_imported` (placement, puis équilibrage), avec le flux ChaCha `fill` de la seed. La seed est tirée par Raftup si l'hôte n'en donne pas, et passée aux deux côtés.
+- **Launcher** : `ExportBackend` (`launcher-core`). Si l'import ou le placement échoue (monde non pris en charge, contrôle croisé, placement impossible), la raison va dans le journal, et la génération repart avec le générateur Python seul, dans un worker neuf. Un export sans contrôle croisé est refusé. Dans l'interface, la case « Moteur Rust » choisit le moteur Rust seul s'il comprend tous les YAML, sinon ce moteur « export ».
+- **Vérifié en vrai** : seed complète à 2 joueurs (`raftup_sonde` et APQuest) placée par Raftup, écrite par Archipelago, relue par `multidata` (14 lieux remplis). Même seed deux fois : mêmes placements et même `slot_data`. Le repli a lieu quand une règle est refusée. `version` du worker donne `hash_randomization = 0`.
+- **Constat** : sur le petit monde de test (2 lieux ouverts au départ), le placement d'Archipelago échoue sur certaines seeds (`FillError`), alors que celui de Raftup réussit grâce à ses nouveaux essais.
+- **Reste** : le moteur « export » n'a pas encore généré un vrai monde tiers (Slime Rancher, étape 5) ; le journal du launcher ne montre pas encore le moteur utilisé à la fin.
 

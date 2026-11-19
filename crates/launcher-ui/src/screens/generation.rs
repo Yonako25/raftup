@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use egui::{RichText, Ui};
 use launcher_core::generation::{
-    pins, runtime_status, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend,
-    RuntimeStatus, RustBackend,
+    pins, runtime_status, ExportBackend, GenerateOutput, GenerateRequest, GeneratorBackend,
+    PythonBackend, RuntimeStatus, RustBackend,
 };
 use launcher_core::party::generate_blocking;
 use launcher_core::{CancelToken, GenerationError};
@@ -59,6 +59,9 @@ pub enum Engine {
     Python,
     /// Le moteur Rust de Raftup (ADR 0027), pour les mondes portés.
     Rust,
+    /// Archipelago construit les mondes et écrit la seed, Raftup place les objets
+    /// (ADR 0028) ; repli sur Archipelago seul si un monde ne s'y prête pas.
+    Export,
 }
 
 /// Une génération qui tourne dans un thread.
@@ -116,12 +119,15 @@ pub fn start(
     // l'envoyer dans le thread de génération.
     let mut backend: Box<dyn GeneratorBackend + Send> = match engine {
         Engine::Rust => Box::new(RustBackend),
-        Engine::Python => {
+        Engine::Python | Engine::Export => {
             let pins = match pins() {
                 Ok(pins) => pins,
                 Err(e) => return fail(format!("Le générateur est mal configuré : {e}.")),
             };
             match runtime_status(&paths, &pins) {
+                RuntimeStatus::Ready(runtime) if engine == Engine::Export => {
+                    Box::new(ExportBackend::new(runtime))
+                }
                 RuntimeStatus::Ready(runtime) => Box::new(PythonBackend::new(runtime)),
                 _ => return fail(
                     "Le générateur n'est plus installé. Cliquez de nouveau sur « Générer la partie »."
@@ -222,6 +228,7 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
                 let who = match task.engine {
                     Engine::Python => "Archipelago génère la partie…",
                     Engine::Rust => "Raftup génère la partie (moteur Rust)…",
+                    Engine::Export => "Archipelago construit les mondes, Raftup place les objets…",
                 };
                 ui.label(format!("{who} {}", elapsed(task.started.elapsed())));
                 ui.add_space(6.0);

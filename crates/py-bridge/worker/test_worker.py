@@ -337,10 +337,33 @@ class TestExport(unittest.TestCase):
         self.assertEqual(r["opaque_rules"], 3)
         with open(r["export"], encoding="utf-8") as f:
             self.assertEqual(json.load(f)["joueurs"], ["Alice"])
-        # Le placement a ete interrompu : pas de zip ecrit.
+        # Le placement est en attente : pas de zip ecrit.
         self.assertEqual([n for n in os.listdir(self.sortie) if n.endswith(".zip")], [])
         self.assertEqual(sortie[1], {"id": 2, "result": "pong"})
         self.assertEqual(code, 0)
+
+    def test_export_puis_finish(self):
+        self.yaml("Alice")
+        placement = os.path.join(self.tmp.name, "placement.json")
+        with open(placement, "w", encoding="utf-8") as f:
+            f.write("[]")
+        fin = req(2, "finish_worlds", {"placement_path": placement})
+        sortie, code = echanger(self.exp() + fin + req(3, "ping"))
+        r = sortie[1]["result"]
+        # Main.main a repris apres le placement et ecrit la seed.
+        self.assertEqual(r["seed_name"], "42")
+        self.assertTrue(os.path.isfile(r["zip"]))
+        self.assertEqual(sortie[2], {"id": 3, "result": "pong"})
+        self.assertEqual(code, 0)
+
+    def test_finish_sans_export(self):
+        sortie, _ = echanger(req(1, "finish_worlds", {"placement_path": os.path.abspath("x")}))
+        self.assertEqual(sortie[0]["error"]["code"], -32014)
+
+    def test_finish_placement_illisible(self):
+        self.yaml("Alice")
+        sortie, _ = echanger(self.exp() + req(2, "finish_worlds", {"placement_path": "relatif"}))
+        self.assertEqual(sortie[1]["error"]["code"], -32602)
 
     def test_export_qui_plante(self):
         self.yaml("ExportPlante")

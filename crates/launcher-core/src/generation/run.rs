@@ -150,18 +150,9 @@ impl PythonBackend {
     }
 }
 
-impl GeneratorBackend for PythonBackend {
-    fn archipelago_dir(&self) -> &Path {
-        &self.runtime.archipelago_dir
-    }
-
-    fn run(
-        &mut self,
-        p: &GenerateParams,
-        timeout: Duration,
-        cancel: &CancelToken,
-        log: Sender<String>,
-    ) -> Result<GenerateResult, GenerationError> {
+impl PythonBackend {
+    /// Lance un worker neuf (ADR 0017, décision 5) ; ses lignes de stderr vont dans `log`.
+    pub(super) fn start_bridge(&self, log: Sender<String>) -> Result<PyBridge, GenerationError> {
         let mut options = BridgeOptions::new(&self.runtime.python_exe);
         options.working_dir = Some(self.runtime.archipelago_dir.clone());
         // Archipelago ne doit ni lancer pip ni toucher au réseau.
@@ -174,13 +165,33 @@ impl GeneratorBackend for PythonBackend {
                 .insert("RAFTUP_BLOCK_NETWORK".to_string(), "1".to_string());
         }
         options.stderr_lines = Some(log);
+        Ok(PyBridge::start(options)?)
+    }
 
-        let mut bridge = PyBridge::start(options)?;
-        // On complète les paramètres avec ce que seul le runtime connaît.
+    /// Complète les paramètres avec ce que seul le runtime connaît.
+    pub(super) fn complete(&self, p: &GenerateParams) -> GenerateParams {
         let mut params = p.clone();
         if self.runtime.site_packages.is_some() {
             params.site_packages = self.runtime.site_packages.clone();
         }
+        params
+    }
+}
+
+impl GeneratorBackend for PythonBackend {
+    fn archipelago_dir(&self) -> &Path {
+        &self.runtime.archipelago_dir
+    }
+
+    fn run(
+        &mut self,
+        p: &GenerateParams,
+        timeout: Duration,
+        cancel: &CancelToken,
+        log: Sender<String>,
+    ) -> Result<GenerateResult, GenerationError> {
+        let mut bridge = self.start_bridge(log)?;
+        let params = self.complete(p);
         let result = bridge.generate_cancellable(&params, timeout, cancel);
         // Un worker neuf par génération : on le ferme dans tous les cas (erreur de fermeture ignorée).
         let _ = bridge.shutdown();

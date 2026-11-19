@@ -145,12 +145,35 @@ def block_network():
     socket.gethostbyname_ex = lambda host: refuse("gethostbyname_ex %r" % (host,))
 
 
-class Captured(BaseException):
-    """Leve a la place du placement d'Archipelago (export_worlds, ADR 0028)."""
+class Abandon(BaseException):
+    """Arrete Main.main en attente si Raftup ne donne pas de placement."""
 
-    def __init__(self, mw):
-        BaseException.__init__(self)
-        self.mw = mw
+
+# Export en cours (ADR 0028) : Main.main tourne dans un thread, en attente juste avant
+# le placement ; finish_worlds lui donne le placement de Raftup et le laisse finir.
+SESSION = {}
+
+
+def failed(exc, tb):
+    return RpcFail(-32010, "generation echouee : %s: %s" % (type(exc).__name__, exc),
+                   {"type": type(exc).__name__, "traceback": tb})
+
+
+def result_of(mw, out, Utils, t0):
+    try:
+        name = str(mw.seed_name)
+        zip_path = os.path.realpath(os.path.join(out, "AP_%s.zip" % name))
+        root = os.path.realpath(out)
+        if os.path.commonpath([zip_path, root]) != root or not os.path.isfile(zip_path):
+            raise ValueError("zip introuvable sous output_dir : " + zip_path)
+        players = [{"slot": int(i), "name": str(mw.player_name[i]), "game": str(mw.game[i])}
+                   for i in sorted(mw.player_ids)]
+        ver = str(getattr(Utils, "__version__", "inconnue"))
+    except BaseException as exc:
+        raise RpcFail(-32010, "resultat illisible : %s: %s" % (type(exc).__name__, exc),
+                      {"type": type(exc).__name__, "traceback": tb_text()})
+    return {"zip": zip_path, "seed_name": name, "ap_version": ver, "players": players,
+            "seconds": round(time.time() - t0, 3)}
 
 
 def generate(params, capture=False):
@@ -164,7 +187,7 @@ def generate(params, capture=False):
         os.makedirs(a["out"], exist_ok=True)
         if a["sp"]:
             site.addsitedir(a["sp"])
-        # Avec -I, le dossier courant n'est pas dans sys.path.
+        # Avec -P, le dossier courant n'est pas dans sys.path.
         sys.path.insert(0, a["ap"])
         os.chdir(a["ap"])  # Utils.local_path en depend
         os.environ["SKIP_REQUIREMENTS_UPDATE"] = "1"
@@ -189,39 +212,89 @@ def generate(params, capture=False):
         import Main
         import Utils
 
-        if capture:
-            # Main.main s'arrete juste avant le placement : on garde le MultiWorld.
-            def stop(multiworld, *args, **kwargs):
-                raise Captured(multiworld)
-            Main.distribute_items_restrictive = stop
-            Main.flood_items = stop
         erargs, seed = Generate.main()
-        mw = Main.main(erargs, seed)
         if capture:
-            raise RpcFail(-32010, "le placement n'a pas ete atteint")
-    except Captured as got:
-        return got.mw, Utils, t0
+            return pause_before_fill(Main, Utils, erargs, seed, a["out"], t0)
+        mw = Main.main(erargs, seed)
     except RpcFail:
         raise
     except ImportError as exc:
         raise RpcFail(-32011, "import impossible : %s" % exc, {"type": type(exc).__name__, "traceback": tb_text()})
     except BaseException as exc:  # SystemExit, EOFError (input) et erreurs de generation
-        raise RpcFail(-32010, "generation echouee : %s: %s" % (type(exc).__name__, exc),
-                      {"type": type(exc).__name__, "traceback": tb_text()})
-    try:
-        name = str(mw.seed_name)
-        zip_path = os.path.realpath(os.path.join(a["out"], "AP_%s.zip" % name))
-        root = os.path.realpath(a["out"])
-        if os.path.commonpath([zip_path, root]) != root or not os.path.isfile(zip_path):
-            raise ValueError("zip introuvable sous output_dir : " + zip_path)
-        players = [{"slot": int(i), "name": str(mw.player_name[i]), "game": str(mw.game[i])}
-                   for i in sorted(mw.player_ids)]
-        ver = str(getattr(Utils, "__version__", "inconnue"))
-    except BaseException as exc:
-        raise RpcFail(-32010, "resultat illisible : %s: %s" % (type(exc).__name__, exc),
-                      {"type": type(exc).__name__, "traceback": tb_text()})
-    return {"zip": zip_path, "seed_name": name, "ap_version": ver, "players": players,
-            "seconds": round(time.time() - t0, 3)}
+        raise failed(exc, tb_text())
+    return result_of(mw, a["out"], Utils, t0)
+
+
+def pause_before_fill(Main, Utils, erargs, seed, out, t0):
+    """Lance Main.main dans un thread qui s'arrete au placement ; rend le MultiWorld."""
+    import threading
+
+    ready, go, box = threading.Event(), threading.Event(), {}
+
+    def fill(multiworld, *args, **kwargs):
+        box["mw"] = multiworld
+        ready.set()
+        go.wait()
+        if "place" not in box:
+            raise Abandon()
+        box["place"](multiworld)
+
+    Main.distribute_items_restrictive = fill
+    Main.flood_items = fill
+    # Raftup a deja equilibre la progression.
+    Main.balance_multiworld_progression = lambda multiworld: None
+
+    def run():
+        try:
+            box["result"] = Main.main(erargs, seed)
+        except BaseException as exc:
+            box["error"] = (exc, tb_text())
+        finally:
+            ready.set()
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    ready.wait()
+    if "mw" not in box:  # fini ou plante avant le placement
+        thread.join()
+        if "error" in box:
+            raise failed(*box["error"])
+        raise RpcFail(-32010, "le placement n'a pas ete atteint")
+    SESSION.update(box=box, go=go, thread=thread, out=out, utils=Utils, t0=t0)
+    return box["mw"], Utils, t0
+
+
+def finish_worlds(params):
+    """Pose le placement de Raftup et laisse Archipelago ecrire la seed (ADR 0028)."""
+    if not SESSION:
+        raise RpcFail(-32014, "aucun export en cours")
+    path = params.get("placement_path")
+    if not isinstance(path, str) or not os.path.isabs(path):
+        raise RpcFail(-32602, "parametre invalide : placement_path")
+    with open(path, encoding="utf-8") as f:
+        placement = json.load(f)
+    box = SESSION["box"]
+
+    def place(mw):
+        pool = {}
+        for item in mw.itempool:
+            if item.location is None:
+                pool.setdefault((item.player, item.name), []).append(item)
+        for lp, lname, ip, iname in placement:
+            loc = mw.get_location(lname, lp)
+            items = pool.get((ip, iname))
+            if loc.item is not None or not items:
+                raise ValueError("placement impossible : %s <- %s" % (lname, iname))
+            mw.push_item(loc, items.pop(0), collect=False)
+        if any(pool.values()) or mw.get_unfilled_locations():
+            raise ValueError("placement incomplet")
+
+    box["place"] = place
+    SESSION["go"].set()
+    SESSION["thread"].join()
+    if "error" in box:
+        raise failed(*box["error"])
+    return result_of(box["result"], SESSION["out"], SESSION["utils"], SESSION["t0"])
 
 
 def export_worlds(params):
@@ -258,6 +331,8 @@ def call(method, params):
             "python": "%d.%d.%d" % sys.version_info[:3],
             "implementation": "CPython" if impl == "cpython" else impl,
             "protocol": PROTOCOL,
+            # 0 si PYTHONHASHSEED=0 : ordre des set de chaines reproductible (ADR 0028).
+            "hash_randomization": int(sys.flags.hash_randomization),
         }
     if method == "echo":
         return params
@@ -265,6 +340,8 @@ def call(method, params):
         return generate(params)
     if method == "export_worlds":
         return export_worlds(params)
+    if method == "finish_worlds":
+        return finish_worlds(params)
     raise MethodNotFound(method)
 
 
