@@ -65,6 +65,23 @@ pub enum HubError {
     LastIdentity,
     #[error("présence invalide : {0}")]
     InvalidPresence(&'static str),
+    /// Compte suspendu par l'admin du hub (ADR 0036).
+    #[error("ce compte est suspendu")]
+    AccountSuspended,
+    #[error("impossible de suspendre son propre compte")]
+    SelfSuspend,
+    #[error("les inscriptions sont fermées sur ce hub")]
+    RegistrationClosed,
+    #[error("ce hub demande un code d'invitation pour s'inscrire")]
+    InviteRequired,
+    #[error("code d'invitation invalide, expiré ou déjà utilisé")]
+    InvalidInvite,
+    #[error("aucun code d'invitation avec ce numéro")]
+    InviteNotFound,
+    #[error("réglage inconnu")]
+    UnknownSetting,
+    #[error("réglage refusé : {0}")]
+    InvalidSetting(&'static str),
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
     #[error("requête invalide : {0}")]
     BadRequest(String),
@@ -106,6 +123,14 @@ impl HubError {
             HubError::IdentityNotFound => (StatusCode::NOT_FOUND, "identity_not_found"),
             HubError::LastIdentity => (StatusCode::CONFLICT, "last_identity"),
             HubError::InvalidPresence(_) => (StatusCode::BAD_REQUEST, "invalid_presence"),
+            HubError::AccountSuspended => (StatusCode::FORBIDDEN, "account_suspended"),
+            HubError::SelfSuspend => (StatusCode::BAD_REQUEST, "self_suspend"),
+            HubError::RegistrationClosed => (StatusCode::FORBIDDEN, "registration_closed"),
+            HubError::InviteRequired => (StatusCode::FORBIDDEN, "invite_required"),
+            HubError::InvalidInvite => (StatusCode::FORBIDDEN, "invalid_invite"),
+            HubError::InviteNotFound => (StatusCode::NOT_FOUND, "invite_not_found"),
+            HubError::UnknownSetting => (StatusCode::BAD_REQUEST, "unknown_setting"),
+            HubError::InvalidSetting(_) => (StatusCode::BAD_REQUEST, "invalid_setting"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")

@@ -387,3 +387,100 @@ async fn jeton_faux_au_depart_refuse() {
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+// ---------- Console Rafthub (ADR 0036) ----------
+
+/// Comme [`discord_app`], avec l'état du hub pour appeler la console.
+async fn discord_app_with_state() -> (Router, Arc<FakeDiscord>, AppState) {
+    let store = test_store().await;
+    let fake = Arc::new(FakeDiscord::new());
+    let state = AppState::with_services(
+        store,
+        HubConfig::for_tests(),
+        Arc::new(DisabledMailer),
+        Some(fake.clone()),
+    )
+    .await
+    .unwrap();
+    (hub::router(state.clone()), fake, state)
+}
+
+#[tokio::test]
+async fn compte_suspendu_refuse_par_discord() {
+    let (app, fake, state) = discord_app_with_state().await;
+    let started = start(&app, None, json!({})).await;
+    let ticket = authorize(&app, &fake, &started, discord_user("111", "zelda")).await;
+    finish(&app, &started, &ticket).await;
+    let (status, body) = register_discord(&app, &started, &ticket, "Link").await;
+    assert_eq!(status, StatusCode::CREATED);
+    let user_id = body["user_id"].as_i64().unwrap();
+
+    state.suspend_user(None, user_id).await.unwrap();
+    let again = start(&app, None, json!({})).await;
+    let ticket = authorize(&app, &fake, &again, discord_user("111", "zelda")).await;
+    let (status, body) = finish(&app, &again, &ticket).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&body), "account_suspended");
+}
+
+#[tokio::test]
+async fn inscription_discord_selon_le_mode() {
+    let (app, fake, state) = discord_app_with_state().await;
+
+    // Fermé : la connexion d'un nouveau joueur s'arrête au retour de Discord.
+    state
+        .update_setting(None, "registration_mode", Some("closed"))
+        .await
+        .unwrap();
+    let started = start(&app, None, json!({})).await;
+    let ticket = authorize(&app, &fake, &started, discord_user("1", "un")).await;
+    let (status, body) = finish(&app, &started, &ticket).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&body), "registration_closed");
+
+    // Sur invitation : pseudo et code demandés.
+    state
+        .update_setting(None, "registration_mode", Some("invite"))
+        .await
+        .unwrap();
+    let started = start(&app, None, json!({})).await;
+    let ticket = authorize(&app, &fake, &started, discord_user("2", "deux")).await;
+    let (status, body) = finish(&app, &started, &ticket).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "needs_username");
+    assert_eq!(body["invite_required"], true);
+    let (status, body) = register_discord(&app, &started, &ticket, "Deux").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error_code(&body), "invite_required");
+
+    // La connexion reste ouverte : on réessaie avec un bon code.
+    let invite = state
+        .create_invite(None, std::time::Duration::from_secs(600))
+        .await
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/oauth/discord/register",
+        None,
+        Some(json!({
+            "state": started.state, "secret": started.secret, "ticket": ticket,
+            "username": "Deux", "invite_code": invite.code
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    let events = state.events(10, 0).await.unwrap();
+    assert_eq!(events.items[0].kind, "account_created");
+    assert_eq!(events.items[0].detail, "Discord, avec invitation");
+
+    // Mode ouvert : pas de champ `invite_required` dans la réponse.
+    state
+        .update_setting(None, "registration_mode", Some("open"))
+        .await
+        .unwrap();
+    let started = start(&app, None, json!({})).await;
+    let ticket = authorize(&app, &fake, &started, discord_user("3", "trois")).await;
+    let (_, body) = finish(&app, &started, &ticket).await;
+    assert!(body.get("invite_required").is_none());
+}

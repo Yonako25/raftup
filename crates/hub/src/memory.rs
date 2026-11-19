@@ -85,6 +85,15 @@ impl PresenceBoard {
         lock(&self.entries).remove(&user_id);
     }
 
+    /// Nombre de comptes en ligne (présence encore fraîche), pour le tableau de bord.
+    pub fn online_count(&self) -> usize {
+        let entries = lock(&self.entries);
+        entries
+            .values()
+            .filter(|entry| entry.updated.elapsed() <= self.ttl)
+            .count()
+    }
+
     pub fn get(&self, user_id: i64) -> PresenceView {
         let mut entries = lock(&self.entries);
         match entries.get(&user_id) {

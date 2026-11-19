@@ -7,6 +7,7 @@
 //! Pas encore fait (ADR 0033) : changement de pseudo, refus de toutes les demandes.
 
 pub mod api;
+pub mod console;
 pub mod discord;
 pub mod error;
 pub mod identity;
@@ -14,6 +15,7 @@ pub mod mail;
 pub mod memory;
 pub mod password;
 pub mod session;
+pub mod settings;
 pub mod store;
 
 use std::sync::Arc;
@@ -24,6 +26,7 @@ pub use discord::{DiscordApi, DiscordConfig, DiscordUser, FakeDiscord, HttpDisco
 pub use error::HubError;
 pub use mail::{DisabledMailer, Email, Mailer, MemoryMailer, SmtpMailer};
 pub use password::{HashParams, Password};
+pub use settings::{EnvSettings, PublicSettings, RegistrationMode, SettingKey, Settings};
 pub use store::Store;
 
 use memory::{PresenceBoard, RateLimiter};
@@ -42,8 +45,12 @@ pub struct HubConfig {
     pub login_window: Duration,
     /// Demandes d'ami permises par compte et par minute.
     pub friend_requests_per_minute: u32,
-    /// Adresse publique du hub, pour les liens des e-mails (sans `/` final).
+    /// Adresse publique **par défaut** du hub, pour les liens des e-mails. Le
+    /// réglage `public_url` (base, puis environnement) passe avant (ADR 0036).
     pub public_url: String,
+    /// Réglages venus de l'environnement et de la ligne de commande (ADR 0036) :
+    /// utilisés quand la base n'a pas de valeur. Vide par défaut.
+    pub settings_env: EnvSettings,
     /// Durée de validité d'un lien de vérification d'adresse.
     pub email_verify_lifetime: Duration,
     /// Durée de validité d'un code « mot de passe oublié ».
@@ -73,6 +80,7 @@ impl Default for HubConfig {
             mail_window: Duration::from_secs(3600),
             oauth_ttl: Duration::from_secs(10 * 60),
             oauth_max_pending: 10_000,
+            settings_env: EnvSettings::default(),
         }
     }
 }
@@ -85,6 +93,22 @@ impl HubConfig {
             ..HubConfig::default()
         }
     }
+}
+
+/// D'où viennent le service d'envoi d'e-mails et le client Discord.
+enum Services {
+    /// Choisis une fois pour toutes (tests : `MemoryMailer`, `FakeDiscord`).
+    ///
+    /// `Arc<dyn Mailer>` : un objet partagé dont on ne connaît que le trait ; le vrai
+    /// type (SMTP, mémoire…) est choisi au lancement. Sans Discord (`None`), les
+    /// routes Discord répondent 503.
+    Fixed {
+        mailer: Arc<dyn Mailer>,
+        discord: Option<Arc<dyn DiscordApi>>,
+    },
+    /// Construits à chaque usage depuis les [`Settings`] (base > environnement >
+    /// défaut) : un changement fait dans la console vaut tout de suite (ADR 0036).
+    FromSettings,
 }
 
 /// État partagé par toutes les requêtes.
@@ -104,11 +128,9 @@ struct Inner {
     friend_limiter: RateLimiter,
     /// Limite les e-mails envoyés à une même adresse (ou pour un même compte).
     mail_limiter: RateLimiter,
-    /// Service d'envoi. `Arc<dyn Mailer>` : un objet partagé dont on ne connaît que
-    /// le trait ; le vrai type (SMTP, mémoire…) est choisi au lancement.
-    mailer: Arc<dyn Mailer>,
-    /// Discord, si le hub est réglé pour (sinon les routes Discord répondent 503).
-    discord: Option<Arc<dyn DiscordApi>>,
+    /// Envoi des e-mails et connexion Discord : fixés au lancement, ou relus depuis
+    /// les réglages à chaque usage.
+    services: Services,
     /// Connexions Discord commencées et pas encore finies.
     oauth_pending: discord::PendingLogins,
     /// Hash d'un mot de passe bidon : vérifié quand l'adresse n'existe pas, pour que
@@ -131,12 +153,27 @@ impl AppState {
         AppState::with_services(store, config, mailer, None).await
     }
 
-    /// État complet : envoi d'e-mails et, si réglé, Discord.
+    /// État avec un envoi d'e-mails et un Discord fixés (tests), indépendants des
+    /// réglages SMTP et Discord.
     pub async fn with_services(
         store: Store,
         config: HubConfig,
         mailer: Arc<dyn Mailer>,
         discord: Option<Arc<dyn DiscordApi>>,
+    ) -> Result<AppState, HubError> {
+        AppState::build(store, config, Services::Fixed { mailer, discord }).await
+    }
+
+    /// État de production : SMTP et Discord relus depuis les réglages (base,
+    /// environnement de `config.settings_env`, défaut) à chaque usage.
+    pub async fn from_settings(store: Store, config: HubConfig) -> Result<AppState, HubError> {
+        AppState::build(store, config, Services::FromSettings).await
+    }
+
+    async fn build(
+        store: Store,
+        config: HubConfig,
+        services: Services,
     ) -> Result<AppState, HubError> {
         let params = config.hash_params;
         let dummy_hash = blocking(move || {
@@ -152,8 +189,7 @@ impl AppState {
                     Duration::from_secs(60),
                 ),
                 mail_limiter: RateLimiter::new(config.mails_per_window, config.mail_window),
-                mailer,
-                discord,
+                services,
                 oauth_pending: discord::PendingLogins::new(
                     config.oauth_ttl,
                     config.oauth_max_pending,
@@ -169,17 +205,51 @@ impl AppState {
         &self.inner.store
     }
 
+    /// Réglages actuels (relus en base à chaque appel : quelques lignes).
+    pub async fn settings(&self) -> Result<Settings, HubError> {
+        let database = self.inner.store.all_settings().await?;
+        Ok(Settings::resolve(
+            &database,
+            &self.inner.config.settings_env,
+            &self.inner.config.public_url,
+        ))
+    }
+
+    /// Service d'envoi à utiliser maintenant.
+    async fn mailer(&self) -> Result<Arc<dyn Mailer>, HubError> {
+        match &self.inner.services {
+            Services::Fixed { mailer, .. } => Ok(Arc::clone(mailer)),
+            Services::FromSettings => Ok(match self.settings().await?.smtp_mailer() {
+                Some(mailer) => Arc::new(mailer),
+                None => Arc::new(DisabledMailer),
+            }),
+        }
+    }
+
+    /// Client Discord à utiliser maintenant (`None` : Discord non réglé).
+    async fn discord(&self) -> Result<Option<Arc<dyn DiscordApi>>, HubError> {
+        match &self.inner.services {
+            Services::Fixed { discord, .. } => Ok(discord.clone()),
+            Services::FromSettings => Ok(self
+                .settings()
+                .await?
+                .discord_config()
+                .map(|config| Arc::new(HttpDiscord::new(config)) as Arc<dyn DiscordApi>)),
+        }
+    }
+
     /// Envoie un e-mail sans attendre : l'envoi part sur un thread à part et la
     /// réponse HTTP n'attend pas le serveur SMTP. Elle prend donc le même temps que
     /// l'adresse existe ou non. Un échec ne laisse qu'un avertissement au journal.
-    fn send_mail(&self, email: Email) {
-        let mailer = Arc::clone(&self.inner.mailer);
+    async fn send_mail(&self, email: Email) -> Result<(), HubError> {
+        let mailer = self.mailer().await?;
         // Le `JoinHandle` rendu est ignoré : la tâche continue seule.
         drop(tokio::task::spawn_blocking(move || {
             if let Err(error) = mailer.send(&email) {
                 tracing::warn!(%error, subject = %email.subject, "e-mail non envoyé");
             }
         }));
+        Ok(())
     }
 }
 

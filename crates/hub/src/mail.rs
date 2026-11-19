@@ -92,6 +92,16 @@ impl Mailer for SmtpMailer {
     }
 }
 
+/// L'adresse SMTP est-elle lisible par `lettre` ? (réglages de la console)
+pub fn valid_smtp_url(url: &str) -> bool {
+    SmtpTransport::from_url(url).is_ok()
+}
+
+/// L'expéditeur est-il une adresse valable (`Nom <adresse@exemple.org>`) ?
+pub fn valid_mailbox(from: &str) -> bool {
+    from.parse::<Mailbox>().is_ok()
+}
+
 /// N'envoie rien : le hub tourne sans SMTP (développement sur le PC).
 pub struct DisabledMailer;
 
