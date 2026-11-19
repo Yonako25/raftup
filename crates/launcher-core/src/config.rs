@@ -69,6 +69,16 @@ pub struct UserConfig {
     /// launcher plus ancien l'ignore à la lecture.
     #[serde(default)]
     pub hub_url: Option<String>,
+    /// Vrai une fois l'adresse de `rafthub.toml` adoptée (ADR 0036) : le fichier n'est
+    /// plus relu, même si le joueur revient ensuite à l'adresse par défaut. Champ
+    /// facultatif, sans changer `format_version` ; écrit seulement quand il vaut vrai.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub rafthub_file_adopted: bool,
+}
+
+/// Pour `skip_serializing_if` : serde passe le champ par référence, d'où `&bool`.
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn current_version() -> u32 {
@@ -85,6 +95,7 @@ impl Default for UserConfig {
             webhook_url: None,
             preset: None,
             hub_url: None,
+            rafthub_file_adopted: false,
         }
     }
 }
@@ -233,6 +244,7 @@ impl std::fmt::Debug for UserConfig {
             .field("webhook_url", &webhook)
             .field("preset", &self.preset)
             .field("hub_url", &self.hub_url)
+            .field("rafthub_file_adopted", &self.rafthub_file_adopted)
             .finish()
     }
 }

@@ -61,22 +61,14 @@ impl App {
         dev_host(&worker);
         // Webhook et préréglage mémorisés : ils pré-remplissent « Héberger » et « Créer ».
         let saved = crate::screens::prefs::load();
-        let mut join = join::JoinState::default();
-        let page = match &link {
-            Some(link) => {
-                join::receive(&mut join, link);
-                Page::Join
-            }
-            None => start_page(),
-        };
-        App {
-            page,
+        let mut app = App {
+            page: start_page(),
             worker,
             setup: setup::SetupForm::with_webhook(saved.webhook.clone()),
             create: create::CreateForm::with_prefs(saved),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
-            join,
+            join: join::JoinState::default(),
             friends: friends::FriendsState::new(),
             update: crate::update_ui::UpdateState::new(),
             error: None,
@@ -84,7 +76,35 @@ impl App {
             inbox_checked: std::time::Instant::now(),
             #[cfg(debug_assertions)]
             dev: crate::devscript::DevScript::from_env(),
+        };
+        if let Some(link) = &link {
+            app.receive_link(link);
         }
+        app
+    }
+
+    /// Un lien `raftup://` reçu (argument ou deuxième instance) :
+    /// - `raftup://hub/…` (ADR 0036) : écran « Amis » et boîte « Passer sur le hub … ? » ;
+    /// - tout le reste : écran « Rejoindre », qui lit le lien d'invitation (ADR 0020).
+    fn receive_link(&mut self, link: &str) {
+        use launcher_core::rafthub;
+
+        if rafthub::is_hub_link(link) {
+            match rafthub::parse_hub_link(link) {
+                Ok(url) => self.friends.offer_switch(url),
+                // Montré en haut de l'écran « Amis », qui a son propre bandeau.
+                Err(e) => self.friends.link_refused(&e),
+            }
+            self.error = None;
+            self.page = Page::Friends;
+            return;
+        }
+        // Le dernier lien reçu l'emporte : c'est celui que le joueur vient de cliquer.
+        join::receive(&mut self.join, link);
+        if self.page != Page::Join {
+            self.error = None;
+        }
+        self.page = Page::Join;
     }
 }
 
@@ -100,12 +120,7 @@ impl App {
         self.inbox_checked = std::time::Instant::now();
         for message in launcher_core::instance::take_inbox(dir) {
             if message != crate::startup::FOCUS {
-                // Le dernier lien reçu l'emporte : c'est celui que le joueur vient de cliquer.
-                join::receive(&mut self.join, &message);
-                if self.page != Page::Join {
-                    self.error = None;
-                }
-                self.page = Page::Join;
+                self.receive_link(&message);
             }
             // Dans les deux cas, la fenêtre revient au premier plan.
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
@@ -183,6 +198,8 @@ impl eframe::App for App {
 
         // Session du hub, présence et liste d'amis, quel que soit l'écran affiché.
         friends::background(&mut self.friends, &ctx);
+        // Lien `raftup://hub/…` en attente : la question s'affiche par-dessus l'écran.
+        friends::switch_dialog(&ctx, &mut self.friends);
 
         // Le verrou est tenu le temps du dessin : le worker attend au plus une image.
         let shared = self.worker.lock();

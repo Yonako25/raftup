@@ -56,6 +56,8 @@ fn main() -> anyhow::Result<()> {
     // `_guard` (et non `_`) : la variable vit jusqu'à la fin de `main`, donc le verrou
     // de l'instance unique aussi. `let _ = …` le relâcherait tout de suite.
     let _guard = guard;
+    // Launcher téléchargé depuis un Rafthub : il vient avec son adresse (ADR 0036).
+    startup::adopt_rafthub_file();
 
     // Le runtime doit rester en vie tant que la fenêtre est ouverte : quand `runtime`
     // est détruit (fin de `main`), le serveur et le worker s'arrêtent avec lui.

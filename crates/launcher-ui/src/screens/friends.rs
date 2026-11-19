@@ -1,5 +1,5 @@
-//! Écran « Amis » : compte sur le hub, liste d'amis avec leur présence, demandes d'ami
-//! (ADR 0002, 0035).
+//! Écran « Amis » : compte sur le hub Rafthub, liste d'amis avec leur présence, demandes
+//! d'ami (ADR 0002, 0035, 0036).
 //!
 //! L'écran ne parle au hub que par `launcher_core::hub_client` (le hub est en AGPL, le
 //! launcher n'en dépend pas, ADR 0003). Chaque appel réseau part dans un **thread à
@@ -11,6 +11,10 @@
 //! Tant que le joueur est connecté, [`background`] renvoie sa présence « en ligne » et
 //! relit la liste d'amis toutes les minutes, même si l'écran n'est pas affiché (le hub
 //! oublie une présence au bout de 2 minutes).
+//!
+//! Un lien `raftup://hub/<hôte>` propose de changer de Rafthub
+//! ([`FriendsState::offer_switch`]) ; rien ne change avant le clic sur « Passer sur ce
+//! hub » dans la boîte de [`switch_dialog`].
 
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
@@ -60,6 +64,9 @@ enum Action {
         username: String,
     },
     Logout,
+    /// Changer de hub : présence « hors ligne » envoyée à l'ancien (s'il y avait une
+    /// session), puis reprise de la session rangée pour le nouveau, s'il y en a une.
+    Switch(HubUrl),
     /// Renvoyer la présence et relire amis et demandes.
     Sync,
     SendRequest(String),
@@ -129,6 +136,10 @@ pub struct FriendsState {
     confirm_remove: Option<String>,
     /// En debug : se connecter tout seul avec ces identifiants (macro de captures).
     dev_login: Option<(String, String)>,
+    /// Hub proposé par un lien `raftup://hub/…`, en attente de la confirmation du joueur.
+    pending_switch: Option<HubUrl>,
+    /// Écrire l'adresse choisie dans `config.toml` (faux dans les tests).
+    persist: bool,
 }
 
 /// Résumé pour les cartes de la barre latérale.
@@ -176,6 +187,8 @@ impl FriendsState {
             last_sync: None,
             confirm_remove: None,
             dev_login,
+            pending_switch: None,
+            persist: true,
         }
     }
 
@@ -234,7 +247,7 @@ impl FriendsState {
                 self.job = None;
                 self.client = self.url.as_ref().ok().map(|u| HubClient::new(u.clone()));
                 self.username = None;
-                self.notice = Some(Notice::Error("L'appel au hub a échoué.".to_string()));
+                self.notice = Some(Notice::Error("L'appel à Rafthub a échoué.".to_string()));
                 return;
             }
         };
@@ -249,12 +262,22 @@ impl FriendsState {
                 self.username = Some(username);
                 self.lists = lists;
                 self.last_sync = Some(Instant::now());
-                self.notice = warning.map(Notice::Error);
+                // Connexion réussie : une ancienne erreur (mauvais mot de passe…) n'a plus
+                // lieu d'être ; une information (« vous êtes sur le Rafthub … ») reste.
+                match warning {
+                    Some(warning) => self.notice = Some(Notice::Error(warning)),
+                    None if matches!(self.notice, Some(Notice::Error(_))) => self.notice = None,
+                    None => {}
+                }
             }
             Ok(Done::LoggedOut { message }) => {
                 self.username = None;
                 self.lists = Lists::default();
-                self.notice = message.map(Notice::Info);
+                // Sans message (aucune session rangée), le bandeau affiché est gardé :
+                // un lien refusé au démarrage doit rester visible.
+                if let Some(message) = message {
+                    self.notice = Some(Notice::Info(message));
+                }
             }
             Ok(Done::Lists { lists, message }) => {
                 self.lists = lists;
@@ -267,7 +290,7 @@ impl FriendsState {
         }
     }
 
-    /// Change d'adresse de hub : la session de l'ancien hub est laissée de côté.
+    /// Change d'adresse de hub depuis le champ de l'écran.
     fn apply_url(&mut self, ctx: &egui::Context) {
         let url = match HubUrl::parse(&self.url_text) {
             Ok(url) => url,
@@ -280,15 +303,86 @@ impl FriendsState {
         if self.url.as_ref().ok() == Some(&url) {
             return;
         }
-        save_url(&url);
-        self.client = Some(HubClient::new(url.clone()));
-        self.url = Ok(url);
+        self.notice = None;
+        self.switch_to(url, ctx);
+    }
+
+    /// Passe sur un autre hub : adresse enregistrée, ancienne session quittée proprement
+    /// (présence « hors ligne », jeton gardé pour un retour), session du nouveau reprise.
+    ///
+    /// Rend faux, sans rien changer, si un appel est en cours : le client est alors dans
+    /// le thread réseau et on ne peut pas encore le remplacer.
+    fn switch_to(&mut self, url: HubUrl, ctx: &egui::Context) -> bool {
+        if self.busy() {
+            return false;
+        }
+        if self.persist {
+            save_url(&url);
+        }
+        // Adresse refusée au démarrage : pas de client, on en crée un pour le nouveau hub.
+        if self.client.is_none() {
+            self.client = Some(HubClient::new(url.clone()));
+        }
+        self.url_text = url.to_string();
+        self.url = Ok(url.clone());
         self.username = None;
         self.lists = Lists::default();
-        self.notice = None;
-        // Une session déjà rangée pour ce hub-là ? On la reprend.
+        self.confirm_remove = None;
+        // La reprise de session du démarrage est remplacée par celle du nouveau hub.
         self.started = true;
-        self.start(ctx, Action::Restore);
+        self.start(ctx, Action::Switch(url));
+        true
+    }
+
+    /// Un lien `raftup://hub/…` propose ce hub : on attend la confirmation du joueur.
+    /// Déjà sur ce hub : un simple message, pas de question.
+    pub fn offer_switch(&mut self, url: HubUrl) {
+        if self.url.as_ref().ok() == Some(&url) {
+            self.pending_switch = None;
+            self.notice = Some(Notice::Info(format!(
+                "Vous êtes déjà sur le Rafthub {}.",
+                url.host()
+            )));
+            return;
+        }
+        self.pending_switch = Some(url);
+    }
+
+    /// Lien `raftup://hub/…` illisible : on le dit en haut de l'écran, sans rien changer.
+    pub fn link_refused(&mut self, error: &launcher_core::rafthub::HubLinkError) {
+        self.pending_switch = None;
+        self.notice = Some(Notice::Error(format!("Lien Rafthub refusé : {error}.")));
+    }
+
+    /// Le hub en attente de confirmation, s'il y en a un.
+    pub fn pending_switch(&self) -> Option<&HubUrl> {
+        self.pending_switch.as_ref()
+    }
+
+    /// « Passer sur ce hub » : rend vrai si le changement est parti.
+    pub fn confirm_switch(&mut self, ctx: &egui::Context) -> bool {
+        let Some(url) = self.pending_switch.clone() else {
+            return false;
+        };
+        if !self.switch_to(url.clone(), ctx) {
+            return false;
+        }
+        self.pending_switch = None;
+        self.notice = Some(Notice::Info(format!(
+            "Vous êtes maintenant sur le Rafthub {}.",
+            url.host()
+        )));
+        true
+    }
+
+    /// « Rester » : la proposition est oubliée, rien ne change.
+    pub fn cancel_switch(&mut self) {
+        self.pending_switch = None;
+    }
+
+    /// L'hôte du hub en service (`hub.example.org`), s'il est valide.
+    pub fn host(&self) -> Option<&str> {
+        self.url.as_ref().ok().map(HubUrl::host)
     }
 }
 
@@ -359,13 +453,24 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 result: Err(error_text(&error)),
             },
         },
+        Action::Switch(to) => {
+            // Ancien hub : la présence passe tout de suite à « hors ligne » pour les
+            // amis (sinon il faudrait attendre 2 minutes). Un échec est sans importance :
+            // le hub l'oubliera de lui-même. Le jeton reste rangé, pour un retour.
+            if client.is_logged_in() {
+                let _ = client.set_presence(&Presence::offline());
+            }
+            run(HubClient::new(to), store, Action::Restore)
+        }
         Action::Logout => {
             let mut client = client;
             let remote = client.logout();
             let local = store.clear(&url);
             let message = match (remote, local) {
                 (Ok(()), Ok(())) => "Déconnecté.".to_string(),
-                (Err(_), _) => "Déconnecté sur ce PC ; le hub n'a pas pu être prévenu.".to_string(),
+                (Err(_), _) => {
+                    "Déconnecté sur ce PC ; Rafthub n'a pas pu être prévenu.".to_string()
+                }
                 (Ok(()), Err(e)) => format!("Déconnecté, mais le jeton reste rangé : {e}"),
             };
             Outcome {
@@ -508,13 +613,13 @@ fn sort_friends(friends: &mut [Friend]) {
 fn error_text(error: &HubClientError) -> String {
     match error {
         HubClientError::Network(_) => {
-            "Le hub ne répond pas : vérifiez son adresse (en bas de l'écran) ou votre connexion."
+            "Rafthub ne répond pas : vérifiez son adresse (en bas de l'écran) ou votre connexion."
                 .to_string()
         }
         HubClientError::Api {
             code: ErrorCode::Internal,
             ..
-        } => "Le hub a rencontré une erreur. Réessayez plus tard.".to_string(),
+        } => "Rafthub a rencontré une erreur. Réessayez plus tard.".to_string(),
         // Les messages du hub sont déjà en français et sans secret.
         HubClientError::Api { message, .. } => capitalize(message),
         other => capitalize(&other.to_string()),
@@ -572,7 +677,12 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
     let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
         let logged_in = state.username.is_some();
+        // Copie de l'hôte : la fermeture ci-dessous emprunte `state` en écriture.
+        let host = state.host().map(str::to_string);
         super::header(ui, "Communauté", "Amis", |ui| {
+            if let Some(host) = &host {
+                ui.label(widgets::dim(format!("Rafthub · {host}")).size(12.0));
+            }
             if logged_in {
                 if widgets::ghost_button(ui, "Se déconnecter") && !state.busy() {
                     state.start(&ctx, Action::Logout);
@@ -639,7 +749,7 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     };
     widgets::panel(ui, heading, |ui| {
         ui.label(widgets::dim(
-            "Un compte Raftup sert à retrouver vos amis et à voir qui joue. \
+            "Un compte Rafthub sert à retrouver vos amis et à voir qui joue. \
              Le launcher marche aussi sans compte.",
         ));
         ui.add_space(8.0);
@@ -726,7 +836,11 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     let mut action = None;
     widgets::panel(ui, &heading, |ui| {
         if let Some(name) = &state.username {
-            ui.label(widgets::dim(format!("Connecté en tant que {name}")));
+            let text = match state.host() {
+                Some(host) => format!("Connecté en tant que {name} sur le Rafthub {host}"),
+                None => format!("Connecté en tant que {name}"),
+            };
+            ui.label(widgets::dim(text));
             ui.add_space(6.0);
         }
         if state.lists.friends.is_empty() {
@@ -845,7 +959,7 @@ fn requests_panels(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
 
 /// Adresse du hub, modifiable.
 fn hub_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
-    widgets::panel(ui, "Adresse du hub", |ui| {
+    widgets::panel(ui, "Rafthub", |ui| {
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut state.url_text)
@@ -861,18 +975,64 @@ fn hub_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
             }
         });
         let status = match &state.url {
-            Ok(url) => format!("En service : {url}"),
+            Ok(url) => format!("En service : {} ({url})", url.host()),
             Err(e) => format!("Adresse refusée : {e}"),
         };
         ui.label(widgets::dim(status).size(12.0));
         ui.label(
             widgets::dim(
-                "Aucun hub public pour l'instant : par défaut, celui lancé sur ce PC. \
-                 Une adresse distante doit être en https://.",
+                "Aucun Rafthub public pour l'instant : par défaut, celui lancé sur ce PC. \
+                 Une adresse distante doit être en https://. Un lien raftup://hub/<hôte> \
+                 change aussi de Rafthub, après confirmation.",
             )
             .size(12.0),
         );
     });
+}
+
+/// Boîte « Passer sur le hub <hôte> ? », dessinée par-dessus n'importe quel écran tant
+/// qu'un lien `raftup://hub/…` attend la réponse du joueur.
+pub fn switch_dialog(ctx: &egui::Context, state: &mut FriendsState) {
+    let Some(url) = state.pending_switch().cloned() else {
+        return;
+    };
+    let current = state.host().unwrap_or("aucun").to_string();
+    let busy = state.busy();
+    let mut confirm = false;
+    let mut cancel = false;
+    // `Modal` grise le reste de la fenêtre et bloque les clics derrière la boîte.
+    let modal = egui::Modal::new(egui::Id::unique("rafthub_switch")).show(ctx, |ui| {
+        ui.set_width(440.0);
+        ui.label(widgets::dim("RAFTHUB").size(12.0));
+        ui.label(
+            RichText::new(format!("Passer sur le hub {} ?", url.host()))
+                .size(20.0)
+                .family(theme::bold_family())
+                .color(theme::TEXT),
+        );
+        ui.add_space(8.0);
+        ui.label(RichText::new(format!("Adresse : {url}")).color(theme::TEXT));
+        ui.label(widgets::dim(format!("Hub actuel : {current}")));
+        ui.add_space(6.0);
+        ui.label(widgets::dim(
+            "Comptes et amis sont propres à chaque hub. La session du hub actuel \
+             reste rangée sur ce PC : vous pourrez y revenir.",
+        ));
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            confirm = widgets::primary_button(ui, "Passer sur ce hub", !busy);
+            cancel = widgets::ghost_button(ui, "Rester");
+            if busy {
+                ui.spinner();
+            }
+        });
+    });
+    // Échap ou clic à côté de la boîte : comme « Rester ».
+    if cancel || modal.should_close() {
+        state.cancel_switch();
+    } else if confirm {
+        state.confirm_switch(ctx);
+    }
 }
 
 /// Pastille de couleur de la présence.
@@ -953,8 +1113,86 @@ mod tests {
             code: ErrorCode::Internal,
             message: "erreur interne".to_string(),
         };
-        assert!(error_text(&internal).starts_with("Le hub a rencontré"));
+        assert!(error_text(&internal).starts_with("Rafthub a rencontré"));
         assert!(error_text(&HubClientError::Network("refused".into())).contains("ne répond pas"));
+    }
+
+    /// État de test : hub local, jeton en mémoire, rien d'écrit dans `config.toml`.
+    fn test_state() -> FriendsState {
+        let mut state = FriendsState::new();
+        // Port 1 : personne n'écoute, l'appel lancé en arrière-plan échoue tout de suite.
+        let url = HubUrl::parse("http://127.0.0.1:1").unwrap();
+        state.client = Some(HubClient::new(url.clone()));
+        state.url_text = url.to_string();
+        state.url = Ok(url);
+        state.store = Arc::new(MemoryStore::new());
+        state.persist = false;
+        state.started = true;
+        state
+    }
+
+    #[test]
+    fn lien_hub_demande_confirmation() {
+        let mut state = test_state();
+        let url = HubUrl::parse("https://hub.exemple.org").unwrap();
+        state.offer_switch(url.clone());
+        // Rien n'a changé tant que le joueur n'a pas répondu.
+        assert_eq!(state.pending_switch(), Some(&url));
+        assert_eq!(state.host(), Some("127.0.0.1:1"));
+        // « Rester » : la proposition disparaît, le hub reste le même.
+        state.cancel_switch();
+        assert_eq!(state.pending_switch(), None);
+        assert_eq!(state.host(), Some("127.0.0.1:1"));
+    }
+
+    #[test]
+    fn confirmation_change_de_hub() {
+        let mut state = test_state();
+        state.username = Some("Mimi".into());
+        state.lists.friends = vec![friend("a", Presence::online())];
+        let url = HubUrl::parse("https://127.0.0.1:2").unwrap();
+        state.offer_switch(url.clone());
+        let ctx = egui::Context::default();
+        assert!(state.confirm_switch(&ctx));
+        // Nouveau hub en service, session et listes de l'ancien effacées de l'écran,
+        // reprise de session lancée en arrière-plan.
+        assert_eq!(state.pending_switch(), None);
+        assert_eq!(state.url.as_ref().ok(), Some(&url));
+        assert_eq!(state.url_text, "https://127.0.0.1:2");
+        assert_eq!(state.username, None);
+        assert!(state.lists.friends.is_empty());
+        assert!(state.busy());
+        // Un autre lien pendant l'appel : la confirmation attend la fin de l'appel.
+        state.offer_switch(HubUrl::parse("https://autre.exemple.org").unwrap());
+        assert!(!state.confirm_switch(&ctx));
+        assert!(state.pending_switch().is_some());
+    }
+
+    #[test]
+    fn lien_refuse_reste_affiche_apres_la_reprise_de_session() {
+        // Bug vu en capture : la reprise de session du démarrage (aucun jeton rangé)
+        // effaçait le bandeau « Lien Rafthub refusé ».
+        let mut state = test_state();
+        state.link_refused(&launcher_core::rafthub::HubLinkError::MissingHost);
+        let (sender, receiver) = mpsc::channel();
+        let client = state.client.take().unwrap();
+        sender
+            .send(Outcome {
+                client,
+                result: Ok(Done::LoggedOut { message: None }),
+            })
+            .unwrap();
+        state.job = Some(receiver);
+        state.poll();
+        assert!(matches!(&state.notice, Some(Notice::Error(m)) if m.contains("refusé")));
+    }
+
+    #[test]
+    fn lien_vers_le_hub_actuel_sans_question() {
+        let mut state = test_state();
+        state.offer_switch(HubUrl::parse("http://127.0.0.1:1").unwrap());
+        assert_eq!(state.pending_switch(), None);
+        assert!(matches!(&state.notice, Some(Notice::Info(m)) if m.contains("déjà")));
     }
 
     #[test]

@@ -96,6 +96,60 @@ pub fn prepare(link: Option<String>) -> Start {
     }
 }
 
+/// Adopte l'adresse de `rafthub.toml` posé à côté de l'exécutable (ADR 0036), si aucun
+/// hub n'est encore réglé. À appeler avant d'ouvrir la fenêtre : l'écran « Amis » lit
+/// ensuite l'adresse dans la configuration, comme si le joueur l'avait tapée.
+pub fn adopt_rafthub_file() {
+    use launcher_core::config;
+    use launcher_core::rafthub::{self, Adoption};
+
+    let exe_dir = match std::env::current_exe() {
+        Ok(exe) => match exe.parent() {
+            Some(dir) => dir.to_path_buf(),
+            None => return,
+        },
+        Err(e) => {
+            tracing::warn!(
+                "{} non lu : chemin du programme introuvable : {e}",
+                rafthub::BUNDLED_FILE
+            );
+            return;
+        }
+    };
+    let file = match crate::screens::library::load_paths() {
+        Ok(paths) => paths.config_file(),
+        Err(e) => {
+            tracing::warn!("{} non lu : {e}", rafthub::BUNDLED_FILE);
+            return;
+        }
+    };
+    let mut loaded = match config::load(&file) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            tracing::warn!(
+                "{} non lu : configuration illisible : {e}",
+                rafthub::BUNDLED_FILE
+            );
+            return;
+        }
+    };
+    match rafthub::adopt_bundled(&mut loaded.config, &exe_dir) {
+        Adoption::AlreadySet => {}
+        Adoption::Absent => {
+            tracing::info!("pas de {} : Rafthub par défaut", rafthub::BUNDLED_FILE);
+        }
+        Adoption::Invalid(e) => tracing::warn!("{e} ; Rafthub par défaut"),
+        Adoption::Adopted(url) => match loaded.config.save(&file) {
+            Ok(()) => tracing::info!(
+                "Rafthub {} adopté depuis {}",
+                url.host(),
+                rafthub::BUNDLED_FILE
+            ),
+            Err(e) => tracing::warn!("Rafthub {} non enregistré : {e}", url.host()),
+        },
+    }
+}
+
 /// Enregistre `raftup://` pour ce programme (Windows, binaire livré seulement).
 ///
 /// Pas en debug : un `cargo run` détournerait les liens vers un exécutable de

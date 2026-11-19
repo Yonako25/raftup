@@ -139,6 +139,18 @@ impl HubUrl {
         &self.0
     }
 
+    /// L'hôte (avec son port éventuel), sans schéma ni chemin : `hub.example.org`.
+    /// C'est ce que l'interface affiche pour dire sur quel Rafthub on est.
+    pub fn host(&self) -> &str {
+        // `parse` a vérifié le schéma : l'un des deux préfixes est toujours là.
+        let rest = self
+            .0
+            .strip_prefix("https://")
+            .or_else(|| self.0.strip_prefix("http://"))
+            .unwrap_or(&self.0);
+        rest.split('/').next().unwrap_or(rest)
+    }
+
     /// Adresse complète d'une route (`path` commence par `/v1`).
     fn join(&self, path: &str) -> String {
         format!("{}{path}", self.0)
@@ -517,6 +529,18 @@ mod tests {
             ("http://[::1]:8787", "http://[::1]:8787"),
         ] {
             assert_eq!(HubUrl::parse(text).unwrap().as_str(), expected, "{text}");
+        }
+    }
+
+    #[test]
+    fn hote_affiche() {
+        for (text, host) in [
+            ("https://hub.example.org", "hub.example.org"),
+            ("https://example.org/hub", "example.org"),
+            ("http://127.0.0.1:8787", "127.0.0.1:8787"),
+            ("http://[::1]:8787/x", "[::1]:8787"),
+        ] {
+            assert_eq!(HubUrl::parse(text).unwrap().host(), host, "{text}");
         }
     }
 
