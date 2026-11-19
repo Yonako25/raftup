@@ -3,9 +3,13 @@
 //! ```text
 //! raftup-server <seed.archipelago> --cert fullchain.pem --cert_key privkey.pem
 //!               [--host 0.0.0.0] [--port 38281] [--password X] [--verbose]
-//!               [--savefile partie.raftup | --disable_save]
+//!               [--savefile partie.raftup | --disable_save] [--async_follow]
 //! raftup-server <seed.archipelago> --no-tls [...]
 //! ```
+//!
+//! `--async_follow` active le suivi asynchrone (ADR 0031) : `!away`, `!back`,
+//! `!summary`, `!vote_release` et résumé de retour. Sans lui, le serveur se
+//! comporte comme le serveur officiel.
 //!
 //! Par défaut, le serveur parle `wss://` (NF06, ADR 0009) : il lui faut un
 //! certificat et sa clé privée, au format PEM. Le clair (`ws://`) se demande
@@ -26,7 +30,7 @@ use tracing::{info, warn, Level};
 const USAGE: &str = "usage : raftup-server <seed.archipelago> \
 (--cert CERTIFICAT.pem --cert_key CLE.pem | --no-tls) \
 [--host 0.0.0.0] [--port 38281] [--password MOT_DE_PASSE] [--verbose] \
-[--savefile PARTIE.raftup | --disable_save]";
+[--savefile PARTIE.raftup | --disable_save] [--async_follow]";
 
 /// Options de la ligne de commande.
 struct Options {
@@ -41,6 +45,8 @@ struct Options {
     /// `None` : à côté de la seed, avec l'extension `.raftup`.
     savefile: Option<PathBuf>,
     disable_save: bool,
+    /// Suivi asynchrone (ADR 0031) : `!away`, `!vote_release`, résumé de retour.
+    async_follow: bool,
 }
 
 fn parse_args() -> anyhow::Result<Options> {
@@ -57,6 +63,7 @@ fn parse_args() -> anyhow::Result<Options> {
         verbose: false,
         savefile: None,
         disable_save: false,
+        async_follow: false,
     };
     // `skip(1)` : le premier argument est le nom du programme.
     let mut args = std::env::args().skip(1);
@@ -85,6 +92,7 @@ fn parse_args() -> anyhow::Result<Options> {
                 options.savefile = Some(PathBuf::from(path));
             }
             "--disable_save" => options.disable_save = true,
+            "--async_follow" => options.async_follow = true,
             "-h" | "--help" => bail!("{USAGE}"),
             _ if arg.starts_with("--") => bail!("option inconnue : {arg}\n{USAGE}"),
             _ if seed.is_none() => seed = Some(PathBuf::from(arg)),
@@ -158,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
         Some(open_or_create(&path, &bytes, &data.seed_name)?)
     };
 
-    let mut room = Room::new(data);
+    let mut room = Room::new(data).with_async_follow(options.async_follow);
     if options.password.is_some() {
         room = room.with_password(options.password);
     }

@@ -37,6 +37,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Bac à sable du générateur** (V2, ADR 0034, 19 novembre 2026) : worker en intégrité basse sous Windows, activé par défaut, refus s'il n'est pas appliqué ; tests réels de génération et d'export passent avec ; hors Windows, repli sans bac à sable
 - [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
 - [ ] **Durée estimée et équilibrage par temps** (ADR 0030, à relire) : estimation par joueur affichée après génération (`launcher_core::estimate`, panneau de « Créer une partie »), `fill::time_balance` écrit et testé, désactivé ; reste à le brancher derrière une option et à mesurer les temps par lieu en vraie partie
+- [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
 
 ## Crates
 
@@ -91,7 +92,8 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **Sauvegarde** (ADR 0014, NF07) : écrite et synchronisée sur le disque **avant** chaque réponse ; reprise au démarrage ; compactage au démarrage, à 10 000 deltas et à l'arrêt
 - Limites (ADR 0007) : message 1 Mio, chat 2 000 caractères, 50 paquets/s, 5 chats / 10 s, ping 20 s, muet 40 s, files bornées
 - Chiffrement (ADR 0009) : `wss` avec `--cert` et `--cert_key` (fichiers PEM) ; clair seulement avec `--no-tls`
-- Binaire : `raftup-server <seed> --cert fullchain.pem --cert_key privkey.pem [--savefile X.raftup | --disable_save]`
+- Binaire : `raftup-server <seed> --cert fullchain.pem --cert_key privkey.pem [--savefile X.raftup | --disable_save] [--async_follow]`
+- **Suivi async** (ADR 0031, avec l'option) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour, réponse automatique quand on cite un absent, clés `_read_raftup_away_<équipe>` et `_read_raftup_release_votes_<équipe>`
 - Tests différentiels (ADR 0008) : `tests/differentiel/`, lancés à la main, hors CI
 
 **launcher-core** (ADR 0010)
@@ -142,6 +144,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0034** : bac à sable du générateur : sous Windows, worker en intégrité basse (copie de `python.exe` étiquetée par `icacls`), écriture seulement dans le dossier de la génération ; rien hors Windows (à relire par l'utilisatrice)
 - **0029** : moteur « export » : règles d'objet en listes calculées par Archipelago (contrôle croisé), objets à placer tôt en sphère 0, `accessibility` (accepté en autonomie, à relire)
 - **0030** : durée estimée par joueur (temps par lieu dans le profil, sphères de la seed) et équilibrage par temps de jeu (`fill::time_balance`, désactivé par défaut) ; accepté en autonomie, à relire
+- **0031** : suivi async (option de la salle, désactivée par défaut) : absence, résumé de retour, release par vote à la majorité, fil d'activité, `.raftup` version 2
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)
 

@@ -220,7 +220,9 @@ impl Host {
         let seed = SeedSummary::of(&data);
         // Le nom de la seed est copié avant que `data` parte dans la salle.
         let seed_name = data.seed_name.clone();
-        let mut room = Room::new(data);
+        // Le launcher active toujours le suivi asynchrone (ADR 0031) : `!away`,
+        // `!vote_release`, résumé de retour. Rien ne change pour un mod existant.
+        let mut room = Room::new(data).with_async_follow(true);
         let password = options.password.clone().filter(|p| !p.is_empty());
         if password.is_some() {
             room = room.with_password(password);
@@ -419,6 +421,8 @@ mod tests {
                 total: 0,
                 status: code as _,
                 last_activity: None,
+                away: None,
+                release_votes: 0,
             }],
             connections: 0,
         }

@@ -28,6 +28,10 @@ pub struct Room {
     data: MultiData,
     /// Mot de passe de la salle : celui de la seed, ou celui donné au lancement.
     password: Option<String>,
+    /// Suivi asynchrone (ADR 0031) : commandes `!away`, `!back`, `!summary`,
+    /// `!vote_release` et résumé de retour. Désactivé par défaut : le serveur
+    /// se comporte alors exactement comme le serveur officiel.
+    async_follow: bool,
 }
 
 impl Room {
@@ -39,7 +43,22 @@ impl Room {
             .password
             .clone()
             .filter(|p| !p.is_empty());
-        Room { data, password }
+        Room {
+            data,
+            password,
+            async_follow: false,
+        }
+    }
+
+    /// Active ou non le suivi asynchrone (ADR 0031).
+    pub fn with_async_follow(mut self, enabled: bool) -> Room {
+        self.async_follow = enabled;
+        self
+    }
+
+    /// Vrai si le suivi asynchrone est actif.
+    pub fn async_follow(&self) -> bool {
+        self.async_follow
     }
 
     /// Remplace le mot de passe de la seed (option `--password` du serveur).

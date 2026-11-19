@@ -33,11 +33,23 @@ const COMMANDS: [&str; 16] = [
     "hint_location",
 ];
 
+/// Commandes du suivi asynchrone (ADR 0031), ajoutées à la fin de la liste
+/// seulement si la salle a l'option.
+const FOLLOW_COMMANDS: [&str; 4] = ["away", "back", "summary", "vote_release"];
+
 /// Commandes qui reçoivent le texte brut après le premier mot (`@mark_raw`).
 fn is_raw(command: &str) -> bool {
     matches!(
         command,
-        "admin" | "missing" | "checked" | "alias" | "getitem" | "hint" | "hint_location"
+        "admin"
+            | "missing"
+            | "checked"
+            | "alias"
+            | "getitem"
+            | "hint"
+            | "hint_location"
+            | "away"
+            | "vote_release"
     )
 }
 
@@ -46,6 +58,16 @@ fn is_raw(command: &str) -> bool {
 pub(super) const MASK: &str = "********";
 
 impl RoomTask {
+    /// Commandes acceptées par cette salle : celles du serveur officiel, puis
+    /// celles du suivi asynchrone si l'option est active.
+    pub(super) fn known_commands(&self) -> Vec<&'static str> {
+        let mut known = COMMANDS.to_vec();
+        if self.follow_on() {
+            known.extend(FOLLOW_COMMANDS);
+        }
+        known
+    }
+
     /// Réponse à une commande, visible du seul demandeur (`output`).
     pub(super) fn output(&self, id: ClientId, text: impl Into<String>) {
         self.notify(id, command_result(text.into()));
@@ -86,10 +108,11 @@ impl RoomTask {
         };
         // `.lower()` de Python.
         let command = name.to_lowercase();
-        if !COMMANDS.contains(&command.as_str()) {
+        let known = self.known_commands();
+        if !known.contains(&command.as_str()) {
             let text = format!(
                 "Could not find command {name}. Known commands: {}",
-                COMMANDS.join(", ")
+                known.join(", ")
             );
             self.output(id, text);
             return;
@@ -124,6 +147,8 @@ impl RoomTask {
             "release" => self.cmd_release(id),
             "collect" => self.cmd_collect(id),
             "countdown" => self.cmd_countdown(id, args.first().copied().unwrap_or("10")),
+            "back" => self.cmd_back(id),
+            "summary" => self.cmd_summary(id),
             _ => self.todo_command(id, command),
         }
     }
@@ -145,6 +170,8 @@ impl RoomTask {
             "getitem" => self.cmd_getitem(id, &text),
             "hint" => self.cmd_hint(id, &text, false),
             "hint_location" => self.cmd_hint(id, &text, true),
+            "away" => self.cmd_away(id, &text),
+            "vote_release" => self.cmd_vote_release(id, &text),
             _ => self.todo_command(id, command),
         }
     }

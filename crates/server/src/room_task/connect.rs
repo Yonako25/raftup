@@ -263,6 +263,8 @@ impl RoomTask {
         let mut tutorial = text_message(TUTORIAL.to_string());
         tutorial.kind = Some("Tutorial".to_string());
         self.notify(id, tutorial);
+        // Suivi asynchrone : ce qui s'est passé depuis son départ (ADR 0031).
+        self.send_return_summary(id, player);
     }
 
     /// Un client est parti : on l'oublie, et on annonce son départ s'il jouait.
@@ -292,6 +294,8 @@ impl RoomTask {
             .any(|p| (p.team, p.slot) == (player.team, player.slot))
         {
             self.update_client_status(player.team, player.slot, ClientStatus::UNKNOWN);
+            // Pour le résumé de retour (ADR 0031).
+            self.note_seen(player.team, player.slot);
         }
         let name = self.slot_name(player.slot);
         self.emit(GameEvent::Left {

@@ -48,6 +48,11 @@ pub struct SlotStatus {
     pub status: u32,
     /// Heure (secondes depuis 1970) du dernier paquet reçu de ce slot.
     pub last_activity: Option<f64>,
+    /// Message d'absence (`!away`, ADR 0031) ; `None` si le joueur n'est pas absent.
+    /// Un absent sans message a `Some("")`.
+    pub away: Option<String>,
+    /// Votes en cours pour relâcher le monde de ce slot (`!vote_release`).
+    pub release_votes: u32,
 }
 
 /// Ce qui vient de se passer dans la partie.
@@ -92,6 +97,30 @@ pub enum GameEvent {
         time: f64,
         slot: SlotId,
         name: String,
+    },
+    /// Un joueur s'est déclaré absent (`!away`, ADR 0031).
+    Away {
+        time: f64,
+        slot: SlotId,
+        name: String,
+        message: String,
+    },
+    /// Il est revenu (`!back`, ou un nouveau lieu visité).
+    Back {
+        time: f64,
+        slot: SlotId,
+        name: String,
+    },
+    /// Un vote pour relâcher le monde de `target` (`!vote_release`).
+    /// `passed` : la majorité est atteinte, le monde est relâché.
+    ReleaseVote {
+        time: f64,
+        target: SlotId,
+        target_name: String,
+        voter_name: String,
+        votes: u32,
+        needed: u32,
+        passed: bool,
     },
 }
 

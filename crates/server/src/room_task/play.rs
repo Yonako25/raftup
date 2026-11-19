@@ -13,7 +13,12 @@ impl RoomTask {
             self.send(id, vec![invalid_packet("cmd", "LocationChecks", text)]);
             return;
         }
+        let before = self.game.checked_count(player.team, player.slot);
         self.register_location_checks(player.team, player.slot, &checks.locations);
+        // Un nouveau lieu visité par le joueur lui-même : il joue (ADR 0031).
+        if self.game.checked_count(player.team, player.slot) > before {
+            self.on_player_played(player.team, player.slot);
+        }
     }
 
     /// Enregistre des lieux visités et prévient tout le monde
@@ -124,6 +129,7 @@ impl RoomTask {
             team + 1
         );
         info!(team, slot, "objectif atteint");
+        self.feed(team, slot, multidata::raftup::FeedKind::Goal);
         self.emit(GameEvent::Goal {
             time: now(),
             slot,
@@ -148,6 +154,13 @@ impl RoomTask {
 
     /// Envoie aux autres tous les objets encore cachés dans le monde de ce slot.
     pub(super) fn release_player(&mut self, team: TeamId, slot: SlotId) {
+        self.feed(team, slot, multidata::raftup::FeedKind::Release);
+        self.release_world(team, slot);
+    }
+
+    /// Le travail de `release_player`, sans entrée au fil d'activité (la
+    /// release par vote écrit la sienne, ADR 0031).
+    pub(super) fn release_world(&mut self, team: TeamId, slot: SlotId) {
         let text = format!(
             "{} (Team #{}) has released all remaining items from their world.",
             self.slot_name(slot),

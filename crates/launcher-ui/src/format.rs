@@ -321,7 +321,10 @@ pub fn event_time(event: &GameEvent) -> f64 {
         | GameEvent::ItemSent { time, .. }
         | GameEvent::Chat { time, .. }
         | GameEvent::ServerChat { time, .. }
-        | GameEvent::Goal { time, .. } => *time,
+        | GameEvent::Goal { time, .. }
+        | GameEvent::Away { time, .. }
+        | GameEvent::Back { time, .. }
+        | GameEvent::ReleaseVote { time, .. } => *time,
     }
 }
 
@@ -373,7 +376,56 @@ pub fn activity(event: &GameEvent) -> Vec<Piece> {
             vec![name("Hôte"), text(format!(" : « {said} »"))]
         }
         GameEvent::Goal { name: who, .. } => vec![name(who), text(" a atteint son objectif")],
+        // Suivi asynchrone (ADR 0031).
+        GameEvent::Away {
+            name: who, message, ..
+        } if message.is_empty() => vec![name(who), text(" est absent")],
+        GameEvent::Away {
+            name: who, message, ..
+        } => vec![name(who), text(format!(" est absent : « {message} »"))],
+        GameEvent::Back { name: who, .. } => vec![name(who), text(" est de retour")],
+        GameEvent::ReleaseVote {
+            target_name,
+            votes,
+            needed,
+            passed: true,
+            ..
+        } => vec![
+            text("Vote réussi : le monde de "),
+            name(target_name),
+            text(format!(" est relâché ({votes}/{needed})")),
+        ],
+        GameEvent::ReleaseVote {
+            target_name,
+            voter_name,
+            votes,
+            needed,
+            passed: false,
+            ..
+        } => vec![
+            name(voter_name),
+            text(" vote pour relâcher le monde de "),
+            name(target_name),
+            text(format!(" ({votes}/{needed})")),
+        ],
     }
+}
+
+/// Mention d'absence et de votes d'un joueur, pour l'équipage :
+/// `absent · « lundi » · 1 vote de release`. Vide s'il n'y a rien à dire.
+pub fn follow_note(slot: &SlotStatus) -> String {
+    let mut parts = Vec::new();
+    match slot.away.as_deref() {
+        Some("") => parts.push("absent".to_string()),
+        Some(message) => parts.push(format!("absent · « {message} »")),
+        None => {}
+    }
+    match slot.release_votes {
+        0 => {}
+        1 => parts.push("1 vote de release".to_string()),
+        n => parts.push(format!("{n} votes de release")),
+    }
+    parts.join(" · ")
 }
 
 /// La phrase sans couleurs, pour les tests.
@@ -425,7 +477,40 @@ mod tests {
             total: 25,
             status,
             last_activity: None,
+            away: None,
+            release_votes: 0,
         }
+    }
+
+    #[test]
+    fn follow_notes() {
+        let mut s = slot("Alice", 20, 0);
+        assert_eq!(follow_note(&s), "");
+        s.away = Some(String::new());
+        assert_eq!(follow_note(&s), "absent");
+        s.away = Some("lundi".into());
+        s.release_votes = 2;
+        assert_eq!(follow_note(&s), "absent · « lundi » · 2 votes de release");
+        let vote = GameEvent::ReleaseVote {
+            time: 0.0,
+            target: 2,
+            target_name: "Bob".into(),
+            voter_name: "Alice".into(),
+            votes: 1,
+            needed: 2,
+            passed: false,
+        };
+        assert_eq!(
+            plain(&activity(&vote)),
+            "Alice vote pour relâcher le monde de Bob (1/2)"
+        );
+        let back = GameEvent::Back {
+            time: 4.0,
+            slot: 1,
+            name: "Alice".into(),
+        };
+        assert_eq!(plain(&activity(&back)), "Alice est de retour");
+        assert_eq!(event_time(&back), 4.0);
     }
 
     #[test]
