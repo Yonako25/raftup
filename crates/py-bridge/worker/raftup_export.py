@@ -197,6 +197,17 @@ def _atom_json(q):
     return {"t": kind, "player": player, field: q[2]}
 
 
+def _truth(result):
+    """Vrai ou faux, comme Archipelago lit une regle (`if rule(state)`). Beaucoup de
+    mondes renvoient `a or b` ou une valeur d'option (un entier) : on accepte booleens,
+    entiers, None et compteurs ; tout autre type est suspect et refuse."""
+    if isinstance(result, ProbeCount):
+        return bool(result)
+    if result is None or isinstance(result, (bool, int)):
+        return bool(result)
+    raise Refused("resultat %r" % type(result).__name__)
+
+
 def probe(mw, rule):
     """Arbre de decision de `rule` par exploration en profondeur, puis regle « ou » de
     « et ». Leve Refused si la regle sort de ce qu'on sait traduire.
@@ -217,14 +228,11 @@ def probe(mw, rule):
             raise
         except Exception as exc:  # la regle a plante avec nos reponses
             raise Refused("%s: %s" % (type(exc).__name__, exc))
-        if isinstance(result, ProbeCount):
-            result = bool(result)
-        if not isinstance(result, bool):
-            raise Refused("resultat %r" % type(result).__name__)
+        result = _truth(result)
         asked = list(state.asked.items())
         # Meme chemin rejoue : meme resultat (pas de hasard ni d'etat cache).
         again = ProbeState(mw, [a for _, a in asked])
-        if rule(again) != result or list(again.asked.items()) != asked:
+        if _truth(rule(again)) != result or list(again.asked.items()) != asked:
             raise Refused("resultat instable")
         leaves.append(({q for q, a in asked if a}, {q for q, a in asked if not a}, result))
         if len(leaves) > MAX_PATHS:

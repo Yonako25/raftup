@@ -270,3 +270,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
 - **Suite** : ADR 0028, étape 5 : Slime Rancher exporté en vrai (apworld installée par la Bibliothèque), puis une partie.
 
+### 2026-11-19 · ADR 0028, étape 5 : Slime Rancher par le moteur export
+- **Fait** : sondeur qui lit la vérité d'un résultat entier (valeur d'option), comme Archipelago : 147 règles de Slime Rancher traduites, 0 opaque, contrôle croisé réussi. Seed complète (seed 11) identique à celle d'Archipelago seul sauf le placement, même `slot_data` ; 2,9 s contre 2,8 s. Tests réels `slime_rancher_exporte` et `slime_rancher_genere_par_export` (`RAFTUP_SLIME_APWORLD`). 39 tests Python, workspace et clippy passent.
+- **Pas vérifié** : une vraie partie de Slime Rancher sur une seed placée par Raftup ; autres options du YAML de Slime Rancher (seulement les valeurs par défaut).
+- **Ne pas toucher** : `docs/profils-en-attente/` (attend l'autorisation de l'auteur de Slimipelago).
+- **Suite** : jouer une partie de Slime Rancher générée avec la case « Moteur Rust » (à faire par l'utilisatrice, devant le jeu).
+

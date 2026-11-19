@@ -139,3 +139,12 @@ Deux choix validés par l'utilisatrice le 19 novembre 2026 : Archipelago écrit 
 - **Constat** : sur le petit monde de test (2 lieux ouverts au départ), le placement d'Archipelago échoue sur certaines seeds (`FillError`), alors que celui de Raftup réussit grâce à ses nouveaux essais.
 - **Reste** : le moteur « export » n'a pas encore généré un vrai monde tiers (Slime Rancher, étape 5) ; le journal du launcher ne montre pas encore le moteur utilisé à la fin.
 
+## Étape 5 : Slime Rancher (19 novembre 2026)
+
+Apworld `slime_rancher` 0.3.2.1, installée sur le PC par la Bibliothèque, lue par le test réel (`RAFTUP_SLIME_APWORLD`), jamais copiée dans le dépôt.
+
+- **Premier essai** : 109 règles sondées, 38 opaques. Cause unique : beaucoup de lambdas renvoient `a or b` avec une **valeur d'option** (un entier 0 ou 1) au lieu d'un booléen. Le sondeur lit maintenant la vérité du résultat, comme Archipelago (`if rule(state)`) : booléens, entiers, `None` et compteurs sont acceptés, et tout autre type reste refusé.
+- **Ensuite** : 147 règles sondées, **0 opaque**. Le contrôle croisé contre le vrai Archipelago passe (64 inventaires). 25 régions, 32 entrées, 284 lieux, 152 objets dans le pool.
+- **Génération complète** (seed 11), comparée à la même seed générée par Archipelago seul : même nom de seed, même datapackage, mêmes lieux, même pool d'objets, même inventaire de départ, **même `slot_data`**. Seul le placement diffère. Durée : 2,9 s, contre 2,8 s pour Archipelago seul.
+- **Pas encore fait** : une vraie partie de Slime Rancher sur une seed placée par Raftup (il faut l'utilisatrice devant le jeu).
+

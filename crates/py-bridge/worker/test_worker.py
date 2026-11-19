@@ -433,7 +433,12 @@ class TestSondage(unittest.TestCase):
         self.refus(lambda s: not s.has("A", 1), "non monotone")
         self.refus(lambda s: s.prog_items[1]["A"] > 0, "state.prog_items")
         self.refus(lambda s: s.count("A", 1) + s.count("B", 1) >= 2, "TypeError")
-        self.refus(lambda s: 3, "resultat")
+        self.refus(lambda s: "oui", "resultat")
+        # Un entier (valeur d'option) ou None se lisent comme vrai / faux, comme en Python.
+        self.assertEqual(self.sonde(lambda s: s.has("A", 1) or 0),
+                         {"t": "and", "of": [{"t": "has", "player": 1, "item": "A", "count": 1}]})
+        self.assertEqual(self.sonde(lambda s: 1), {"t": "true"})
+        self.assertEqual(self.sonde(lambda s: None), {"t": "false"})
         compteur = [0]
 
         def instable(s):

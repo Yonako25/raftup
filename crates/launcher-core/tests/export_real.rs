@@ -434,11 +434,26 @@ fn try_generate_with_export(
     Result<launcher_core::generation::GenerateOutput, launcher_core::GenerationError>,
     Vec<String>,
 ) {
+    let apworld = work.join("raftup_sonde.apworld");
+    write_sonde_apworld(&apworld);
+    let mut backend = ExportBackend::new(runtime.clone());
+    run_generation(&mut backend, work, yamls, vec![apworld], seed)
+}
+
+/// Une génération complète par `generate` du launcher, avec le moteur donné.
+fn run_generation(
+    backend: &mut dyn launcher_core::generation::GeneratorBackend,
+    work: &Path,
+    yamls: &[(&str, String)],
+    apworlds: Vec<PathBuf>,
+    seed: u64,
+) -> (
+    Result<launcher_core::generation::GenerateOutput, launcher_core::GenerationError>,
+    Vec<String>,
+) {
     let data = Paths::under(&PathBuf::from(
         std::env::var_os("RAFTUP_REAL_RUNTIME").unwrap(),
     ));
-    let apworld = work.join("raftup_sonde.apworld");
-    write_sonde_apworld(&apworld);
     let player_files = yamls
         .iter()
         .map(|(name, text)| {
@@ -449,20 +464,14 @@ fn try_generate_with_export(
         .collect();
     let request = HostRequest {
         player_files,
-        apworlds: vec![apworld],
+        apworlds,
         seed: Some(seed),
         timeout: Duration::from_secs(300),
         ..HostRequest::default()
     };
     let (log, lines) = std::sync::mpsc::channel();
-    let mut backend = ExportBackend::new(runtime.clone());
-    let output = launcher_core::generation::generate(
-        &data,
-        &mut backend,
-        &request,
-        &CancelToken::new(),
-        log,
-    );
+    let output =
+        launcher_core::generation::generate(&data, backend, &request, &CancelToken::new(), log);
     (output, lines.try_iter().collect())
 }
 
@@ -524,4 +533,145 @@ fn repli_sur_archipelago_seul() {
         }
     }
     panic!("Archipelago n'a réussi aucune des 20 seeds");
+}
+
+/// L'apworld Slime Rancher installée sur le PC (`RAFTUP_SLIME_APWORLD`), jamais dans le
+/// dépôt (elle n'a pas de licence, ADR 0021) ; `None` si la variable manque.
+fn slime_apworld() -> Option<PathBuf> {
+    let path = PathBuf::from(std::env::var_os("RAFTUP_SLIME_APWORLD").or_else(|| {
+        eprintln!("RAFTUP_SLIME_APWORLD absente : test Slime Rancher sauté");
+        None
+    })?);
+    assert!(path.is_file(), "{} introuvable", path.display());
+    Some(path)
+}
+
+const SLIME_YAML: &str = "name: Beatrix\ngame: Slime Rancher\nSlime Rancher: {}\n";
+
+#[test]
+#[ignore = "demande RAFTUP_REAL_RUNTIME et RAFTUP_SLIME_APWORLD"]
+fn slime_rancher_exporte() {
+    let Some(runtime) = runtime() else { return };
+    let Some(apworld) = slime_apworld() else {
+        return;
+    };
+    let dir = runtime.archipelago_dir.join("custom_worlds");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(&apworld, dir.join("slime_rancher.apworld")).unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let (result, imported) = export_raw(&runtime, work.path(), &[SLIME_YAML.to_string()], 11);
+    eprintln!("{result:?}");
+    // Raisons des règles non traduites, regroupées (diagnostic).
+    let json: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&result.export).unwrap()).unwrap();
+    let mut whys = BTreeMap::new();
+    collect_whys(&json, &mut whys);
+    for (why, n) in &whys {
+        eprintln!("opaque ×{n} : {why}");
+    }
+    let imported = match imported {
+        Ok(imported) => imported,
+        Err(e) => panic!("import refusé : {e}"),
+    };
+    assert_eq!(result.opaque_rules, 0);
+    let w = &imported.world;
+    eprintln!(
+        "{} régions, {} entrées, {} lieux, {} objets dans le pool",
+        w.regions().len(),
+        w.entrances().len(),
+        w.locations().len(),
+        imported.pool.len()
+    );
+}
+
+/// Raisons (`why`) des règles opaques d'un export, comptées.
+fn collect_whys(value: &serde_json::Value, out: &mut BTreeMap<String, usize>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if map.get("t").and_then(|t| t.as_str()) == Some("opaque") {
+                let why = map.get("why").and_then(|w| w.as_str()).unwrap_or("?");
+                // Le nom de la lambda varie peu ; la raison est entre parenthèses.
+                let reason = why.rsplit_once(" (").map(|(_, r)| r).unwrap_or(why);
+                *out.entry(reason.to_string()).or_insert(0) += 1;
+            }
+            for v in map.values() {
+                collect_whys(v, out);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for v in items {
+                collect_whys(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Slime Rancher généré de bout en bout par le moteur « export », comparé à la même seed
+/// générée par Archipelago seul : même datapackage, mêmes lieux, même inventaire de
+/// départ, même `slot_data` ; seul le placement diffère.
+#[test]
+#[ignore = "demande RAFTUP_REAL_RUNTIME et RAFTUP_SLIME_APWORLD"]
+fn slime_rancher_genere_par_export() {
+    let Some(runtime) = runtime() else { return };
+    let Some(apworld) = slime_apworld() else {
+        return;
+    };
+    let yamls = [("beatrix.yaml", SLIME_YAML.to_string())];
+    let load = |output: &launcher_core::generation::GenerateOutput| {
+        let bytes = std::fs::read(&output.archipelago_file).unwrap();
+        multidata::load_archipelago(&bytes, &multidata::ArchiveLimits::default()).unwrap()
+    };
+
+    let work = tempfile::tempdir().unwrap();
+    let started = std::time::Instant::now();
+    let mut export = ExportBackend::new(runtime.clone());
+    let (output, log) = run_generation(&mut export, work.path(), &yamls, vec![apworld.clone()], 11);
+    let output = output.unwrap();
+    let export_time = started.elapsed();
+    assert!(
+        log.iter()
+            .any(|l| l.contains("Placement des objets par Raftup")),
+        "{log:#?}"
+    );
+    assert!(
+        !log.iter().any(|l| l.contains("Archipelago génère seul")),
+        "{log:#?}"
+    );
+    let ours = load(&output);
+
+    let work2 = tempfile::tempdir().unwrap();
+    let started = std::time::Instant::now();
+    let mut python = launcher_core::generation::PythonBackend::new(runtime.clone());
+    let (official, _) = run_generation(&mut python, work2.path(), &yamls, vec![apworld], 11);
+    let python_time = started.elapsed();
+    let official = load(&official.unwrap());
+    eprintln!("export : {export_time:?}, Archipelago seul : {python_time:?}");
+
+    assert_eq!(ours.seed_name, official.seed_name);
+    assert_eq!(ours.datapackage, official.datapackage);
+    assert_eq!(ours.slot_data, official.slot_data, "slot_data");
+    assert_eq!(ours.precollected_items, official.precollected_items);
+    let keys = |md: &multidata::MultiData| {
+        md.locations
+            .iter()
+            .map(|(slot, l)| (*slot, l.keys().copied().collect::<Vec<_>>()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(keys(&ours), keys(&official), "mêmes lieux");
+    // Même pool : les mêmes objets, placés autrement.
+    let pool = |md: &multidata::MultiData| {
+        let mut items: Vec<_> = md
+            .locations
+            .values()
+            .flat_map(|l| l.values().map(|p| (p.player, p.item)))
+            .collect();
+        items.sort();
+        items
+    };
+    assert_eq!(pool(&ours), pool(&official), "même pool");
+    assert_ne!(
+        ours.locations, official.locations,
+        "placement identique : suspect"
+    );
 }
