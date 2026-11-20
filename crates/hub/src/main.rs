@@ -7,9 +7,11 @@
 //! rafthub admin remove <e-mail> [--db …]   le lui retire (et ferme ses sessions d'admin)
 //! ```
 //!
-//! **Base intégrée** : sans `--db` ni `RAFTUP_HUB_DB`, le hub range tout dans le dossier
-//! `rafthub-data/` posé à côté de l'exe (base SQLite `rafthub.db`, cache du launcher),
-//! créé au premier lancement. Rien à installer (ADR 0037).
+//! **Premier lancement** : sans `--db` ni `RAFTUP_HUB_DB`, le hub lit son choix dans
+//! `rafthub-data/rafthub.toml` (dossier à côté de l'exe). S'il n'existe pas, `/admin`
+//! ouvre un assistant : base intégrée (SQLite, `rafthub-data/rafthub.db`, rien à
+//! installer) ou base externe (PostgreSQL) avec ses informations de connexion. Le
+//! choix est essayé, puis gardé dans `rafthub.toml` (ADR 0037).
 //!
 //! **Premier admin** : tant que le hub n'a aucun admin, il écrit au journal un code
 //! d'installation à usage unique ; la page `/admin/installation` crée le premier compte
@@ -46,7 +48,9 @@
 //! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
 
 use anyhow::{bail, Context};
+use hub::server_config::ServerConfig;
 use hub::store::Role;
+use hub::web::install::{install_router, InstallState};
 use hub::{AppState, EnvSettings, HubConfig, SettingKey, Store};
 
 struct Args {
@@ -76,11 +80,6 @@ fn data_dir() -> anyhow::Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-/// URL SQLite d'un fichier. Les `\` de Windows deviennent des `/`, que SQLite comprend.
-fn sqlite_file_url(path: &std::path::Path) -> String {
-    format!("sqlite://{}", path.display().to_string().replace('\\', "/"))
-}
-
 fn parse_args() -> anyhow::Result<Args> {
     let mut args = Args {
         db: env("RAFTUP_HUB_DB"),
@@ -99,7 +98,8 @@ fn parse_args() -> anyhow::Result<Args> {
                 args.public_url = Some(iter.next().context("--public-url attend une URL")?)
             }
             "--help" | "-h" => {
-                println!("rafthub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]");
+                println!("rafthub [--db sqlite://chemin.db] [--listen 127.0.0.1:8787]");
+                println!("  sans --db : base choisie au premier lancement, dans /admin");
                 println!("rafthub admin create <e-mail>   donne le rôle d'admin à un compte");
                 println!("rafthub admin remove <e-mail>   le lui retire");
                 println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
@@ -129,21 +129,84 @@ fn parse_args() -> anyhow::Result<Args> {
     Ok(args)
 }
 
+/// Assistant de premier lancement : sert seulement la page du choix de la base,
+/// jusqu'à ce qu'une base soit essayée et enregistrée, puis rend son URL.
+async fn run_install_wizard(
+    args: &Args,
+    dir: std::path::PathBuf,
+    code: &str,
+) -> anyhow::Result<String> {
+    let public_url = args
+        .public_url
+        .clone()
+        .or_else(|| env("RAFTUP_HUB_PUBLIC_URL"));
+    // Cookie `Secure` sauf quand le hub est joint en local, comme la console.
+    let secure = public_url.as_deref().is_some_and(|url| {
+        !["http://127.0.0.1", "http://localhost"]
+            .iter()
+            .any(|local| url.starts_with(local))
+    });
+    // `oneshot` : un canal qui porte une seule valeur, ici l'URL de la base choisie.
+    let (done_tx, done_rx) = tokio::sync::oneshot::channel::<String>();
+    let state = InstallState::new(code.to_string(), dir, secure, done_tx);
+
+    let listener = tokio::net::TcpListener::bind(&args.listen)
+        .await
+        .with_context(|| format!("écoute sur {}", args.listen))?;
+    tracing::warn!(
+        adresse = %args.listen,
+        "premier lancement : ouvrez /admin dans un navigateur, code d'installation {code}"
+    );
+    // Le petit serveur s'arrête dès que l'URL arrive ; on la garde au passage.
+    // `Arc<Mutex<…>>` : la tâche d'arrêt écrit, `main` lit ensuite.
+    let chosen = std::sync::Arc::new(tokio::sync::Mutex::new(None::<String>));
+    let slot = chosen.clone();
+    axum::serve(listener, install_router(state))
+        .with_graceful_shutdown(async move {
+            tokio::select! {
+                url = done_rx => {
+                    if let Ok(url) = url {
+                        *slot.lock().await = Some(url);
+                    }
+                }
+                _ = tokio::signal::ctrl_c() => {}
+            }
+        })
+        .await
+        .context("assistant d'installation")?;
+    let url = chosen.lock().await.take();
+    url.context("installation interrompue")
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let args = parse_args()?;
 
-    // Pas d'URL dans le message d'erreur : elle peut contenir un mot de passe.
-    // Base intégrée par défaut : un fichier SQLite dans `rafthub-data/`.
+    // Code d'installation, tiré seulement s'il sert (assistant ou premier admin).
+    let mut setup_code: Option<String> = None;
+
+    // Quelle base ? `--db` ou `RAFTUP_HUB_DB`, sinon le choix gardé dans
+    // `rafthub-data/rafthub.toml`, sinon l'assistant de premier lancement (ADR 0037).
     let db = match &args.db {
         Some(url) => url.clone(),
         None => {
-            let path = data_dir()?.join("rafthub.db");
-            tracing::info!(chemin = %path.display(), "base intégrée");
-            sqlite_file_url(&path)
+            let dir = data_dir()?;
+            match ServerConfig::load(&dir)? {
+                Some(saved) => saved.database_url_in(&dir),
+                None if args.admin.is_some() => bail!(
+                    "hub pas encore installé : lancez `rafthub` et ouvrez /admin dans un navigateur"
+                ),
+                None => {
+                    let code = hub::session::new_invite_code();
+                    let url = run_install_wizard(&args, dir, &code).await?;
+                    setup_code = Some(code);
+                    url
+                }
+            }
         }
     };
+    // Pas d'URL dans le message d'erreur : elle peut contenir un mot de passe.
     let store = Store::open(&db)
         .await
         .context("ouverture de la base de données")?;
@@ -170,11 +233,18 @@ async fn main() -> anyhow::Result<()> {
     };
     // Aucun admin encore : code d'installation à usage unique, montré au journal
     // seulement (celui qui le lit a accès au serveur), pour `/admin/installation`.
+    // Après l'assistant, on garde le même code : la personne l'a déjà sous les yeux.
     if !store.has_admin().await? {
-        let code = hub::session::new_invite_code();
-        tracing::warn!(
-            "aucun admin : ouvrez /admin/installation avec le code d'installation {code}"
-        );
+        let code = match setup_code {
+            Some(code) => code,
+            None => {
+                let code = hub::session::new_invite_code();
+                tracing::warn!(
+                    "aucun admin : ouvrez /admin/installation avec le code d'installation {code}"
+                );
+                code
+            }
+        };
         config.setup_code = Some(code);
     }
     let state = AppState::from_settings(store.clone(), config).await?;

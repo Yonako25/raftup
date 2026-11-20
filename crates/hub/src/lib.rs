@@ -17,6 +17,7 @@ pub mod identity;
 pub mod mail;
 pub mod memory;
 pub mod password;
+pub mod server_config;
 pub mod session;
 pub mod settings;
 pub mod store;

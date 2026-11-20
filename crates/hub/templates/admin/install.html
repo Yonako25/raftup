@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if finished %}<meta http-equiv="refresh" content="3;url=/admin/installation">{% endif %}
+<title>Installation · Rafthub</title>
+<link rel="stylesheet" href="/admin/static/rafthub.css">
+</head>
+<body>
+<main class="center">
+<div class="panel login install">
+<div class="brand">
+<svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 18 L14 22 L25 18" fill="none" stroke="#3D8BFF" stroke-width="2.2"/><path d="M5 13 L14 16.5 L23 13" fill="none" stroke="#9AA8B6" stroke-width="2.2"/><path d="M14 3 L14 13" stroke="#E6ECF2" stroke-width="2.2"/><path d="M14 4 L21 10 L14 10 Z" fill="#3D8BFF"/></svg>
+<div><div class="brand-name">RAFTHUB</div><div class="muted small">Installation · étape 1 sur 2</div></div>
+</div>
+{% if finished %}
+<h1>Base de données prête</h1>
+<p>Le hub redémarre sur cette base. La création du premier admin s'ouvre dans quelques secondes.</p>
+<p class="muted small"><a href="/admin/installation">Continuer</a> si rien ne se passe.</p>
+{% else %}
+<h1>Base de données</h1>
+<p class="muted small">Où ce hub garde ses comptes. Le code d'installation est écrit dans le journal du serveur, au démarrage.</p>
+{% if let Some(message) = error %}<p class="alert" role="alert">{{ message }}</p>{% endif %}
+<form method="post" action="/admin/installation" class="form">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<label for="code">Code d'installation</label>
+<input id="code" name="code" type="text" autocomplete="off" spellcheck="false" required placeholder="XXXX-XXXX-XXXX-XXXX">
+
+<fieldset class="db-choice">
+<legend>Base de données</legend>
+<label class="db-option">
+<input type="radio" name="database" value="sqlite" id="db-sqlite"{% if choice == "sqlite" %} checked{% endif %}>
+<span><strong>Base intégrée (SQLite)</strong><br><span class="muted small">Rien à installer : un fichier à côté du hub. Pour un petit groupe, quelques dizaines de joueurs.</span></span>
+</label>
+<label class="db-option">
+<input type="radio" name="database" value="postgres" id="db-external"{% if choice == "postgres" %} checked{% endif %}>
+<span><strong>Base externe</strong><br><span class="muted small">Un serveur de base de données à part, pour un grand groupe.</span></span>
+</label>
+</fieldset>
+
+<fieldset class="db-external">
+<legend>Base externe</legend>
+<label for="engine">Type de base</label>
+<select id="engine" name="engine">
+<option value="postgres" selected>PostgreSQL</option>
+<option value="mysql" disabled>MySQL / MariaDB (pas encore pris en charge)</option>
+</select>
+<label for="pg_host">Adresse du serveur</label>
+<input id="pg_host" name="pg_host" type="text" autocomplete="off" value="{{ pg_host }}">
+<label for="pg_port">Port</label>
+<input id="pg_port" name="pg_port" type="text" inputmode="numeric" autocomplete="off" value="{{ pg_port }}">
+<label for="pg_database">Nom de la base</label>
+<input id="pg_database" name="pg_database" type="text" autocomplete="off" value="{{ pg_database }}">
+<label for="pg_user">Utilisateur</label>
+<input id="pg_user" name="pg_user" type="text" autocomplete="off" value="{{ pg_user }}">
+<label for="pg_password">Mot de passe</label>
+<input id="pg_password" name="pg_password" type="password" autocomplete="new-password">
+<p class="muted small">La base doit déjà exister et être vide ; le hub crée ses tables lui-même.</p>
+</fieldset>
+
+<button type="submit" class="button">Essayer et continuer</button>
+</form>
+{% endif %}
+</div>
+</main>
+</body>
+</html>

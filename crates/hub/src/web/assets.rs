@@ -65,10 +65,14 @@ pub async fn serve(Path(path): Path<String>) -> Response {
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
-    // Les fichiers ne changent qu'avec le binaire : un jour de cache suffit.
-    headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=86400"),
-    );
+    // Les polices ne changent pas : un jour de cache. La feuille de style et le script
+    // changent avec chaque version du hub : `no-cache` les fait relire à chaque page,
+    // sinon un admin verrait l'ancienne mise en page après une mise à jour (ADR 0037).
+    let cache = if mime.starts_with("font/") {
+        "public, max-age=86400"
+    } else {
+        "no-cache"
+    };
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
     response
 }

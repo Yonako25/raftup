@@ -426,3 +426,9 @@ untime2`.
 - **Pas vérifié** : exe lancé depuis un autre dossier que `target/debug` ; PostgreSQL avec la page d'installation ; affichage sur grand écran.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… » et `web/soon.rs` + `soon.html` (à jeter sur accord).
 - **Suite** : champ « code d'invitation » dans le launcher ; vrai téléchargement depuis la release GitHub ; déploiement.
+
+### 2026-11-20 · Rafthub : assistant de premier lancement, choix de la base (ADR 0037)
+- **Fait** : sans `--db` ni `rafthub-data/rafthub.toml`, le hub ne sert que l'assistant `/admin/installation` (`web/install.rs`, `install.html`) : base intégrée SQLite ou externe PostgreSQL (MySQL grisé), essayée puis gardée dans `rafthub.toml` (`server_config.rs`, chemin SQLite relatif) ; le vrai hub redémarre sur le même port et enchaîne sur le premier admin, même code. CSS et JS en `no-cache` (ancienne CSS vue dans le navigateur). 5 tests `tests/install.rs` + 4 unitaires ; parcours complet fait dans le navigateur sur un hub neuf. fmt, clippy `-D warnings`, `cargo test --workspace` passent.
+- **Pas vérifié** : une vraie base PostgreSQL par l'assistant (seulement le refus d'un port fermé) ; exe lancé hors de `target/debug`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html` (à jeter sur accord).
+- **Suite** : essayer l'assistant avec un vrai PostgreSQL ; champ « code d'invitation » dans le launcher ; déploiement.

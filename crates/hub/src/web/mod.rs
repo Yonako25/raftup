@@ -31,6 +31,7 @@
 mod assets;
 mod dashboard;
 mod distribution;
+pub mod install;
 mod login;
 mod logs;
 mod players;
