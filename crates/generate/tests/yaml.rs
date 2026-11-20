@@ -19,6 +19,7 @@ fn apquest(texts: &[&str], seed: u64) -> Vec<(String, ApQuestOptions)> {
         .into_iter()
         .map(|p| match p.options {
             GameOptions::ApQuest(o) => (p.name, o),
+            other => panic!("monde inattendu : {}", other.game()),
         })
         .collect()
 }

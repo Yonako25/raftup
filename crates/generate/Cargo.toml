@@ -23,6 +23,7 @@ serde_json.workspace = true
 sha1.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+worlds-native.workspace = true
 yaml-rust2.workspace = true
 
 [dev-dependencies]

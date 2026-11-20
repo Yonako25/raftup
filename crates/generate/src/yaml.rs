@@ -18,11 +18,20 @@
 //!
 //! Les tirages (poids, `random`) utilisent un flux propre à chaque joueur, dérivé de la
 //! seed : même seed et mêmes fichiers ⇒ mêmes options.
+//!
+//! Les mondes natifs (ADR 0041) passés à [`read_players_with_worlds`] sont lus d'après la
+//! liste de leurs options, avec les mêmes tirages que le portage d'APQuest ; un monde natif
+//! l'emporte sur un monde porté en Rust du même nom.
+
+use std::sync::Arc;
 
 use rand_core::Rng;
+use worlds_native::model::OptionKind;
+use worlds_native::NativeWorld;
 use yaml_rust2::{Yaml, YamlLoader};
 
 use crate::worlds::apquest::{self, ApQuestOptions, PlayerSprite};
+use crate::worlds::NativeOptions;
 use crate::{stream, GameOptions, PlayerRequest, SUPPORTED_GAMES};
 
 /// Le YAML ne peut pas être généré par le moteur Rust ; la raison est lisible par l'hôte.
@@ -63,6 +72,16 @@ pub fn read_players_with_meta(
     meta: Option<&str>,
     seed: u64,
 ) -> Result<Vec<PlayerRequest>, Unsupported> {
+    read_players_with_worlds(files, meta, seed, &[])
+}
+
+/// Comme [`read_players_with_meta`], en connaissant aussi des mondes natifs.
+pub fn read_players_with_worlds(
+    files: &[(String, String)],
+    meta: Option<&str>,
+    seed: u64,
+    natives: &[Arc<NativeWorld>],
+) -> Result<Vec<PlayerRequest>, Unsupported> {
     // Le meta a son propre flux (slot 0) : il ne change pas les tirages des joueurs.
     let balancing = match meta {
         Some(text) => read_meta(text, &mut stream("meta", seed, 0))?,
@@ -76,7 +95,7 @@ pub fn read_players_with_meta(
             // Les slots commencent à 1 ; chaque joueur a son propre flux de tirages.
             let slot = u32::try_from(players.len() + 1).unwrap_or(u32::MAX);
             let mut rng = stream("yaml", seed, slot);
-            players.push(read_player(file, &doc, &mut rng)?);
+            players.push(read_player(file, &doc, &mut rng, natives)?);
         }
     }
     if players.is_empty() {
@@ -174,6 +193,7 @@ fn read_player<R: Rng + ?Sized>(
     file: &str,
     doc: &Yaml,
     rng: &mut R,
+    natives: &[Arc<NativeWorld>],
 ) -> Result<PlayerRequest, Unsupported> {
     let Yaml::Hash(root) = doc else {
         return Err(unsupported(format!(
@@ -193,7 +213,8 @@ fn read_player<R: Rng + ?Sized>(
         Yaml::String(game) => game,
         _ => return Err(unsupported(format!("{file} : jeu absent"))),
     };
-    if !SUPPORTED_GAMES.contains(&game.as_str()) {
+    let native = natives.iter().find(|w| w.game == game);
+    if native.is_none() && !SUPPORTED_GAMES.contains(&game.as_str()) {
         return Err(unsupported(format!(
             "{name} joue à « {game} », que le moteur Rust ne sait pas encore générer"
         )));
@@ -220,9 +241,14 @@ fn read_player<R: Rng + ?Sized>(
         }
     };
     let mut common = Common::default();
-    let options = match game.as_str() {
-        apquest::GAME => GameOptions::ApQuest(read_apquest(&name, section, rng, &mut common)?),
-        _ => return Err(unsupported(format!("jeu « {game} » non pris en charge"))),
+    let options = match (native, game.as_str()) {
+        (Some(world), _) => {
+            GameOptions::Native(read_native(&name, section, rng, &mut common, world)?)
+        }
+        (None, apquest::GAME) => {
+            GameOptions::ApQuest(read_apquest(&name, section, rng, &mut common)?)
+        }
+        (None, _) => return Err(unsupported(format!("jeu « {game} » non pris en charge"))),
     };
     Ok(PlayerRequest {
         name,
@@ -298,6 +324,103 @@ fn read_apquest<R: Rng + ?Sized>(
         }
     }
     Ok(o)
+}
+
+/// Lit la section d'un monde natif, d'après la liste de ses options. Les options absentes
+/// gardent leur valeur par défaut ; les tirages sont faits comme dans [`read_apquest`].
+fn read_native<R: Rng + ?Sized>(
+    player: &str,
+    section: &Yaml,
+    rng: &mut R,
+    common: &mut Common,
+    world: &Arc<NativeWorld>,
+) -> Result<NativeOptions, Unsupported> {
+    let mut o = NativeOptions::new(world.clone());
+    let Yaml::Hash(entries) = section else {
+        return Ok(o);
+    };
+    for (key, raw) in entries {
+        let Yaml::String(key) = key else {
+            return Err(unsupported(format!("{player} : option non textuelle")));
+        };
+        let bad = |what: &str| unsupported(format!("{player} : option « {key} » : {what}"));
+        if let Some(def) = world.options.iter().find(|d| &d.name == key) {
+            let value = match &def.kind {
+                OptionKind::Toggle => toggle(raw, rng)
+                    .map(i64::from)
+                    .ok_or_else(|| bad("oui/non attendu"))?,
+                OptionKind::Range { min, max } => range_i64(raw, *min, *max, rng)
+                    .ok_or_else(|| bad(&format!("{min} à {max} attendu")))?,
+                OptionKind::Choice { choices, aliases } => {
+                    choice(raw, choices, aliases, rng).ok_or_else(|| bad("choix inconnu"))?
+                }
+            };
+            o.set(key, value).map_err(|e| bad(&e.to_string()))?;
+            continue;
+        }
+        match key.as_str() {
+            "progression_balancing" => {
+                common.progression_balancing =
+                    progression_balancing(raw, rng).ok_or_else(|| bad("0 à 99 attendu"))?
+            }
+            "accessibility" => {
+                if !is_full(raw, rng)? {
+                    return Err(bad("seule la valeur « full » est prise en charge"));
+                }
+            }
+            other if EMPTY_ONLY.contains(&other) => {
+                if !is_empty(raw) {
+                    return Err(bad("pas encore pris en charge par le moteur Rust"));
+                }
+            }
+            _ => return Err(bad("inconnue du moteur Rust")),
+        }
+    }
+    Ok(o)
+}
+
+/// Option numérique d'un monde natif : comme [`range`], avec des bornes `i64`.
+fn range_i64<R: Rng + ?Sized>(raw: &Yaml, min: i64, max: i64, rng: &mut R) -> Option<i64> {
+    let value = pick(raw, rng).ok()?;
+    if is_random(&value) {
+        // `i128` : `max - min + 1` tient toujours, même pour des bornes extrêmes.
+        let span = u64::try_from(i128::from(max) - i128::from(min) + 1).ok()?;
+        let drawn = i128::from(fill::below(rng, span));
+        return i64::try_from(i128::from(min) + drawn).ok();
+    }
+    let number = match value {
+        Yaml::Integer(n) => n,
+        Yaml::String(s) => s.trim().parse().ok()?,
+        _ => return None,
+    };
+    (min..=max).contains(&number).then_some(number)
+}
+
+/// Option à choix d'un monde natif : nom (sans tenir compte de la casse), alias ou
+/// numéro ; `random` parmi tous les choix (comme [`sprite`]).
+fn choice<R: Rng + ?Sized>(
+    raw: &Yaml,
+    choices: &[String],
+    aliases: &[(String, u32)],
+    rng: &mut R,
+) -> Option<i64> {
+    let value = pick(raw, rng).ok()?;
+    if is_random(&value) {
+        return i64::try_from(fill::below(rng, choices.len() as u64)).ok();
+    }
+    match value {
+        Yaml::Integer(n) if n >= 0 && (n as usize) < choices.len() => Some(n),
+        Yaml::String(s) => {
+            if let Some(i) = choices.iter().position(|c| c.eq_ignore_ascii_case(&s)) {
+                return i64::try_from(i).ok();
+            }
+            aliases
+                .iter()
+                .find(|(alias, _)| alias.eq_ignore_ascii_case(&s))
+                .map(|(_, i)| i64::from(*i))
+        }
+        _ => None,
+    }
 }
 
 /// Une valeur simple, ou un tirage pondéré si c'est une table `{valeur: poids}`.

@@ -215,10 +215,7 @@ fn noms_et_options_refuses() {
     };
     assert!(matches!(
         err(vec![player("Alice", bad)]),
-        GenerateError::InvalidOption {
-            option: "trap_chance",
-            ..
-        }
+        GenerateError::InvalidOption { ref option, .. } if option == "trap_chance"
     ));
 }
 
