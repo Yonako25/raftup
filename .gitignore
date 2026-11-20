@@ -25,9 +25,10 @@ Thumbs.db
 # Python (scripts de test)
 __pycache__/
 
-# Registre : copies locales des paquets et index produit (jamais commités, voir registre/README.md)
+# Registre : copies locales des paquets, index produit et rapport de CI (jamais commités, voir registre/README.md)
 /registre/fichiers/
 /registre/sortie/
+/registre/rapport/
 
 # Déploiement du Rafthub : secrets locaux et sauvegardes (deploy/rafthub/README.md)
 /deploy/rafthub/.env
