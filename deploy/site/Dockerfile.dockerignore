@@ -1,6 +1,7 @@
-# Contexte = racine du dépôt : on n'envoie que ce que la page utilise.
+# Contexte = racine du dépôt : on n'envoie que ce que le site utilise.
 *
 !deploy/site/
 !crates/launcher-ui/icons/logo-texte.png
+!crates/launcher-ui/icons/logo.png
 !crates/launcher-ui/icons/icon.png
 !crates/launcher-ui/fonts/

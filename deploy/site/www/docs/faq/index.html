@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Questions fréquentes · Raftup</title>
+<meta name="description" content="Réponses courtes aux questions fréquentes sur Raftup : compatibilité avec Archipelago, sécurité, jeux, comptes et Rafthub.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/" aria-current="page">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu doc">
+    <nav class="doc-nav" aria-label="Guides">
+      <h2>Documentation</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/parties/">Créer et rejoindre une partie</a></li>
+        <li><a href="/docs/rafthub/">Héberger son Rafthub</a></li>
+        <li><a href="/docs/faq/" aria-current="page">FAQ</a></li>
+      </ul>
+    </nav>
+
+    <article class="article faq">
+      <span class="surtitre">Aide</span>
+      <h1>Questions fréquentes</h1>
+      <p class="chapo">Les réponses courtes. Pour le pas-à-pas, voir les autres guides.</p>
+
+      <h2>Raftup et Archipelago</h2>
+      <details>
+        <summary>Raftup remplace-t-il Archipelago&nbsp;?</summary>
+        <div>
+          <p>Non. Raftup est une implémentation alternative, compatible avec Archipelago&nbsp;: même protocole réseau, mêmes mods de jeux, mêmes fichiers d'options. Il utilise d'ailleurs le générateur officiel d'Archipelago, à une version épinglée.</p>
+          <p>Raftup est un projet indépendant, sans lien officiel avec l'équipe d'Archipelago.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Mon mod Archipelago marche-t-il avec un serveur Raftup&nbsp;?</summary>
+        <div><p>Oui, c'est la règle de base du projet&nbsp;: un mod existant se connecte au serveur de Raftup sans aucune modification. Le serveur est testé en comparant ses réponses à celles du serveur officiel.</p></div>
+      </details>
+      <details>
+        <summary>Puis-je rejoindre une partie hébergée ailleurs&nbsp;?</summary>
+        <div><p>Oui. Dans la Bibliothèque, remplissez l'adresse, le slot et le mot de passe de la partie, puis lancez le jeu. Raftup installe le mod&nbsp;; la partie, elle, peut tourner sur n'importe quel serveur compatible.</p></div>
+      </details>
+      <details>
+        <summary>Quelle version d'Archipelago Raftup suit-il&nbsp;?</summary>
+        <div><p>Chaque version de Raftup épingle une version d'Archipelago. Elle est affichée en bas à gauche du launcher (par exemple «&nbsp;Compatible avec Archipelago 0.6.8&nbsp;»).</p></div>
+      </details>
+
+      <h2>Jeux et mods</h2>
+      <details>
+        <summary>Raftup fournit-il les jeux ou des ROM&nbsp;?</summary>
+        <div><p>Jamais. Raftup installe des mods sur votre propre copie du jeu, achetée de votre côté. Il ne distribue ni jeu, ni ROM, ni clé, ni asset.</p></div>
+      </details>
+      <details>
+        <summary>Pourquoi si peu de jeux&nbsp;?</summary>
+        <div><p>Un jeu n'entre au catalogue qu'après une vraie partie, avec le mod de son auteur, à une version vérifiée. Le catalogue grandit petit à petit. Vous pouvez proposer un profil par pull request&nbsp;: voir la <a href="/jeux/">page des jeux</a>.</p></div>
+      </details>
+      <details>
+        <summary>Mon jeu n'est pas détecté.</summary>
+        <div><p>Raftup cherche dans Steam et Epic. Pour une autre installation, utilisez <strong>Ajouter un dossier de jeu</strong> dans la Bibliothèque et choisissez le dossier qui contient l'exécutable du jeu.</p></div>
+      </details>
+      <details>
+        <summary>Comment remettre mon jeu comme avant&nbsp;?</summary>
+        <div><p>Dans la Bibliothèque, choisissez le jeu puis <strong>Désinstaller le mod</strong>. Raftup retire ce qu'il a installé et les fichiers que le mod a créés.</p></div>
+      </details>
+      <details>
+        <summary>Est-ce que je peux ajouter un apworld téléchargé ailleurs&nbsp;?</summary>
+        <div><p>Oui, dans «&nbsp;Créer une partie&nbsp;», section Apworlds. Attention&nbsp;: un apworld est du code Python qui s'exécute sur votre PC pendant la génération. N'ajoutez que ceux dont vous connaissez l'auteur.</p></div>
+      </details>
+
+      <h2>Sécurité</h2>
+      <details>
+        <summary>Windows affiche un avertissement au lancement.</summary>
+        <div><p>Windows SmartScreen se méfie des programmes récents et peu téléchargés. Vérifiez l'empreinte SHA-256 du fichier avec celle publiée dans la release, puis choisissez «&nbsp;Informations complémentaires&nbsp;» et «&nbsp;Exécuter quand même&nbsp;».</p></div>
+      </details>
+      <details>
+        <summary>Les mises à jour automatiques sont-elles sûres&nbsp;?</summary>
+        <div><p>Chaque version du launcher est signée par la mainteneuse du projet. Le launcher vérifie cette signature avant de remplacer son exécutable&nbsp;: une version modifiée en route est refusée.</p></div>
+      </details>
+      <details>
+        <summary>Faut-il chiffrer ma partie&nbsp;?</summary>
+        <div><p>C'est conseillé dès que des joueurs viennent d'Internet&nbsp;: en clair (<code>ws</code>), le mot de passe de la salle et les messages passent lisibles sur le réseau. Le chiffrement (<code>wss</code>) demande un certificat pour votre nom de domaine.</p></div>
+      </details>
+
+      <h2>Comptes et Rafthub</h2>
+      <details>
+        <summary>Un compte est-il obligatoire pour jouer&nbsp;?</summary>
+        <div><p>Non. On crée et on rejoint une partie sans compte. Le compte Rafthub sert aux amis et à la présence.</p></div>
+      </details>
+      <details>
+        <summary>Quelle différence entre le Rafthub officiel et un Rafthub auto-hébergé&nbsp;?</summary>
+        <div>
+          <p>Le <strong>Rafthub officiel</strong> est le service du projet&nbsp;: rien à installer, le launcher s'y connecte par défaut, et il peut proposer la connexion avec Discord.</p>
+          <p>Un <strong>Rafthub auto-hébergé</strong> tourne chez vous, pour votre groupe&nbsp;: connexion par pseudo ou e-mail et mot de passe, sans Discord. Les comptes d'un hub ne sont pas ceux d'un autre. Voir <a href="/docs/rafthub/">Héberger son propre Rafthub</a>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>Comment changer de hub&nbsp;?</summary>
+        <div><p>Ouvrez un lien <code>raftup://hub/…</code> donné par l'administrateur du hub, ou tapez son adresse en bas de l'écran «&nbsp;Amis&nbsp;». Le bouton <strong>Par défaut</strong> revient au Rafthub officiel.</p></div>
+      </details>
+      <details>
+        <summary>Puis-je changer de pseudo ou supprimer mon compte&nbsp;?</summary>
+        <div><p>Le pseudo se change dans l'écran «&nbsp;Amis&nbsp;», une fois par 24&nbsp;heures. Rafthub permet aussi d'exporter ses données et de supprimer son compte avec tout ce qui s'y rattache.</p></div>
+      </details>
+
+      <h2>Le projet</h2>
+      <details>
+        <summary>Raftup est-il gratuit&nbsp;?</summary>
+        <div><p>Oui, et son code est ouvert&nbsp;: MIT ou Apache-2.0 pour le launcher et le serveur, AGPL-3.0 pour Rafthub. Voir les <a href="/mentions/">mentions et licences</a>.</p></div>
+      </details>
+      <details>
+        <summary>Et sur macOS ou Linux&nbsp;?</summary>
+        <div><p>Le code compile et passe ses tests sur les trois systèmes, mais seul le launcher Windows est publié pour l'instant. Rafthub, lui, existe déjà pour Linux et Windows.</p></div>
+      </details>
+      <details>
+        <summary>J'ai trouvé un bug.</summary>
+        <div><p>Merci&nbsp;! Ouvrez un ticket sur <a href="https://github.com/Yonako25/raftup/issues">GitHub</a>, avec la version du launcher et ce que vous faisiez.</p></div>
+      </details>
+    </article>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

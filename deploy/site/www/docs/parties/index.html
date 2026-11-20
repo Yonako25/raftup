@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Créer et rejoindre une partie · Raftup</title>
+<meta name="description" content="Générer et héberger une partie multiworld avec Raftup, envoyer les invitations, rejoindre une partie avec un lien.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/" aria-current="page">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu doc">
+    <nav class="doc-nav" aria-label="Guides">
+      <h2>Documentation</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/parties/" aria-current="page">Créer et rejoindre une partie</a></li>
+        <li><a href="/docs/rafthub/">Héberger son Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </nav>
+
+    <article class="article">
+      <span class="surtitre">Guide · joueurs et hôtes</span>
+      <h1>Créer et rejoindre une partie</h1>
+      <p class="chapo">Une personne héberge la partie sur son PC&nbsp;: c'est l'hôte. Les autres la rejoignent avec un lien d'invitation.</p>
+
+      <h2 id="avant">Avant de commencer</h2>
+      <ul>
+        <li>Chaque joueur a installé son jeu dans la <strong>Bibliothèque</strong> (voir <a href="/docs/premiers-pas/#jeu">Premiers pas</a>).</li>
+        <li>Chaque joueur prépare son <strong>fichier d'options</strong> (YAML), au même format que pour Archipelago, souvent à partir du modèle fourni avec le monde du jeu. Le champ <code>name</code> donne le nom du joueur dans la partie (son «&nbsp;slot&nbsp;»).</li>
+        <li>Les joueurs envoient leur YAML à l'hôte.</li>
+      </ul>
+
+      <h2 id="creer">Créer la partie (hôte)</h2>
+      <ol>
+        <li>Dans la barre de gauche, ouvrez <strong>Parties › En cours</strong>, puis cliquez sur <strong>Créer depuis des YAML</strong>.</li>
+        <li>Dans <strong>Joueurs</strong>, cliquez sur <strong>Ajouter des YAML…</strong> et choisissez un fichier par joueur.</li>
+        <li><strong>Apworlds</strong>&nbsp;: les mondes installés par la Bibliothèque sont repris tout seuls. N'en ajoutez d'autres que si vous leur faites confiance&nbsp;: un apworld est du code qui s'exécute sur votre PC.</li>
+        <li>Dans <strong>Serveur</strong>, gardez le port <code>38281</code> sauf raison contraire. Le mot de passe de la salle est facultatif.</li>
+        <li><strong>Adresse publique</strong>&nbsp;: votre nom de domaine ou votre adresse IP publique. C'est elle qui sera écrite dans les invitations.</li>
+        <li><strong>Chiffrement</strong>&nbsp;: «&nbsp;Chiffré (wss)&nbsp;» demande un certificat et sa clé privée (fichiers PEM) pour votre nom de domaine. Sans certificat, choisissez «&nbsp;En clair (ws)&nbsp;»&nbsp;; le mot de passe de la salle passe alors en clair sur le réseau.</li>
+        <li>Choisissez un <strong>préréglage</strong>&nbsp;: Rapide, Standard ou Long.</li>
+        <li>Facultatif&nbsp;: un <strong>webhook Discord</strong>, pour poster les grands moments de la partie dans votre salon.</li>
+        <li>Cliquez sur <strong>Générer la partie</strong>.</li>
+      </ol>
+      <figure class="capture">
+        <img src="/img/creer.webp" alt="Écran Créer une partie : deux YAML ajoutés, réglages du serveur et du chiffrement." width="1280" height="820" loading="lazy">
+      </figure>
+      <div class="panneau">
+        <p><strong>La première fois</strong>, Raftup propose d'installer le générateur officiel d'Archipelago (environ 72&nbsp;Mo). Il est téléchargé une seule fois, puis lancé dans un process séparé, en bac à sable sous Windows.</p>
+      </div>
+      <p>Une fois la partie générée, le serveur intégré la met en ligne. L'écran <strong>Partie en cours</strong> montre les joueurs, la progression, une durée estimée, le chat et le journal.</p>
+      <p>Vous avez déjà un fichier <code>.archipelago</code> généré ailleurs&nbsp;? Utilisez <strong>Héberger un fichier .archipelago</strong>.</p>
+
+      <h2 id="inviter">Inviter les joueurs</h2>
+      <ul>
+        <li><strong>Copier le lien</strong>, sous un joueur, copie son lien personnel, avec son slot. C'est le plus simple&nbsp;: envoyez-le-lui par message.</li>
+        <li><strong>Copier l'invitation</strong>, en haut de l'écran, copie un message pour tout le groupe&nbsp;: l'adresse, la liste des joueurs et un lien commun, sans slot.</li>
+      </ul>
+      <p>Un lien ressemble à <code>raftup://join?v=1&amp;addr=…&amp;slot=Bob&amp;game=…</code>. Le mot de passe de la salle n'est jamais mis dans un lien&nbsp;: donnez-le à part.</p>
+      <p>L'onglet <strong>Salon</strong> montre qui est prêt. Le test «&nbsp;prêt&nbsp;» passe par une vraie connexion au serveur&nbsp;: un joueur prêt pourra vraiment se connecter.</p>
+      <figure class="capture">
+        <img src="/img/partie.webp" alt="Écran Partie en cours : deux joueurs hors ligne, bouton Copier l'invitation, durée estimée." width="1280" height="820" loading="lazy">
+      </figure>
+      <div class="panneau alerte">
+        <p><strong>Joueurs hors de chez vous&nbsp;:</strong> votre box doit laisser passer le port choisi (TCP <code>38281</code> par défaut) vers votre PC. Cherchez «&nbsp;redirection de port&nbsp;» dans l'interface de votre box. Une adresse <code>localhost</code> ne marche que sur votre propre PC.</p>
+      </div>
+
+      <h2 id="rejoindre">Rejoindre une partie (joueur)</h2>
+      <ol>
+        <li>Cliquez sur le lien reçu&nbsp;: le launcher s'ouvre. Certaines applications, comme Discord, ne rendent pas ces liens cliquables&nbsp;: copiez alors le lien, ouvrez <strong>Parties › Invitations</strong>, collez-le puis cliquez sur <strong>Lire le lien</strong>.</li>
+        <li>Vérifiez le serveur, le jeu et le slot, puis cliquez sur <strong>Continuer</strong>.</li>
+        <li>La Bibliothèque s'ouvre avec l'adresse et le slot déjà remplis. Ajoutez le mot de passe de la salle s'il y en a un.</li>
+        <li>Cliquez sur <strong>Lancer le jeu</strong>.</li>
+      </ol>
+      <figure class="capture">
+        <img src="/img/rejoindre.webp" alt="Écran Rejoindre une partie : lien collé, serveur, jeu et slot à vérifier." width="1280" height="820" loading="lazy">
+      </figure>
+      <p>Selon le mod, Raftup transmet l'adresse au jeu tout seul, ou la copie dans le presse-papiers avec la marche à suivre. Pour Slime Rancher, la connexion se fait dans le jeu&nbsp;: menu Options, puis le menu de connexion du mod.</p>
+
+      <h2 id="pendant">Pendant la partie</h2>
+      <p>Le serveur de Raftup comprend les commandes habituelles, à taper dans le chat de votre client&nbsp;:</p>
+      <div class="tableau">
+        <table>
+          <thead><tr><th>Commande</th><th>Effet</th></tr></thead>
+          <tbody>
+            <tr><td><code>!hint &lt;objet&gt;</code></td><td>demande où se trouve un objet (coûte des points d'indice)</td></tr>
+            <tr><td><code>!remaining</code>, <code>!missing</code></td><td>ce qu'il vous reste à trouver</td></tr>
+            <tr><td><code>!release</code>, <code>!collect</code></td><td>envoyer vos objets restants, ou récupérer les vôtres, après l'objectif</td></tr>
+            <tr><td><code>!away</code>, <code>!back</code></td><td>signaler une absence, puis votre retour</td></tr>
+            <tr><td><code>!summary</code></td><td>résumé de ce qui s'est passé depuis votre dernière visite</td></tr>
+            <tr><td><code>!vote_release &lt;joueur&gt;</code></td><td>voter pour libérer les objets d'un joueur qui abandonne</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>!help</code> donne la liste complète.</p>
+
+      <h2 id="reprendre">Arrêter et reprendre</h2>
+      <p>La partie est sauvegardée à chaque objet, dans un fichier <code>.raftup</code> à côté de la seed. Fermer le launcher arrête la partie proprement. Quand vous hébergez de nouveau la même seed, elle reprend là où elle en était, sans objet perdu ni en double.</p>
+    </article>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# Page d'attente de raftup-games.com derrière Traefik.
+# Site officiel de raftup-games.com derrière Traefik.
 #
 #   docker compose build && docker compose up -d
 #

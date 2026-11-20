@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Téléchargements · Raftup</title>
+<meta name="description" content="Télécharger le launcher Raftup pour Windows et Rafthub, le service de comptes et d'amis, en version auto-hébergée.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/" aria-current="page">Téléchargements</a>
+      <a href="/docs/">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu">
+    <header class="entete-page">
+      <span class="surtitre">Téléchargements</span>
+      <h1>Récupérer Raftup</h1>
+      <p>Tous les fichiers sont publiés sur la page des releases GitHub du projet, avec leur empreinte SHA-256. Raftup est gratuit et son code est ouvert.</p>
+    </header>
+
+    <section class="section" aria-labelledby="titre-launcher">
+      <div class="panneau accent">
+        <div class="grille deux">
+          <div>
+            <span class="badge">Pour jouer</span>
+            <h2 id="titre-launcher">Launcher Raftup pour Windows</h2>
+            <p class="secondaire">Un seul fichier <code>.exe</code>, sans installation ni droits d'administrateur. Il se met ensuite à jour tout seul, avec des versions signées.</p>
+            <p class="nom-fichier">raftup-windows-x86_64.exe</p>
+            <div class="actions">
+              <a class="bouton principal" href="https://github.com/Yonako25/raftup/releases">Télécharger sur GitHub</a>
+              <a class="bouton" href="/docs/premiers-pas/">Premiers pas</a>
+            </div>
+          </div>
+          <div>
+            <h3>Configuration</h3>
+            <ul class="liste-courte">
+              <li>Windows 10 ou 11, 64 bits.</li>
+              <li>Une copie légale des jeux auxquels vous jouez (Steam, Epic…).</li>
+              <li>Une connexion Internet pour installer les mods et, la première fois, le générateur.</li>
+            </ul>
+            <p class="secondaire">macOS et Linux&nbsp;: le code compile et passe ses tests sur les trois systèmes, mais seul le launcher Windows est publié pour l'instant.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-rafthub">
+      <span class="surtitre">Rafthub</span>
+      <h2 id="titre-rafthub">Comptes et amis&nbsp;: deux versions</h2>
+      <p class="secondaire etroit">Rafthub est le service qui gère les comptes, les listes d'amis et la présence. Il n'est pas nécessaire pour jouer&nbsp;: une partie se crée et se rejoint sans compte. Il existe en deux versions, avec le même code.</p>
+
+      <div class="grille deux">
+        <div class="panneau fichier">
+          <span class="badge vert">Rien à installer</span>
+          <h3>Rafthub officiel</h3>
+          <p class="secondaire">Le service du projet Raftup, à l'adresse <code>hub.raftup-games.com</code>. Le launcher s'y connecte par défaut&nbsp;: il suffit de créer un compte dans l'écran «&nbsp;Amis&nbsp;».</p>
+          <ul>
+            <li>Connexion par pseudo ou e-mail, et mot de passe.</li>
+            <li>Connexion avec Discord, quand elle est activée.</li>
+            <li>Amis de toute la communauté Raftup.</li>
+          </ul>
+          <div class="actions">
+            <a class="bouton" href="/docs/premiers-pas/#amis">Créer un compte</a>
+          </div>
+        </div>
+        <div class="panneau fichier">
+          <span class="badge neutre">Pour votre groupe</span>
+          <h3>Rafthub auto-hébergé</h3>
+          <p class="secondaire">Votre propre Rafthub, sur votre serveur ou votre PC, pour une communauté privée. Base de données intégrée, assistant d'installation dans le navigateur, HTTPS intégré en option.</p>
+          <ul>
+            <li>Connexion par pseudo ou e-mail, et mot de passe.</li>
+            <li>Pas de connexion Discord dans cette version.</li>
+            <li>Vous gérez les joueurs, les inscriptions et les invitations.</li>
+          </ul>
+          <p class="nom-fichier">rafthub-linux-x86_64.tar.gz<br>rafthub-windows-x86_64.zip</p>
+          <div class="actions">
+            <a class="bouton principal" href="https://github.com/Yonako25/raftup/releases">Télécharger sur GitHub</a>
+            <a class="bouton" href="/docs/rafthub/">Guide d'installation</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-verifier">
+      <div class="grille deux">
+        <div class="panneau">
+          <h2 id="titre-verifier" class="h3">Vérifier un fichier</h2>
+          <p class="secondaire">Chaque fichier a son empreinte à côté de lui (<code>.sha256</code>). Sous Windows, dans PowerShell&nbsp;:</p>
+          <pre><code>Get-FileHash .\raftup-windows-x86_64.exe -Algorithm SHA256</code></pre>
+          <p class="secondaire">Sous Linux&nbsp;:</p>
+          <pre><code>sha256sum -c rafthub-linux-x86_64.tar.gz.sha256</code></pre>
+        </div>
+        <div class="panneau">
+          <h2 class="h3">Code source</h2>
+          <p class="secondaire">Le code de Raftup est sur GitHub. Le launcher, le serveur de parties et les bibliothèques sont sous MIT ou Apache-2.0, au choix. Rafthub est sous AGPL-3.0&nbsp;: ses archives contiennent la licence et le lien vers son code.</p>
+          <div class="actions">
+            <a class="bouton" href="https://github.com/Yonako25/raftup">Voir le dépôt</a>
+            <a class="bouton" href="/mentions/">Licences</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

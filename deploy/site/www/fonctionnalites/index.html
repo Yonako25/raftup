@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fonctionnalités · Raftup</title>
+<meta name="description" content="Installation des mods en un clic, création et hébergement des parties, invitations, suivi de partie, amis : tout ce que fait Raftup.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/" aria-current="page">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu">
+    <header class="entete-page">
+      <span class="surtitre">Fonctionnalités</span>
+      <h1>Moins de réglages, plus de parties</h1>
+      <p>Raftup reprend le principe d'Archipelago et s'occupe de tout ce qui demande d'habitude une heure de préparation&nbsp;: les mods, les versions, la génération, le serveur et les invitations.</p>
+    </header>
+
+    <section class="section" aria-labelledby="titre-installer">
+      <h2 id="titre-installer">Installer les jeux</h2>
+      <div class="grille trois">
+        <div class="panneau fonction">
+          <h3>Détection des jeux</h3>
+          <p>Raftup trouve les jeux installés avec Steam et Epic. Pour une autre installation, vous choisissez le dossier&nbsp;: Raftup vérifie que l'exécutable attendu s'y trouve.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Installation en un clic</h3>
+          <p>Chargeur de mods, mod du jeu et monde&nbsp;: un profil public décrit chaque étape. Chaque fichier est téléchargé chez son auteur, puis son empreinte SHA-256 est vérifiée avant d'être installé.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Désinstallation propre</h3>
+          <p>Raftup retire ce qu'il a installé et remet le jeu dans son état d'origine. Votre connexion enregistrée dans le mod est gardée lors d'une réinstallation.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Versions figées</h3>
+          <p>Le profil épingle la version du mod et celle du monde. Le mod du joueur et le monde utilisé par l'hôte vont toujours ensemble.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Registre signé</h3>
+          <p>Des mondes supplémentaires peuvent venir du registre de Raftup. Son index est signé&nbsp;: un fichier modifié en route est refusé.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Mises à jour signées</h3>
+          <p>Le launcher se met à jour tout seul. Chaque nouvelle version est signée, et la signature est vérifiée avant de remplacer l'exécutable.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-creer">
+      <div class="vitrine">
+        <div>
+          <h2 id="titre-creer">Créer et héberger une partie</h2>
+          <ul class="liste-courte">
+            <li><strong>Un fichier YAML par joueur</strong>, comme d'habitude&nbsp;: Raftup accepte les mêmes fichiers d'options.</li>
+            <li><strong>Préréglages</strong> Rapide, Standard ou Long, avant tout éditeur avancé.</li>
+            <li><strong>Générateur officiel d'Archipelago</strong>, à une version épinglée, installé et lancé par Raftup dans un process isolé.</li>
+            <li><strong>Serveur intégré</strong> en un clic, avec une adresse stable et un chiffrement <code>wss</code> conseillé.</li>
+            <li><strong>Sauvegarde sans perte</strong>&nbsp;: chaque objet est écrit sur le disque avant d'être confirmé. La partie reprend après un redémarrage.</li>
+            <li><strong>Webhook Discord</strong> facultatif&nbsp;: les événements clés de la partie sont postés dans votre salon.</li>
+          </ul>
+        </div>
+        <figure class="capture">
+          <img src="/img/creer.webp" alt="Écran Créer une partie du launcher." width="1280" height="820" loading="lazy">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-jouer">
+      <div class="vitrine inverse">
+        <div>
+          <h2 id="titre-jouer">Inviter et suivre la partie</h2>
+          <ul class="liste-courte">
+            <li><strong>Un lien d'invitation par joueur</strong> (<code>raftup://…</code>)&nbsp;: adresse, slot et jeu en une fois.</li>
+            <li><strong>Salon de préparation</strong>&nbsp;: chacun vérifie qu'il est «&nbsp;prêt&nbsp;» par une vraie connexion avant le départ.</li>
+            <li><strong>Progression en direct</strong>&nbsp;: emplacements trouvés, joueurs connectés, objectifs atteints, chat et journal.</li>
+            <li><strong>Durée estimée</strong> par joueur, et équilibrage de la partie par temps de jeu <span class="badge neutre">optionnel</span></li>
+            <li><strong>Erreurs expliquées</strong>&nbsp;: refus, certificat, délai dépassé, mauvais slot ou mauvaise version.</li>
+          </ul>
+        </div>
+        <figure class="capture">
+          <img src="/img/partie.webp" alt="Écran Partie en cours : joueurs, progression et durée estimée." width="1280" height="820" loading="lazy">
+        </figure>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-async">
+      <h2 id="titre-async">Pensé pour les parties entre amis</h2>
+      <div class="grille deux">
+        <div class="panneau fonction">
+          <h3>Parties en asynchrone</h3>
+          <p>Une partie qui dure une semaine reste lisible. <code>!away</code> et <code>!back</code> signalent une absence, <code>!summary</code> résume ce qui s'est passé depuis votre dernière visite, et <code>!vote_release</code> permet de libérer un joueur qui abandonne, par vote.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Amis et présence</h3>
+          <p>Avec un compte Rafthub, vous ajoutez vos amis par pseudo et vous voyez qui est en ligne ou en partie. Le Rafthub officiel est prêt à l'emploi&nbsp;; vous pouvez aussi héberger le vôtre.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Commandes habituelles</h3>
+          <p>Indices, <code>!hint</code>, <code>!release</code>, <code>!collect</code>, DeathLink, stockage partagé&nbsp;: le serveur de Raftup répond aux mêmes commandes et paquets que le serveur officiel.</p>
+        </div>
+        <div class="panneau fonction">
+          <h3>Générateur en Rust <span class="badge balise">expérimental</span></h3>
+          <p>Raftup a son propre moteur de placement, avec des erreurs expliquées quand une partie est impossible. Il reste en option&nbsp;: le générateur officiel est utilisé par défaut.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="titre-securite">
+      <div class="panneau accent">
+        <h2 id="titre-securite">Plus sûr par défaut</h2>
+        <div class="grille deux">
+          <ul class="liste-courte">
+            <li>Connexions chiffrées (<code>wss</code>) recommandées, le clair seulement sur choix explicite.</li>
+            <li>Lecture des fichiers de partie sans exécuter de code, avec des limites de taille.</li>
+            <li>Limites par connexion&nbsp;: un client trop bavard ne fait pas tomber la partie.</li>
+          </ul>
+          <ul class="liste-courte">
+            <li>Générateur lancé dans un process à part, en bac à sable sous Windows.</li>
+            <li>Mots de passe hachés (argon2), jamais écrits dans les journaux.</li>
+            <li>Rien n'est installé sans vérification d'empreinte.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

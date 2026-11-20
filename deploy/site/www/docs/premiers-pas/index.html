@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premiers pas avec le launcher · Raftup</title>
+<meta name="description" content="Télécharger Raftup, installer un premier jeu, créer un compte Rafthub et ajouter ses amis.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/" aria-current="page">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu doc">
+    <nav class="doc-nav" aria-label="Guides">
+      <h2>Documentation</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/" aria-current="page">Premiers pas</a></li>
+        <li><a href="/docs/parties/">Créer et rejoindre une partie</a></li>
+        <li><a href="/docs/rafthub/">Héberger son Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </nav>
+
+    <article class="article">
+      <span class="surtitre">Guide · joueurs</span>
+      <h1>Premiers pas avec le launcher</h1>
+      <p class="chapo">De zéro à un jeu prêt pour le multiworld, en quelques minutes.</p>
+
+      <h2 id="installer">1. Installer Raftup</h2>
+      <ol>
+        <li>Téléchargez <code>raftup-windows-x86_64.exe</code> depuis la <a href="/telechargements/">page des téléchargements</a>.</li>
+        <li>Rangez-le dans un dossier à vous, par exemple <code>Documents\Raftup</code>. Il n'a pas besoin d'installation ni de droits d'administrateur.</li>
+        <li>Double-cliquez dessus.</li>
+      </ol>
+      <div class="panneau alerte">
+        <p><strong>Windows SmartScreen</strong> peut afficher «&nbsp;Windows a protégé votre ordinateur&nbsp;» pour un programme récent et peu téléchargé. Vérifiez d'abord l'empreinte du fichier (voir les téléchargements), puis cliquez sur «&nbsp;Informations complémentaires&nbsp;», puis «&nbsp;Exécuter quand même&nbsp;».</p>
+      </div>
+      <p>Au premier lancement, Raftup s'enregistre pour ouvrir les liens <code>raftup://</code>&nbsp;: un clic sur une invitation dans votre navigateur ouvrira directement le launcher.</p>
+
+      <h2 id="jeu">2. Installer un jeu</h2>
+      <p>Ouvrez la <strong>Bibliothèque</strong>, dans la barre de gauche.</p>
+      <ol>
+        <li>Cliquez sur <strong>Rechercher des jeux</strong>. Raftup regarde les jeux installés avec Steam et Epic.</li>
+        <li>Votre jeu n'est pas trouvé&nbsp;? Cliquez sur <strong>Ajouter un dossier de jeu</strong> et choisissez le dossier où il est installé. Raftup vérifie que l'exécutable attendu s'y trouve.</li>
+        <li>Choisissez le jeu, puis cliquez sur <strong>Installer</strong>. Raftup télécharge le chargeur de mods, le mod et le monde du jeu, vérifie chaque fichier, puis les installe.</li>
+        <li>Quand le jeu est marqué <strong>Prêt</strong>, vous pouvez le lancer.</li>
+      </ol>
+      <figure class="capture">
+        <img src="/img/bibliotheque.webp" alt="Bibliothèque : Slime Rancher prêt, ses trois composants installés avec un hash vérifié." width="1280" height="820" loading="lazy">
+        <figcaption>Chaque composant est marqué «&nbsp;Installé · hash vérifié&nbsp;».</figcaption>
+      </figure>
+      <p><strong>Lancer le jeu</strong> sans adresse ni slot démarre le jeu sans connexion, pour vérifier que le mod se charge. Pour jouer en multiworld, il faut une partie&nbsp;: voir <a href="/docs/parties/">Créer et rejoindre une partie</a>.</p>
+      <p><strong>Désinstaller le mod</strong> (avec une confirmation) retire tout ce que Raftup a installé et remet le jeu comme avant.</p>
+
+      <h2 id="amis">3. Créer un compte et ajouter des amis</h2>
+      <p>Un compte n'est pas obligatoire pour jouer. Il sert à retrouver vos amis et à voir qui est en ligne. Il est géré par Rafthub, le service de comptes de Raftup.</p>
+      <ol>
+        <li>Ouvrez l'écran <strong>Amis</strong> (carte «&nbsp;Amis&nbsp;» en bas à gauche).</li>
+        <li>Onglet <strong>Nouveau compte</strong>&nbsp;: adresse e-mail, pseudo et mot de passe. Si le hub fonctionne sur invitation, remplissez aussi <strong>Code d'invitation</strong>.</li>
+        <li>Confirmez votre adresse avec l'e-mail reçu, si le hub en envoie.</li>
+        <li>Ensuite, connectez-vous avec votre <strong>e-mail ou votre pseudo</strong>.</li>
+        <li>Dans <strong>Ajouter un ami</strong>, tapez le pseudo exact de votre ami. Il verra votre demande et pourra l'accepter.</li>
+      </ol>
+      <figure class="capture">
+        <img src="/img/amis.webp" alt="Écran Amis : trois amis avec leur présence, une demande reçue, une demande envoyée." width="1280" height="820" loading="lazy">
+      </figure>
+      <p>Par défaut, le launcher utilise le <strong>Rafthub officiel</strong>. Si votre groupe a son propre Rafthub, son administrateur vous donnera un lien <code>raftup://hub/…</code>&nbsp;: ouvrez-le, et le launcher vous demandera de confirmer le changement. L'adresse du hub se règle aussi en bas de l'écran «&nbsp;Amis&nbsp;».</p>
+
+      <h2 id="mises-a-jour">4. Mises à jour</h2>
+      <p>Quand une nouvelle version sort, une bannière apparaît avec un bouton <strong>Installer</strong>. Raftup télécharge la nouvelle version, vérifie sa signature et remplace son exécutableRaftup vérifie la signature de la nouvelle version, remplace son exécutable et redémarre. Vos réglages sont gardés.nbsp;; cliquez ensuite sur <strong>Redémarrer</strong>. Vos réglages sont gardés.</p>
+
+      <div class="panneau accent">
+        <p><strong>Et ensuite&nbsp;?</strong> Lisez <a href="/docs/parties/">Créer et rejoindre une partie</a>.</p>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

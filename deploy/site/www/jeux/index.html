@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jeux pris en charge · Raftup</title>
+<meta name="description" content="Les jeux que le launcher Raftup sait installer et lancer, avec les mods utilisés et leurs auteurs.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/" aria-current="page">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu">
+    <header class="entete-page">
+      <span class="surtitre">Catalogue</span>
+      <h1>Jeux pris en charge</h1>
+      <p>Chaque jeu du catalogue a un profil d'installation public, dans le dépôt de Raftup. Le profil dit quoi télécharger, où, à quelle version, et avec quelle empreinte. Le catalogue est embarqué dans le launcher.</p>
+    </header>
+
+    <section class="section" aria-labelledby="titre-sr">
+      <article class="panneau jeu">
+        <div class="jaquette" aria-hidden="true">SR</div>
+        <div>
+          <h2 id="titre-sr" class="h3">Slime Rancher</h2>
+          <div class="etiquettes">
+            <span class="badge vert">Disponible</span>
+            <span class="badge neutre">Windows</span>
+            <span class="badge neutre">Steam</span>
+          </div>
+          <p class="secondaire">Le premier Slime Rancher (pas le 2). Raftup détecte l'installation Steam, installe MelonLoader puis le mod Slimipelago, et ajoute le monde du jeu au générateur. Le mod se connecte au serveur de Raftup sans modification.</p>
+          <div class="tableau">
+            <table>
+              <thead><tr><th>Composant</th><th>Version</th><th>Auteur</th></tr></thead>
+              <tbody>
+                <tr><td>MelonLoader <span class="secondaire">(chargeur de mods)</span></td><td>0.7.3</td><td>LavaGang · Apache-2.0</td></tr>
+                <tr><td>Slimipelago <span class="secondaire">(mod du jeu)</span></td><td>0.3.2.1</td><td>SWCreeperKing</td></tr>
+                <tr><td>Monde Slime Rancher <span class="secondaire">(apworld)</span></td><td>0.3.2.1</td><td>SWCreeperKing</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="secondaire"><strong>Connexion&nbsp;:</strong> dans le jeu, menu Options, puis le menu de connexion du mod. Raftup copie l'adresse et le slot&nbsp;: il suffit de les coller.</p>
+          <p class="secondaire">Les fichiers sont téléchargés depuis les pages de leurs auteurs, sur votre PC. Raftup ne les redistribue pas.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="section" aria-labelledby="titre-suite">
+      <div class="grille deux">
+        <div class="panneau">
+          <h2 id="titre-suite" class="h3">D'autres jeux arrivent</h2>
+          <p class="secondaire">D'autres jeux PC, sans ROM, sont en préparation. Un jeu n'entre au catalogue qu'après une vraie partie, avec le mod de son auteur, non modifié.</p>
+          <p class="secondaire">Les jeux de consoles Nintendo actuelles ne seront pas ajoutés.</p>
+        </div>
+        <div class="panneau">
+          <h2 class="h3">Proposer un jeu</h2>
+          <p class="secondaire">Les profils vivent dans le dossier <code>profiles/</code> du dépôt, un fichier TOML par jeu. Une proposition passe par une pull request&nbsp;; la CI vérifie le profil (empreintes, domaines autorisés, chemins).</p>
+          <p class="secondaire">Un mod sans licence n'est ajouté qu'avec l'accord écrit de son auteur.</p>
+          <a href="https://github.com/Yonako25/raftup/tree/main/profiles">Voir les profils sur GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="secondaire">Les noms de jeux cités appartiennent à leurs éditeurs. Raftup n'est affilié à aucun d'eux et n'utilise aucun visuel officiel&nbsp;: les jaquettes du launcher sont de simples aplats de couleur.</p>
+    </section>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

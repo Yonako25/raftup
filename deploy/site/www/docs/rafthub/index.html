@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Héberger son propre Rafthub · Raftup</title>
+<meta name="description" content="Installer Rafthub, le service de comptes et d'amis de Raftup, sur son serveur ou son PC : base intégrée, premier admin, HTTPS, Docker.">
+<meta name="theme-color" content="#111316">
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<a class="lien-evitement" href="#principal">Aller au contenu</a>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+    <nav class="nav" aria-label="Navigation principale">
+      <a href="/fonctionnalites/">Fonctionnalités</a>
+      <a href="/jeux/">Jeux</a>
+      <a href="/telechargements/">Téléchargements</a>
+      <a href="/docs/" aria-current="page">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="principal">
+  <div class="contenu doc">
+    <nav class="doc-nav" aria-label="Guides">
+      <h2>Documentation</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/parties/">Créer et rejoindre une partie</a></li>
+        <li><a href="/docs/rafthub/" aria-current="page">Héberger son Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </nav>
+
+    <article class="article">
+      <span class="surtitre">Guide · administrateurs</span>
+      <h1>Héberger son propre Rafthub</h1>
+      <p class="chapo">Rafthub gère les comptes, les amis et la présence des joueurs. Le vôtre tourne sur votre serveur, ou même sur votre PC, pour votre communauté.</p>
+
+      <div class="panneau accent">
+        <p><strong>Version auto-hébergée&nbsp;:</strong> connexion par pseudo ou e-mail, et mot de passe. La connexion avec Discord est réservée au Rafthub officiel. Rafthub est sous licence AGPL-3.0&nbsp;: si vous modifiez son code et l'ouvrez à d'autres, vous devez publier vos changements.</p>
+      </div>
+
+      <h2 id="lancer">1. Télécharger et lancer</h2>
+      <p>Sur la <a href="https://github.com/Yonako25/raftup/releases">page des releases</a>, prenez l'archive de votre système&nbsp;:</p>
+      <ul>
+        <li><code>rafthub-linux-x86_64.tar.gz</code> pour Linux (64 bits)&nbsp;;</li>
+        <li><code>rafthub-windows-x86_64.zip</code> pour Windows.</li>
+      </ul>
+      <p>Décompressez-la dans le dossier où vivra le hub, puis lancez-le&nbsp;:</p>
+      <pre><code>./rafthub</code></pre>
+      <p>Par défaut, le hub écoute sur <code>127.0.0.1:8787</code>. Il range ses données dans un dossier <code>rafthub-data/</code>, créé à côté de l'exécutable&nbsp;: base, réglages et cache.</p>
+
+      <h2 id="installation">2. L'assistant d'installation</h2>
+      <p>Au premier lancement, le hub n'a ni base ni administrateur. Il écrit dans son journal un <strong>code d'installation</strong>&nbsp;:</p>
+      <pre><code>premier lancement : ouvrez /admin dans un navigateur, code d'installation 7K2M…</code></pre>
+      <p>Ouvrez ensuite <code>http://127.0.0.1:8787/admin</code> dans un navigateur, et suivez les deux étapes&nbsp;:</p>
+      <ol>
+        <li><strong>Choisir la base de données</strong>&nbsp;:
+          <ul>
+            <li><strong>base intégrée</strong> (SQLite)&nbsp;: rien à installer, le bon choix pour un groupe d'amis&nbsp;;</li>
+            <li><strong>base externe</strong>&nbsp;: PostgreSQL, MySQL ou MariaDB, avec l'adresse, le nom de la base, l'utilisateur et le mot de passe.</li>
+          </ul>
+          Le hub essaie la connexion avant de garder votre choix.</li>
+        <li><strong>Créer le premier administrateur</strong>&nbsp;: e-mail, pseudo et mot de passe. Le code n'est demandé qu'une fois.</li>
+      </ol>
+      <p>Le code prouve que vous avez accès au serveur&nbsp;: sans lui, personne ne peut prendre la main sur un hub tout juste installé. Il change à chaque redémarrage tant qu'aucun admin n'existe. Installez donc le hub juste après l'avoir lancé.</p>
+      <p>Ensuite, la console <code>/admin</code> vous donne&nbsp;:</p>
+      <ul>
+        <li><strong>Réglages</strong>&nbsp;: nom du hub, inscriptions (ouvertes, sur invitation ou fermées), serveur d'e-mails (SMTP)&nbsp;;</li>
+        <li><strong>Joueurs</strong>&nbsp;: liste, recherche, suspension, codes d'invitation&nbsp;;</li>
+        <li><strong>Distribution du launcher</strong>&nbsp;: un launcher prêt à se connecter à votre hub&nbsp;;</li>
+        <li><strong>Journaux</strong>&nbsp;: les actions des administrateurs.</li>
+      </ul>
+      <p>D'autres admins&nbsp;? Créez leur compte normalement, puis&nbsp;:</p>
+      <pre><code>rafthub admin create joueur@exemple.org</code></pre>
+
+      <h2 id="internet">3. Ouvrir le hub à Internet</h2>
+      <p>Le launcher n'accepte un hub distant qu'en <strong>HTTPS</strong>. Il faut donc un nom de domaine (par exemple <code>hub.exemple.org</code>) qui pointe vers votre serveur, puis l'une de ces trois façons de faire&nbsp;:</p>
+      <div class="tableau">
+        <table>
+          <thead><tr><th>Mode</th><th>Options</th></tr></thead>
+          <tbody>
+            <tr><td>Derrière un proxy (Traefik, Caddy, nginx) qui fait le HTTPS</td><td><code>--listen 127.0.0.1:8787 --public-url https://hub.exemple.org</code></td></tr>
+            <tr><td>HTTPS avec vos fichiers de certificat</td><td><code>--tls-cert fullchain.pem --tls-key privkey.pem</code></td></tr>
+            <tr><td>HTTPS automatique avec Let's Encrypt</td><td><code>--listen 0.0.0.0:443 --tls-acme hub.exemple.org</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li><strong>Let's Encrypt</strong>&nbsp;: le hub obtient et renouvelle son certificat tout seul. Il doit être joignable sur le port 443. Essayez d'abord avec <code>--tls-acme-staging</code> (serveur d'essai), puis retirez l'option. <code>--tls-acme-email</code> donne une adresse de contact à Let's Encrypt.</li>
+        <li><strong>Vos fichiers</strong>&nbsp;: par exemple ceux de certbot. Redémarrez le hub après chaque renouvellement.</li>
+        <li><strong>Console à part</strong>&nbsp;: <code>--admin-listen &lt;adresse:port&gt;</code> sert la console <code>/admin</code> sur une autre adresse, par exemple celle d'un VPN ou du réseau local. Sur l'adresse publique, <code>/admin</code> répond alors 404. Conseillé pour un hub ouvert à tous.</li>
+      </ul>
+      <p>Les secrets passent mieux par l'environnement que par la ligne de commande&nbsp;: <code>RAFTUP_HUB_DB</code>, <code>RAFTUP_HUB_SMTP_URL</code>, <code>RAFTUP_HUB_MAIL_FROM</code>. Le plus simple reste de régler le SMTP dans la console, qui ne réaffiche jamais un secret. <code>rafthub --help</code> liste toutes les options.</p>
+
+      <h2 id="docker">4. Avec Docker et Traefik</h2>
+      <p>Le dossier <a href="https://github.com/Yonako25/raftup/tree/main/deploy/rafthub"><code>deploy/rafthub/</code></a> du dépôt contient un déploiement complet&nbsp;: image du hub, conteneur sans droits en lecture seule, labels Traefik, et un service de <strong>sauvegarde nuitière</strong> de la base intégrée, avec rotation. En bref&nbsp;:</p>
+      <pre><code>git clone https://github.com/Yonako25/raftup.git
+cd raftup/deploy/rafthub
+cp .env.example .env      # domaine, Traefik, adresse privée de la console
+mkdir -p backups &amp;&amp; sudo chown 10001:10001 backups
+docker compose build
+docker compose up -d
+docker logs rafthub 2&gt;&amp;1 | grep "code d'installation"</code></pre>
+      <p>Toutes les étapes, la restauration d'une sauvegarde et les conseils de sécurité sont dans son <a href="https://github.com/Yonako25/raftup/blob/main/deploy/rafthub/README.md">README</a>.</p>
+
+      <h2 id="launcher">5. Relier les launchers à votre hub</h2>
+      <p>Trois façons, au choix&nbsp;:</p>
+      <ul>
+        <li><strong>Un lien</strong>&nbsp;: envoyez <code>raftup://hub/hub.exemple.org</code> à vos joueurs. En l'ouvrant, le launcher leur demande de confirmer le changement de hub.</li>
+        <li><strong>Un launcher préréglé</strong>&nbsp;: la page <strong>Distribution du launcher</strong> de la console prépare un zip avec le launcher officiel signé et un fichier <code>rafthub.toml</code>. Au premier lancement, le launcher adopte votre hub. Vous pouvez proposer ce zip sur la page publique <code>/telecharger</code> de votre hub.</li>
+        <li><strong>À la main</strong>&nbsp;: chaque joueur tape l'adresse <code>https://hub.exemple.org</code> en bas de l'écran «&nbsp;Amis&nbsp;».</li>
+      </ul>
+
+      <h2 id="sauvegarde">6. Sauvegarder</h2>
+      <ul>
+        <li><strong>Base intégrée</strong>&nbsp;: tout est dans <code>rafthub-data/</code>. Copiez <code>rafthub.db</code> hub arrêté, ou utilisez <code>sqlite3 rafthub.db ".backup copie.db"</code> hub en marche.</li>
+        <li><strong>Base externe</strong>&nbsp;: utilisez l'outil du moteur (<code>pg_dump</code>, <code>mysqldump</code>). Gardez aussi <code>rafthub.toml</code>, qui contient l'adresse de la base et son mot de passe&nbsp;: il est secret.</li>
+        <li>Gardez une copie <strong>hors du serveur</strong>&nbsp;: une sauvegarde sur le même disque ne protège pas d'une panne de disque.</li>
+      </ul>
+    </article>
+  </div>
+</main>
+
+<footer class="pied">
+  <div class="pied-contenu">
+    <div>
+      <a class="marque" href="/"><img src="/logo.png" alt="" width="156" height="159">RAFTUP</a>
+      <p>Launcher multiworld libre, compatible avec Archipelago. Projet indépendant&nbsp;: aucun jeu ni ROM fourni.</p>
+    </div>
+    <div>
+      <h2>Raftup</h2>
+      <ul>
+        <li><a href="/fonctionnalites/">Fonctionnalités</a></li>
+        <li><a href="/jeux/">Jeux</a></li>
+        <li><a href="/telechargements/">Téléchargements</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Aide</h2>
+      <ul>
+        <li><a href="/docs/premiers-pas/">Premiers pas</a></li>
+        <li><a href="/docs/rafthub/">Héberger Rafthub</a></li>
+        <li><a href="/docs/faq/">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Projet</h2>
+      <ul>
+        <li><a href="https://github.com/Yonako25/raftup">Code source</a></li>
+        <li><a href="https://github.com/Yonako25/raftup/issues">Signaler un bug</a></li>
+        <li><a href="/mentions/">Mentions et licences</a></li>
+      </ul>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
