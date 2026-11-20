@@ -28,3 +28,7 @@ __pycache__/
 # Registre : copies locales des paquets et index produit (jamais commités, voir registre/README.md)
 /registre/fichiers/
 /registre/sortie/
+
+# Déploiement du Rafthub : secrets locaux et sauvegardes (deploy/rafthub/README.md)
+/deploy/rafthub/.env
+/deploy/rafthub/backups/

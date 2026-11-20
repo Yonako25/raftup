@@ -1,0 +1,16 @@
+# Fichiers laissés hors du contexte de build de deploy/rafthub/Dockerfile.
+# (BuildKit lit ce fichier parce qu'il porte le nom du Dockerfile + .dockerignore.)
+**/target
+.git
+.claude
+.github
+graphify-out
+registre
+profiles
+# Fichier d'épinglage de la toolchain : dans l'image, on garde la version de Rust
+# déjà installée (RUST_VERSION) au lieu d'en télécharger une autre.
+rust-toolchain.toml
+rust-toolchain
+# Jamais de secret local dans une image.
+**/.env
+deploy/rafthub/backups

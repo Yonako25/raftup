@@ -469,3 +469,10 @@ untime2`.
 - **Vérifié** : `cargo test -p hub --test licence`, clippy du hub, `cargo test --workspace --no-fail-fast` (108 binaires ok). Au premier passage, `py-bridge` `ignore_eof_shutdown_et_drop_rapides` (limite de 2 s) a échoué sous charge ; il passe seul et au second passage.
 - **Pas vérifié** : rien de plus ; le test de durée de `py-bridge` reste instable quand la machine est chargée.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
+
+### 2026-11-20 · Rafthub officiel : déploiement Docker préparé (`deploy/rafthub/`)
+- **Fait** : `Dockerfile` (build `--release --features officiel`, Debian 13 slim, uid 10001, volume `/data`, image `backup` avec sqlite3), `docker-compose.yml` (Traefik : `Host(${RAFTHUB_DOMAIN})`, certresolver et réseau en variables, pas de port sur l'hôte, lecture seule, healthcheck), `.env.example`, `backup.sh` (`sqlite3 .backup` + `integrity_check`, gzip, rotation `BACKUP_KEEP_DAYS`), `README.md` pas à pas. Hub : `RAFTUP_HUB_DATA_DIR` (`server_config::resolve_data_dir`), `rafthub healthcheck` (module `health`, sans curl), arrêt propre sur SIGTERM. Tests unitaires ajoutés ; fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Vérifié en local (Docker 29)** : image construite (147 Mo), « healthy » pendant l'assistant, code d'installation au journal, `docker stop` en 1,5 s, sauvegarde à chaud hub en marche (données du `-wal` comprises), boucle nocturne arrêtée par signal.
+- **Pas vérifié** : rien sur le serveur triomyno (interdit) ; Traefik réel et certificat ; restauration ; clippy du bloc `#[cfg(unix)]` (compilé sans avertissement dans l'image seulement).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; volumes `rafthub-p2-test-data`, `rafthub-p2-test-bk` et images `rafthub:officiel-test`, `rafthub-backup:officiel-test` (essais locaux, à supprimer sur accord).
+- **Suite** : choisir le domaine, puis suivre `deploy/rafthub/README.md` sur le serveur.
