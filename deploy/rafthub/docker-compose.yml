@@ -1,0 +1,113 @@
+# Rafthub officiel derrière Traefik.
+#
+# Mode d'emploi pas à pas : README.md (même dossier).
+# Les valeurs viennent du fichier `.env` posé à côté de ce fichier (copie de
+# `.env.example`) : `docker compose` le lit tout seul.
+#
+#   docker compose build      # compile l'image (depuis la racine du dépôt)
+#   docker compose up -d      # démarre le hub et sa sauvegarde
+#   docker compose logs -f rafthub
+
+name: rafthub
+
+services:
+  rafthub:
+    build:
+      # Le contexte est la racine du dépôt : le hub a besoin du workspace entier.
+      context: ../..
+      dockerfile: deploy/rafthub/Dockerfile
+      target: runtime
+    image: rafthub:officiel
+    container_name: rafthub
+    restart: unless-stopped
+    # Le hub écoute sur toutes les interfaces du conteneur ; aucun port publié sur
+    # l'hôte : seul Traefik le joint, par le réseau Docker.
+    command:
+      - --listen
+      - 0.0.0.0:8787
+      - --public-url
+      - https://${RAFTHUB_DOMAIN:?RAFTHUB_DOMAIN manquant dans .env}
+    environment:
+      RAFTUP_HUB_DATA_DIR: /data
+      RUST_LOG: ${RAFTHUB_LOG:-info}
+      TZ: ${TZ:-Europe/Paris}
+      # Base externe (facultatif). Vide = la base choisie dans l'assistant de
+      # premier lancement (intégrée ou externe), gardée dans /data/rafthub.toml.
+      RAFTUP_HUB_DB: ${RAFTUP_HUB_DB:-}
+      # Ces réglages se changent aussi dans la console (/admin → Réglages) ; la
+      # valeur en base passe avant celle-ci. Vides = non réglés.
+      RAFTUP_HUB_NAME: ${RAFTUP_HUB_NAME:-}
+      RAFTUP_HUB_REGISTRATION: ${RAFTUP_HUB_REGISTRATION:-}
+      RAFTUP_HUB_PUBLIC_DOWNLOAD: ${RAFTUP_HUB_PUBLIC_DOWNLOAD:-}
+      RAFTUP_HUB_SMTP_URL: ${RAFTUP_HUB_SMTP_URL:-}
+      RAFTUP_HUB_MAIL_FROM: ${RAFTUP_HUB_MAIL_FROM:-}
+      RAFTUP_HUB_DISCORD_CLIENT_ID: ${RAFTUP_HUB_DISCORD_CLIENT_ID:-}
+      RAFTUP_HUB_DISCORD_CLIENT_SECRET: ${RAFTUP_HUB_DISCORD_CLIENT_SECRET:-}
+    volumes:
+      - rafthub-data:/data
+    # Durcissement : système de fichiers en lecture seule (le hub n'écrit que dans
+    # /data), aucun privilège Linux, pas d'élévation possible.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/rafthub", "healthcheck", "--listen", "127.0.0.1:8787"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    networks:
+      - traefik
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK manquant dans .env}
+      traefik.http.routers.rafthub.rule: Host(`${RAFTHUB_DOMAIN}`)
+      traefik.http.routers.rafthub.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.rafthub.tls: "true"
+      traefik.http.routers.rafthub.tls.certresolver: ${TRAEFIK_CERTRESOLVER:?TRAEFIK_CERTRESOLVER manquant dans .env}
+      traefik.http.services.rafthub.loadbalancer.server.port: "8787"
+
+  # Sauvegarde nuitière de la base intégrée (SQLite), voir backup.sh.
+  backup:
+    build:
+      context: ../..
+      dockerfile: deploy/rafthub/Dockerfile
+      target: backup
+    image: rafthub-backup:officiel
+    container_name: rafthub-backup
+    restart: unless-stopped
+    environment:
+      RAFTUP_HUB_DATA_DIR: /data
+      BACKUP_DIR: /backups
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      TZ: ${TZ:-Europe/Paris}
+    volumes:
+      # En écriture : SQLite a besoin du fichier -shm pour lire une base en WAL.
+      - rafthub-data:/data
+      # Dossier de l'hôte, à créer avant et à donner à l'uid 10001 (README).
+      - ${RAFTHUB_BACKUP_DIR:-./backups}:/backups
+    # Pas besoin de réseau pour copier un fichier.
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  # Volume nommé : rafthub.toml, rafthub.db (base intégrée) et cache/.
+  rafthub-data:
+    name: rafthub-data
+
+networks:
+  # Réseau déjà créé par la pile Traefik du serveur.
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}

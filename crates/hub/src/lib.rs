@@ -13,6 +13,7 @@ pub mod console;
 pub mod discord;
 pub mod distribution;
 pub mod error;
+pub mod health;
 pub mod identity;
 pub mod mail;
 pub mod memory;

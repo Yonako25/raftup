@@ -220,10 +220,54 @@ impl ExternalDb {
     }
 }
 
+/// Variable d'environnement qui choisit le dossier de données à la place de
+/// `rafthub-data/` à côté de l'exe. Sert surtout dans un conteneur Docker, où le
+/// dossier doit être sur un volume (`/data`) et non à côté du binaire.
+pub const DATA_DIR_ENV: &str = "RAFTUP_HUB_DATA_DIR";
+
+/// Nom du dossier de données par défaut, à côté de l'exe.
+pub const DEFAULT_DATA_DIR_NAME: &str = "rafthub-data";
+
+/// Dossier de données : la valeur de [`DATA_DIR_ENV`] si elle est donnée (et non
+/// vide), sinon `rafthub-data/` dans le dossier de l'exe. Fonction pure, sans lecture
+/// de l'environnement ni création de dossier, pour pouvoir la tester.
+/// `None` seulement si l'exe n'a pas de dossier parent (cas théorique).
+pub fn resolve_data_dir(from_env: Option<&str>, exe: &Path) -> Option<PathBuf> {
+    match from_env.map(str::trim).filter(|dir| !dir.is_empty()) {
+        Some(dir) => Some(PathBuf::from(dir)),
+        None => exe
+            .parent()
+            .map(|parent| parent.join(DEFAULT_DATA_DIR_NAME)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
+
+    #[test]
+    fn dossier_de_donnees_a_cote_de_l_exe_par_defaut() {
+        let exe = Path::new("/opt/rafthub/rafthub");
+        assert_eq!(
+            resolve_data_dir(None, exe),
+            Some(PathBuf::from("/opt/rafthub/rafthub-data"))
+        );
+        // Une variable vide (ou faite d'espaces) compte comme absente.
+        assert_eq!(
+            resolve_data_dir(Some("  "), exe),
+            Some(PathBuf::from("/opt/rafthub/rafthub-data"))
+        );
+    }
+
+    #[test]
+    fn dossier_de_donnees_choisi_par_la_variable() {
+        let exe = Path::new("/usr/local/bin/rafthub");
+        assert_eq!(
+            resolve_data_dir(Some("/data"), exe),
+            Some(PathBuf::from("/data"))
+        );
+    }
 
     fn info(password: &str) -> ExternalDb {
         ExternalDb {

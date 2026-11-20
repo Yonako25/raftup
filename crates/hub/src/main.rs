@@ -5,10 +5,12 @@
 //!         [--public-url https://hub.exemple.org]
 //! rafthub admin create <e-mail> [--db …]   donne le rôle d'admin à un compte existant
 //! rafthub admin remove <e-mail> [--db …]   le lui retire (et ferme ses sessions d'admin)
+//! rafthub healthcheck [--listen …]         vérifie qu'un hub répond (sonde Docker)
 //! ```
 //!
 //! **Premier lancement** : sans `--db` ni `RAFTUP_HUB_DB`, le hub lit son choix dans
-//! `rafthub-data/rafthub.toml` (dossier à côté de l'exe). S'il n'existe pas, `/admin`
+//! `rafthub-data/rafthub.toml` (dossier à côté de l'exe, ou celui de
+//! `RAFTUP_HUB_DATA_DIR`). S'il n'existe pas, `/admin`
 //! ouvre un assistant : base intégrée (SQLite, `rafthub-data/rafthub.db`, rien à
 //! installer) ou base externe (PostgreSQL) avec ses informations de connexion. Le
 //! choix est essayé, puis gardé dans `rafthub.toml` (ADR 0037).
@@ -31,6 +33,7 @@
 //! | Variable | Rôle |
 //! | --- | --- |
 //! | `RAFTUP_HUB_DB` | URL de la base (remplace `--db`) |
+//! | `RAFTUP_HUB_DATA_DIR` | dossier de données (défaut : `rafthub-data/` à côté de l'exe) |
 //! | `RAFTUP_HUB_SMTP_URL` | serveur d'envoi : `smtps://utilisateur:motdepasse@hote:465` |
 //! | `RAFTUP_HUB_MAIL_FROM` | expéditeur : `Raftup <no-reply@exemple.org>` |
 //! | `RAFTUP_HUB_DISCORD_CLIENT_ID` | application Discord (portail développeur) |
@@ -49,7 +52,8 @@
 //! L'adresse de retour à déclarer chez Discord est `<public-url>/v1/oauth/discord/callback`.
 //!
 //! Le hub parle HTTP en clair : en production, il se place derrière un proxy
-//! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
+//! qui fait le TLS (ADR 0033). Déploiement Docker derrière Traefik : `deploy/rafthub/`.
+//! Le hub s'arrête proprement sur Ctrl+C et, sous Linux, sur SIGTERM (`docker stop`).
 
 use anyhow::{bail, Context};
 use hub::server_config::ServerConfig;
@@ -64,6 +68,8 @@ struct Args {
     public_url: Option<String>,
     /// Commande d'admin (`admin create|remove <e-mail>`) au lieu de lancer le serveur.
     admin: Option<(Role, String)>,
+    /// `rafthub healthcheck` : sonde un hub déjà lancé au lieu d'en lancer un.
+    healthcheck: bool,
 }
 
 /// Variable d'environnement non vide.
@@ -71,14 +77,14 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
-/// Dossier `rafthub-data/` à côté de l'exe, créé s'il manque. On part de l'exe
-/// et non du dossier courant : le hub retrouve sa base d'où qu'on le lance.
+/// Dossier de données, créé s'il manque : `RAFTUP_HUB_DATA_DIR` s'il est donné
+/// (conteneur Docker : un volume), sinon `rafthub-data/` à côté de l'exe. On part de
+/// l'exe et non du dossier courant : le hub retrouve sa base d'où qu'on le lance.
 fn data_dir() -> anyhow::Result<std::path::PathBuf> {
     let exe = std::env::current_exe().context("chemin de l'exe")?;
-    let dir = exe
-        .parent()
-        .context("dossier de l'exe")?
-        .join("rafthub-data");
+    let from_env = env(hub::server_config::DATA_DIR_ENV);
+    let dir = hub::server_config::resolve_data_dir(from_env.as_deref(), &exe)
+        .context("dossier de l'exe")?;
     std::fs::create_dir_all(&dir)
         .with_context(|| format!("création du dossier {}", dir.display()))?;
     Ok(dir)
@@ -90,6 +96,7 @@ fn parse_args() -> anyhow::Result<Args> {
         listen: "127.0.0.1:8787".to_string(),
         public_url: None,
         admin: None,
+        healthcheck: false,
     };
     // Mots qui ne sont pas des options (`admin`, `create`, l'adresse…).
     let mut words = Vec::new();
@@ -106,6 +113,7 @@ fn parse_args() -> anyhow::Result<Args> {
                 println!("  sans --db : base choisie au premier lancement, dans /admin");
                 println!("rafthub admin create <e-mail>   donne le rôle d'admin à un compte");
                 println!("rafthub admin remove <e-mail>   le lui retire");
+                println!("rafthub healthcheck [--listen …] vérifie qu'un hub répond");
                 println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
                 println!("  --public-url : adresse publique du hub, pour les liens des e-mails");
                 println!(
@@ -128,7 +136,10 @@ fn parse_args() -> anyhow::Result<Args> {
         [] => {}
         ["admin", "create", email] => args.admin = Some((Role::Admin, email.to_string())),
         ["admin", "remove", email] => args.admin = Some((Role::Player, email.to_string())),
-        _ => bail!("commande inconnue : attendu `rafthub admin create|remove <e-mail>`"),
+        ["healthcheck"] => args.healthcheck = true,
+        _ => bail!(
+            "commande inconnue : attendu `rafthub admin create|remove <e-mail>` ou `rafthub healthcheck`"
+        ),
     }
     Ok(args)
 }
@@ -173,7 +184,7 @@ async fn run_install_wizard(
                         *slot.lock().await = Some(url);
                     }
                 }
-                _ = tokio::signal::ctrl_c() => {}
+                _ = shutdown_signal() => {}
             }
         })
         .await
@@ -186,6 +197,12 @@ async fn run_install_wizard(
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let args = parse_args()?;
+
+    // Sonde de santé : pas de base, pas de serveur ; code de sortie 0 ou 1.
+    if args.healthcheck {
+        hub::health::check(&args.listen, std::time::Duration::from_secs(5))?;
+        return Ok(());
+    }
 
     // Code d'installation, tiré seulement s'il sert (assistant ou premier admin).
     let mut setup_code: Option<String> = None;
@@ -284,12 +301,38 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(adresse = %args.listen, "rafthub démarré (console : /admin)");
 
     axum::serve(listener, hub::router(state))
-        .with_graceful_shutdown(async {
-            // Ctrl+C arrête le serveur proprement ; une erreur ici l'arrête aussi.
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
+}
+
+/// Attend une demande d'arrêt : Ctrl+C partout, et SIGTERM sous Linux (c'est ce
+/// qu'envoie `docker stop`). Sans SIGTERM, le hub, process n° 1 du conteneur,
+/// ignorerait le signal et Docker finirait par le tuer au bout de 10 s.
+async fn shutdown_signal() {
+    // `#[cfg(unix)]` : ce bloc n'est compilé que sous Linux / macOS.
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            // Impossible d'écouter SIGTERM : Ctrl+C seulement.
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        // Une erreur ici arrête aussi le serveur.
+        let _ = tokio::signal::ctrl_c().await;
+    }
+    tracing::info!("arrêt demandé");
 }
 
 /// `rafthub admin create|remove <e-mail>` : change le rôle d'un compte existant.
