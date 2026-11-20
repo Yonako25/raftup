@@ -506,3 +506,10 @@ untime2`.
 - **Pas vérifié** : vraie application Discord ; écran regardé à l'œil (pas de capture).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : liaison de Discord à un compte existant depuis le launcher ; capture de l'écran Discord.
+
+### 2026-11-20 · Fusion des sept sessions du plan dans `main`
+- **Fait** : fusion de `p4-agpl`, `p2-deploiement`, `p1-correctifs`, `p1-release`, `p1-https`, `p1-pseudo`, `p3-discord`. Conflits réglés à la main : `hub/src/main.rs` (HTTPS intégré + arrêt sur SIGTERM, `shutdown_signal()` partagé par l'assistant et le hub ; sonde `healthcheck` placée avant la lecture du TLS), `hub/src/lib.rs` (`setup_pass` et `https`), écran « Amis » (changement de pseudo + Discord), `Cargo.lock`, `hub/Cargo.toml`, journal et état.
+- **Vérifié** : `cargo clippy --workspace --all-targets -D warnings`, clippy du hub avec `--features officiel`, `cargo test --workspace --no-fail-fast` (113 binaires ok).
+- **Pas vérifié** : écrans regardés à l'œil (pseudo, Discord) ; workflow de release jamais lancé ; Let's Encrypt, vrai SMTP, vraie application Discord ; rien poussé.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*`, volumes et images `rafthub-p2-test-*` / `*:officiel-test` (à supprimer sur accord).
+- **Suite** : pousser ; choisir le domaine du Rafthub officiel puis suivre `deploy/rafthub/README.md` ; poser un tag `v*` pour essayer la release.
