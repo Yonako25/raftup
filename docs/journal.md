@@ -457,3 +457,9 @@ untime2`.
 - **Pas vérifié** : inscription avec code depuis le launcher contre un vrai Rafthub en mode `invite`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
 - **Suite** : connexion Discord dans le launcher ; déploiement.
+
+### 2026-11-20 · Rafthub officiel et auto-hébergé, connexion par pseudo (ADR 0038)
+- **Fait** : option de compilation `officiel` (`HubConfig::discord_allowed`) : sans elle, Discord répond `discord_disabled` même réglé, et la console ne montre ni ne règle Discord (tableau de bord, Réglages, formulaire forgé refusé). Connexion API et console par e-mail **ou** pseudo (`LoginName`, `Store::password_identity_by_username`, limiteur par compte visé) ; launcher : « E-mail ou pseudo » à la connexion. Tests : `hub_auto_heberge_sans_discord`, `console_sans_discord_hors_version_officielle`, `connexion_par_pseudo`, `connexion_console_par_pseudo`. fmt, clippy (avec et sans `officiel`), `cargo test --workspace` et `cargo test -p hub --features officiel` passent.
+- **Pas vérifié** : écran du launcher regardé (capture) ; console sans Discord ouverte dans le navigateur.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
+- **Suite** : construire les deux binaires aux releases ; déploiement du Rafthub officiel.

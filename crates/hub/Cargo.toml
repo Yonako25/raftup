@@ -18,6 +18,12 @@ name = "rafthub"
 path = "src/main.rs"
 
 # Licences des dépendances vérifiées le 19 novembre 2026 : voir docs/adr/0033-hub-http-stockage-sessions.md.
+[features]
+# Version officielle de Rafthub (serveur du projet) : la connexion Discord peut y
+# être activée. Sans cette option (Rafthub auto-hébergé, binaires des releases),
+# Discord n'est ni affiché ni activable : pseudo ou e-mail et mot de passe (ADR 0038).
+officiel = []
+
 [dependencies]
 # Serveur HTTP (MIT), sur tokio comme le reste de Raftup.
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"] }

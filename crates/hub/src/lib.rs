@@ -71,6 +71,10 @@ pub struct HubConfig {
     pub admin_session_lifetime: Duration,
     /// Distribution du launcher : cache de l'exe officiel et d'où il vient (ADR 0036).
     pub distribution: distribution::DistributionConfig,
+    /// Connexion Discord permise : vrai seulement dans la version officielle
+    /// (option de compilation `officiel`, ADR 0038). Faux : Discord reste éteint,
+    /// même avec des réglages, et la console ne le propose pas.
+    pub discord_allowed: bool,
     /// Code d'installation à usage unique, tant qu'aucun admin n'existe : il ouvre
     /// la page `/admin/installation` qui crée le premier admin (ADR 0037). `None` :
     /// page fermée.
@@ -97,6 +101,8 @@ impl Default for HubConfig {
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
             setup_code: None,
+            // `cfg!` vaut `true` si le binaire est compilé avec `--features officiel`.
+            discord_allowed: cfg!(feature = "officiel"),
         }
     }
 }
@@ -106,6 +112,8 @@ impl HubConfig {
     pub fn for_tests() -> Self {
         HubConfig {
             hash_params: HashParams::fast_for_tests(),
+            // Les tests couvrent aussi la connexion Discord.
+            discord_allowed: true,
             ..HubConfig::default()
         }
     }
@@ -257,8 +265,12 @@ impl AppState {
         }
     }
 
-    /// Client Discord à utiliser maintenant (`None` : Discord non réglé).
+    /// Client Discord à utiliser maintenant (`None` : Discord non réglé, ou hub
+    /// auto-hébergé où Discord n'est pas permis).
     pub(crate) async fn discord(&self) -> Result<Option<Arc<dyn DiscordApi>>, HubError> {
+        if !self.discord_allowed() {
+            return Ok(None);
+        }
         match &self.inner.services {
             Services::Fixed { discord, .. } => Ok(discord.clone()),
             Services::FromSettings => Ok(self
@@ -267,6 +279,11 @@ impl AppState {
                 .discord_config()
                 .map(|config| Arc::new(HttpDiscord::new(config)) as Arc<dyn DiscordApi>)),
         }
+    }
+
+    /// Vrai si ce hub peut proposer la connexion Discord (version officielle).
+    pub fn discord_allowed(&self) -> bool {
+        self.inner.config.discord_allowed
     }
 
     /// Envoie un e-mail sans attendre : l'envoi part sur un thread à part et la

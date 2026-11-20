@@ -68,6 +68,40 @@ pub fn parse_username(raw: &str) -> Result<Username, HubError> {
     })
 }
 
+/// Ce qui a été tapé dans le champ « e-mail ou pseudo » de la connexion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoginName {
+    /// Adresse e-mail normalisée.
+    Email(String),
+    /// Pseudo normalisé (forme rangée en base).
+    Username(String),
+}
+
+impl LoginName {
+    /// Une saisie avec `@` est une adresse ; sinon c'est un pseudo (un pseudo ne
+    /// peut pas contenir `@`). `None` : saisie vide ou adresse invalide.
+    pub fn parse(raw: &str) -> Option<LoginName> {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        if raw.contains('@') {
+            normalize_email(raw).ok().map(LoginName::Email)
+        } else {
+            Some(LoginName::Username(normalize_username(raw)))
+        }
+    }
+
+    /// Clé du limiteur d'essais ratés : une par compte visé, avec un préfixe pour
+    /// qu'une adresse et un pseudo ne se mélangent jamais.
+    pub fn limiter_key(&self) -> String {
+        match self {
+            LoginName::Email(email) => format!("e:{email}"),
+            LoginName::Username(name) => format!("u:{name}"),
+        }
+    }
+}
+
 /// Valide une adresse e-mail et renvoie sa forme normalisée (espaces retirés, minuscules).
 ///
 /// Vérification volontairement simple : la vraie preuve sera le lien de vérification
@@ -98,6 +132,25 @@ pub fn normalize_email(raw: &str) -> Result<String, HubError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saisie_de_connexion_email_ou_pseudo() {
+        assert_eq!(
+            LoginName::parse(" Moi@Exemple.org "),
+            Some(LoginName::Email("moi@exemple.org".to_string()))
+        );
+        assert_eq!(
+            LoginName::parse("Pseudo.Test"),
+            Some(LoginName::Username("pseudo.test".to_string()))
+        );
+        assert_eq!(LoginName::parse("   "), None);
+        assert_eq!(LoginName::parse("@"), None);
+        // Une adresse et un pseudo n'ont jamais la même clé de limiteur.
+        assert_ne!(
+            LoginName::Email("a".into()).limiter_key(),
+            LoginName::Username("a".into()).limiter_key()
+        );
+    }
 
     #[test]
     fn casse_et_pleine_chasse_donnent_la_meme_forme() {

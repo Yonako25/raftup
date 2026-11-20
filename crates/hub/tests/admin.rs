@@ -302,7 +302,8 @@ async fn compte_joueur_ou_mauvais_mot_de_passe_refuses() {
         assert!(page.set_cookie("rafthub_admin").is_none(), "{email}");
         // Même message dans tous les cas.
         assert!(
-            page.body.contains("E-mail ou mot de passe incorrect"),
+            page.body
+                .contains("E-mail, pseudo ou mot de passe incorrect"),
             "{email}"
         );
     }
@@ -614,4 +615,54 @@ async fn installation_refuse_deux_mots_de_passe_differents() {
     assert!(page.body.contains("chef@exemple.org"));
     assert!(!page.body.contains(&format!("value=\"{PASSWORD}\"")));
     assert!(!store.has_admin().await.unwrap());
+}
+
+/// Rafthub auto-hébergé : la console ne montre ni ne règle Discord (ADR 0038).
+#[tokio::test]
+async fn console_sans_discord_hors_version_officielle() {
+    let (app, store) = hub_with(HubConfig {
+        discord_allowed: false,
+        ..HubConfig::for_tests()
+    })
+    .await;
+    make_admin(&app, &store, "chef@exemple.org", "Chef").await;
+    let cookie = login_cookie(&app, "chef@exemple.org").await;
+
+    let dashboard = get(&app, "/admin", Some(&cookie)).await;
+    assert_eq!(dashboard.status, StatusCode::OK);
+    assert!(!dashboard.body.contains("Discord"), "{}", dashboard.body);
+
+    let settings = get(&app, "/admin/reglages", Some(&cookie)).await;
+    assert_eq!(settings.status, StatusCode::OK);
+    assert!(!settings.body.contains("Discord"), "{}", settings.body);
+
+    // Un formulaire Discord forgé est refusé, rien n'est écrit.
+    let csrf = settings.csrf_field();
+    let reply = post_form(
+        &app,
+        "/admin/reglages",
+        Some(&cookie),
+        &[
+            ("csrf", &csrf),
+            ("group", "discord"),
+            ("discord_client_id", "123456789012345678"),
+        ],
+    )
+    .await;
+    assert_ne!(reply.location(), "/admin/reglages?notice=saved");
+    assert!(!store
+        .all_settings()
+        .await
+        .unwrap()
+        .contains_key("discord_client_id"));
+}
+
+/// La console accepte aussi le pseudo à la connexion (ADR 0038).
+#[tokio::test]
+async fn connexion_console_par_pseudo() {
+    let (app, store) = hub().await;
+    make_admin(&app, &store, "chef@exemple.org", "Chef").await;
+    let page = try_login(&app, "chef", PASSWORD).await;
+    assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
+    assert_eq!(page.location(), "/admin");
 }

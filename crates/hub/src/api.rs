@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 use crate::console::EventKind;
 use crate::discord::{code_challenge, Outcome, Pending, ReturnTo};
 use crate::error::HubError;
-use crate::identity::{normalize_email, normalize_username, parse_username};
+use crate::identity::{normalize_email, normalize_username, parse_username, LoginName};
 use crate::mail::{password_reset_email, verification_email};
 use crate::memory::{PresenceView, Status};
 use crate::password::{hash_password, verify_password, Password};
@@ -128,6 +128,9 @@ pub struct RegisterBody {
 
 #[derive(Debug, Deserialize)]
 pub struct LoginBody {
+    /// Adresse e-mail **ou** pseudo (ADR 0038). Le nom `email` reste pour les
+    /// launchers déjà diffusés ; `login` est accepté aussi.
+    #[serde(alias = "login")]
     pub email: String,
     pub password: Password,
 }
@@ -451,14 +454,15 @@ async fn login(
     State(state): State<AppState>,
     ApiJson(body): ApiJson<LoginBody>,
 ) -> Result<Json<SessionView>, HubError> {
-    // Adresse mal formée : même réponse qu'un mauvais mot de passe.
-    let email = normalize_email(&body.email).map_err(|_| HubError::InvalidCredentials)?;
+    // Saisie vide ou adresse mal formée : même réponse qu'un mauvais mot de passe.
+    let name = LoginName::parse(&body.email).ok_or(HubError::InvalidCredentials)?;
+    let key = name.limiter_key();
     let limiter = &state.inner.login_limiter;
-    if limiter.is_blocked(&email) {
+    if limiter.is_blocked(&key) {
         return Err(HubError::TooManyAttempts);
     }
 
-    let identity = state.store().email_identity(&email).await?;
+    let identity = password_identity(&state, &name).await?;
     // Adresse inconnue : on vérifie quand même contre un hash bidon, pour que la
     // réponse prenne le même temps.
     let (user_id, phc) = match identity {
@@ -471,14 +475,28 @@ async fn login(
     let user_id = match (user_id, matches) {
         (Some(user_id), true) => user_id,
         _ => {
-            limiter.hit(&email);
+            limiter.hit(&key);
             tracing::info!("échec de connexion");
             return Err(HubError::InvalidCredentials);
         }
     };
-    limiter.reset(&email);
+    limiter.reset(&key);
 
     Ok(Json(open_session(&state, user_id).await?))
+}
+
+/// Compte et empreinte du mot de passe visés par une saisie « e-mail ou pseudo ».
+/// Sert à l'API et à la connexion de la console.
+pub(crate) async fn password_identity(
+    state: &AppState,
+    name: &LoginName,
+) -> Result<Option<(i64, String)>, HubError> {
+    match name {
+        LoginName::Email(email) => state.store().email_identity(email).await,
+        LoginName::Username(username) => {
+            state.store().password_identity_by_username(username).await
+        }
+    }
 }
 
 /// Vérifie qu'une inscription est permise par le mode d'inscription du hub, et

@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **20 novembre 2026** (Rafthub : assistant de premier lancement, choix de la base puis premier admin, ADR 0037).
+Mis à jour le **20 novembre 2026** (Rafthub : Discord réservé à la version officielle, connexion par pseudo ou e-mail, ADR 0038).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -153,6 +153,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0033** : `raftup-hub` : axum, sqlx `Any` (SQLite et PostgreSQL), jetons de session opaques hachés et révocables, blocages, RGPD, e-mails (`lettre`), Discord OAuth 2.0 + PKCE (accepté en autonomie, ajouts à relire)
 - **0032** : registre de paquets signés : index JSON versionné (URL + sha256), une signature minisign pour l'index, clé distincte des mises à jour, catalogue embarqué prioritaire (accepté en autonomie, à relire)
 - **0037** : Rafthub : assistant de premier lancement (base intégrée SQLite ou externe PostgreSQL / MySQL / MariaDB, gardée dans `rafthub-data/rafthub.toml`, puis premier admin), protégé par un code d'installation écrit au journal (accepté en autonomie, à relire)
+- **0038** : Rafthub officiel (option `officiel`, connexion Discord possible) et auto-hébergé (pseudo ou e-mail et mot de passe seulement) ; connexion par pseudo ou e-mail partout (accepté le 20 novembre 2026, mise en œuvre à relire)
 - **0034** : bac à sable du générateur : sous Windows, worker en intégrité basse (copie de `python.exe` étiquetée par `icacls`), écriture seulement dans le dossier de la génération ; rien hors Windows (à relire par l'utilisatrice)
 - **0029** : moteur « export » : règles d'objet en listes calculées par Archipelago (contrôle croisé), objets à placer tôt en sphère 0, `accessibility` (accepté en autonomie, à relire)
 - **0030** : durée estimée par joueur (temps par lieu dans le profil, sphères de la seed) et équilibrage par temps de jeu (`fill::time_balance`, sur option, décochée par défaut) ; accepté en autonomie, à relire

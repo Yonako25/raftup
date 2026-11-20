@@ -440,3 +440,27 @@ async fn base_fichier_rouverte_garde_les_comptes() {
     let (status, _) = login(&app, "hugo@example.org", "mot de passe solide").await;
     assert_eq!(status, StatusCode::OK);
 }
+
+/// Connexion avec le pseudo au lieu de l'e-mail, quelle que soit la casse (ADR 0038).
+#[tokio::test]
+async fn connexion_par_pseudo() {
+    let app = app().await;
+    let (status, _) = register(
+        &app,
+        "pseudo@example.org",
+        "Pseudo.Test",
+        "mot de passe solide",
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = login(&app, "pseudo.test", "mot de passe solide").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["token"].as_str().is_some());
+    // Mauvais mot de passe ou pseudo inconnu : même réponse que pour une adresse.
+    let (status, body) = login(&app, "Pseudo.Test", "pas le bon mot de passe").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&body), "invalid_credentials");
+    let (status, body) = login(&app, "inconnu", "mot de passe solide").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(error_code(&body), "invalid_credentials");
+}

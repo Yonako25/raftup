@@ -1,6 +1,6 @@
 //! Connexion et déconnexion de la console d'admin (ADR 0036).
 //!
-//! E-mail + mot de passe seulement (pas de Discord), mêmes hachages argon2 que
+//! E-mail ou pseudo + mot de passe seulement (pas de Discord, ADR 0038), mêmes hachages argon2 que
 //! l'API. Seul un compte au rôle `admin` entre ; pour tous les autres cas (adresse
 //! inconnue, mauvais mot de passe, compte joueur), la page dit la même chose, pour
 //! ne pas révéler quelles adresses existent ni lesquelles sont admin.
@@ -17,7 +17,7 @@ use super::{
     LOGIN_CSRF_COOKIE, SESSION_COOKIE,
 };
 use crate::error::HubError;
-use crate::identity::normalize_email;
+use crate::identity::LoginName;
 use crate::password::{verify_password, Password};
 use crate::session::{new_token, token_hash};
 use crate::{blocking, now_unix, AppState};
@@ -108,34 +108,37 @@ pub async fn submit(
         return csrf_refused();
     }
 
-    const BAD_LOGIN: &str = "E-mail ou mot de passe incorrect, ou compte sans accès à la console.";
+    const BAD_LOGIN: &str =
+        "E-mail, pseudo ou mot de passe incorrect, ou compte sans accès à la console.";
     let typed = body.email.trim().to_string();
-    let Ok(email) = normalize_email(&body.email) else {
+    // E-mail ou pseudo (ADR 0038).
+    let Some(name) = LoginName::parse(&body.email) else {
         return login_page(&state, StatusCode::UNAUTHORIZED, typed, Some(BAD_LOGIN));
     };
+    let key = name.limiter_key();
 
-    // 2. Trop d'échecs récents pour cette adresse : on ne vérifie même pas.
+    // 2. Trop d'échecs récents pour ce compte : on ne vérifie même pas.
     let limiter = &state.inner.admin_login_limiter;
-    if limiter.is_blocked(&email) {
+    if limiter.is_blocked(&key) {
         return login_page(
             &state,
             StatusCode::TOO_MANY_REQUESTS,
             typed,
-            Some("Trop d'essais ratés pour cette adresse. Réessayez dans un quart d'heure."),
+            Some("Trop d'essais ratés pour ce compte. Réessayez dans un quart d'heure."),
         );
     }
 
     // 3. Vérification du mot de passe, puis du rôle.
-    match check_admin(&state, &email, body.password).await {
+    match check_admin(&state, &name, body.password).await {
         Ok(Some(user_id)) => {
-            limiter.reset(&email);
+            limiter.reset(&key);
             match open_admin_session(&state, user_id).await {
                 Ok(response) => response,
                 Err(error) => internal_error(error),
             }
         }
         Ok(None) => {
-            limiter.hit(&email);
+            limiter.hit(&key);
             tracing::info!("échec de connexion à la console d'admin");
             login_page(&state, StatusCode::UNAUTHORIZED, typed, Some(BAD_LOGIN))
         }
@@ -146,10 +149,10 @@ pub async fn submit(
 /// Le compte admin qui correspond à ces identifiants, ou `None`.
 async fn check_admin(
     state: &AppState,
-    email: &str,
+    name: &LoginName,
     password: Password,
 ) -> Result<Option<i64>, HubError> {
-    let identity = state.store().email_identity(email).await?;
+    let identity = crate::api::password_identity(state, name).await?;
     // Adresse inconnue : on vérifie quand même contre un hash bidon, pour que la
     // réponse prenne le même temps (comme l'API).
     let (user_id, phc) = match identity {

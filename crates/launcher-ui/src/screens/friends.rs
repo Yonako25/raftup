@@ -806,10 +806,20 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
             .num_columns(2)
             .spacing([12.0, 8.0])
             .show(ui, |ui| {
-                ui.label("E-mail");
+                // À la connexion, le hub accepte l'e-mail ou le pseudo (ADR 0038) ;
+                // à l'inscription, il faut l'adresse.
+                if state.mode == Mode::Register {
+                    ui.label("E-mail");
+                } else {
+                    ui.label("E-mail ou pseudo");
+                }
                 ui.add(
                     egui::TextEdit::singleline(&mut state.email)
-                        .hint_text("vous@exemple.org")
+                        .hint_text(if state.mode == Mode::Register {
+                            "vous@exemple.org"
+                        } else {
+                            "vous@exemple.org ou votre pseudo"
+                        })
                         .desired_width(280.0),
                 );
                 ui.end_row();

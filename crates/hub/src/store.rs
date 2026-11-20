@@ -626,6 +626,26 @@ impl Store {
     }
 
     /// Compte et hash du mot de passe liés à une adresse e-mail normalisée.
+    /// Identité « e-mail » (compte, empreinte du mot de passe) d'un compte trouvé
+    /// par son pseudo normalisé : permet de se connecter avec le pseudo (ADR 0038).
+    pub async fn password_identity_by_username(
+        &self,
+        username_norm: &str,
+    ) -> Result<Option<(i64, String)>, HubError> {
+        let row = self
+            .q("SELECT i.user_id, i.secret_hash FROM user_identities i \
+                JOIN users u ON u.id = i.user_id \
+                WHERE u.username_norm = $1 AND i.provider = $2")
+            .bind(username_norm)
+            .bind(EMAIL_PROVIDER)
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(row) => Ok(Some((row.try_get("user_id")?, row.try_get("secret_hash")?))),
+            None => Ok(None),
+        }
+    }
+
     pub async fn email_identity(
         &self,
         email_norm: &str,

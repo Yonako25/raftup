@@ -484,3 +484,33 @@ async fn inscription_discord_selon_le_mode() {
     let (_, body) = finish(&app, &started, &ticket).await;
     assert!(body.get("invite_required").is_none());
 }
+
+/// Rafthub auto-hébergé (sans l'option `officiel`) : Discord reste éteint, même
+/// avec un client Discord prêt (ADR 0038).
+#[tokio::test]
+async fn hub_auto_heberge_sans_discord() {
+    let store = test_store().await;
+    let fake = Arc::new(FakeDiscord::new());
+    let state = AppState::with_services(
+        store,
+        HubConfig {
+            discord_allowed: false,
+            ..HubConfig::for_tests()
+        },
+        Arc::new(DisabledMailer),
+        Some(fake),
+    )
+    .await
+    .unwrap();
+    let app = hub::router(state);
+    let (status, body) = call(
+        &app,
+        Method::POST,
+        "/v1/oauth/discord/start",
+        None,
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(error_code(&body), "discord_disabled");
+}

@@ -93,10 +93,12 @@ const GROUPS: [(&str, &[SettingKey]); 5] = [
     ("download", &[SettingKey::PublicDownload]),
 ];
 
-/// Les réglages d'un groupe, ou `None` si le groupe n'existe pas.
-fn group_keys(id: &str) -> Option<&'static [SettingKey]> {
+/// Les réglages d'un groupe, ou `None` si le groupe n'existe pas. Le groupe
+/// « discord » n'existe que dans la version officielle (ADR 0038).
+fn group_keys(id: &str, discord_allowed: bool) -> Option<&'static [SettingKey]> {
     GROUPS
         .iter()
+        .filter(|(group, _)| discord_allowed || *group != "discord")
         .find(|(group, _)| *group == id)
         .map(|(_, keys)| *keys)
 }
@@ -111,7 +113,7 @@ fn describe(key: SettingKey) -> (&'static str, &'static str, &'static str) {
         ),
         SettingKey::PublicUrl => (
             "Adresse publique",
-            "Adresse par laquelle les joueurs joignent le hub (liens des e-mails, Discord).",
+            "Adresse par laquelle les joueurs joignent le hub (liens des e-mails, retours de connexion).",
             "https://hub.exemple.org",
         ),
         SettingKey::RegistrationMode => {
@@ -174,9 +176,10 @@ fn choices(key: SettingKey, current: &str) -> Vec<Choice> {
 }
 
 /// Construit les cadres de la page depuis les réglages sans secret.
-fn build_groups(settings: &PublicSettings) -> Vec<Group> {
+fn build_groups(settings: &PublicSettings, discord_allowed: bool) -> Vec<Group> {
     GROUPS
         .iter()
+        .filter(|(id, _)| discord_allowed || *id != "discord")
         .map(|(id, keys)| {
             let fields = keys
                 .iter()
@@ -273,7 +276,7 @@ async fn render(
         status,
         &SettingsPage {
             layout: Layout::new(session, "settings"),
-            groups: build_groups(&settings),
+            groups: build_groups(&settings, state.discord_allowed()),
             notice,
             error,
             smtp_configured: settings.smtp_configured,
@@ -400,7 +403,7 @@ async fn save_group(
     form: &BTreeMap<String, String>,
 ) -> Result<&'static str, Failure> {
     let group = form.get("group").map(String::as_str).unwrap_or("");
-    let keys = group_keys(group).ok_or(HubError::UnknownSetting)?;
+    let keys = group_keys(group, state.discord_allowed()).ok_or(HubError::UnknownSetting)?;
     let current = state.public_settings().await?;
 
     // 1. Vérification de tout le groupe ; on garde ce qui change vraiment.
@@ -493,8 +496,11 @@ mod tests {
                 .count();
             assert_eq!(count, 1, "{}", key.name());
         }
-        assert!(group_keys("general").is_some());
-        assert!(group_keys("inconnu").is_none());
+        assert!(group_keys("general", false).is_some());
+        assert!(group_keys("inconnu", true).is_none());
+        // Discord : seulement dans la version officielle.
+        assert!(group_keys("discord", true).is_some());
+        assert!(group_keys("discord", false).is_none());
     }
 
     #[test]

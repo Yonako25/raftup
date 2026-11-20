@@ -17,6 +17,10 @@
 //! d'installation à usage unique ; la page `/admin/installation` crée le premier compte
 //! admin avec ce code, depuis le navigateur (ADR 0037).
 //!
+//! **Version officielle** : compilé avec `--features officiel`, le hub peut proposer la
+//! connexion Discord ; sans (Rafthub auto-hébergé), seulement pseudo ou e-mail et mot
+//! de passe (ADR 0038).
+//!
 //! La console d'admin est sous `<public-url>/admin`. Son cookie n'a l'attribut
 //! `Secure` que si `--public-url` n'est pas en `http://127.0.0.1` (ou `localhost`) :
 //! derrière un proxy, donner l'adresse publique en `https://`.
@@ -253,7 +257,7 @@ async fn main() -> anyhow::Result<()> {
     if settings.smtp_mailer().is_none() {
         tracing::warn!("SMTP non réglé : aucun e-mail ne sera envoyé");
     }
-    if settings.discord_config().is_none() {
+    if state.discord_allowed() && settings.discord_config().is_none() {
         tracing::warn!("application Discord non réglée : connexion Discord désactivée");
     }
 

@@ -113,7 +113,12 @@ pub async fn show(State(state): State<AppState>, session: AdminSession) -> Respo
             online,
             in_game,
             unverified_emails: counts.unverified,
-            services: vec![database, smtp, discord],
+            // Discord n'existe que dans la version officielle (ADR 0038).
+            services: if state.discord_allowed() {
+                vec![database, smtp, discord]
+            } else {
+                vec![database, smtp]
+            },
         },
     )
 }
