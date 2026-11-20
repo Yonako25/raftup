@@ -548,6 +548,12 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : sur accord, `docker compose build && docker compose up -d` dans `~/rafthub/deploy/site` sur triomyno (après `git pull`).
 
+### 2026-11-20 · Présence « en partie » et liaison Discord dans le launcher
+- **Fait** : présence « en partie · <jeu> » tant qu'un jeu lancé depuis la Bibliothèque tourne (processus suivi) ou qu'une partie est hébergée (jeux de la seed), nom du jeu seul, nettoyé et coupé à 64 caractères (`launcher_core::activity`, `Presence::playing`), renvoyée dès qu'elle change ; panneau « Profil » de l'écran « Amis » : « Lier mon compte Discord » / « Délier Discord » (si `GET /v1/info` propose Discord), refus `discord_taken`, `already_linked`, `last_identity` en clair. Hub inchangé (liaison déjà là et testée). Tests client sur faux serveur et tests d'écran ; fmt, clippy (avec et sans `officiel`), `cargo test --workspace` passent.
+- **Pas vérifié** : écran « Profil » jamais regardé (captures à faire) ; vraie liaison avec une vraie application Discord ; jeu passant par Steam (le processus rend la main tout de suite, la présence revient alors à « en ligne ») ; pendant l'attente de Discord (5 min au plus), la présence n'est pas renouvelée.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : captures de l'écran « Amis » connecté (panneau « Profil ») avec la macro `RAFTUP_DEV_CAPTURE`.
+
 ### 2026-11-20 · V3 phase A : format de monde natif (ADR 0041)
 - **Fait** : `193df45` ADR 0041 (accepté en autonomie, à relire) et spécification autonome `spec/monde-natif/` ; `b51a093` crate `worlds-native` (TOML borné, mini-langage de règles, erreurs ligne/colonne, compilation vers `logic`), `GameOptions::Native`, YAML des mondes natifs, APQuest natif identique au portage (même empreinte) ; launcher : dossier `mondes-natifs/` lu pour le moteur Rust.
 - **Vérifié** : `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace -j 4` (aucun échec).

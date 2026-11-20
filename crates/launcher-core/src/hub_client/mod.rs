@@ -26,7 +26,7 @@ pub use discord::{DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, DI
 pub use token::{KeyringStore, MemoryStore, TokenStore, TokenStoreError};
 pub use types::{
     Account, ApiInfo, ErrorCode, Friend, FriendRequests, HubInfo, Me, Password, Player, Presence,
-    RequestOutcome, Session, SessionToken, Status,
+    RequestOutcome, Session, SessionToken, Status, MAX_GAME_CHARS,
 };
 
 /// Adresse du hub par défaut (ADR 0035, 0040).
@@ -306,14 +306,34 @@ impl HubClient {
     ///
     /// `return_port` : port de [`DiscordReturn`] ; sans lui, le hub renvoie le
     /// navigateur vers `raftup://oauth/discord`. Le jeton n'est **pas** envoyé : on
-    /// se connecte (la liaison à un compte déjà connecté n'est pas encore proposée).
+    /// se connecte (pour lier Discord au compte connecté : [`Self::discord_link_start`]).
     pub fn discord_start(&self, return_port: Option<u16>) -> Result<DiscordStart, HubClientError> {
+        self.discord_start_with(return_port, false)
+    }
+
+    /// `POST /v1/oauth/discord/start` **avec le jeton** : lie Discord au compte
+    /// connecté. La suite est la même (attente du retour, puis [`Self::discord_finish`],
+    /// qui rend [`DiscordOutcome::Linked`]). Un compte Discord déjà lié à un autre
+    /// compte est refusé à la fin par [`ErrorCode::DiscordTaken`].
+    pub fn discord_link_start(
+        &self,
+        return_port: Option<u16>,
+    ) -> Result<DiscordStart, HubClientError> {
+        self.discord_start_with(return_port, true)
+    }
+
+    /// Corps commun de `discord_start` et `discord_link_start` ; `auth` : envoyer le jeton.
+    fn discord_start_with(
+        &self,
+        return_port: Option<u16>,
+        auth: bool,
+    ) -> Result<DiscordStart, HubClientError> {
         let body = match return_port {
             Some(port) => json!({ "return_port": port }),
             None => json!({}),
         };
         let json: discord::DiscordStartJson =
-            self.call(Method::Post, "/v1/oauth/discord/start", Some(body), false)?;
+            self.call(Method::Post, "/v1/oauth/discord/start", Some(body), auth)?;
         Ok(DiscordStart {
             authorize_url: json.authorize_url,
             state: json.state,
@@ -378,6 +398,13 @@ impl HubClient {
             ));
         }
         self.keep_discord_session(json)
+    }
+
+    /// `DELETE /v1/me/identities/discord` : délie Discord du compte connecté. Refusé
+    /// si c'est le dernier moyen de se connecter ([`ErrorCode::LastIdentity`]) ou si
+    /// aucun compte Discord n'est lié ([`ErrorCode::IdentityNotFound`]).
+    pub fn discord_unlink(&self) -> Result<(), HubClientError> {
+        self.call_empty(Method::Delete, "/v1/me/identities/discord", None)
     }
 
     /// Lit la session d'une réponse `logged_in` et garde le jeton.

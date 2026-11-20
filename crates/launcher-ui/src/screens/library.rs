@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
 use egui::{Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
+use launcher_core::activity::RunningGames;
 use launcher_core::{
     detect_games, install, launch, plan_launch, plan_launch_offline, status, uninstall,
     validate_manual_dir, Catalog, Credentials, DetectRule, DetectedGame, DetectionRoots,
@@ -98,6 +99,8 @@ pub struct LibraryState {
     registry: RegistryPanel,
     /// Le registre a ajouté des jeux pendant une détection : en relancer une à la fin.
     rescan_pending: bool,
+    /// Jeux lancés depuis la Bibliothèque qui tournent encore (présence « en partie »).
+    running: RunningGames,
 }
 
 impl LibraryState {
@@ -119,7 +122,13 @@ impl LibraryState {
                 && std::env::var_os("RAFTUP_DEV_INSTALLER").is_some(),
             registry: RegistryPanel::new(),
             rescan_pending: false,
+            running: RunningGames::new(),
         }
+    }
+
+    /// Les jeux lancés depuis la Bibliothèque qui tournent encore.
+    pub fn running_games(&self) -> Vec<String> {
+        self.running.names()
     }
 
     /// Nombre de jeux du catalogue (compteur de la barre latérale).
@@ -587,14 +596,27 @@ impl LibraryState {
                 return;
             }
         };
+        // Nom du jeu pour la présence « en partie » sur Rafthub (rien d'autre du plan :
+        // ni adresse, ni slot, ni mot de passe).
+        let game_name = profile.game.name.clone();
+        let running = self.running.clone();
         // `launch` écrit la config du mod puis démarre le jeu : dans le thread.
         let receiver = spawn(ctx, move |sender| {
-            let result = match launch(&plan) {
-                // Le processus du jeu continue de vivre même si on oublie sa poignée.
-                Ok(_child) => Ok(plan.manual_instructions.clone()),
-                Err(e) => Err(format!("Lancement impossible : {e}")),
+            let mut child = match launch(&plan) {
+                Ok(child) => child,
+                Err(e) => {
+                    let message = format!("Lancement impossible : {e}");
+                    let _ = sender.send(TaskMessage::Launched(Err(message)));
+                    return;
+                }
             };
-            let _ = sender.send(TaskMessage::Launched(result));
+            // Le jeu compte comme lancé tant que `_playing` existe, c'est-à-dire jusqu'à
+            // la fin de son processus (`wait` bloque ce thread, pas l'interface).
+            let _playing = running.start(game_name);
+            let _ = sender.send(TaskMessage::Launched(Ok(plan.manual_instructions.clone())));
+            // Un jeu qui passe par un autre lanceur (Steam…) peut rendre la main tout de
+            // suite : la présence revient alors à « en ligne » plus tôt que prévu.
+            let _ = child.wait();
         });
         self.begin(profile.game.id.clone(), "Lancement", receiver);
     }

@@ -18,6 +18,7 @@
 //!
 //! `launcher-ui` (egui) n'appelle que cette crate.
 
+pub mod activity;
 pub mod archive;
 pub mod catalog;
 pub mod config;
