@@ -10,7 +10,12 @@
 //! | `GET /admin/login` | formulaire de connexion |
 //! | `POST /admin/login` | connexion (`email`, `password`, `csrf`) |
 //! | `POST /admin/logout` | déconnexion (`csrf`) |
-//! | `GET /admin/joueurs`, `/admin/distribution`, `/admin/reglages`, `/admin/journaux` | page « Bientôt » |
+//! | `GET /admin/distribution` | distribution du launcher (exe en cache, liens) |
+//! | `POST /admin/distribution/rafraichir` | retélécharge l'exe signé (`csrf`) |
+//! | `GET /telecharger` | page publique de téléchargement (404 si désactivée) |
+//! | `GET /admin/distribution/raftup-windows.zip` | zip relié au hub, pour un admin |
+//! | `GET /telecharger/raftup-windows.zip` | le même zip, public (404 si la page est désactivée) |
+//! | `GET /admin/joueurs`, `/admin/reglages`, `/admin/journaux` | page « Bientôt » |
 //! | `GET /admin/static/…` | feuille de style et polices |
 //!
 //! **Connexion** : un cookie `rafthub_admin` porte un jeton opaque, dont la base ne
@@ -25,11 +30,11 @@
 
 mod assets;
 mod dashboard;
+mod distribution;
 mod login;
 mod logs;
 mod players;
 mod settings;
-mod soon;
 
 use askama::Template;
 use axum::extract::FromRequestParts;
@@ -64,7 +69,14 @@ pub(crate) fn routes() -> Router<AppState> {
             "/admin/joueurs/invitations/revoquer",
             post(players::revoke_invite),
         )
-        .route("/admin/distribution", get(soon::distribution))
+        .route("/admin/distribution", get(distribution::show))
+        .route(
+            "/admin/distribution/rafraichir",
+            post(distribution::refresh),
+        )
+        .route("/telecharger", get(distribution::public_page))
+        .route(distribution::ADMIN_ZIP_PATH, get(distribution::admin_zip))
+        .route(distribution::ZIP_PATH, get(distribution::public_zip))
         .route(
             "/admin/reglages",
             get(settings::show).post(settings::submit),

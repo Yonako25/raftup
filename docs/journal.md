@@ -408,3 +408,15 @@ untime2`.
 - **Pas vérifié** : page jamais ouverte dans un navigateur ; vrai serveur SMTP pour l'e-mail de test ; PostgreSQL.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; pages Joueurs, Distribution, Journaux (autres sessions) ; le tableau de la doc de `web/mod.rs` cite encore `/admin/reglages` comme « Bientôt » (laissé pour éviter un conflit, à corriger à la fusion).
 - **Suite** : fusionner les quatre pages dans `main`, puis ouvrir la console dans un navigateur.
+
+### 2026-11-20 · Rafthub, distribution du launcher (session `rafthub-distribution`, ADR 0036)
+- **Fait** : `hub::distribution` (manifeste ADR 0022, liste blanche, sha256 + signature minisign, cache disque revérifié à chaque service, zip exe + `rafthub.toml`, pas de retour en arrière) ; page `/admin/distribution` (état du cache, « Rafraîchir » en POST + CSRF, lien `raftup://hub/…` à copier), page publique `/telecharger`, zips public et admin ; `copy.js` ; clé publique recopiée de `launcher-core` (test d'égalité) plutôt qu'une dépendance, consigné dans l'ADR 0036. 12 tests `tests/distribution.rs` sans réseau (clé générée dans le test) ; fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : vrai téléchargement depuis la release GitHub (aucun appel réseau fait) ; pages jamais ouvertes dans un navigateur ; zip jamais décompressé à côté d'un vrai launcher.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pages Joueurs, Réglages, Journaux (sessions parallèles).
+- **Suite** : publier une release avec `update.json`, puis essayer « Rafraîchir » sur un vrai hub et lancer l'exe du zip.
+
+### 2026-11-20 · Fusion des 4 pages de la console Rafthub dans `main` (ADR 0036)
+- **Fait** : fusion de `rafthub-joueurs`, `rafthub-journaux`, `rafthub-reglages`, `rafthub-distribution` ; conflits dans `web/mod.rs` (routes des quatre pages), `rafthub.css` et le journal (les deux côtés gardés) ; tous les bouchons retirés, `mod soon` enlevé du routeur. Sur `main` : fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : console jamais ouverte dans un navigateur après fusion ; PostgreSQL pour les nouvelles pages ; vrai téléchargement GitHub.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub… » (à jeter sur accord) ; `web/soon.rs` et `templates/admin/soon.html` ne servent plus (à supprimer sur accord).
+- **Suite** : ouvrir la console dans un navigateur et la parcourir ; champ « code d'invitation » dans le launcher ; déploiement.

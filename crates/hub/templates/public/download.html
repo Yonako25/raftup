@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Télécharger Raftup · {{ hub_name }}</title>
+<link rel="stylesheet" href="/admin/static/rafthub.css">
+</head>
+<body>
+<main class="center">
+<div class="panel login">
+<div class="brand">
+<svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><path d="M3 18 L14 22 L25 18" fill="none" stroke="#3D8BFF" stroke-width="2.2"/><path d="M5 13 L14 16.5 L23 13" fill="none" stroke="#9AA8B6" stroke-width="2.2"/><path d="M14 3 L14 13" stroke="#E6ECF2" stroke-width="2.2"/><path d="M14 4 L21 10 L14 10 Z" fill="#3D8BFF"/></svg>
+<div><div class="brand-name">{{ hub_name }}</div><div class="muted small">{{ host }}</div></div>
+</div>
+<h1>Raftup</h1>
+<p class="muted">Launcher compatible avec Archipelago, déjà relié à ce hub.</p>
+{% if ready %}
+<a class="button" id="download" href="{{ zip_path }}" download>Télécharger pour Windows</a>
+<p class="muted small">Décompressez le zip et lancez <code>raftup.exe</code> : il se connecte tout seul à ce hub.</p>
+{% else %}
+<p class="alert" role="status" id="not-ready">Le téléchargement n'est pas encore prêt sur ce hub. Revenez plus tard.</p>
+{% endif %}
+{% if let Some(link) = hub_link %}
+<div class="form">
+<label for="hub-link">Déjà installé ? Ce lien passe le launcher sur ce hub :</label>
+<div class="copy">
+<input id="hub-link" class="copy-input" type="text" readonly value="{{ link }}">
+<button type="button" class="button" data-copy="hub-link">Copier</button>
+</div>
+<p class="small"><a href="{{ link }}">Ouvrir dans Raftup</a></p>
+</div>
+{% endif %}
+</div>
+</main>
+<script src="/admin/static/copy.js"></script>
+</body>
+</html>

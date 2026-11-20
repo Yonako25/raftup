@@ -226,6 +226,15 @@ h1 { margin: 0 0 4px; font-family: "Chakra Petch", sans-serif; font-weight: 600;
 }
 .content > .alert { margin-top: 18px; }
 
+/* ---------- Distribution du launcher ---------- */
+
+.alert-ok { background: rgba(63, 209, 139, 0.12); border-color: rgba(63, 209, 139, 0.5); color: #D2F7E4; }
+.copy { display: flex; gap: 8px; margin: 8px 0 6px; }
+.copy-input {
+  flex: 1; min-width: 0; font: inherit; font-size: 14px; color: var(--text);
+  background: rgba(8, 12, 16, 0.6); border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px;
+}
+
 /* Téléphone : le menu passe au-dessus du contenu. */
 @media (max-width: 700px) {
   .sidebar { max-width: none; flex-basis: 100%; border-right: 0; border-bottom: 1px solid #1F2A36; }

@@ -11,6 +11,7 @@
 pub mod api;
 pub mod console;
 pub mod discord;
+pub mod distribution;
 pub mod error;
 pub mod identity;
 pub mod mail;
@@ -67,6 +68,8 @@ pub struct HubConfig {
     pub oauth_max_pending: usize,
     /// Durée de vie d'une session de la console d'admin (12 h, ADR 0036).
     pub admin_session_lifetime: Duration,
+    /// Distribution du launcher : cache de l'exe officiel et d'où il vient (ADR 0036).
+    pub distribution: distribution::DistributionConfig,
 }
 
 impl Default for HubConfig {
@@ -87,6 +90,7 @@ impl Default for HubConfig {
             oauth_max_pending: 10_000,
             admin_session_lifetime: Duration::from_secs(12 * 3600),
             settings_env: EnvSettings::default(),
+            distribution: distribution::DistributionConfig::default(),
         }
     }
 }
@@ -145,6 +149,8 @@ struct Inner {
     /// Hash d'un mot de passe bidon : vérifié quand l'adresse n'existe pas, pour que
     /// la réponse prenne le même temps (on ne devine pas les adresses inscrites).
     dummy_hash: String,
+    /// Exe officiel du launcher en cache, et zip relié à ce hub.
+    distribution: distribution::Distribution,
 }
 
 impl AppState {
@@ -207,11 +213,17 @@ impl AppState {
                     config.oauth_ttl,
                     config.oauth_max_pending,
                 ),
+                distribution: distribution::Distribution::new(config.distribution.clone()),
                 store,
                 config,
                 dummy_hash,
             }),
         })
+    }
+
+    /// Distribution du launcher (cache de l'exe officiel).
+    pub fn distribution(&self) -> &distribution::Distribution {
+        &self.inner.distribution
     }
 
     pub fn store(&self) -> &Store {

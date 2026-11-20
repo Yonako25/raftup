@@ -32,12 +32,5 @@ fn soon(
     )
 }
 
-/// `GET /admin/distribution`.
-pub async fn distribution(session: AdminSession) -> Response {
-    soon(
-        &session,
-        "distribution",
-        "Distribution du launcher",
-        "Launcher déjà relié à ce hub, à télécharger ou à partager par un lien raftup://hub/….",
     )
 }
