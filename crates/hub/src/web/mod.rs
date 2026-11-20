@@ -26,6 +26,7 @@
 mod assets;
 mod dashboard;
 mod login;
+mod settings;
 mod soon;
 
 use askama::Template;
@@ -55,7 +56,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/admin/logout", post(login::logout))
         .route("/admin/joueurs", get(soon::players))
         .route("/admin/distribution", get(soon::distribution))
-        .route("/admin/reglages", get(soon::settings))
+        .route(
+            "/admin/reglages",
+            get(settings::show).post(settings::submit),
+        )
         .route("/admin/journaux", get(soon::logs))
         .route("/admin/static/{*path}", get(assets::serve))
 }

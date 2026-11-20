@@ -52,16 +52,6 @@ pub async fn distribution(session: AdminSession) -> Response {
     )
 }
 
-/// `GET /admin/reglages`.
-pub async fn settings(session: AdminSession) -> Response {
-    soon(
-        &session,
-        "settings",
-        "Réglages",
-        "Nom du hub, adresse publique, mode d'inscription, réglages SMTP et Discord.",
-    )
-}
-
 /// `GET /admin/journaux`.
 pub async fn logs(session: AdminSession) -> Response {
     soon(

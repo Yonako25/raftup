@@ -390,3 +390,9 @@ untime2`.
 - **Pas vérifié** : console jamais ouverte dans un navigateur ; PostgreSQL ; migration d'une base réelle de la version 4 à 6 (seulement par les tests).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub trouvées dans main avant fusion Rafthub » (non commité, inutile à la compilation, à jeter sur accord de l'utilisatrice).
 - **Suite** : pages Joueurs, Distribution du launcher (zip + `rafthub.toml`), Réglages et Journaux de la console.
+
+### 2026-11-20 · Page « Réglages » de la console Rafthub (session `rafthub-reglages`, ADR 0036)
+- **Fait** : `/admin/reglages` remplace le bouchon (`web/settings.rs`, `settings.html`, CSS ajouté en fin de `rafthub.css`) : un formulaire POST + CSRF par groupe (général, inscriptions, e-mail, Discord, page publique), source affichée (base, environnement, défaut), « Revenir au défaut », secrets jamais réaffichés (hôte SMTP seul, champ vide = rien ne change), groupe vérifié en entier avant d'écrire, valeur inchangée non réécrite, e-mail de test à l'admin connecté. 7 tests dans `tests/settings_page.rs` ; fmt, clippy `-D warnings` et `cargo test -p hub` passent.
+- **Pas vérifié** : page jamais ouverte dans un navigateur ; vrai serveur SMTP pour l'e-mail de test ; PostgreSQL.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pages Joueurs, Distribution, Journaux (autres sessions) ; le tableau de la doc de `web/mod.rs` cite encore `/admin/reglages` comme « Bientôt » (laissé pour éviter un conflit, à corriger à la fusion).
+- **Suite** : fusionner les quatre pages dans `main`, puis ouvrir la console dans un navigateur.
