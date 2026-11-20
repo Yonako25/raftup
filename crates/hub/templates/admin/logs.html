@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+{% block title %}Journaux{% endblock %}
+{% block content %}
+<div class="page-head">
+<div>
+<h1>Journaux</h1>
+<p class="muted">Actions d'administration, de la plus récente à la plus ancienne. Heures en UTC.</p>
+</div>
+</div>
+
+<section class="panel" aria-label="Filtres">
+<h2>Filtres</h2>
+<form method="get" action="/admin/journaux" class="filters">
+<div class="filter">
+<label for="type">Type</label>
+<select id="type" name="type">
+<option value="">Tous</option>
+{% for k in kinds %}<option value="{{ k.value }}"{% if k.selected %} selected{% endif %}>{{ k.label }}</option>
+{% endfor %}</select>
+</div>
+<div class="filter">
+<label for="pseudo">Pseudo (acteur ou cible)</label>
+<input id="pseudo" name="pseudo" type="search" value="{{ pseudo }}" maxlength="64">
+</div>
+<div class="filter">
+<label for="du">Du</label>
+<input id="du" name="du" type="date" value="{{ du }}">
+</div>
+<div class="filter">
+<label for="au">Au</label>
+<input id="au" name="au" type="date" value="{{ au }}">
+</div>
+<div class="filter filter-actions">
+<button type="submit" class="button">Filtrer</button>
+<a href="/admin/journaux">Tout effacer</a>
+</div>
+</form>
+</section>
+
+{% if let Some(message) = notice %}<p class="alert" role="alert">{{ message }}</p>{% endif %}
+
+<section class="panel" aria-label="Lignes du journal">
+<h2 id="total">{{ total }} ligne{% if total > 1 %}s{% endif %}</h2>
+{% if rows.is_empty() %}
+<div class="row"><div class="grow muted">Aucune ligne pour ces filtres.</div></div>
+{% endif %}
+{% for r in rows %}
+<div class="row event">
+<div class="event-date muted small">{{ r.date }}</div>
+<div class="grow">
+<div class="row-title">{{ r.kind }}</div>
+<div class="muted small">Par {{ r.actor }} · cible : {{ r.target }}{% if !r.detail.is_empty() %} · {{ r.detail }}{% endif %}</div>
+</div>
+</div>
+{% endfor %}
+</section>
+
+<nav class="pager" aria-label="Pages">
+{% if let Some(href) = prev_href %}<a href="{{ href }}" rel="prev">← Plus récentes</a>{% else %}<span></span>{% endif %}
+<span class="muted small" id="page">Page {{ page }} sur {{ pages }}</span>
+{% if let Some(href) = next_href %}<a href="{{ href }}" rel="next">Plus anciennes →</a>{% else %}<span></span>{% endif %}
+</nav>
+{% endblock %}

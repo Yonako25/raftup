@@ -188,6 +188,20 @@ h1 { margin: 0 0 4px; font-family: "Chakra Petch", sans-serif; font-weight: 600;
   background: rgba(240, 106, 106, 0.12); border: 1px solid rgba(240, 106, 106, 0.5); color: #FFD5D5;
 }
 
+/* ---------- Journaux ---------- */
+
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: 14px 18px; }
+.filter { display: flex; flex-direction: column; gap: 6px; }
+.filter label { font-size: 13px; color: var(--muted); }
+.filter input, .filter select {
+  font: inherit; color: var(--text); background: rgba(8, 12, 16, 0.6);
+  border: 1px solid var(--border); border-radius: 2px; padding: 9px 10px;
+}
+.filter-actions { flex-direction: row; align-items: center; gap: 14px; }
+.event { align-items: flex-start; }
+.event-date { flex: none; width: 150px; padding-top: 2px; }
+.pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
 /* Téléphone : le menu passe au-dessus du contenu. */
 @media (max-width: 700px) {
   .sidebar { max-width: none; flex-basis: 100%; border-right: 0; border-bottom: 1px solid #1F2A36; }

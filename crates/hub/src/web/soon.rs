@@ -51,13 +51,3 @@ pub async fn settings(session: AdminSession) -> Response {
         "Nom du hub, adresse publique, mode d'inscription, réglages SMTP et Discord.",
     )
 }
-
-/// `GET /admin/journaux`.
-pub async fn logs(session: AdminSession) -> Response {
-    soon(
-        &session,
-        "logs",
-        "Journaux",
-        "Fil des actions d'administration : comptes créés, suspensions, réglages modifiés.",
-    )
-}
