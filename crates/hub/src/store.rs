@@ -23,6 +23,7 @@ use crate::error::HubError;
 // - `store/admin.rs` : suspension, réglages, invitations, journal, liste des joueurs.
 mod admin;
 mod admin_auth;
+pub use admin::EventFilter;
 pub use admin::{
     AdminEvent, DashboardCounts, InviteRow, Page, PlayerFilter, PlayerSummary, MAX_PAGE_SIZE,
 };

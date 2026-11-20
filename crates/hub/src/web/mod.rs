@@ -26,6 +26,7 @@
 mod assets;
 mod dashboard;
 mod login;
+mod logs;
 mod soon;
 
 use askama::Template;
@@ -56,7 +57,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/admin/joueurs", get(soon::players))
         .route("/admin/distribution", get(soon::distribution))
         .route("/admin/reglages", get(soon::settings))
-        .route("/admin/journaux", get(soon::logs))
+        .route("/admin/journaux", get(logs::show))
         .route("/admin/static/{*path}", get(assets::serve))
 }
 

@@ -402,6 +402,103 @@ fn event_row(row: &AnyRow) -> Result<AdminEvent, HubError> {
     })
 }
 
+/// Filtre de la page « Journaux ». Chaque champ vide (`None` ou texte vide)
+/// laisse passer toutes les lignes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EventFilter {
+    /// Type exact (`account_created`…), déjà vérifié par l'appelant.
+    pub kind: Option<String>,
+    /// Morceau de pseudo, cherché chez l'acteur **ou** la cible.
+    pub username: String,
+    /// Première date gardée (incluse), en secondes Unix.
+    pub from: Option<i64>,
+    /// Date de fin (exclue), en secondes Unix.
+    pub until: Option<i64>,
+}
+
+impl Store {
+    /// Journal filtré, du plus récent au plus ancien (date puis identifiant, pour
+    /// un ordre stable même quand plusieurs lignes ont la même seconde).
+    pub async fn list_events_filtered(
+        &self,
+        filter: &EventFilter,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Page<AdminEvent>, HubError> {
+        let (limit, offset) = page_bounds(limit, offset);
+        let username = crate::identity::normalize_username(filter.username.trim());
+        let pattern = like_pattern(&username);
+
+        // Comme pour `list_players` : le texte SQL n'est fait que de morceaux fixes,
+        // les valeurs saisies passent toutes par les paramètres `$n`.
+        let mut condition = String::from("WHERE 1 = 1");
+        let mut next = 1;
+        if filter.kind.is_some() {
+            condition.push_str(&format!(" AND e.kind = ${next}"));
+            next += 1;
+        }
+        if !username.is_empty() {
+            condition.push_str(&format!(
+                " AND (a.username_norm LIKE ${next} ESCAPE '\\' \
+                 OR t.username_norm LIKE ${next} ESCAPE '\\')"
+            ));
+            next += 1;
+        }
+        if filter.from.is_some() {
+            condition.push_str(&format!(" AND e.created_at >= ${next}"));
+            next += 1;
+        }
+        if filter.until.is_some() {
+            condition.push_str(&format!(" AND e.created_at < ${next}"));
+            next += 1;
+        }
+        let from = format!(
+            "FROM admin_events e \
+             LEFT JOIN users a ON a.id = e.actor_id \
+             LEFT JOIN users t ON t.id = e.target_id {condition}"
+        );
+
+        // Les deux requêtes reçoivent les mêmes paramètres, dans le même ordre.
+        // `sqlx::query` rend une valeur qu'on remplace à chaque `bind` : d'où les
+        // `query = query.bind(…)`.
+        let count_sql = format!("SELECT COUNT(*) AS total {from}");
+        let list_sql = format!(
+            "SELECT e.id, e.created_at, e.actor_id, a.username AS actor_name, e.kind, \
+             e.target_id, t.username AS target_name, e.detail {from} \
+             ORDER BY e.created_at DESC, e.id DESC LIMIT ${} OFFSET ${}",
+            next,
+            next + 1
+        );
+        let mut count = sqlx::query(&count_sql);
+        let mut list = sqlx::query(&list_sql);
+        if let Some(kind) = &filter.kind {
+            count = count.bind(kind.as_str());
+            list = list.bind(kind.as_str());
+        }
+        if !username.is_empty() {
+            count = count.bind(pattern.as_str());
+            list = list.bind(pattern.as_str());
+        }
+        if let Some(at) = filter.from {
+            count = count.bind(at);
+            list = list.bind(at);
+        }
+        if let Some(at) = filter.until {
+            count = count.bind(at);
+            list = list.bind(at);
+        }
+        let total: i64 = count.fetch_one(&self.pool).await?.try_get("total")?;
+        let rows = list.bind(limit).bind(offset).fetch_all(&self.pool).await?;
+        let items = rows.iter().map(event_row).collect::<Result<_, _>>()?;
+        Ok(Page {
+            items,
+            total,
+            limit,
+            offset,
+        })
+    }
+}
+
 // ---------- Page « Joueurs » et tableau de bord ----------
 
 impl Store {

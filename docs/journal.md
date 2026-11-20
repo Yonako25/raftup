@@ -390,3 +390,9 @@ untime2`.
 - **Pas vérifié** : console jamais ouverte dans un navigateur ; PostgreSQL ; migration d'une base réelle de la version 4 à 6 (seulement par les tests).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub trouvées dans main avant fusion Rafthub » (non commité, inutile à la compilation, à jeter sur accord de l'utilisatrice).
 - **Suite** : pages Joueurs, Distribution du launcher (zip + `rafthub.toml`), Réglages et Journaux de la console.
+
+### 2026-11-20 · Page « Journaux » de la console Rafthub (session `rafthub-journaux`, ADR 0036)
+- **Fait** : `GET /admin/journaux` (`web/logs.rs`, `admin/logs.html`) : `admin_events` du plus récent au plus ancien (date UTC lisible, acteur, type en français, cible, détail repassé dans `clean_detail`), filtres GET sans JS (type, pseudo acteur ou cible, période `du`/`au` incluse), 50 lignes par page ; `Store::list_events_filtered` + `EventFilter` (ordre date puis id) ; bouchon `logs` retiré de `soon.rs` ; quelques règles CSS « Journaux ». 4 tests `tests/admin_logs.rs` + 4 tests unitaires ; fmt, clippy `-D warnings`, `cargo test -p hub` passent.
+- **Pas vérifié** : page jamais ouverte dans un navigateur ; PostgreSQL (SQLite seulement) ; heures en UTC, pas dans le fuseau de l'admin.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; journaux techniques `tracing` (pas décidé, ADR 0036).
+- **Suite** : fusion avec les sessions Joueurs, Distribution, Réglages (conflits attendus dans `web/mod.rs`, `soon.rs`, `rafthub.css`, `store.rs`).
