@@ -104,6 +104,9 @@ pub(crate) fn prepare(python: &Path, sandbox: &Sandbox) -> Result<Prepared, Stri
 }
 
 /// Nom de la copie étiquetée : `python.exe` → `python-raftup-low.exe`.
+// Servie seulement sous Windows (et par le test, partout) : sans ce `cfg`, la CI
+// Linux et macOS refuse une fonction jamais utilisée (`-D warnings`).
+#[cfg(any(windows, test))]
 pub(crate) fn low_copy_name(python: &Path) -> Option<PathBuf> {
     let stem = python.file_stem()?.to_str()?;
     let dir = python.parent()?;
