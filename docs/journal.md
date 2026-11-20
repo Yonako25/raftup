@@ -547,3 +547,10 @@ untime2`.
 - **Pas vérifié** : image Docker non construite et `nginx.conf` jamais chargé par un vrai nginx ; rien déployé ; liens des releases vides tant qu'aucun tag n'est publié ; pas de mentions légales d'éditeur ni d'hébergeur (choix de l'utilisatrice).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : sur accord, `docker compose build && docker compose up -d` dans `~/rafthub/deploy/site` sur triomyno (après `git pull`).
+
+### 2026-11-20 · V3 phase A : format de monde natif (ADR 0041)
+- **Fait** : `193df45` ADR 0041 (accepté en autonomie, à relire) et spécification autonome `spec/monde-natif/` ; `b51a093` crate `worlds-native` (TOML borné, mini-langage de règles, erreurs ligne/colonne, compilation vers `logic`), `GameOptions::Native`, YAML des mondes natifs, APQuest natif identique au portage (même empreinte) ; launcher : dossier `mondes-natifs/` lu pour le moteur Rust.
+- **Vérifié** : `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace -j 4` (aucun échec).
+- **Pas vérifié** : un monde natif joué en vrai depuis le launcher (seulement en test) ; affichage des mondes natifs dans la Bibliothèque (pas fait).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/registry`, `launcher-core::registry`, `.github/` (session confiance du registre) ; `launcher-ui/src/screens/friends.rs`, `hub_client` (session « Amis »).
+- **Suite** : phase B, conversion apworld → natif à partir de l'export de l'ADR 0028 (note de relais dans le dossier partagé).

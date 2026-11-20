@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 
 use egui::{RichText, Ui};
 use launcher_core::generation::{
-    pins, runtime_status, EngineReport, EngineUsed, ExportBackend, GenerateOutput, GenerateRequest,
-    GeneratorBackend, PythonBackend, RuntimeStatus, RustBackend,
+    load_native_worlds, pins, runtime_status, EngineReport, EngineUsed, ExportBackend,
+    GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, RuntimeStatus, RustBackend,
 };
 use launcher_core::party::generate_blocking;
 use launcher_core::{CancelToken, GenerationError};
@@ -128,7 +128,10 @@ pub fn start(
     // `Box<dyn …>` : une boîte qui contient l'un ou l'autre moteur ; `Send` permet de
     // l'envoyer dans le thread de génération.
     let mut backend: Box<dyn GeneratorBackend + Send> = match engine {
-        Engine::Rust => Box::new(RustBackend { time_balance }),
+        Engine::Rust => Box::new(RustBackend {
+            time_balance,
+            native_worlds: load_native_worlds(&paths.native_worlds_dir()).worlds,
+        }),
         Engine::Python | Engine::Export => {
             let pins = match pins() {
                 Ok(pins) => pins,

@@ -284,7 +284,10 @@ fn equilibrage_par_temps_sur_option() {
         .try_iter()
         .any(|l| l.contains("Équilibrage par temps")));
 
-    let mut on = RustBackend { time_balance: true };
+    let mut on = RustBackend {
+        time_balance: true,
+        ..RustBackend::default()
+    };
     let (log, lines) = channel();
     let first = generate(&paths, &mut on, &request, &CancelToken::new(), log).unwrap();
     assert!(lines
@@ -294,4 +297,43 @@ fn equilibrage_par_temps_sur_option() {
     let (log, _) = channel();
     let again = generate(&paths, &mut on, &request, &CancelToken::new(), log).unwrap();
     assert_eq!(std::fs::read(&again.archipelago_file).unwrap(), first);
+}
+
+/// Un monde natif posé dans `mondes-natifs/` (ADR 0041) passe par le moteur Rust ; sans
+/// lui, le même jeu est refusé.
+#[test]
+fn monde_natif_du_dossier_des_donnees() {
+    use launcher_core::generation::{load_native_worlds, rust_support_with_worlds};
+
+    let _serial = serial();
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths::under(tmp.path());
+    std::fs::create_dir_all(paths.native_worlds_dir()).unwrap();
+    std::fs::write(
+        paths.native_worlds_dir().join("minimal.toml"),
+        include_str!("../../../spec/monde-natif/exemples/minimal/world.toml"),
+    )
+    .unwrap();
+    let alice = yaml(tmp.path(), "alice.yaml", "name: Alice\ngame: Minimal\n");
+    let request = GenerateRequest {
+        player_files: vec![alice],
+        seed: Some(7),
+        ..GenerateRequest::default()
+    };
+    assert!(rust_support(&request.player_files, None).is_err());
+    let natives = load_native_worlds(&paths.native_worlds_dir());
+    assert!(natives.rejected.is_empty());
+    assert_eq!(
+        rust_support_with_worlds(&request.player_files, None, &natives.worlds),
+        Ok(())
+    );
+
+    let (log, _) = channel();
+    let mut backend = RustBackend {
+        native_worlds: natives.worlds,
+        ..RustBackend::default()
+    };
+    let output = generate(&paths, &mut backend, &request, &CancelToken::new(), log).unwrap();
+    assert!(output.archipelago_file.is_file());
+    assert_eq!(output.players[0].game, "Minimal");
 }

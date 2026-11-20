@@ -33,7 +33,7 @@
 ### 3. Validation au chargement, sans panique
 
 - Lecture bornée : fichier de 4 Mio au plus, 100 000 éléments par liste, règle de 16 Kio, profondeur 64, nom de 200 caractères.
-- Refusé : `format_version` inconnu, champ inconnu (`deny_unknown_fields`), nom en double (les objets d'événement partagent l'espace des objets, les lieux d'événement celui des lieux), numéro en double ou nul, référence inconnue, règle mal typée, région inaccessible depuis le départ (graphe de toutes les entrées, sans règles), valeur par défaut hors bornes.
+- Refusé : `format_version` inconnu, champ inconnu (`deny_unknown_fields`), nom en double (les objets d'événement partagent l'espace des objets, les lieux d'événement celui des lieux), numéro en double ou nul, référence inconnue, règle mal typée, région inaccessible depuis le départ (graphe de toutes les entrées, sans règles), valeur par défaut hors bornes, option qui porte le nom d'une option commune à tous les jeux (`progression_balancing`, `accessibility`, `local_items`…).
 - À la compilation (options connues) : élément présent qui pointe vers un élément absent, région présente mais inaccessible, plus d'objets que de lieux.
 
 ### 4. Datapackage
@@ -60,4 +60,4 @@
 - Le portage Rust d'APQuest reste la référence ; le test d'empreinte garde les deux identiques. À terme, le portage pourra être retiré au profit du fichier.
 - Le langage est volontairement petit : tout ce qu'il exprime existe dans `logic` et dans le `rule_builder` d'Archipelago, donc l'export natif → apworld (phase B) est possible.
 - Les positions dans une chaîne TOML avec échappements sont approchées.
-- Le launcher ne charge pas encore de monde natif depuis un fichier (suite notée dans `docs/etat-du-projet.md` si non faite).
+- Le launcher lit les mondes natifs posés dans `mondes-natifs/` (dossier des données de Raftup : fichiers `.toml` ou dossiers avec un `world.toml`) quand il choisit le moteur Rust ; un monde illisible est écarté (journal), deux mondes du même jeu : le premier par ordre alphabétique gagne. La Bibliothèque ne les affiche pas encore, et rien ne les installe : on les copie à la main.
