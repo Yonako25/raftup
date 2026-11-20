@@ -560,3 +560,9 @@ untime2`.
 - **Pas vérifié** : un monde natif joué en vrai depuis le launcher (seulement en test) ; affichage des mondes natifs dans la Bibliothèque (pas fait).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/registry`, `launcher-core::registry`, `.github/` (session confiance du registre) ; `launcher-ui/src/screens/friends.rs`, `hub_client` (session « Amis »).
 - **Suite** : phase B, conversion apworld → natif à partir de l'export de l'ADR 0028 (note de relais dans le dossier partagé).
+
+### 2026-11-21 · V3 phase B : conversion apworld ↔ monde natif (ADR 0042)
+- **Fait** : `44ce2f6` ADR 0042 (à relire), ordre de création et options dans l'export, `generate::convert` (APQuest converti = même seed que le portage) ; `bad5e8c` export natif → apworld et outil `raftup-monde` ; `5e7a79b` `format_version` 2 (objet d'événement partagé), Slime Rancher converti sur le PC ; `e82e6b3` fusion de `main`. Vérifié : fmt, clippy, `cargo test --workspace -j 4`, tests réels `conversion_real` (Archipelago 0.6.8 : datapackage, aller-retour avec contrôle croisé, Slime Rancher généré par le moteur Rust seul).
+- **Pas vérifié** : un apworld issu d'un monde natif joué en vrai avec un client ; `raftup-monde` lancé par l'utilisatrice ; export JSON d'une génération du launcher converti (seulement depuis les tests).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/registry`, `launcher-core::registry`, `.github/` ; `launcher-ui/src/screens/friends.rs`, `hub_client`.
+- **Suite** : afficher les mondes natifs dans la Bibliothèque (et les installer par le registre).
