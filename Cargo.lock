@@ -1956,6 +1956,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "futures-util",
+ "launcher-core",
  "lettre",
  "minisign",
  "minisign-verify",

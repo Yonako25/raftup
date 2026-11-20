@@ -81,3 +81,6 @@ tempfile.workspace = true
 minisign.workspace = true
 # Certificat auto-signé créé pendant le test HTTPS (MIT OR Apache-2.0).
 rcgen.workspace = true
+# Test de bout en bout avec le vrai client du launcher (`tests/launcher_discord.rs`).
+# Sens permis : le hub (AGPL) dépend du launcher (MIT / Apache), jamais l'inverse.
+launcher-core = { path = "../launcher-core" }
