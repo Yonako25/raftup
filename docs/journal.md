@@ -482,3 +482,9 @@ untime2`.
 - **Pas vérifié** : enchaînement des deux étapes dans un vrai navigateur ; l'estimation n'existe que si l'écran « Créer » a dessiné la seed prête avant le passage à « Partie en cours » (vrai sur la capture).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le générateur Python de `Z:\raftup-test\runtime` est à réinstaller (versions épinglées changées), non fait (téléchargement).
 - **Suite** : refaire l'installation d'un hub neuf dans le navigateur pour voir l'étape 2 sans code.
+
+### 2026-11-20 · Binaires prêts à l'emploi dans les releases (session `p1-release`)
+- **Fait** : workflow `release.yml` sur tag `v*` (tag comparé à la version de `Cargo.toml`) : `rafthub` public Linux et Windows x86_64, `rafthub-officiel-linux-x86_64` (`--features officiel`), launcher `raftup-windows-x86_64.exe` nu ; licence AGPL et lien du code source dans les archives de Rafthub ; `.sha256` à côté de chaque fichier ; brouillon de release, **sans signature**. Job CI `hub-officiel` (clippy + tests avec `officiel`). Procédure de signature à la main : `docs/publier-une-release.md`. YAML relu et analysé (yaml-rust2) ; fmt, clippy `-D warnings`, `cargo test --workspace` passent.
+- **Pas vérifié** : workflow jamais lancé (rien poussé, pas de tag) ; actionlint absent ; téléchargement par le launcher et par Rafthub depuis une vraie release (redirection GitHub vers un autre domaine).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : première vraie release `v0.1.0` (tag, signature, `update.json`) ; déploiement du Rafthub officiel.

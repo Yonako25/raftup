@@ -37,3 +37,16 @@ jobs:
       # résultat se lise d'un coup d'œil sur chaque système.
       - name: Empreinte de la seed APQuest (NF12)
         run: cargo test -p generate --test empreinte
+
+  hub-officiel:
+    # ADR 0038 : le Rafthub officiel se compile avec `--features officiel` (Discord possible).
+    # Le job `verifier` ne compile que la version publique : ce job vérifie l'autre.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p hub --features officiel --all-targets -- -D warnings
+      - run: cargo test -p hub --features officiel

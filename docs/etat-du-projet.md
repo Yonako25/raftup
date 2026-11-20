@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **20 novembre 2026** (Rafthub : déploiement Docker du hub officiel préparé dans `deploy/rafthub/`).
+Mis à jour le **20 novembre 2026** (workflow de release : binaires de Rafthub et du launcher, signature à la main).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -45,6 +45,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Relire les ADR 0029 à 0035** (acceptés en autonomie le 19 novembre 2026)
 - [x] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (texte de gnu.org récupéré le 2026-11-20, empreinte vérifiée par `tests/licence.rs`)
 - [ ] **CI macOS et Linux** jamais lancée (rien poussé)
+- [ ] **Releases avec binaires** (20 novembre 2026) : `release.yml` sur tag `v*` construit Rafthub public (Linux, Windows), Rafthub officiel (Linux) et le launcher Windows, avec `.sha256`, en brouillon de release ; signature du launcher à la main (`docs/publier-une-release.md`) ; job CI `hub-officiel` ; jamais lancé (aucun tag poussé)
 
 ## Crates
 

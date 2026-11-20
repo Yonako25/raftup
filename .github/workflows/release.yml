@@ -1,0 +1,160 @@
+name: Release
+
+# Construit les binaires prêts à l'emploi quand un tag `v*` est poussé (ex. `v0.2.0`),
+# puis les joint à un **brouillon** de release GitHub, chacun avec son empreinte SHA-256.
+#
+# Rien n'est signé ici : la clé privée minisign reste chez la mainteneuse (ADR 0022).
+# Le launcher se signe ensuite à la main avec `update_tool`, puis la release est publiée :
+# voir `docs/publier-une-release.md`.
+
+on:
+  push:
+    tags: ["v*"]
+
+# Lecture seule par défaut ; seul le job `publier` reçoit le droit d'écrire la release.
+permissions:
+  contents: read
+
+jobs:
+  # Le tag doit correspondre à la version du workspace (`Cargo.toml`), sinon le launcher
+  # publié annoncerait une version différente de celle de son manifeste.
+  verifier-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Comparer le tag et la version de Cargo.toml
+        shell: bash
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "hub") | .version')
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Le tag ${GITHUB_REF_NAME} ne correspond pas à la version v${version} de Cargo.toml"
+            exit 1
+          fi
+
+  construire:
+    needs: verifier-version
+    strategy:
+      # Si une cible casse, on veut quand même savoir si les autres passent.
+      fail-fast: false
+      matrix:
+        include:
+          # Rafthub auto-hébergé (sans Discord, ADR 0038).
+          # Ubuntu 22.04 : glibc plus ancienne, donc un binaire qui tourne aussi sur des
+          # distributions Linux un peu anciennes.
+          - nom: rafthub-linux-x86_64
+            os: ubuntu-22.04
+            paquet: hub
+            binaire: rafthub
+            options: ""
+            archive: tar.gz
+          - nom: rafthub-windows-x86_64
+            os: windows-latest
+            paquet: hub
+            binaire: rafthub.exe
+            options: ""
+            archive: zip
+          # Rafthub officiel (serveur du projet, Discord possible), Linux seulement.
+          - nom: rafthub-officiel-linux-x86_64
+            os: ubuntu-22.04
+            paquet: hub
+            binaire: rafthub
+            options: "--features officiel"
+            archive: tar.gz
+          # Launcher Windows : l'exe nu, comme le veut la mise à jour automatique (ADR 0022).
+          - nom: raftup-windows-x86_64
+            os: windows-latest
+            paquet: launcher-ui
+            binaire: raftup.exe
+            options: ""
+            archive: exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Cache séparé par cible : les deux Rafthub Linux n'ont pas les mêmes options.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.nom }}
+
+      # `--locked` : on construit exactement les versions de `Cargo.lock`.
+      - name: Compiler ${{ matrix.nom }}
+        shell: bash
+        run: cargo build --release --locked -p ${{ matrix.paquet }} ${{ matrix.options }}
+
+      - name: Préparer l'archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          bin="target/release/${{ matrix.binaire }}"
+          case "${{ matrix.archive }}" in
+            exe)
+              # Exe nu : c'est ce fichier que l'on signe et que le launcher télécharge.
+              cp "$bin" "dist/${{ matrix.nom }}.exe"
+              fichier="${{ matrix.nom }}.exe"
+              ;;
+            tar.gz | zip)
+              # Rafthub est en AGPL (ADR 0003) : la licence voyage avec le binaire.
+              dossier="${{ matrix.nom }}"
+              mkdir -p "$dossier"
+              cp "$bin" "$dossier/"
+              cp crates/hub/LICENSE-AGPL "$dossier/"
+              cp THIRD_PARTY_NOTICES.md "$dossier/"
+              {
+                echo "Rafthub ${GITHUB_REF_NAME} (${{ matrix.nom }})"
+                echo
+                echo "Logiciel libre sous licence AGPL-3.0-or-later (fichier LICENSE-AGPL)."
+                echo "Code source : ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/tree/${GITHUB_REF_NAME}"
+              } > "$dossier/LISEZMOI.txt"
+              if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+                fichier="${dossier}.tar.gz"
+                tar -czf "dist/$fichier" "$dossier"
+              else
+                fichier="${dossier}.zip"
+                # 7-Zip est installé sur les machines Windows de GitHub.
+                7z a -tzip "dist/$fichier" "$dossier" > /dev/null
+              fi
+              ;;
+          esac
+          # Empreinte au format de `sha256sum` : « <empreinte>  <nom du fichier> ».
+          # On la calcule depuis `dist/` pour que le nom soit seul, sans chemin.
+          (cd dist && sha256sum "$fichier" > "$fichier.sha256")
+          cat "dist/$fichier.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.nom }}
+          path: dist/*
+          if-no-files-found: error
+
+  publier:
+    needs: construire
+    runs-on: ubuntu-latest
+    permissions:
+      # Créer la release et y joindre les fichiers.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Revérifier les empreintes
+        shell: bash
+        run: cd dist && sha256sum -c *.sha256
+      # Brouillon : rien n'est visible des joueurs (ni lu par la mise à jour automatique)
+      # tant que la mainteneuse n'a pas ajouté la signature et `update.json`, puis publié.
+      # Si la release existe déjà, on remplace seulement les fichiers.
+      - name: Créer le brouillon de release et joindre les fichiers
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
+              --title "Raftup $GITHUB_REF_NAME" \
+              --notes "Binaires construits par la CI. Le launcher n'est pas encore signé : voir docs/publier-une-release.md."
+          fi
