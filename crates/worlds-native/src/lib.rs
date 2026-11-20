@@ -16,6 +16,7 @@
 //! Rien ici ne panique sur une entrée hostile, et tout est parcouru dans l'ordre du
 //! fichier : même fichier et mêmes options ⇒ même monde.
 
+pub mod apworld;
 mod build;
 mod error;
 mod expr;
