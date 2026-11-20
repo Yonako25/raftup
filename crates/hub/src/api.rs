@@ -3,6 +3,7 @@
 //! | Méthode et chemin | Rôle |
 //! | --- | --- |
 //! | `GET /v1` | version de l'API |
+//! | `GET /v1/info` | nom du hub, version, moyens de connexion (`password`, `discord`) et mode d'inscription |
 //! | `POST /v1/accounts` | inscription (`email`, `password`, `username`) |
 //! | `POST /v1/sessions` | connexion (`email`, `password`) → jeton |
 //! | `DELETE /v1/sessions/current` | déconnexion (révoque le jeton) |
@@ -72,6 +73,7 @@ const MAX_GAME_CHARS: usize = 64;
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1", get(api_info))
+        .route("/v1/info", get(hub_info))
         .route("/v1/accounts", post(register))
         .route("/v1/sessions", post(login))
         .route("/v1/sessions/current", delete(logout))
@@ -385,6 +387,25 @@ async fn optional_auth(
 
 async fn api_info() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "service": "raftup-hub", "api_version": API_VERSION }))
+}
+
+/// Ce que le hub propose, pour que le launcher n'affiche que les boutons utiles.
+/// `discord` n'apparaît que si la version le permet (ADR 0038) **et** si
+/// l'application Discord est réglée.
+async fn hub_info(State(state): State<AppState>) -> Result<Json<serde_json::Value>, HubError> {
+    let settings = state.settings().await?;
+    let mut login_methods = vec!["password"];
+    if state.discord().await?.is_some() {
+        login_methods.push("discord");
+    }
+    Ok(Json(serde_json::json!({
+        "service": "raftup-hub",
+        "api_version": API_VERSION,
+        "name": settings.hub_name,
+        "version": env!("CARGO_PKG_VERSION"),
+        "login_methods": login_methods,
+        "registration_mode": settings.registration_mode.as_str(),
+    })))
 }
 
 async fn register(

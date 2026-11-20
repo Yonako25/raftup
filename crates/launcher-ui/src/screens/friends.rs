@@ -12,10 +12,16 @@
 //! relit la liste d'amis toutes les minutes, même si l'écran n'est pas affiché (le hub
 //! oublie une présence au bout de 2 minutes).
 //!
+//! Connexion Discord (ADR 0033, 0035) : le bouton n'apparaît que si le hub la propose
+//! (`GET /v1/info`, lu une fois par adresse). Le parcours passe par trois appels dans
+//! le thread réseau : `start` (serveur local ouvert), attente du retour du navigateur
+//! puis `finish`, et, pour un nouveau joueur, `register` avec le pseudo choisi.
+//!
 //! Un lien `raftup://hub/<hôte>` propose de changer de Rafthub
 //! ([`FriendsState::offer_switch`]) ; rien ne change avant le clic sur « Passer sur ce
 //! hub » dans la boîte de [`switch_dialog`].
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,8 +29,9 @@ use std::time::{Duration, Instant};
 use egui::{RichText, Ui};
 use launcher_core::config;
 use launcher_core::hub_client::{
-    ErrorCode, Friend, FriendRequests, HubClient, HubClientError, HubUrl, KeyringStore,
-    MemoryStore, Password, Presence, RequestOutcome, Status, TokenStore, DEFAULT_HUB_URL,
+    DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, ErrorCode, Friend, FriendRequests,
+    HubClient, HubClientError, HubInfo, HubUrl, KeyringStore, MemoryStore, Password, Presence,
+    RequestOutcome, Session, Status, TokenStore, DEFAULT_HUB_URL, DISCORD_WAIT,
 };
 
 use super::library::load_paths;
@@ -50,6 +57,24 @@ enum Notice {
     Error(String),
 }
 
+/// Où en est la connexion Discord.
+#[derive(Debug, Clone, Default)]
+enum DiscordStep {
+    #[default]
+    Idle,
+    /// Navigateur ouvert chez Discord : on attend son retour. `cancel` arrête l'attente
+    /// (partagé avec le thread réseau, d'où `Arc`).
+    Waiting {
+        authorize_url: String,
+        cancel: Arc<AtomicBool>,
+    },
+    /// Nouveau joueur : il choisit un pseudo (et donne un code si `invite_required`).
+    ChooseName {
+        ticket: DiscordTicket,
+        invite_required: bool,
+    },
+}
+
 /// Ce qu'on demande au thread réseau.
 enum Action {
     /// Reprendre la session rangée dans le trousseau (au démarrage).
@@ -66,6 +91,22 @@ enum Action {
         invite_code: Option<String>,
     },
     Logout,
+    /// Lire ce que le hub propose (`GET /v1/info`).
+    Info,
+    /// Connexion Discord, étape 1 : serveur local ouvert, puis `start`.
+    DiscordStart,
+    /// Étape 2 : attendre le retour du navigateur, puis `finish`.
+    DiscordWait {
+        local: DiscordReturn,
+        start: DiscordStart,
+        cancel: Arc<AtomicBool>,
+    },
+    /// Étape 3 (nouveau joueur) : créer le compte avec le pseudo choisi.
+    DiscordRegister {
+        ticket: DiscordTicket,
+        username: String,
+        invite_code: Option<String>,
+    },
     /// Changer de hub : présence « hors ligne » envoyée à l'ancien (s'il y avait une
     /// session), puis reprise de la session rangée pour le nouveau, s'il y en a une.
     Switch(HubUrl),
@@ -100,6 +141,27 @@ enum Done {
     Lists {
         lists: Lists,
         message: Option<String>,
+    },
+    /// Ce que le hub propose ; `None` : pas lu (hub injoignable…).
+    Info(Option<HubInfo>),
+    /// `start` a répondu : ouvrir le navigateur, puis attendre le retour.
+    DiscordOpened {
+        local: DiscordReturn,
+        start: DiscordStart,
+    },
+    /// Nouveau joueur Discord : pseudo à choisir.
+    DiscordNeedsUsername {
+        ticket: DiscordTicket,
+        suggested_username: Option<String>,
+        invite_required: bool,
+    },
+    /// La connexion Discord a échoué. `keep_ticket` : l'étape « pseudo » reste ouverte
+    /// (pseudo pris, code faux…) ; sinon, retour au formulaire.
+    DiscordFailed {
+        message: String,
+        keep_ticket: bool,
+        /// Vrai pour une annulation : message d'information, pas d'erreur.
+        cancelled: bool,
     },
 }
 
@@ -144,6 +206,16 @@ pub struct FriendsState {
     pending_switch: Option<HubUrl>,
     /// Écrire l'adresse choisie dans `config.toml` (faux dans les tests).
     persist: bool,
+    /// Ce que le hub en service propose (`GET /v1/info`).
+    info: Option<HubInfo>,
+    /// Adresse pour laquelle `info` a déjà été demandé.
+    info_for: Option<HubUrl>,
+    /// Connexion Discord en cours.
+    discord: DiscordStep,
+    /// Suite à lancer à la prochaine image (étape suivante de la connexion Discord).
+    next: Option<Action>,
+    /// Adresse à ouvrir dans le navigateur du système à la prochaine image.
+    open_url: Option<String>,
 }
 
 /// Résumé pour les cartes de la barre latérale.
@@ -202,7 +274,17 @@ impl FriendsState {
             dev_login,
             pending_switch: None,
             persist: true,
+            info: None,
+            info_for: None,
+            discord: DiscordStep::Idle,
+            next: None,
+            open_url: None,
         }
+    }
+
+    /// Vrai si le hub en service propose la connexion Discord.
+    fn offers_discord(&self) -> bool {
+        self.info.as_ref().is_some_and(HubInfo::offers_discord)
     }
 
     pub fn summary(&self) -> Summary {
@@ -299,7 +381,61 @@ impl FriendsState {
                     self.notice = Some(Notice::Info(message));
                 }
             }
+            Ok(Done::Info(info)) => self.info = info,
+            Ok(Done::DiscordOpened { local, start }) => {
+                let cancel = Arc::new(AtomicBool::new(false));
+                self.open_url = Some(start.authorize_url.clone());
+                self.discord = DiscordStep::Waiting {
+                    authorize_url: start.authorize_url.clone(),
+                    cancel: Arc::clone(&cancel),
+                };
+                self.next = Some(Action::DiscordWait {
+                    local,
+                    start,
+                    cancel,
+                });
+            }
+            Ok(Done::DiscordNeedsUsername {
+                ticket,
+                suggested_username,
+                invite_required,
+            }) => {
+                self.new_username = suggested_username.unwrap_or_default();
+                self.discord = DiscordStep::ChooseName {
+                    ticket,
+                    invite_required,
+                };
+                self.notice = None;
+            }
+            Ok(Done::DiscordFailed {
+                message,
+                keep_ticket,
+                cancelled,
+            }) => {
+                if !keep_ticket {
+                    self.discord = DiscordStep::Idle;
+                }
+                self.notice = Some(if cancelled {
+                    Notice::Info(message)
+                } else {
+                    Notice::Error(message)
+                });
+            }
             Err(message) => self.notice = Some(Notice::Error(message)),
+        }
+        // Connecté (par Discord ou autrement) : l'étape Discord est finie.
+        if self.username.is_some() {
+            self.discord = DiscordStep::Idle;
+        }
+    }
+
+    /// « Annuler » pendant la connexion Discord.
+    fn cancel_discord(&mut self) {
+        match &self.discord {
+            // Le thread réseau voit le drapeau et répond « annulée ».
+            DiscordStep::Waiting { cancel, .. } => cancel.store(true, Ordering::Relaxed),
+            DiscordStep::ChooseName { .. } => self.discord = DiscordStep::Idle,
+            DiscordStep::Idle => {}
         }
     }
 
@@ -341,6 +477,11 @@ impl FriendsState {
         self.username = None;
         self.lists = Lists::default();
         self.confirm_remove = None;
+        // Ce que propose le nouveau hub sera relu ; une connexion Discord en cours est
+        // abandonnée (elle appartenait à l'ancien hub).
+        self.info = None;
+        self.info_for = None;
+        self.discord = DiscordStep::Idle;
         // La reprise de session du démarrage est remplacée par celle du nouveau hub.
         self.started = true;
         self.start(ctx, Action::Switch(url));
@@ -409,6 +550,14 @@ impl Default for FriendsState {
 /// démarrage, réponses des threads, présence et listes renouvelées.
 pub fn background(state: &mut FriendsState, ctx: &egui::Context) {
     state.poll();
+    if let Some(url) = state.open_url.take() {
+        // Ouvre le navigateur du système (eframe, option `links`).
+        ctx.open_url(egui::OpenUrl::new_tab(url));
+    }
+    if let Some(action) = state.next.take() {
+        state.start(ctx, action);
+        return;
+    }
     if !state.started {
         state.started = true;
         let action = match state.dev_login.take() {
@@ -430,6 +579,12 @@ pub fn background(state: &mut FriendsState, ctx: &egui::Context) {
     if state.username.is_some() {
         // Réveille l'interface pour la prochaine synchronisation, même sans clic.
         ctx.request_repaint_after(SYNC_EVERY);
+    }
+    // Pas connecté : on demande une fois par adresse ce que le hub propose (Discord ?).
+    let current = state.url.as_ref().ok().cloned();
+    if state.username.is_none() && !state.busy() && current.is_some() && state.info_for != current {
+        state.info_for = current;
+        state.start(ctx, Action::Info);
     }
 }
 
@@ -495,6 +650,85 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
             }
         }
         Action::Sync => after(client, store, Ok(None)),
+        Action::Info => {
+            // Un hub injoignable est déjà signalé par la reprise de session : ici, on
+            // n'affiche rien de plus, le bouton Discord reste caché.
+            let info = client.hub_info().ok();
+            Outcome {
+                client,
+                result: Ok(Done::Info(info)),
+            }
+        }
+        Action::DiscordStart => {
+            let result = DiscordReturn::bind().and_then(|local| {
+                let start = client.discord_start(Some(local.port()))?;
+                Ok(Done::DiscordOpened { local, start })
+            });
+            Outcome {
+                client,
+                result: Ok(result.unwrap_or_else(|e| discord_failed(&e, false))),
+            }
+        }
+        Action::DiscordWait {
+            local,
+            start,
+            cancel,
+        } => {
+            let mut client = client;
+            let ticket = match local.wait(&start, DISCORD_WAIT, &cancel) {
+                Ok(ticket) => ticket,
+                Err(error) => {
+                    return Outcome {
+                        client,
+                        result: Ok(discord_failed(&error, false)),
+                    }
+                }
+            };
+            match client.discord_finish(&ticket) {
+                Ok(DiscordOutcome::LoggedIn(session)) => keep_session(client, store, session),
+                Ok(DiscordOutcome::NeedsUsername {
+                    suggested_username,
+                    invite_required,
+                }) => Outcome {
+                    client,
+                    result: Ok(Done::DiscordNeedsUsername {
+                        ticket,
+                        suggested_username,
+                        invite_required,
+                    }),
+                },
+                // `start` est appelé sans jeton : une liaison n'arrive pas ici.
+                Ok(DiscordOutcome::Linked) => Outcome {
+                    client,
+                    result: Ok(Done::DiscordFailed {
+                        message: "Compte Discord lié.".to_string(),
+                        keep_ticket: false,
+                        cancelled: true,
+                    }),
+                },
+                Err(error) => Outcome {
+                    client,
+                    result: Ok(discord_failed(&error, false)),
+                },
+            }
+        }
+        Action::DiscordRegister {
+            ticket,
+            username,
+            invite_code,
+        } => {
+            let mut client = client;
+            match client.discord_register(&ticket, &username, invite_code.as_deref()) {
+                Ok(session) => keep_session(client, store, session),
+                Err(error) => {
+                    let keep = discord_retry_possible(&error);
+                    Outcome {
+                        client,
+                        result: Ok(discord_failed(&error, keep)),
+                    }
+                }
+            }
+        }
         Action::SendRequest(name) => {
             let result = client.send_request(&name).map(|outcome| {
                 Some(match outcome {
@@ -541,17 +775,47 @@ fn login(
     password: &Password,
 ) -> Outcome {
     match client.login(email.trim(), password) {
-        Ok(session) => {
-            let warning = client.remember(store).err().map(|e| {
-                format!("Connecté, mais la session ne sera pas gardée à la fermeture : {e}")
-            });
-            logged_in(client, session.username, warning)
-        }
+        Ok(session) => keep_session(client, store, session),
         Err(error) => Outcome {
             client,
             result: Err(error_text(&error)),
         },
     }
+}
+
+/// Session ouverte (mot de passe ou Discord) : jeton rangé, puis listes lues.
+fn keep_session(client: HubClient, store: &dyn TokenStore, session: Session) -> Outcome {
+    let warning = client
+        .remember(store)
+        .err()
+        .map(|e| format!("Connecté, mais la session ne sera pas gardée à la fermeture : {e}"));
+    logged_in(client, session.username, warning)
+}
+
+/// Échec de la connexion Discord, en message pour le joueur.
+fn discord_failed(error: &HubClientError, keep_ticket: bool) -> Done {
+    Done::DiscordFailed {
+        message: error_text(error),
+        keep_ticket,
+        cancelled: matches!(error, HubClientError::DiscordCancelled),
+    }
+}
+
+/// Après un `register` refusé : vrai si le joueur peut corriger sa saisie et
+/// réessayer avec le même ticket (pseudo pris ou invalide, code d'invitation…).
+fn discord_retry_possible(error: &HubClientError) -> bool {
+    matches!(
+        error.code(),
+        Some(
+            ErrorCode::UsernameTaken
+                | ErrorCode::InvalidUsername
+                | ErrorCode::InviteRequired
+                | ErrorCode::InvalidInvite
+        )
+    ) || matches!(
+        error,
+        HubClientError::EmptyUsername | HubClientError::Network(_)
+    )
 }
 
 /// Après connexion : présence et listes.
@@ -649,10 +913,34 @@ fn error_text(error: &HubClientError) -> String {
             code: ErrorCode::InvalidInvite,
             ..
         } => "Code d'invitation incorrect, expiré ou déjà utilisé.".to_string(),
+        // Connexion Discord : nos propres phrases aussi.
+        HubClientError::Api { code, .. } if discord_text(code).is_some() => {
+            discord_text(code).unwrap_or_default().to_string()
+        }
+        HubClientError::DiscordTimeout => {
+            "Pas de réponse de Discord après 5 minutes : recommencez.".to_string()
+        }
+        HubClientError::DiscordCancelled => "Connexion Discord annulée.".to_string(),
+        HubClientError::DiscordReturn(detail) => {
+            format!("Le launcher n'a pas pu recevoir la réponse de Discord : {detail}.")
+        }
         // Les messages du hub sont déjà en français et sans secret.
         HubClientError::Api { message, .. } => capitalize(message),
         other => capitalize(&other.to_string()),
     }
+}
+
+/// Phrase pour un code d'erreur de la connexion Discord.
+fn discord_text(code: &ErrorCode) -> Option<&'static str> {
+    Some(match code {
+        ErrorCode::DiscordDisabled => "Ce Rafthub ne propose pas la connexion Discord.",
+        ErrorCode::DiscordRefused => "Connexion refusée chez Discord.",
+        ErrorCode::DiscordUnavailable => "Discord ne répond pas : réessayez dans un moment.",
+        ErrorCode::DiscordTaken => "Ce compte Discord est déjà lié à un autre compte.",
+        ErrorCode::InvalidToken => "Connexion Discord expirée : recommencez.",
+        ErrorCode::AccountSuspended => "Ce compte est suspendu.",
+        _ => return None,
+    })
 }
 
 /// Champ « Code d'invitation » : vide (ou des espaces) = pas de code envoyé.
@@ -778,6 +1066,21 @@ fn info_banner(ui: &mut Ui, message: &str) {
 
 /// Connexion ou création de compte.
 fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
+    // Connexion Discord en cours : son étape remplace le formulaire.
+    match state.discord.clone() {
+        DiscordStep::Idle => {}
+        DiscordStep::Waiting { authorize_url, .. } => {
+            discord_waiting_panel(ui, state, &authorize_url);
+            return;
+        }
+        DiscordStep::ChooseName {
+            ticket,
+            invite_required,
+        } => {
+            discord_name_panel(ui, state, ctx, ticket, invite_required);
+            return;
+        }
+    }
     let heading = match state.mode {
         Mode::Login => "Se connecter",
         Mode::Register => "Créer un compte",
@@ -880,6 +1183,110 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                     username: state.new_username.trim().to_string(),
                     invite_code: invite_code_or_none(&state.invite_code),
                 },
+            };
+            state.start(ctx, action);
+        }
+        // Bouton Discord : seulement si le hub le propose (`GET /v1/info`).
+        if state.offers_discord() {
+            ui.add_space(10.0);
+            ui.label(widgets::dim("ou").size(12.0));
+            ui.add_space(6.0);
+            if widgets::ghost_button(ui, "Se connecter avec Discord") && !state.busy() {
+                state.start(ctx, Action::DiscordStart);
+            }
+            ui.label(
+                widgets::dim(
+                    "Ouvre votre navigateur sur Discord. Un nouveau joueur choisit \
+                     ensuite son pseudo.",
+                )
+                .size(12.0),
+            );
+        }
+    });
+}
+
+/// Attente du retour de Discord : le navigateur est ouvert.
+fn discord_waiting_panel(ui: &mut Ui, state: &mut FriendsState, authorize_url: &str) {
+    widgets::panel(ui, "Connexion avec Discord", |ui| {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(RichText::new("En attente de votre réponse sur Discord…").color(theme::TEXT));
+        });
+        ui.add_space(6.0);
+        ui.label(widgets::dim(
+            "Votre navigateur s'est ouvert sur la page de Discord. Acceptez, puis revenez \
+             ici : la connexion se termine toute seule.",
+        ));
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            if widgets::ghost_button(ui, "Copier le lien") {
+                // Si le navigateur ne s'est pas ouvert, le joueur colle le lien lui-même.
+                ui.ctx().copy_text(authorize_url.to_string());
+                state.notice = Some(Notice::Info(
+                    "Lien copié : collez-le dans votre navigateur.".to_string(),
+                ));
+            }
+            if widgets::ghost_button(ui, "Annuler") {
+                state.cancel_discord();
+            }
+        });
+    });
+}
+
+/// Nouveau joueur venu par Discord : choix du pseudo (et code d'invitation).
+fn discord_name_panel(
+    ui: &mut Ui,
+    state: &mut FriendsState,
+    ctx: &egui::Context,
+    ticket: DiscordTicket,
+    invite_required: bool,
+) {
+    widgets::panel(ui, "Choisir un pseudo", |ui| {
+        ui.label(widgets::dim(
+            "Discord a confirmé votre identité. Choisissez le pseudo que vos amis \
+             verront sur ce Rafthub.",
+        ));
+        ui.add_space(10.0);
+        let mut submit = false;
+        egui::Grid::new("hub_discord_name")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .show(ui, |ui| {
+                ui.label("Pseudo");
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut state.new_username)
+                        .hint_text("3 à 24 caractères")
+                        .desired_width(280.0),
+                );
+                submit |= response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.end_row();
+                if invite_required {
+                    ui.label("Code d'invitation");
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut state.invite_code)
+                            .hint_text("demandé par ce hub")
+                            .desired_width(280.0),
+                    );
+                    submit |=
+                        response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.end_row();
+                }
+            });
+        ui.add_space(10.0);
+        let ready = !state.busy()
+            && !state.new_username.trim().is_empty()
+            && (!invite_required || !state.invite_code.trim().is_empty());
+        ui.horizontal(|ui| {
+            submit |= widgets::primary_button(ui, "Créer le compte", ready);
+            if widgets::ghost_button(ui, "Annuler") && !state.busy() {
+                state.cancel_discord();
+            }
+        });
+        if submit && ready {
+            let action = Action::DiscordRegister {
+                ticket,
+                username: state.new_username.trim().to_string(),
+                invite_code: invite_code_or_none(&state.invite_code),
             };
             state.start(ctx, action);
         }
@@ -1191,6 +1598,117 @@ mod tests {
             error_text(&api(ErrorCode::InvalidInvite)),
             "Code d'invitation incorrect, expiré ou déjà utilisé."
         );
+    }
+
+    #[test]
+    fn messages_de_la_connexion_discord() {
+        let api = |code| HubClientError::Api {
+            status: 400,
+            code,
+            message: "texte du hub".to_string(),
+        };
+        assert_eq!(
+            error_text(&api(ErrorCode::DiscordRefused)),
+            "Connexion refusée chez Discord."
+        );
+        assert!(error_text(&api(ErrorCode::InvalidToken)).contains("expirée"));
+        assert!(error_text(&HubClientError::DiscordTimeout).contains("5 minutes"));
+        assert_eq!(
+            error_text(&HubClientError::DiscordCancelled),
+            "Connexion Discord annulée."
+        );
+    }
+
+    #[test]
+    fn pseudo_pris_garde_l_etape_discord() {
+        let api = |code| HubClientError::Api {
+            status: 409,
+            code,
+            message: String::new(),
+        };
+        assert!(discord_retry_possible(&api(ErrorCode::UsernameTaken)));
+        assert!(discord_retry_possible(&api(ErrorCode::InvalidInvite)));
+        assert!(!discord_retry_possible(&api(ErrorCode::InvalidToken)));
+        assert!(!discord_retry_possible(&api(ErrorCode::RegistrationClosed)));
+    }
+
+    #[test]
+    fn bouton_discord_selon_le_hub() {
+        let mut state = test_state();
+        assert!(!state.offers_discord());
+        let mut info = HubInfo::password_only();
+        state.info = Some(info.clone());
+        assert!(!state.offers_discord());
+        info.login_methods.push("discord".to_string());
+        state.info = Some(info);
+        assert!(state.offers_discord());
+        // Changer de hub oublie ce que proposait l'ancien.
+        let ctx = egui::Context::default();
+        assert!(state.switch_to(HubUrl::parse("https://hub.exemple.org").unwrap(), &ctx));
+        assert!(!state.offers_discord());
+    }
+
+    /// Fait arriver une réponse du thread réseau, comme si l'appel venait de finir.
+    fn deliver(state: &mut FriendsState, result: Result<Done, String>) {
+        let (sender, receiver) = mpsc::channel();
+        let client = state.client.take().unwrap();
+        sender.send(Outcome { client, result }).unwrap();
+        state.job = Some(receiver);
+        state.poll();
+    }
+
+    #[test]
+    fn nouveau_joueur_discord_choisit_un_pseudo() {
+        let mut state = test_state();
+        deliver(
+            &mut state,
+            Ok(Done::DiscordNeedsUsername {
+                ticket: DiscordTicket::from_parts("s", "x", "t"),
+                suggested_username: Some("Mimi".to_string()),
+                invite_required: true,
+            }),
+        );
+        assert!(matches!(
+            state.discord,
+            DiscordStep::ChooseName {
+                invite_required: true,
+                ..
+            }
+        ));
+        assert_eq!(state.new_username, "Mimi");
+        // Pseudo pris : l'étape reste ouverte, avec le message.
+        deliver(
+            &mut state,
+            Ok(Done::DiscordFailed {
+                message: "Ce pseudo est déjà pris".to_string(),
+                keep_ticket: true,
+                cancelled: false,
+            }),
+        );
+        assert!(matches!(state.discord, DiscordStep::ChooseName { .. }));
+        assert!(matches!(&state.notice, Some(Notice::Error(_))));
+        // « Annuler » : retour au formulaire.
+        state.cancel_discord();
+        assert!(matches!(state.discord, DiscordStep::Idle));
+    }
+
+    #[test]
+    fn attente_discord_annulee() {
+        let mut state = test_state();
+        let cancel = Arc::new(AtomicBool::new(false));
+        state.discord = DiscordStep::Waiting {
+            authorize_url: "https://discord.com/x".to_string(),
+            cancel: Arc::clone(&cancel),
+        };
+        state.cancel_discord();
+        assert!(cancel.load(Ordering::Relaxed));
+        // Le thread répond « annulée » : message d'information, formulaire de retour.
+        deliver(
+            &mut state,
+            Ok(discord_failed(&HubClientError::DiscordCancelled, false)),
+        );
+        assert!(matches!(state.discord, DiscordStep::Idle));
+        assert!(matches!(&state.notice, Some(Notice::Info(m)) if m.contains("annulée")));
     }
 
     #[test]

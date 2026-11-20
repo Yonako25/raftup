@@ -463,3 +463,9 @@ untime2`.
 - **Pas vérifié** : écran du launcher regardé (capture) ; console sans Discord ouverte dans le navigateur.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
 - **Suite** : construire les deux binaires aux releases ; déploiement du Rafthub officiel.
+
+### 2026-11-20 · Launcher : connexion Discord, route `GET /v1/info` (session `p3-discord`)
+- **Fait** : hub, route publique `GET /v1/info` (nom, version, `login_methods` : `password`, plus `discord` si `discord_allowed` et Discord réglé, `registration_mode`), 4 tests `tests/info.rs`. Client : `hub_info` (404 = mot de passe seulement), `discord_start` / `discord_finish` / `discord_register`, serveur local `DiscordReturn` (127.0.0.1, port libre, 5 min, annulable), erreurs typées ; tests faux serveur `tests/hub_discord.rs`, bout en bout vrai routeur + `FakeDiscord` `hub/tests/launcher_discord.rs` (le hub dépend du launcher en test, pas l'inverse). Écran « Amis » : bouton « Se connecter avec Discord » seulement si proposé, attente (copier le lien, annuler), étape « Choisir un pseudo » (+ code d'invitation). ADR 0035 complété.
+- **Pas vérifié** : vraie application Discord ; écran regardé à l'œil (pas de capture).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : liaison de Discord à un compte existant depuis le launcher ; capture de l'écran Discord.

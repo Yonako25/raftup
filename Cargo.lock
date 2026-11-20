@@ -1738,6 +1738,7 @@ dependencies = [
  "askama",
  "axum",
  "base64 0.22.1",
+ "launcher-core",
  "lettre",
  "minisign",
  "minisign-verify",

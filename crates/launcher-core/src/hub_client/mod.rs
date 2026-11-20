@@ -7,10 +7,12 @@
 //! - [`HubClient`] : un appel par route de l'API, **bloquant** (`ureq`) : l'interface
 //!   l'appelle depuis un thread à part, jamais depuis le thread du dessin ;
 //! - [`token`] : où ranger le jeton de session (trousseau du système, ou mémoire) ;
+//! - [`discord`] : connexion Discord (serveur local du retour, `start`, `finish`) ;
 //! - [`HubClientError`] : erreurs typées, avec le code stable du hub quand il répond.
 //!
 //! Ni le mot de passe ni le jeton n'apparaissent dans un `Debug` ou un message d'erreur.
 
+pub mod discord;
 pub mod token;
 pub mod types;
 
@@ -20,9 +22,10 @@ use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 
+pub use discord::{DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, DISCORD_WAIT};
 pub use token::{KeyringStore, MemoryStore, TokenStore, TokenStoreError};
 pub use types::{
-    Account, ApiInfo, ErrorCode, Friend, FriendRequests, Me, Password, Player, Presence,
+    Account, ApiInfo, ErrorCode, Friend, FriendRequests, HubInfo, Me, Password, Player, Presence,
     RequestOutcome, Session, SessionToken, Status,
 };
 
@@ -68,6 +71,15 @@ pub enum HubClientError {
     /// Réponse que ce client ne comprend pas (pas un hub, version trop récente…).
     #[error("réponse inattendue du hub (code {status}) : {detail}")]
     UnexpectedResponse { status: u16, detail: String },
+    /// Le petit serveur local qui attend le retour de Discord n'a pas pu s'ouvrir.
+    #[error("retour de Discord impossible à recevoir : {0}")]
+    DiscordReturn(String),
+    /// Le joueur n'a pas répondu chez Discord à temps.
+    #[error("délai dépassé : aucune réponse de Discord")]
+    DiscordTimeout,
+    /// Le joueur a annulé la connexion Discord dans le launcher.
+    #[error("connexion Discord annulée")]
+    DiscordCancelled,
     /// Le trousseau du système a refusé de lire ou de ranger le jeton.
     #[error(transparent)]
     TokenStore(#[from] TokenStoreError),
@@ -254,6 +266,128 @@ impl HubClient {
             });
         }
         Ok(info)
+    }
+
+    /// `GET /v1/info` : nom du hub, moyens de connexion proposés, mode d'inscription.
+    ///
+    /// Un hub plus ancien, sans cette route (404), est traité comme un hub qui ne
+    /// propose que le mot de passe.
+    pub fn hub_info(&self) -> Result<HubInfo, HubClientError> {
+        match self.call::<HubInfo>(Method::Get, "/v1/info", None, false) {
+            Ok(info) if info.service != "raftup-hub" => Err(unexpected(
+                200,
+                "ce serveur n'est pas un hub Raftup".to_string(),
+            )),
+            Ok(info) => Ok(info),
+            Err(HubClientError::UnexpectedResponse { status: 404, .. }) => {
+                Ok(HubInfo::password_only())
+            }
+            Err(other) => Err(other),
+        }
+    }
+
+    // ---------- Connexion Discord (voir le module `discord`) ----------
+
+    /// `POST /v1/oauth/discord/start` : commence une connexion Discord.
+    ///
+    /// `return_port` : port de [`DiscordReturn`] ; sans lui, le hub renvoie le
+    /// navigateur vers `raftup://oauth/discord`. Le jeton n'est **pas** envoyé : on
+    /// se connecte (la liaison à un compte déjà connecté n'est pas encore proposée).
+    pub fn discord_start(&self, return_port: Option<u16>) -> Result<DiscordStart, HubClientError> {
+        let body = match return_port {
+            Some(port) => json!({ "return_port": port }),
+            None => json!({}),
+        };
+        let json: discord::DiscordStartJson =
+            self.call(Method::Post, "/v1/oauth/discord/start", Some(body), false)?;
+        Ok(DiscordStart {
+            authorize_url: json.authorize_url,
+            state: json.state,
+            secret: json.secret,
+        })
+    }
+
+    /// `POST /v1/oauth/discord/finish` : finit la connexion. Si le compte existe, la
+    /// session est gardée dans le client, comme après [`Self::login`].
+    pub fn discord_finish(
+        &mut self,
+        ticket: &DiscordTicket,
+    ) -> Result<DiscordOutcome, HubClientError> {
+        let body = json!({
+            "state": ticket.state,
+            "secret": ticket.secret,
+            "ticket": ticket.ticket,
+        });
+        let json: discord::DiscordFinishJson =
+            self.call(Method::Post, "/v1/oauth/discord/finish", Some(body), false)?;
+        match json.status.as_str() {
+            "logged_in" => self
+                .keep_discord_session(json)
+                .map(DiscordOutcome::LoggedIn),
+            "linked" => Ok(DiscordOutcome::Linked),
+            "needs_username" => Ok(DiscordOutcome::NeedsUsername {
+                suggested_username: json.suggested_username,
+                invite_required: json.invite_required,
+            }),
+            other => Err(unexpected(200, format!("statut Discord inconnu : {other}"))),
+        }
+    }
+
+    /// `POST /v1/oauth/discord/register` : crée le compte d'un nouveau joueur Discord
+    /// avec le pseudo choisi, et garde la session. Pseudo pris ou code d'invitation
+    /// faux : le même `ticket` peut resservir avec une autre saisie.
+    pub fn discord_register(
+        &mut self,
+        ticket: &DiscordTicket,
+        username: &str,
+        invite_code: Option<&str>,
+    ) -> Result<Session, HubClientError> {
+        let mut body = json!({
+            "state": ticket.state,
+            "secret": ticket.secret,
+            "ticket": ticket.ticket,
+            "username": non_empty(username)?,
+        });
+        if let Some(code) = invite_code.map(str::trim).filter(|c| !c.is_empty()) {
+            body["invite_code"] = json!(code);
+        }
+        let json: discord::DiscordFinishJson = self.call(
+            Method::Post,
+            "/v1/oauth/discord/register",
+            Some(body),
+            false,
+        )?;
+        if json.status != "logged_in" {
+            return Err(unexpected(
+                200,
+                format!("statut Discord inconnu : {}", json.status),
+            ));
+        }
+        self.keep_discord_session(json)
+    }
+
+    /// Lit la session d'une réponse `logged_in` et garde le jeton.
+    fn keep_discord_session(
+        &mut self,
+        json: discord::DiscordFinishJson,
+    ) -> Result<Session, HubClientError> {
+        // `zip` : les quatre champs doivent être là ensemble, sinon la réponse est fausse.
+        let fields = json
+            .token
+            .zip(json.user_id)
+            .zip(json.username)
+            .zip(json.expires_at);
+        let Some((((token, user_id), username), expires_at)) = fields else {
+            return Err(unexpected(200, "session incomplète".to_string()));
+        };
+        let session = Session {
+            token: SessionToken::new(token),
+            user_id,
+            username,
+            expires_at,
+        };
+        self.token = Some(session.token.clone());
+        Ok(session)
     }
 
     /// `POST /v1/accounts` : crée un compte. Ne connecte pas : appeler [`Self::login`].

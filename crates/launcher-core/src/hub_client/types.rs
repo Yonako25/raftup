@@ -62,6 +62,42 @@ pub struct ApiInfo {
     pub api_version: u32,
 }
 
+/// Réponse de `GET /v1/info` : ce que le hub propose.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct HubInfo {
+    pub service: String,
+    /// Nom du hub choisi par son admin (« Rafthub » par défaut).
+    #[serde(default)]
+    pub name: String,
+    /// Version du logiciel du hub.
+    #[serde(default)]
+    pub version: String,
+    /// Moyens de connexion : `password`, et `discord` s'il est proposé.
+    #[serde(default)]
+    pub login_methods: Vec<String>,
+    /// `open`, `invite` ou `closed` (ADR 0036).
+    #[serde(default)]
+    pub registration_mode: String,
+}
+
+impl HubInfo {
+    /// Ce qu'on suppose d'un hub trop ancien pour avoir `GET /v1/info`.
+    pub fn password_only() -> HubInfo {
+        HubInfo {
+            service: "raftup-hub".to_string(),
+            name: String::new(),
+            version: String::new(),
+            login_methods: vec!["password".to_string()],
+            registration_mode: "open".to_string(),
+        }
+    }
+
+    /// Vrai si le hub propose la connexion Discord.
+    pub fn offers_discord(&self) -> bool {
+        self.login_methods.iter().any(|m| m == "discord")
+    }
+}
+
 /// Compte créé (`POST /v1/accounts`).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Account {
@@ -207,6 +243,18 @@ pub enum ErrorCode {
     InviteRequired,
     /// Code d'invitation inconnu, expiré ou déjà utilisé.
     InvalidInvite,
+    /// Ce hub ne propose pas Discord (auto-hébergé, ou Discord pas réglé).
+    DiscordDisabled,
+    /// Le joueur a refusé chez Discord.
+    DiscordRefused,
+    /// Discord n'a pas répondu au hub.
+    DiscordUnavailable,
+    /// Ce compte Discord est déjà lié à un autre compte.
+    DiscordTaken,
+    /// Connexion inconnue ou expirée (`state`, `secret` ou `ticket` refusé).
+    InvalidToken,
+    /// Compte suspendu par un admin.
+    AccountSuspended,
     BadRequest,
     Internal,
     Other(String),
@@ -233,6 +281,12 @@ impl ErrorCode {
             "registration_closed" => ErrorCode::RegistrationClosed,
             "invite_required" => ErrorCode::InviteRequired,
             "invalid_invite" => ErrorCode::InvalidInvite,
+            "discord_disabled" => ErrorCode::DiscordDisabled,
+            "discord_refused" => ErrorCode::DiscordRefused,
+            "discord_unavailable" => ErrorCode::DiscordUnavailable,
+            "discord_taken" => ErrorCode::DiscordTaken,
+            "invalid_token" => ErrorCode::InvalidToken,
+            "account_suspended" => ErrorCode::AccountSuspended,
             "bad_request" => ErrorCode::BadRequest,
             "internal" => ErrorCode::Internal,
             other => ErrorCode::Other(other.to_string()),
