@@ -1,8 +1,11 @@
-//! Binaire `rafthub` : sert l'API du hub et sa console d'admin en HTTP (ADR 0036).
+//! Binaire `rafthub` : sert l'API du hub et sa console d'admin, en HTTP ou en HTTPS
+//! (ADR 0036, 0039).
 //!
 //! ```text
 //! rafthub [--db sqlite://chemin.db] [--listen 127.0.0.1:8787]
 //!         [--public-url https://hub.exemple.org]
+//!         [--tls-cert fullchain.pem --tls-key privkey.pem]
+//!         [--tls-acme hub.exemple.org [--tls-acme-email moi@exemple.org] [--tls-acme-staging]]
 //! rafthub admin create <e-mail> [--db …]   donne le rôle d'admin à un compte existant
 //! rafthub admin remove <e-mail> [--db …]   le lui retire (et ferme ses sessions d'admin)
 //! ```
@@ -21,9 +24,21 @@
 //! connexion Discord ; sans (Rafthub auto-hébergé), seulement pseudo ou e-mail et mot
 //! de passe (ADR 0038).
 //!
-//! La console d'admin est sous `<public-url>/admin`. Son cookie n'a l'attribut
-//! `Secure` que si `--public-url` n'est pas en `http://127.0.0.1` (ou `localhost`) :
-//! derrière un proxy, donner l'adresse publique en `https://`.
+//! **HTTP ou HTTPS** (ADR 0039), au choix :
+//! - sans option TLS, le hub parle HTTP en clair : on le place derrière un proxy
+//!   (Traefik, Caddy, nginx) qui fait le HTTPS ;
+//! - `--tls-cert` + `--tls-key` : le hub sert lui-même en HTTPS avec ces fichiers
+//!   PEM (par exemple ceux de certbot ; redémarrer après un renouvellement) ;
+//! - `--tls-acme <domaine>` : certificat Let's Encrypt obtenu et renouvelé tout seul
+//!   (défi TLS-ALPN-01 : le hub doit être joignable sur le port 443, par exemple
+//!   `--listen 0.0.0.0:443`), rangé dans `rafthub-data/acme/`. `--tls-acme-staging`
+//!   prend le serveur d'essai de Let's Encrypt, pour essayer sans risquer ses limites.
+//!
+//! L'assistant d'installation est servi de la même façon (HTTPS compris).
+//!
+//! La console d'admin est sous `<public-url>/admin`. Son cookie a l'attribut `Secure`
+//! en HTTPS intégré, et sinon dès que `--public-url` n'est pas en `http://127.0.0.1`
+//! (ou `localhost`) : derrière un proxy, donner l'adresse publique en `https://`.
 //!
 //! `--db` accepte aussi une base PostgreSQL : `postgres://utilisateur:motdepasse@hote/base`.
 //! Les secrets passent plutôt par l'environnement (invisibles dans la liste des process) :
@@ -40,6 +55,10 @@
 //! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
 //! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
 //! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache (défaut : `rafthub-data/cache`) |
+//! | `RAFTUP_HUB_TLS_CERT` | certificat PEM (comme `--tls-cert`) |
+//! | `RAFTUP_HUB_TLS_KEY` | clé privée PEM (comme `--tls-key`) |
+//! | `RAFTUP_HUB_TLS_ACME` | domaine pour Let's Encrypt (comme `--tls-acme`) |
+//! | `RAFTUP_HUB_TLS_ACME_EMAIL` | e-mail de contact pour Let's Encrypt |
 //!
 //! Ces réglages se changent aussi depuis la console d'admin (ADR 0036) : la valeur
 //! écrite en base passe avant la variable d'environnement, qui passe avant le défaut.
@@ -48,12 +67,12 @@
 //! Sans application Discord, la connexion Discord répond `discord_disabled`.
 //! L'adresse de retour à déclarer chez Discord est `<public-url>/v1/oauth/discord/callback`.
 //!
-//! Le hub parle HTTP en clair : en production, il se place derrière un proxy
-//! qui fait le TLS (ADR 0033). Pas de déploiement pour l'instant.
+//! Pas de déploiement pour l'instant.
 
 use anyhow::{bail, Context};
 use hub::server_config::ServerConfig;
 use hub::store::Role;
+use hub::tls::{AcmeOptions, TlsSetup};
 use hub::web::install::{install_router, InstallState};
 use hub::{AppState, EnvSettings, HubConfig, SettingKey, Store};
 
@@ -64,6 +83,13 @@ struct Args {
     public_url: Option<String>,
     /// Commande d'admin (`admin create|remove <e-mail>`) au lieu de lancer le serveur.
     admin: Option<(Role, String)>,
+    /// HTTPS par fichiers PEM : certificat (avec sa chaîne) et clé privée (ADR 0039).
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
+    /// HTTPS par Let's Encrypt : nom de domaine, e-mail de contact, serveur d'essai.
+    tls_acme: Option<String>,
+    tls_acme_email: Option<String>,
+    tls_acme_staging: bool,
 }
 
 /// Variable d'environnement non vide.
@@ -90,6 +116,11 @@ fn parse_args() -> anyhow::Result<Args> {
         listen: "127.0.0.1:8787".to_string(),
         public_url: None,
         admin: None,
+        tls_cert: env("RAFTUP_HUB_TLS_CERT"),
+        tls_key: env("RAFTUP_HUB_TLS_KEY"),
+        tls_acme: env("RAFTUP_HUB_TLS_ACME"),
+        tls_acme_email: env("RAFTUP_HUB_TLS_ACME_EMAIL"),
+        tls_acme_staging: false,
     };
     // Mots qui ne sont pas des options (`admin`, `create`, l'adresse…).
     let mut words = Vec::new();
@@ -101,6 +132,20 @@ fn parse_args() -> anyhow::Result<Args> {
             "--public-url" => {
                 args.public_url = Some(iter.next().context("--public-url attend une URL")?)
             }
+            "--tls-cert" => {
+                args.tls_cert = Some(iter.next().context("--tls-cert attend un fichier .pem")?)
+            }
+            "--tls-key" => {
+                args.tls_key = Some(iter.next().context("--tls-key attend un fichier .pem")?)
+            }
+            "--tls-acme" => {
+                args.tls_acme = Some(iter.next().context("--tls-acme attend un nom de domaine")?)
+            }
+            "--tls-acme-email" => {
+                args.tls_acme_email =
+                    Some(iter.next().context("--tls-acme-email attend une adresse")?)
+            }
+            "--tls-acme-staging" => args.tls_acme_staging = true,
             "--help" | "-h" => {
                 println!("rafthub [--db sqlite://chemin.db] [--listen 127.0.0.1:8787]");
                 println!("  sans --db : base choisie au premier lancement, dans /admin");
@@ -112,6 +157,11 @@ fn parse_args() -> anyhow::Result<Args> {
                     "  environnement : RAFTUP_HUB_DB, RAFTUP_HUB_SMTP_URL, RAFTUP_HUB_MAIL_FROM,"
                 );
                 println!("    RAFTUP_HUB_DISCORD_CLIENT_ID, RAFTUP_HUB_DISCORD_CLIENT_SECRET");
+                println!("HTTPS intégré (sinon HTTP, derrière un proxy) :");
+                println!("  --tls-cert fullchain.pem --tls-key privkey.pem   certificat fourni");
+                println!("  --tls-acme hub.exemple.org [--tls-acme-email moi@exemple.org]");
+                println!("    certificat Let's Encrypt automatique (port 443 joignable)");
+                println!("  --tls-acme-staging   serveur d'essai de Let's Encrypt");
                 std::process::exit(0);
             }
             other if other.starts_with('-') => bail!("option inconnue : {other}"),
@@ -137,6 +187,7 @@ fn parse_args() -> anyhow::Result<Args> {
 /// jusqu'à ce qu'une base soit essayée et enregistrée, puis rend son URL.
 async fn run_install_wizard(
     args: &Args,
+    tls: Option<TlsSetup>,
     dir: std::path::PathBuf,
     code: &str,
 ) -> anyhow::Result<String> {
@@ -144,12 +195,14 @@ async fn run_install_wizard(
         .public_url
         .clone()
         .or_else(|| env("RAFTUP_HUB_PUBLIC_URL"));
-    // Cookie `Secure` sauf quand le hub est joint en local, comme la console.
-    let secure = public_url.as_deref().is_some_and(|url| {
-        !["http://127.0.0.1", "http://localhost"]
-            .iter()
-            .any(|local| url.starts_with(local))
-    });
+    // Cookie `Secure` en HTTPS intégré, et sauf quand le hub est joint en local
+    // en HTTP, comme la console.
+    let secure = tls.is_some()
+        || public_url.as_deref().is_some_and(|url| {
+            !["http://127.0.0.1", "http://localhost"]
+                .iter()
+                .any(|local| url.starts_with(local))
+        });
     // `oneshot` : un canal qui porte une seule valeur, ici l'URL de la base choisie.
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<String>();
     let state = InstallState::new(code.to_string(), dir, secure, done_tx);
@@ -165,19 +218,19 @@ async fn run_install_wizard(
     // `Arc<Mutex<…>>` : la tâche d'arrêt écrit, `main` lit ensuite.
     let chosen = std::sync::Arc::new(tokio::sync::Mutex::new(None::<String>));
     let slot = chosen.clone();
-    axum::serve(listener, install_router(state))
-        .with_graceful_shutdown(async move {
-            tokio::select! {
-                url = done_rx => {
-                    if let Ok(url) = url {
-                        *slot.lock().await = Some(url);
-                    }
+    // En HTTPS si `tls` est donné, comme le vrai hub ensuite.
+    hub::tls::serve(listener, tls, install_router(state), async move {
+        tokio::select! {
+            url = done_rx => {
+                if let Ok(url) = url {
+                    *slot.lock().await = Some(url);
                 }
-                _ = tokio::signal::ctrl_c() => {}
             }
-        })
-        .await
-        .context("assistant d'installation")?;
+            _ = tokio::signal::ctrl_c() => {}
+        }
+    })
+    .await
+    .context("assistant d'installation")?;
     let url = chosen.lock().await.take();
     url.context("installation interrompue")
 }
@@ -186,6 +239,12 @@ async fn run_install_wizard(
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let args = parse_args()?;
+    // HTTPS intégré, lu avant tout : un certificat illisible arrête le hub tout de suite.
+    let tls = if args.admin.is_some() {
+        None
+    } else {
+        tls_setup(&args)?
+    };
 
     // Code d'installation, tiré seulement s'il sert (assistant ou premier admin).
     let mut setup_code: Option<String> = None;
@@ -203,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
                 ),
                 None => {
                     let code = hub::session::new_invite_code();
-                    let url = run_install_wizard(&args, dir, &code).await?;
+                    let url = run_install_wizard(&args, tls.clone(), dir, &code).await?;
                     setup_code = Some(code);
                     url
                 }
@@ -222,8 +281,13 @@ async fn main() -> anyhow::Result<()> {
     // Réglages de l'environnement ; `--public-url` passe avant la variable.
     let mut config = HubConfig {
         settings_env: EnvSettings::from_env(),
+        https: tls.is_some(),
         ..HubConfig::default()
     };
+    // Avec Let's Encrypt, l'adresse publique par défaut est celle du domaine.
+    if let Some(domain) = &args.tls_acme {
+        config.public_url = format!("https://{domain}");
+    }
     if let Some(url) = args.public_url {
         config
             .settings_env
@@ -260,6 +324,11 @@ async fn main() -> anyhow::Result<()> {
     if state.discord_allowed() && settings.discord_config().is_none() {
         tracing::warn!("application Discord non réglée : connexion Discord désactivée");
     }
+    if tls.is_some() && !settings.public_url.starts_with("https://") {
+        tracing::warn!(
+            "HTTPS activé mais adresse publique en http:// : donnez --public-url https://…"
+        );
+    }
 
     // Ménage des sessions et jetons expirés, une fois par heure, dans une tâche à part.
     tokio::spawn(async move {
@@ -281,15 +350,44 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&args.listen)
         .await
         .with_context(|| format!("écoute sur {}", args.listen))?;
-    tracing::info!(adresse = %args.listen, "rafthub démarré (console : /admin)");
+    let scheme = if tls.is_some() { "https" } else { "http" };
+    tracing::info!(adresse = %args.listen, "rafthub démarré en {scheme} (console : /admin)");
 
-    axum::serve(listener, hub::router(state))
-        .with_graceful_shutdown(async {
-            // Ctrl+C arrête le serveur proprement ; une erreur ici l'arrête aussi.
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+    hub::tls::serve(listener, tls, hub::router(state), async {
+        // Ctrl+C arrête le serveur proprement ; une erreur ici l'arrête aussi.
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await?;
     Ok(())
+}
+
+/// HTTPS intégré (ADR 0039) d'après les options : `None` = HTTP en clair (proxy).
+fn tls_setup(args: &Args) -> anyhow::Result<Option<TlsSetup>> {
+    match (&args.tls_cert, &args.tls_key, &args.tls_acme) {
+        (None, None, None) => Ok(None),
+        (Some(_), _, Some(_)) | (_, Some(_), Some(_)) => {
+            bail!("choisir --tls-cert/--tls-key ou --tls-acme, pas les deux")
+        }
+        (Some(cert), Some(key), None) => {
+            let setup = TlsSetup::from_pem_files(cert.as_ref(), key.as_ref())
+                .context("HTTPS (--tls-cert, --tls-key)")?;
+            Ok(Some(setup))
+        }
+        (Some(_), None, None) => bail!("--tls-cert demande aussi --tls-key (la clé privée)"),
+        (None, Some(_), None) => bail!("--tls-key demande aussi --tls-cert (le certificat)"),
+        (None, None, Some(domain)) => {
+            let options = AcmeOptions {
+                domain: domain.clone(),
+                contact_email: args.tls_acme_email.clone(),
+                cache_dir: data_dir()?.join("acme"),
+                staging: args.tls_acme_staging,
+            };
+            tracing::info!(domaine = %domain, "HTTPS : certificat Let's Encrypt demandé");
+            Ok(Some(
+                TlsSetup::acme(&options).context("HTTPS (--tls-acme)")?,
+            ))
+        }
+    }
 }
 
 /// `rafthub admin create|remove <e-mail>` : change le rôle d'un compte existant.

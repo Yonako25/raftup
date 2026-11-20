@@ -60,6 +60,15 @@ semver.workspace = true
 zip.workspace = true
 # Fichier `rafthub-data/rafthub.toml` : base choisie au premier lancement (ADR 0037).
 toml.workspace = true
+# HTTPS intégré, en option (ADR 0039) : rustls + ring comme le serveur Archipelago
+# de Raftup (ADR 0009), pas d'OpenSSL. Licences : Apache-2.0 OR ISC OR MIT (rustls),
+# MIT OR Apache-2.0 (tokio-rustls).
+rustls.workspace = true
+tokio-rustls.workspace = true
+# Certificat Let's Encrypt automatique, défi TLS-ALPN-01 (Apache-2.0 OR MIT), moteur
+# `ring` au lieu d'aws-lc ; `futures-util` (MIT OR Apache-2.0) fait avancer son flux.
+rustls-acme = { version = "0.15", default-features = false, features = ["ring", "tls12", "webpki-roots", "tokio"] }
+futures-util.workspace = true
 # Binaire seulement.
 anyhow.workspace = true
 tracing-subscriber.workspace = true
@@ -70,3 +79,5 @@ tower = { version = "0.5", default-features = false, features = ["util"] }
 tempfile.workspace = true
 # Signer un faux exe avec une clé générée dans le test (distribution, MIT).
 minisign.workspace = true
+# Certificat auto-signé créé pendant le test HTTPS (MIT OR Apache-2.0).
+rcgen.workspace = true

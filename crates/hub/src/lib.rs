@@ -21,6 +21,7 @@ pub mod server_config;
 pub mod session;
 pub mod settings;
 pub mod store;
+pub mod tls;
 pub mod web;
 
 use std::sync::Arc;
@@ -79,6 +80,9 @@ pub struct HubConfig {
     /// la page `/admin/installation` qui crée le premier admin (ADR 0037). `None` :
     /// page fermée.
     pub setup_code: Option<String>,
+    /// Vrai quand le hub sert lui-même en HTTPS (`--tls-cert` ou `--tls-acme`,
+    /// ADR 0039) : les cookies de la console ont alors toujours l'attribut `Secure`.
+    pub https: bool,
 }
 
 impl Default for HubConfig {
@@ -101,6 +105,7 @@ impl Default for HubConfig {
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
             setup_code: None,
+            https: false,
             // `cfg!` vaut `true` si le binaire est compilé avec `--features officiel`.
             discord_allowed: cfg!(feature = "officiel"),
         }

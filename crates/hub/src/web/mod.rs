@@ -205,7 +205,9 @@ fn is_local_http(public_url: &str) -> bool {
 
 /// En-tête `Set-Cookie` d'un cookie de la console. `max_age = 0` efface le cookie.
 fn set_cookie(state: &AppState, name: &str, value: &str, path: &str, max_age: u64) -> HeaderValue {
-    let secure = if is_local_http(&state.inner.config.public_url) {
+    // En HTTPS intégré (ADR 0039), toujours `Secure`, même joint en local.
+    let config = &state.inner.config;
+    let secure = if !config.https && is_local_http(&config.public_url) {
         ""
     } else {
         "; Secure"

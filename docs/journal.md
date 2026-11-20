@@ -463,3 +463,9 @@ untime2`.
 - **Pas vérifié** : écran du launcher regardé (capture) ; console sans Discord ouverte dans le navigateur.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
 - **Suite** : construire les deux binaires aux releases ; déploiement du Rafthub officiel.
+
+### 2026-11-20 · Rafthub : HTTPS intégré, en option (ADR 0039, session `p1-https`)
+- **Fait** : module `hub::tls` (rustls + ring) : `--tls-cert` / `--tls-key` (et `RAFTUP_HUB_TLS_CERT` / `_KEY`) et Let's Encrypt automatique `--tls-acme <domaine>` (crate `rustls-acme`, défi TLS-ALPN-01, port 443, `rafthub-data/acme/`, `--tls-acme-staging`) ; assistant d'installation servi pareil ; cookies `Secure` en HTTPS intégré (`HubConfig::https`) ; sans option, HTTP inchangé. Tests `tests/https.rs` (certificat `rcgen`, client qui lui fait confiance, port libéré à l'arrêt, messages d'erreur) ; licences des 28 nouvelles crates vérifiées (MIT/Apache) ; message d'un certificat absent vu avec le vrai binaire.
+- **Pas vérifié** : Let's Encrypt jamais essayé (ni le vrai serveur ni celui d'essai) ; HTTPS dans un vrai navigateur ; launcher contre un hub en HTTPS.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `api.rs`, `web/setup.rs`, `web/install.rs`, `.github/workflows/` (autres sessions).
+- **Suite** : au déploiement, essayer `--tls-acme-staging` puis `--tls-acme` sur un vrai domaine.

@@ -18,7 +18,7 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 
 - **axum 0.8** (MIT), sur `tokio`, déjà utilisé partout. Fonctions minimales (`http1`, `json`, `tokio`).
 - API JSON **versionnée** sous `/v1` (exigence de l'ADR 0002). Erreurs au format `{"error": "<code stable>", "message": "<texte>"}`. Corps limité à 16 Kio.
-- Le hub parle HTTP en clair : en production il se place derrière un proxy qui fait le TLS (Traefik ou équivalent). Pas de TLS dans le binaire.
+- Le hub parle HTTP en clair : en production il se place derrière un proxy qui fait le TLS (Traefik ou équivalent). Pas de TLS dans le binaire (révisé le 20 novembre 2026 : HTTPS intégré en option, ADR 0039 ; le proxy reste le mode par défaut).
 
 ### Stockage
 
