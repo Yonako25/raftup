@@ -541,3 +541,9 @@ untime2`.
 - **Pas vérifié** : affichage sur téléphone ; `www.raftup-games.com` (pas de DNS ni de route).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : vrai site officiel (présentation, jeux, téléchargements, doc) ; réglages SMTP, Discord et inscriptions du hub.
+
+### 2026-11-20 · Site officiel de `raftup-games.com`
+- **Fait** : `b0a94bd` : site statique écrit à la main (aucun script) dans `deploy/site/www` : accueil, fonctionnalités, jeux (Slime Rancher), téléchargements (launcher, Rafthub officiel et auto-hébergé), documentation (premiers pas, parties, héberger son Rafthub, FAQ), mentions, 404 ; captures du launcher en WebP ; CSP plus stricte (`style-src 'self'`) ; nginx : index par dossier, redirections relatives, page 404. Vu dans le navigateur intégré, ordinateur et téléphone (375 px), avec la même CSP : aucun défilement horizontal, aucun lien interne cassé.
+- **Pas vérifié** : image Docker non construite et `nginx.conf` jamais chargé par un vrai nginx ; rien déployé ; liens des releases vides tant qu'aucun tag n'est publié ; pas de mentions légales d'éditeur ni d'hébergeur (choix de l'utilisatrice).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : sur accord, `docker compose build && docker compose up -d` dans `~/rafthub/deploy/site` sur triomyno (après `git pull`).

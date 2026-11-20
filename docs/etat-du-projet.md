@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **20 novembre 2026** (Rafthub officiel : console d'admin invisible côté public, Cloudflare, adresse officielle du launcher à la compilation, ADR 0040).
+Mis à jour le **20 novembre 2026** (site officiel de raftup-games.com écrit, pas encore déployé).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
