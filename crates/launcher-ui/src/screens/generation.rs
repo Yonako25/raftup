@@ -509,11 +509,12 @@ fn missing_rom(kind: &str, message: &str) -> Option<String> {
         None => text,
     }
     .trim();
-    // `Path` sait couper sur `/` et `\` sous Windows ; on garde le seul nom du fichier.
-    let file = std::path::Path::new(path).file_name()?.to_string_lossy();
+    // On garde le seul nom du fichier. Coupure à la main sur `/` et `\` : `Path` ne
+    // coupe sur `\` que sous Windows, or le chemin peut venir d'un autre système.
+    let file = path.rsplit(['/', '\\']).next().filter(|f| !f.is_empty())?;
     let extension = file.rsplit_once('.')?.1.to_ascii_lowercase();
     let is_rom = ROM_EXTENSIONS.contains(&extension.as_str()) || text.contains("rom_file");
-    is_rom.then(|| file.into_owned())
+    is_rom.then(|| file.to_string())
 }
 
 #[cfg(test)]

@@ -217,7 +217,7 @@ connect = { method = "manual", instructions = "x" }"#,
         plan.exe = PathBuf::from(std::env::var("SystemRoot").unwrap()).join("System32\\cmd.exe");
         plan.args = vec!["/C".into(), "exit".into(), "0".into()];
     } else {
-        plan.exe = PathBuf::from("/bin/true");
+        plan.exe = unix_true();
         plan.args = vec![];
     }
     let mut child = launch(&plan).unwrap();
@@ -241,7 +241,7 @@ connect = { method = "config_file", path = "{game_dir}/UserData/ap.json", format
         plan.exe = PathBuf::from(std::env::var("SystemRoot").unwrap()).join("System32\\cmd.exe");
         plan.args = vec!["/C".into(), "exit".into(), "0".into()];
     } else {
-        plan.exe = PathBuf::from("/bin/true");
+        plan.exe = unix_true();
     }
     launch(&plan).unwrap().wait().unwrap();
 
@@ -291,4 +291,20 @@ fn lancement_hors_partie_sans_connexion() {
         assert!(plan.uri.is_none(), "{method}");
         assert!(plan.manual_instructions.is_none(), "{method}");
     }
+}
+
+/// `true` du système : `/usr/bin/true` sous macOS et Linux, `/bin/true` sur les
+/// vieux Linux (macOS n'a pas de `/bin/true`).
+#[cfg(not(windows))]
+fn unix_true() -> PathBuf {
+    ["/usr/bin/true", "/bin/true"]
+        .iter()
+        .map(PathBuf::from)
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("/usr/bin/true"))
+}
+
+#[cfg(windows)]
+fn unix_true() -> PathBuf {
+    unreachable!("seulement hors Windows")
 }
