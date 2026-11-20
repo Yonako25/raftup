@@ -34,7 +34,8 @@ Le hub savait déjà utiliser SQLite, mais :
 
 ### Étape 2 : premier admin depuis le navigateur
 - Au démarrage, si aucune base n'est choisie ou si aucun compte n'a le rôle d'admin, le hub tire un **code d'installation** (16 caractères en base32 de Crockford, comme les invitations) et l'écrit dans son journal.
-- Le même code sert aux deux étapes. `/admin/login` renvoie vers `/admin/installation` : code, e-mail, pseudo, mot de passe. Le compte est créé (le mode d'inscription ne s'applique pas), il reçoit le rôle d'admin, sa session s'ouvre, et le journal `admin_events` note `account_created` (« premier admin, page d'installation »).
+- Le même code sert aux deux étapes, mais on ne le tape qu'une fois : l'étape 1 réussie pose un cookie `rafthub_setup_pass` (`HttpOnly`, `SameSite=Strict`, limité à `/admin/installation`, 1 h) au jeton aléatoire que le vrai hub garde en mémoire (`HubConfig::setup_pass`) ; sans ce cookie (autre navigateur, hub relancé), le code est redemandé (ajout du 20 novembre 2026).
+- `/admin/login` renvoie vers `/admin/installation` : code (si pas de cookie), e-mail, pseudo, mot de passe. Le compte est créé (le mode d'inscription ne s'applique pas), il reçoit le rôle d'admin, sa session s'ouvre, et le journal `admin_events` note `account_created` (« premier admin, page d'installation »).
 - Le code prouve qu'on a accès au serveur : sans lui, le premier venu pourrait prendre la console d'un hub tout juste installé.
 - Dès qu'un admin existe, la page renvoie vers la connexion. Le code n'est gardé qu'en mémoire : il change à chaque démarrage, et n'est plus tiré quand un admin existe.
 - Mêmes protections que la connexion : jeton anti-CSRF par cookie, mot de passe haché argon2, pas d'e-mail dans le journal.

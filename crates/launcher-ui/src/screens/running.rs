@@ -591,6 +591,12 @@ fn side_area(ui: &mut Ui, shared: &Shared, status: &HostStatus, now: f64) {
     });
     ui.add_space(14.0);
 
+    // Durée estimée calculée à la création de cette seed (ADR 0030) ; rien sinon.
+    if let Some(estimate) = super::estimate::for_seed(ui, &status.seed.seed_name) {
+        list_frame(ui, |ui| super::estimate::running_panel(ui, &estimate));
+        ui.add_space(14.0);
+    }
+
     list_frame(ui, |ui| {
         ui.label(widgets::caps("Fil d'activité"));
         ui.add_space(4.0);

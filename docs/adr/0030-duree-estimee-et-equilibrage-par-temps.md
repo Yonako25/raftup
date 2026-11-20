@@ -30,7 +30,7 @@
 ### 3. Affichage
 
 - Panneau « Durée estimée » (`launcher-ui/src/screens/estimate.rs`) sur l'écran « Créer une partie », relié par une ligne dans `create.rs`. Il est calculé une fois, quand la seed est prête, et gardé dans la mémoire d'egui : il reste visible pour la dernière partie générée.
-- Pas encore dans « Partie en cours » (`running.rs`, fichier d'une autre session) : à ajouter ensuite, avec le même module.
+- Dans « Partie en cours » (20 novembre 2026) : panneau « Durée estimée » dans la colonne de droite, avec l'estimation gardée en mémoire si la partie hébergée est la dernière seed générée ; rien sinon (seed ouverte depuis un fichier, launcher relancé).
 
 ### 4. Équilibrage par temps (`fill::time_balance`), désactivé par défaut
 

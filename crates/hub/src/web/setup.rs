@@ -7,6 +7,11 @@
 //!
 //! Le code prouve qu'on a accès au serveur (seul son journal le montre) : sans lui,
 //! le premier venu pourrait prendre la console d'un hub fraîchement installé.
+//!
+//! Le navigateur qui vient de réussir l'étape 1 (choix de la base) a reçu le cookie
+//! `rafthub_setup_pass` : son jeton, gardé en mémoire par le hub
+//! (`HubConfig::setup_pass`), vaut le code, qui n'est donc pas redemandé. Sans ce
+//! cookie (autre navigateur, hub relancé), le code est demandé comme avant.
 
 use askama::Template;
 use axum::extract::State;
@@ -15,6 +20,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::Form;
 use serde::Deserialize;
 
+use super::install::SETUP_PASS_COOKIE;
 use super::login::open_admin_session;
 use super::{cookie, csrf_refused, internal_error, page, same_token, set_cookie};
 use crate::console::EventKind;
@@ -35,6 +41,8 @@ struct SetupPage {
     csrf: String,
     /// Faux si le hub n'a pas de code (lancé sans passer par `rafthub`) : on explique.
     open: bool,
+    /// Faux quand le navigateur a déjà donné le code à l'étape 1 : champ caché.
+    ask_code: bool,
     email: String,
     username: String,
     error: Option<String>,
@@ -56,8 +64,20 @@ pub struct SetupForm {
     csrf: String,
 }
 
+/// Vrai si la requête porte le cookie de l'étape 1 avec le bon jeton.
+fn has_setup_pass(state: &AppState, headers: &HeaderMap) -> bool {
+    match (
+        &state.inner.config.setup_pass,
+        cookie(headers, SETUP_PASS_COOKIE),
+    ) {
+        (Some(expected), Some(given)) => same_token(expected, &given),
+        _ => false,
+    }
+}
+
 fn setup_page(
     state: &AppState,
+    headers: &HeaderMap,
     status: StatusCode,
     email: String,
     username: String,
@@ -69,6 +89,7 @@ fn setup_page(
         &SetupPage {
             csrf: csrf.clone(),
             open: state.inner.config.setup_code.is_some(),
+            ask_code: !has_setup_pass(state, headers),
             email,
             username,
             error,
@@ -82,10 +103,17 @@ fn setup_page(
 }
 
 /// `GET /admin/installation`.
-pub async fn form(State(state): State<AppState>) -> Response {
+pub async fn form(State(state): State<AppState>, headers: HeaderMap) -> Response {
     match state.store().has_admin().await {
         Ok(true) => Redirect::to("/admin/login").into_response(),
-        Ok(false) => setup_page(&state, StatusCode::OK, String::new(), String::new(), None),
+        Ok(false) => setup_page(
+            &state,
+            &headers,
+            StatusCode::OK,
+            String::new(),
+            String::new(),
+            None,
+        ),
         Err(error) => internal_error(error),
     }
 }
@@ -102,32 +130,41 @@ pub async fn submit(
     }
     let email_typed = body.email.trim().to_string();
     let username_typed = body.username.trim().to_string();
-    match create_first_admin(&state, body).await {
+    let passed = has_setup_pass(&state, &headers);
+    match create_first_admin(&state, body, passed).await {
         Ok(Ok(user_id)) => match open_admin_session(&state, user_id).await {
             Ok(mut response) => {
-                // Le jeton du formulaire a servi : on l'efface.
-                response.headers_mut().append(
-                    header::SET_COOKIE,
-                    set_cookie(&state, SETUP_CSRF_COOKIE, "", SETUP_PATH, 0),
-                );
+                // Le jeton du formulaire et celui de l'étape 1 ont servi : on les efface.
+                for name in [SETUP_CSRF_COOKIE, SETUP_PASS_COOKIE] {
+                    response.headers_mut().append(
+                        header::SET_COOKIE,
+                        set_cookie(&state, name, "", SETUP_PATH, 0),
+                    );
+                }
                 response
             }
             Err(error) => internal_error(error),
         },
         // Erreur que la personne peut corriger : on remontre le formulaire.
-        Ok(Err((status, message))) => {
-            setup_page(&state, status, email_typed, username_typed, Some(message))
-        }
+        Ok(Err((status, message))) => setup_page(
+            &state,
+            &headers,
+            status,
+            email_typed,
+            username_typed,
+            Some(message),
+        ),
         Err(error) => internal_error(error),
     }
 }
 
 /// Vérifie le code et les champs, crée le compte et lui donne le rôle d'admin.
 /// Le `Result` imbriqué sépare les erreurs à montrer dans la page (intérieur) des
-/// pannes du serveur (extérieur).
+/// pannes du serveur (extérieur). `passed` : le cookie de l'étape 1 remplace le code.
 async fn create_first_admin(
     state: &AppState,
     body: SetupForm,
+    passed: bool,
 ) -> Result<Result<i64, (StatusCode, String)>, HubError> {
     let store = state.store();
     if store.has_admin().await? {
@@ -143,10 +180,12 @@ async fn create_first_admin(
         )));
     };
     // Même tolérance que les invitations : casse, tirets et espaces ignorés.
-    if !same_token(
-        &normalize_invite_code(expected),
-        &normalize_invite_code(&body.code),
-    ) {
+    if !passed
+        && !same_token(
+            &normalize_invite_code(expected),
+            &normalize_invite_code(&body.code),
+        )
+    {
         tracing::info!("code d'installation refusé");
         return Ok(Err((
             StatusCode::FORBIDDEN,

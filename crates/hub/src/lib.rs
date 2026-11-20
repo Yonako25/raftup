@@ -79,6 +79,10 @@ pub struct HubConfig {
     /// la page `/admin/installation` qui crée le premier admin (ADR 0037). `None` :
     /// page fermée.
     pub setup_code: Option<String>,
+    /// Jeton du cookie posé par l'étape 1 de l'assistant (`rafthub_setup_pass`) : le
+    /// navigateur qui le présente a déjà donné le code, l'étape 2 ne le redemande
+    /// pas. `None` (hub relancé, pas d'assistant) : le code est demandé.
+    pub setup_pass: Option<String>,
 }
 
 impl Default for HubConfig {
@@ -101,6 +105,7 @@ impl Default for HubConfig {
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
             setup_code: None,
+            setup_pass: None,
             // `cfg!` vaut `true` si le binaire est compilé avec `--features officiel`.
             discord_allowed: cfg!(feature = "officiel"),
         }

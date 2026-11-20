@@ -522,6 +522,82 @@ async fn installation_cree_le_premier_admin_et_le_connecte() {
     assert_eq!(again.location(), "/admin/login");
 }
 
+const SETUP_PASS: &str = "0123456789abcdef0123456789abcdef";
+
+/// Hub qui sort de l'assistant : il connaît le jeton du cookie de l'étape 1.
+async fn hub_after_wizard() -> (Router, Store) {
+    hub_with(HubConfig {
+        setup_code: Some(SETUP_CODE.to_string()),
+        setup_pass: Some(SETUP_PASS.to_string()),
+        ..HubConfig::for_tests()
+    })
+    .await
+}
+
+/// Comme `try_setup`, sans champ « code » et avec ce cookie d'étape 1.
+async fn try_setup_with_pass(app: &Router, pass: &str) -> Page {
+    let pass_cookie = format!("rafthub_setup_pass={pass}");
+    let form = get(app, "/admin/installation", Some(&pass_cookie)).await;
+    assert_eq!(form.status, StatusCode::OK, "{}", form.body);
+    let csrf = form.csrf_field();
+    let cookie = format!("rafthub_setup_csrf={csrf}; {pass_cookie}");
+    post_form(
+        app,
+        "/admin/installation",
+        Some(&cookie),
+        &[
+            ("email", "chef@exemple.org"),
+            ("username", "Chef"),
+            ("password", PASSWORD),
+            ("password_confirm", PASSWORD),
+            ("csrf", &csrf),
+        ],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn installation_sans_retaper_le_code_apres_l_etape_1() {
+    let (app, store) = hub_after_wizard().await;
+    // Avec le cookie de l'étape 1, le champ du code n'est pas montré.
+    let form = get(
+        &app,
+        "/admin/installation",
+        Some(&format!("rafthub_setup_pass={SETUP_PASS}")),
+    )
+    .await;
+    assert!(!form.body.contains("name=\"code\""), "{}", form.body);
+    assert!(form.body.contains("vérifié à l'étape 1"));
+    // Sans lui, le champ est là.
+    let form = get(&app, "/admin/installation", None).await;
+    assert!(form.body.contains("name=\"code\""));
+
+    let page = try_setup_with_pass(&app, SETUP_PASS).await;
+    assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
+    assert_eq!(page.location(), "/admin");
+    assert!(store.has_admin().await.unwrap());
+    // Le cookie de l'étape 1 a servi : il est effacé.
+    let cleared = page
+        .set_cookie("rafthub_setup_pass")
+        .expect("cookie effacé");
+    assert!(cleared.contains("Max-Age=0"), "{cleared}");
+}
+
+#[tokio::test]
+async fn installation_refuse_un_faux_cookie_d_etape_1() {
+    // Mauvais jeton : le code est demandé, et son absence est refusée.
+    let (app, store) = hub_after_wizard().await;
+    let page = try_setup_with_pass(&app, "ffffffffffffffffffffffffffffffff").await;
+    assert_eq!(page.status, StatusCode::FORBIDDEN, "{}", page.body);
+    assert!(!store.has_admin().await.unwrap());
+
+    // Hub relancé (pas de jeton en mémoire) : un ancien cookie ne suffit pas.
+    let (app, store) = fresh_hub().await;
+    let page = try_setup_with_pass(&app, SETUP_PASS).await;
+    assert_eq!(page.status, StatusCode::FORBIDDEN, "{}", page.body);
+    assert!(!store.has_admin().await.unwrap());
+}
+
 #[tokio::test]
 async fn installation_refuse_un_mauvais_code() {
     let (app, store) = fresh_hub().await;
