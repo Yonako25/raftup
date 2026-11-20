@@ -132,6 +132,13 @@ pub struct Me {
     pub username: String,
     #[serde(default)]
     pub email: Option<String>,
+    /// Vrai quand l'adresse a été confirmée (lien reçu par e-mail).
+    #[serde(default)]
+    pub email_verified: bool,
+    /// Vrai quand un compte Discord est lié à ce compte. Un hub plus ancien, sans ce
+    /// champ, est lu comme « pas lié ».
+    #[serde(default)]
+    pub discord_linked: bool,
 }
 
 /// État de présence. `snake_case` : `in_game` dans le JSON, comme côté hub.
@@ -151,7 +158,34 @@ pub struct Presence {
     pub game: Option<String>,
 }
 
+/// Longueur maximale du nom du jeu dans la présence, en caractères : la même limite
+/// que le hub (`MAX_GAME_CHARS` dans `crates/hub/src/api.rs`).
+pub const MAX_GAME_CHARS: usize = 64;
+
 impl Presence {
+    /// « En partie » avec le nom du jeu, **nettoyé** pour que le hub l'accepte :
+    /// caractères de contrôle retirés, espaces autour enlevés, coupé à
+    /// [`MAX_GAME_CHARS`] caractères (avec « … » à la fin). Un nom vide après
+    /// nettoyage donne « en ligne » : le hub refuserait « en partie » sans jeu.
+    pub fn playing(game: &str) -> Presence {
+        let cleaned: String = game.chars().filter(|c| !c.is_control()).collect();
+        let cleaned = cleaned.trim();
+        if cleaned.is_empty() {
+            return Presence::online();
+        }
+        // On compte en caractères (`chars`), pas en octets : « é » compte pour un.
+        let game = if cleaned.chars().count() > MAX_GAME_CHARS {
+            let mut short: String = cleaned.chars().take(MAX_GAME_CHARS - 1).collect();
+            // Une coupe juste après une espace laisserait « Jeu … » : on la retire.
+            short.truncate(short.trim_end().len());
+            short.push('…');
+            short
+        } else {
+            cleaned.to_string()
+        };
+        Presence::in_game(game)
+    }
+
     pub fn online() -> Presence {
         Presence {
             status: Status::Online,
@@ -253,6 +287,12 @@ pub enum ErrorCode {
     DiscordUnavailable,
     /// Ce compte Discord est déjà lié à un autre compte.
     DiscordTaken,
+    /// Ce compte a déjà un (autre) compte Discord lié.
+    AlreadyLinked,
+    /// Aucun compte Discord n'est lié à ce compte (rien à délier).
+    IdentityNotFound,
+    /// Délier Discord laisserait le compte sans aucun moyen de se connecter.
+    LastIdentity,
     /// Connexion inconnue ou expirée (`state`, `secret` ou `ticket` refusé).
     InvalidToken,
     /// Compte suspendu par un admin.
@@ -288,11 +328,55 @@ impl ErrorCode {
             "discord_refused" => ErrorCode::DiscordRefused,
             "discord_unavailable" => ErrorCode::DiscordUnavailable,
             "discord_taken" => ErrorCode::DiscordTaken,
+            "already_linked" => ErrorCode::AlreadyLinked,
+            "identity_not_found" => ErrorCode::IdentityNotFound,
+            "last_identity" => ErrorCode::LastIdentity,
             "invalid_token" => ErrorCode::InvalidToken,
             "account_suspended" => ErrorCode::AccountSuspended,
             "bad_request" => ErrorCode::BadRequest,
             "internal" => ErrorCode::Internal,
             other => ErrorCode::Other(other.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nom_du_jeu_nettoye() {
+        assert_eq!(
+            Presence::playing("  APQuest \n"),
+            Presence::in_game("APQuest")
+        );
+        assert_eq!(Presence::playing("A\u{7}B"), Presence::in_game("AB"));
+        assert_eq!(Presence::playing(" \t "), Presence::online());
+        assert_eq!(Presence::playing(""), Presence::online());
+    }
+
+    #[test]
+    fn nom_du_jeu_coupe_a_64_caracteres() {
+        let exact = "é".repeat(MAX_GAME_CHARS);
+        assert_eq!(Presence::playing(&exact), Presence::in_game(exact.clone()));
+        let long = "é".repeat(MAX_GAME_CHARS + 10);
+        let game = Presence::playing(&long).game.unwrap();
+        assert_eq!(game.chars().count(), MAX_GAME_CHARS);
+        assert!(game.ends_with('…'));
+        // Coupe juste après une espace : pas d'espace avant « … ».
+        let spaced = format!("{} suite", "a".repeat(MAX_GAME_CHARS - 2));
+        let game = Presence::playing(&spaced).game.unwrap();
+        assert!(!game.contains(" …"), "{game}");
+        assert!(game.chars().count() <= MAX_GAME_CHARS);
+    }
+
+    #[test]
+    fn me_d_un_hub_ancien() {
+        let me: Me = serde_json::from_str(r#"{"user_id":1,"username":"Mimi"}"#).unwrap();
+        assert!(!me.discord_linked);
+        let me: Me =
+            serde_json::from_str(r#"{"user_id":1,"username":"Mimi","discord_linked":true}"#)
+                .unwrap();
+        assert!(me.discord_linked);
     }
 }

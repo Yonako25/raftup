@@ -46,6 +46,21 @@ pub struct DiscordStart {
     pub(crate) secret: String,
 }
 
+impl DiscordStart {
+    /// Les trois valeurs déjà connues (tests de l'interface, sans hub).
+    pub fn from_parts(
+        authorize_url: impl Into<String>,
+        state: impl Into<String>,
+        secret: impl Into<String>,
+    ) -> DiscordStart {
+        DiscordStart {
+            authorize_url: authorize_url.into(),
+            state: state.into(),
+            secret: secret.into(),
+        }
+    }
+}
+
 impl fmt::Debug for DiscordStart {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("DiscordStart(***)")

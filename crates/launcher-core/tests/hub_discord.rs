@@ -12,7 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use launcher_core::hub_client::{
-    DiscordOutcome, DiscordReturn, ErrorCode, HubClient, HubClientError, HubUrl, DISCORD_WAIT,
+    DiscordOutcome, DiscordReturn, ErrorCode, HubClient, HubClientError, HubUrl, SessionToken,
+    DISCORD_WAIT,
 };
 use serde_json::Value;
 
@@ -329,4 +330,104 @@ fn attente_du_retour_bornee() {
     let start = HubClient::new(hub.url.clone()).discord_start(None).unwrap();
     let result = local.wait(&start, Duration::from_millis(200), &AtomicBool::new(false));
     assert!(matches!(result, Err(HubClientError::DiscordTimeout)));
+}
+
+#[test]
+fn lier_discord_a_un_compte_connecte() {
+    let hub = FakeHub::start(|seen| {
+        match seen.path.as_str() {
+        "/v1/oauth/discord/start" => (200, START.to_string()),
+        "/v1/oauth/discord/finish" => (200, r#"{"status":"linked"}"#.to_string()),
+        "/v1/me" => (
+            200,
+            r#"{"user_id":7,"username":"Mimi","email":null,"email_verified":false,"discord_linked":true}"#
+                .to_string(),
+        ),
+        _ => (404, String::new()),
+    }
+    });
+    let mut client = HubClient::with_token(hub.url.clone(), SessionToken::new("jeton-mimi"));
+    let local = DiscordReturn::bind().unwrap();
+    let port = local.port();
+    let start = client.discord_link_start(Some(port)).unwrap();
+    let browser = std::thread::spawn(move || browser_get(port, "/discord?state=ab12&ticket=t9"));
+    let ticket = local
+        .wait(&start, DISCORD_WAIT, &AtomicBool::new(false))
+        .unwrap();
+    assert!(browser.join().unwrap().contains("200"));
+    assert_eq!(
+        client.discord_finish(&ticket).unwrap(),
+        DiscordOutcome::Linked
+    );
+    // Toujours connecté avec le même jeton : `linked` n'ouvre pas de nouvelle session.
+    assert_eq!(client.token().unwrap().expose(), "jeton-mimi");
+    assert!(client.me().unwrap().discord_linked);
+
+    let seen = hub.seen();
+    // `start` porte le jeton (c'est lui qui dit « lier à ce compte ») ; `finish` non.
+    assert_eq!(seen[0].authorization.as_deref(), Some("Bearer jeton-mimi"));
+    assert_eq!(seen[0].path, "/v1/oauth/discord/start");
+    assert!(seen[1].authorization.is_none());
+}
+
+#[test]
+fn lier_sans_session_pas_d_appel() {
+    let hub = FakeHub::start(|_| (200, START.to_string()));
+    let client = HubClient::new(hub.url.clone());
+    assert!(matches!(
+        client.discord_link_start(None),
+        Err(HubClientError::NotLoggedIn)
+    ));
+    assert!(matches!(
+        client.discord_unlink(),
+        Err(HubClientError::NotLoggedIn)
+    ));
+    assert!(hub.seen().is_empty());
+}
+
+#[test]
+fn discord_deja_lie_a_un_autre_compte_refuse() {
+    let hub = FakeHub::start(|seen| {
+        match seen.path.as_str() {
+        "/v1/oauth/discord/start" => (200, START.to_string()),
+        _ => (
+            409,
+            r#"{"error":"discord_taken","message":"ce compte Discord est déjà lié à un autre compte"}"#
+                .to_string(),
+        ),
+    }
+    });
+    let mut client = HubClient::with_token(hub.url.clone(), SessionToken::new("j"));
+    let start = client.discord_link_start(None).unwrap();
+    let ticket = launcher_core::hub_client::DiscordTicket::new(&start, "t");
+    let error = client.discord_finish(&ticket).unwrap_err();
+    assert_eq!(error.code(), Some(&ErrorCode::DiscordTaken));
+}
+
+#[test]
+fn delier_discord() {
+    let hub = FakeHub::start(|seen| match seen.method.as_str() {
+        "DELETE" => (204, String::new()),
+        _ => (404, String::new()),
+    });
+    let client = HubClient::with_token(hub.url.clone(), SessionToken::new("j"));
+    client.discord_unlink().unwrap();
+    let seen = hub.seen();
+    assert_eq!(seen[0].method, "DELETE");
+    assert_eq!(seen[0].path, "/v1/me/identities/discord");
+    assert_eq!(seen[0].authorization.as_deref(), Some("Bearer j"));
+}
+
+#[test]
+fn delier_refus_types() {
+    for (code, expected) in [
+        ("last_identity", ErrorCode::LastIdentity),
+        ("identity_not_found", ErrorCode::IdentityNotFound),
+        ("already_linked", ErrorCode::AlreadyLinked),
+    ] {
+        let body = format!(r#"{{"error":"{code}","message":"non"}}"#);
+        let hub = FakeHub::start(move |_| (409, body.clone()));
+        let client = HubClient::with_token(hub.url.clone(), SessionToken::new("j"));
+        assert_eq!(client.discord_unlink().unwrap_err().code(), Some(&expected));
+    }
 }

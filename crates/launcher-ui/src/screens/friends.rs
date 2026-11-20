@@ -8,9 +8,15 @@
 //! Le client du hub (`HubClient`) **part dans le thread** avec la demande, puis **revient**
 //! avec la réponse : un seul appel à la fois, et pas besoin de verrou pour le partager.
 //!
-//! Tant que le joueur est connecté, [`background`] renvoie sa présence « en ligne » et
-//! relit la liste d'amis toutes les minutes, même si l'écran n'est pas affiché (le hub
-//! oublie une présence au bout de 2 minutes).
+//! Tant que le joueur est connecté, [`background`] renvoie sa présence et relit la liste
+//! d'amis toutes les minutes, même si l'écran n'est pas affiché (le hub oublie une
+//! présence au bout de 2 minutes). La présence est « en partie · <jeu> » tant qu'un jeu
+//! lancé depuis le launcher tourne ou qu'une partie est hébergée
+//! (`launcher_core::activity`), « en ligne » sinon ; un changement part tout de suite.
+//! Elle ne contient que le nom du jeu : ni adresse, ni slot, ni mot de passe.
+//!
+//! Un joueur connecté peut lier son compte Discord depuis le panneau « Profil » (même
+//! parcours que la connexion, mais `start` porte le jeton), ou le délier.
 //!
 //! Connexion Discord (ADR 0033, 0035) : le bouton n'apparaît que si le hub la propose
 //! (`GET /v1/info`, lu une fois par adresse). Le parcours passe par trois appels dans
@@ -119,6 +125,25 @@ enum Action {
     Remove(String),
     /// Changer son pseudo (`PATCH /v1/me`).
     Rename(String),
+    /// Lier Discord au compte connecté, étape 1 : serveur local ouvert, puis `start`
+    /// avec le jeton. La suite passe par `DiscordWait`, comme une connexion.
+    DiscordLinkStart,
+    /// Délier Discord du compte connecté.
+    DiscordUnlink,
+}
+
+impl Action {
+    /// Vrai si l'action finit (quand tout va bien) par envoyer la présence au hub.
+    fn sends_presence(&self) -> bool {
+        !matches!(
+            self,
+            Action::Info
+                | Action::Logout
+                | Action::DiscordStart
+                | Action::DiscordLinkStart
+                | Action::DiscordUnlink
+        )
+    }
 }
 
 /// Amis et demandes, tels que relus sur le hub.
@@ -134,6 +159,8 @@ enum Done {
     LoggedIn {
         username: String,
         lists: Lists,
+        /// Un compte Discord est lié à ce compte.
+        discord_linked: bool,
         /// Le jeton n'a pas pu être rangé : la session sera perdue à la fermeture.
         warning: Option<String>,
     },
@@ -159,6 +186,8 @@ enum Done {
         suggested_username: Option<String>,
         invite_required: bool,
     },
+    /// Discord vient d'être lié (`linked` vrai) ou délié du compte connecté.
+    DiscordLinkChanged { linked: bool, message: String },
     /// La connexion Discord a échoué. `keep_ticket` : l'étape « pseudo » reste ouverte
     /// (pseudo pris, code faux…) ; sinon, retour au formulaire.
     DiscordFailed {
@@ -224,6 +253,15 @@ pub struct FriendsState {
     next: Option<Action>,
     /// Adresse à ouvrir dans le navigateur du système à la prochaine image.
     open_url: Option<String>,
+    /// Un compte Discord est lié au compte connecté (`GET /v1/me`).
+    discord_linked: bool,
+    /// « Délier Discord » cliqué une première fois (deuxième clic = confirmation).
+    confirm_unlink: bool,
+    /// Présence voulue : « en ligne », ou « en partie · <jeu> » (voir [`Self::set_presence`]).
+    presence: Presence,
+    /// Dernière présence partie vers le hub ; différente de `presence` : on la renvoie
+    /// tout de suite, sans attendre la synchronisation de la minute.
+    presence_sent: Option<Presence>,
 }
 
 /// Résumé pour les cartes de la barre latérale.
@@ -289,7 +327,22 @@ impl FriendsState {
             discord: DiscordStep::Idle,
             next: None,
             open_url: None,
+            discord_linked: false,
+            confirm_unlink: false,
+            presence: Presence::online(),
+            presence_sent: None,
         }
+    }
+
+    /// Présence voulue, recalculée à chaque image par `app.rs` (jeu lancé, partie
+    /// hébergée). Un changement part vers le hub à la prochaine image libre.
+    pub fn set_presence(&mut self, presence: Presence) {
+        self.presence = presence;
+    }
+
+    /// Vrai si la présence voulue n'est pas celle envoyée en dernier.
+    fn presence_changed(&self) -> bool {
+        self.presence_sent.as_ref() != Some(&self.presence)
     }
 
     /// Vrai si le hub en service propose la connexion Discord.
@@ -323,13 +376,22 @@ impl FriendsState {
             return;
         };
         let store = Arc::clone(&self.store);
+        // Copie de la présence voulue : chaque appel envoie celle du moment où il part.
+        let presence = self.presence.clone();
+        if action.sends_presence() {
+            self.presence_sent = Some(presence.clone());
+        }
         let (sender, receiver) = mpsc::channel();
         // `Context` est un pointeur partagé : le cloner ne copie pas l'interface.
         let ctx = ctx.clone();
-        // `move` : le thread possède le client, le magasin et l'action ; rien n'est
-        // emprunté à l'écran, qui continue de se dessiner pendant ce temps.
+        // `move` : le thread possède le client, le magasin, la présence et l'action ;
+        // rien n'est emprunté à l'écran, qui continue de se dessiner pendant ce temps.
         std::thread::spawn(move || {
-            let outcome = run(client, store.as_ref(), action);
+            let env = Env {
+                store: store.as_ref(),
+                presence: &presence,
+            };
+            let outcome = run(client, &env, action);
             let _ = sender.send(outcome);
             ctx.request_repaint();
         });
@@ -352,6 +414,7 @@ impl FriendsState {
                 self.job = None;
                 self.client = self.url.as_ref().ok().map(|u| HubClient::new(u.clone()));
                 self.username = None;
+                self.discord = DiscordStep::Idle;
                 self.notice = Some(Notice::Error("L'appel à Rafthub a échoué.".to_string()));
                 return;
             }
@@ -362,10 +425,14 @@ impl FriendsState {
             Ok(Done::LoggedIn {
                 username,
                 lists,
+                discord_linked,
                 warning,
             }) => {
                 self.username = Some(username);
                 self.lists = lists;
+                self.discord_linked = discord_linked;
+                // Connecté (par Discord ou autrement) : l'étape Discord est finie.
+                self.discord = DiscordStep::Idle;
                 self.last_sync = Some(Instant::now());
                 // Connexion réussie : une ancienne erreur (mauvais mot de passe…) n'a plus
                 // lieu d'être ; une information (« vous êtes sur le Rafthub … ») reste.
@@ -378,6 +445,10 @@ impl FriendsState {
             Ok(Done::LoggedOut { message }) => {
                 self.username = None;
                 self.lists = Lists::default();
+                self.discord_linked = false;
+                self.confirm_unlink = false;
+                // À la prochaine connexion, la présence repartira avec la synchronisation.
+                self.presence_sent = None;
                 // Sans message (aucune session rangée), le bandeau affiché est gardé :
                 // un lien refusé au démarrage doit rester visible.
                 if let Some(message) = message {
@@ -441,11 +512,13 @@ impl FriendsState {
                     Notice::Error(message)
                 });
             }
+            Ok(Done::DiscordLinkChanged { linked, message }) => {
+                self.discord_linked = linked;
+                self.discord = DiscordStep::Idle;
+                self.confirm_unlink = false;
+                self.notice = Some(Notice::Info(message));
+            }
             Err(message) => self.notice = Some(Notice::Error(message)),
-        }
-        // Connecté (par Discord ou autrement) : l'étape Discord est finie.
-        if self.username.is_some() {
-            self.discord = DiscordStep::Idle;
         }
     }
 
@@ -497,6 +570,9 @@ impl FriendsState {
         self.username = None;
         self.lists = Lists::default();
         self.confirm_remove = None;
+        self.discord_linked = false;
+        self.confirm_unlink = false;
+        self.presence_sent = None;
         // Ce que propose le nouveau hub sera relu ; une connexion Discord en cours est
         // abandonnée (elle appartenait à l'ancien hub).
         self.info = None;
@@ -590,8 +666,10 @@ pub fn background(state: &mut FriendsState, ctx: &egui::Context) {
         state.start(ctx, action);
         return;
     }
+    // Synchronisation de la minute, ou tout de suite si la présence a changé (jeu lancé
+    // ou fermé, partie hébergée ou arrêtée).
     let due = state.last_sync.is_none_or(|at| at.elapsed() >= SYNC_EVERY);
-    if state.username.is_some() && !state.busy() && due {
+    if state.username.is_some() && !state.busy() && (due || state.presence_changed()) {
         // Noté tout de suite : un hub injoignable n'est pas relancé à chaque image.
         state.last_sync = Some(Instant::now());
         state.start(ctx, Action::Sync);
@@ -600,9 +678,10 @@ pub fn background(state: &mut FriendsState, ctx: &egui::Context) {
         // Réveille l'interface pour la prochaine synchronisation, même sans clic.
         ctx.request_repaint_after(SYNC_EVERY);
     }
-    // Pas connecté : on demande une fois par adresse ce que le hub propose (Discord ?).
+    // On demande une fois par adresse ce que le hub propose (Discord ?), connecté ou non :
+    // le bouton « Lier mon compte Discord » en dépend aussi.
     let current = state.url.as_ref().ok().cloned();
-    if state.username.is_none() && !state.busy() && current.is_some() && state.info_for != current {
+    if !state.busy() && current.is_some() && state.info_for != current {
         state.info_for = current;
         state.start(ctx, Action::Info);
     }
@@ -612,12 +691,25 @@ pub fn background(state: &mut FriendsState, ctx: &egui::Context) {
 // Travail du thread réseau (sans interface).
 // ---------------------------------------------------------------------------
 
+/// Ce que le thread réseau reçoit en plus du client et de l'action.
+///
+/// `'a` : `Env` ne possède rien, il **emprunte** le magasin et la présence au thread
+/// qui l'a construit ; la durée de vie dit seulement qu'il ne leur survit pas.
+struct Env<'a> {
+    /// Où ranger le jeton.
+    store: &'a dyn TokenStore,
+    /// La présence à envoyer à chaque synchronisation.
+    presence: &'a Presence,
+}
+
 /// Exécute une action, dans le thread réseau. Rend toujours le client.
-fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
+fn run(client: HubClient, env: &Env<'_>, action: Action) -> Outcome {
     let url = client.url().clone();
     match action {
-        Action::Restore => match HubClient::restore(url.clone(), store) {
-            Ok(Some((client, me))) => logged_in(client, me.username, None),
+        Action::Restore => match HubClient::restore(url.clone(), env.store) {
+            Ok(Some((client, me))) => {
+                logged_in(client, env, me.username, Some(me.discord_linked), None)
+            }
             Ok(None) => Outcome {
                 client: HubClient::new(url),
                 result: Ok(Done::LoggedOut { message: None }),
@@ -629,14 +721,14 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 result: Err(error_text(&error)),
             },
         },
-        Action::Login { email, password } => login(client, store, &email, &password),
+        Action::Login { email, password } => login(client, env, &email, &password),
         Action::Register {
             email,
             password,
             username,
             invite_code,
         } => match client.register(&email, &password, &username, invite_code.as_deref()) {
-            Ok(_) => login(client, store, &email, &password),
+            Ok(_) => login(client, env, &email, &password),
             Err(error) => Outcome {
                 client,
                 result: Err(error_text(&error)),
@@ -649,12 +741,12 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
             if client.is_logged_in() {
                 let _ = client.set_presence(&Presence::offline());
             }
-            run(HubClient::new(to), store, Action::Restore)
+            run(HubClient::new(to), env, Action::Restore)
         }
         Action::Logout => {
             let mut client = client;
             let remote = client.logout();
-            let local = store.clear(&url);
+            let local = env.store.clear(&url);
             let message = match (remote, local) {
                 (Ok(()), Ok(())) => "Déconnecté.".to_string(),
                 (Err(_), _) => {
@@ -669,7 +761,7 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 }),
             }
         }
-        Action::Sync => after(client, store, Ok(None)),
+        Action::Sync => after(client, env, Ok(None)),
         Action::Info => {
             // Un hub injoignable est déjà signalé par la reprise de session : ici, on
             // n'affiche rien de plus, le bouton Discord reste caché.
@@ -689,6 +781,46 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 result: Ok(result.unwrap_or_else(|e| discord_failed(&e, false))),
             }
         }
+        Action::DiscordLinkStart => {
+            let result = DiscordReturn::bind().and_then(|local| {
+                let start = client.discord_link_start(Some(local.port()))?;
+                Ok(Done::DiscordOpened { local, start })
+            });
+            match result {
+                Ok(done) => Outcome {
+                    client,
+                    result: Ok(done),
+                },
+                // Session refusée : même traitement qu'une action sur les amis.
+                Err(error) if error.is_unauthorized() => after(client, env, Err(error)),
+                Err(error) => Outcome {
+                    client,
+                    result: Ok(discord_failed(&error, false)),
+                },
+            }
+        }
+        Action::DiscordUnlink => match client.discord_unlink() {
+            Ok(()) => Outcome {
+                client,
+                result: Ok(Done::DiscordLinkChanged {
+                    linked: false,
+                    message: "Compte Discord délié.".to_string(),
+                }),
+            },
+            // Déjà délié (ailleurs, ou par l'admin) : l'écran se remet d'accord avec le hub.
+            Err(error) if error.code() == Some(&ErrorCode::IdentityNotFound) => Outcome {
+                client,
+                result: Ok(Done::DiscordLinkChanged {
+                    linked: false,
+                    message: "Aucun compte Discord n'était lié à ce compte.".to_string(),
+                }),
+            },
+            Err(error) if error.is_unauthorized() => after(client, env, Err(error)),
+            Err(error) => Outcome {
+                client,
+                result: Err(error_text(&error)),
+            },
+        },
         Action::DiscordWait {
             local,
             start,
@@ -705,7 +837,7 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 }
             };
             match client.discord_finish(&ticket) {
-                Ok(DiscordOutcome::LoggedIn(session)) => keep_session(client, store, session),
+                Ok(DiscordOutcome::LoggedIn(session)) => keep_session(client, env, session),
                 Ok(DiscordOutcome::NeedsUsername {
                     suggested_username,
                     invite_required,
@@ -717,13 +849,14 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                         invite_required,
                     }),
                 },
-                // `start` est appelé sans jeton : une liaison n'arrive pas ici.
+                // Liaison (`DiscordLinkStart`, avec le jeton) : la session ne change pas.
                 Ok(DiscordOutcome::Linked) => Outcome {
                     client,
-                    result: Ok(Done::DiscordFailed {
-                        message: "Compte Discord lié.".to_string(),
-                        keep_ticket: false,
-                        cancelled: true,
+                    result: Ok(Done::DiscordLinkChanged {
+                        linked: true,
+                        message: "Compte Discord lié : vous pourrez aussi vous connecter \
+                                  avec Discord."
+                            .to_string(),
                     }),
                 },
                 Err(error) => Outcome {
@@ -739,7 +872,7 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
         } => {
             let mut client = client;
             match client.discord_register(&ticket, &username, invite_code.as_deref()) {
-                Ok(session) => keep_session(client, store, session),
+                Ok(session) => keep_session(client, env, session),
                 Err(error) => {
                     let keep = discord_retry_possible(&error);
                     Outcome {
@@ -758,35 +891,35 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                     }
                 })
             });
-            after(client, store, result)
+            after(client, env, result)
         }
         Action::Accept(name) => {
             let result = client
                 .accept_request(&name)
                 .map(|()| Some(format!("{name} est maintenant votre ami.")));
-            after(client, store, result)
+            after(client, env, result)
         }
         Action::Decline(name) => {
             let result = client
                 .decline_request(&name)
                 .map(|()| Some(format!("Demande de {name} refusée.")));
-            after(client, store, result)
+            after(client, env, result)
         }
         Action::Cancel(name) => {
             let result = client
                 .cancel_request(&name)
                 .map(|()| Some(format!("Demande à {name} annulée.")));
-            after(client, store, result)
+            after(client, env, result)
         }
         Action::Remove(name) => {
             let result = client
                 .remove_friend(&name)
                 .map(|()| Some(format!("{name} n'est plus dans vos amis.")));
-            after(client, store, result)
+            after(client, env, result)
         }
         Action::Rename(name) => match client.change_username(&name) {
             Ok(account) => {
-                let result = sync(&client).map(|lists| Done::Renamed {
+                let result = sync(&client, env.presence).map(|lists| Done::Renamed {
                     username: account.username,
                     lists,
                 });
@@ -796,20 +929,15 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 }
             }
             // Session refusée, ou refus du hub : même traitement qu'une action sur les amis.
-            Err(error) => after(client, store, Err(error)),
+            Err(error) => after(client, env, Err(error)),
         },
     }
 }
 
 /// Connexion, puis jeton rangé et listes lues.
-fn login(
-    mut client: HubClient,
-    store: &dyn TokenStore,
-    email: &str,
-    password: &Password,
-) -> Outcome {
+fn login(mut client: HubClient, env: &Env<'_>, email: &str, password: &Password) -> Outcome {
     match client.login(email.trim(), password) {
-        Ok(session) => keep_session(client, store, session),
+        Ok(session) => keep_session(client, env, session),
         Err(error) => Outcome {
             client,
             result: Err(error_text(&error)),
@@ -818,12 +946,12 @@ fn login(
 }
 
 /// Session ouverte (mot de passe ou Discord) : jeton rangé, puis listes lues.
-fn keep_session(client: HubClient, store: &dyn TokenStore, session: Session) -> Outcome {
+fn keep_session(client: HubClient, env: &Env<'_>, session: Session) -> Outcome {
     let warning = client
-        .remember(store)
+        .remember(env.store)
         .err()
         .map(|e| format!("Connecté, mais la session ne sera pas gardée à la fermeture : {e}"));
-    logged_in(client, session.username, warning)
+    logged_in(client, env, session.username, None, warning)
 }
 
 /// Échec de la connexion Discord, en message pour le joueur.
@@ -853,10 +981,23 @@ fn discord_retry_possible(error: &HubClientError) -> bool {
 }
 
 /// Après connexion : présence et listes.
-fn logged_in(client: HubClient, username: String, warning: Option<String>) -> Outcome {
-    let result = sync(&client).map(|lists| Done::LoggedIn {
+///
+/// `discord_linked` : déjà connu (session reprise, `GET /v1/me` déjà lu) ; `None` : on
+/// le demande au hub. Un échec de cette lecture n'empêche pas la connexion : on
+/// suppose alors « pas lié ».
+fn logged_in(
+    client: HubClient,
+    env: &Env<'_>,
+    username: String,
+    discord_linked: Option<bool>,
+    warning: Option<String>,
+) -> Outcome {
+    let discord_linked =
+        discord_linked.unwrap_or_else(|| client.me().is_ok_and(|me| me.discord_linked));
+    let result = sync(&client, env.presence).map(|lists| Done::LoggedIn {
         username,
         lists,
+        discord_linked,
         warning,
     });
     Outcome {
@@ -869,10 +1010,11 @@ fn logged_in(client: HubClient, username: String, warning: Option<String>) -> Ou
 /// (expirée, révoquée ailleurs) déconnecte et oublie le jeton.
 fn after(
     client: HubClient,
-    store: &dyn TokenStore,
+    env: &Env<'_>,
     action: Result<Option<String>, HubClientError>,
 ) -> Outcome {
-    let result = action.and_then(|message| sync(&client).map(|lists| (lists, message)));
+    let result =
+        action.and_then(|message| sync(&client, env.presence).map(|lists| (lists, message)));
     match result {
         Ok((lists, message)) => Outcome {
             client,
@@ -880,7 +1022,7 @@ fn after(
         },
         Err(error) if error.is_unauthorized() => {
             let url = client.url().clone();
-            let _ = store.clear(&url);
+            let _ = env.store.clear(&url);
             Outcome {
                 client: HubClient::new(url),
                 result: Ok(Done::LoggedOut {
@@ -895,9 +1037,9 @@ fn after(
     }
 }
 
-/// Présence « en ligne », puis amis et demandes.
-fn sync(client: &HubClient) -> Result<Lists, HubClientError> {
-    client.set_presence(&Presence::online())?;
+/// Présence (« en ligne » ou « en partie · <jeu> »), puis amis et demandes.
+fn sync(client: &HubClient, presence: &Presence) -> Result<Lists, HubClientError> {
+    client.set_presence(presence)?;
     let mut friends = client.friends()?;
     sort_friends(&mut friends);
     let requests = client.requests()?;
@@ -975,7 +1117,16 @@ fn discord_text(code: &ErrorCode) -> Option<&'static str> {
         ErrorCode::DiscordDisabled => "Ce Rafthub ne propose pas la connexion Discord.",
         ErrorCode::DiscordRefused => "Connexion refusée chez Discord.",
         ErrorCode::DiscordUnavailable => "Discord ne répond pas : réessayez dans un moment.",
-        ErrorCode::DiscordTaken => "Ce compte Discord est déjà lié à un autre compte.",
+        ErrorCode::DiscordTaken => {
+            "Ce compte Discord est déjà lié à un autre compte Rafthub : connectez-vous avec \
+             Discord pour l'utiliser, ou déliez-le de l'autre compte d'abord."
+        }
+        ErrorCode::AlreadyLinked => {
+            "Un autre compte Discord est déjà lié à ce compte : déliez-le d'abord."
+        }
+        ErrorCode::LastIdentity => {
+            "Discord est le seul moyen de vous connecter à ce compte : impossible de le délier."
+        }
         ErrorCode::InvalidToken => "Connexion Discord expirée : recommencez.",
         ErrorCode::AccountSuspended => "Ce compte est suspendu.",
         _ => return None,
@@ -1071,6 +1222,8 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
         }
 
         if logged_in {
+            profile_panel(ui, state, &ctx);
+            ui.add_space(12.0);
             if ui.available_width() >= super::WIDE {
                 ui.columns(2, |columns| {
                     friends_panel(&mut columns[0], state, &ctx);
@@ -1338,15 +1491,6 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     let heading = format!("Amis · {count}");
     let mut action = None;
     widgets::panel(ui, &heading, |ui| {
-        if let Some(name) = &state.username {
-            let text = match state.host() {
-                Some(host) => format!("Connecté en tant que {name} sur le Rafthub {host}"),
-                None => format!("Connecté en tant que {name}"),
-            };
-            ui.label(widgets::dim(text));
-            rename_row(ui, state, &mut action);
-            ui.add_space(6.0);
-        }
         if state.lists.friends.is_empty() {
             ui.label(widgets::dim(
                 "Aucun ami pour l'instant. Ajoutez-en un par son pseudo.",
@@ -1387,6 +1531,102 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
         state.confirm_remove = None;
         state.start(ctx, action);
     }
+}
+
+/// Profil du compte connecté : pseudo (à changer), présence envoyée, compte Discord
+/// (à lier ou délier, seulement si le hub propose Discord).
+fn profile_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
+    let mut action = None;
+    widgets::panel(ui, "Profil", |ui| {
+        if let Some(name) = &state.username {
+            let text = match state.host() {
+                Some(host) => format!("Connecté en tant que {name} sur le Rafthub {host}"),
+                None => format!("Connecté en tant que {name}"),
+            };
+            ui.label(RichText::new(text).color(theme::TEXT));
+        }
+        // Ce que les amis voient de nous (« En ligne », « En partie · APQuest »).
+        ui.horizontal(|ui| {
+            presence_dot(ui, state.presence.status);
+            let (text, color) = presence_text(&state.presence);
+            ui.label(widgets::dim("Vos amis voient :").size(13.0));
+            ui.label(RichText::new(text).size(13.0).color(color));
+        });
+        ui.add_space(6.0);
+        rename_row(ui, state, &mut action);
+        if state.offers_discord() {
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(4.0);
+            discord_link_row(ui, state, &mut action);
+        }
+    });
+    if let Some(action) = action {
+        if !state.busy() {
+            state.start(ctx, action);
+        }
+    }
+}
+
+/// Ligne « Discord » du profil : lié ou non, avec le bouton qui va avec. Pendant la
+/// liaison, l'attente du retour du navigateur (comme à la connexion).
+fn discord_link_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<Action>) {
+    if let DiscordStep::Waiting { authorize_url, .. } = state.discord.clone() {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(RichText::new("En attente de votre réponse sur Discord…").color(theme::TEXT));
+        });
+        ui.label(
+            widgets::dim(
+                "Votre navigateur s'est ouvert sur Discord. Acceptez, puis revenez ici : la \
+                 liaison se termine toute seule.",
+            )
+            .size(12.0),
+        );
+        ui.horizontal(|ui| {
+            if widgets::ghost_button(ui, "Copier le lien") {
+                ui.ctx().copy_text(authorize_url);
+                state.notice = Some(Notice::Info(
+                    "Lien copié : collez-le dans votre navigateur.".to_string(),
+                ));
+            }
+            if widgets::ghost_button(ui, "Annuler") {
+                state.cancel_discord();
+            }
+        });
+        return;
+    }
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Discord").color(theme::TEXT));
+        if state.discord_linked {
+            ui.label(RichText::new("lié").size(13.0).color(theme::GREEN));
+        } else {
+            ui.label(widgets::dim("non lié").size(13.0));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if !state.discord_linked {
+                if widgets::ghost_button(ui, "Lier mon compte Discord") && !state.busy() {
+                    *action = Some(Action::DiscordLinkStart);
+                }
+            } else if state.confirm_unlink {
+                if widgets::danger_button(ui, "Confirmer") && !state.busy() {
+                    *action = Some(Action::DiscordUnlink);
+                }
+                if widgets::ghost_button(ui, "Non") {
+                    state.confirm_unlink = false;
+                }
+            } else if widgets::ghost_button(ui, "Délier Discord") {
+                state.confirm_unlink = true;
+            }
+        });
+    });
+    let hint = if state.discord_linked {
+        "Vous pouvez vous connecter avec Discord ou avec votre e-mail ou pseudo."
+    } else {
+        "Lier Discord permet de vous connecter avec lui sur ce Rafthub, en plus de votre \
+         mot de passe."
+    };
+    ui.label(widgets::dim(hint).size(12.0));
 }
 
 /// « Changer de pseudo » : un bouton, puis un champ avec « Valider » et « Annuler ».
@@ -1937,5 +2177,116 @@ mod tests {
         assert_eq!(state.username.as_deref(), Some("Mireille"));
         assert!(!state.rename_open);
         assert!(matches!(&state.notice, Some(Notice::Info(m)) if m.contains("Mireille")));
+    }
+
+    /// État d'un joueur connecté, sans appel réseau.
+    fn logged_in_state() -> FriendsState {
+        let mut state = test_state();
+        deliver(
+            &mut state,
+            Ok(Done::LoggedIn {
+                username: "Mimi".to_string(),
+                lists: Lists::default(),
+                discord_linked: false,
+                warning: None,
+            }),
+        );
+        state
+    }
+
+    #[test]
+    fn presence_changee_renvoyee_tout_de_suite() {
+        let mut state = logged_in_state();
+        // La dernière présence envoyée est « en ligne ».
+        state.presence_sent = Some(Presence::online());
+        state.set_presence(Presence::online());
+        assert!(!state.presence_changed());
+        // Un jeu démarre : la présence voulue change, elle doit repartir.
+        state.set_presence(Presence::playing("APQuest"));
+        assert!(state.presence_changed());
+        // `start` note la présence emportée par une synchronisation.
+        let ctx = egui::Context::default();
+        state.start(&ctx, Action::Sync);
+        assert_eq!(state.presence_sent, Some(Presence::in_game("APQuest")));
+        assert!(!state.presence_changed());
+        // Le jeu s'arrête : retour à « en ligne », à renvoyer aussi.
+        state.set_presence(Presence::online());
+        assert!(state.presence_changed());
+    }
+
+    #[test]
+    fn actions_qui_envoient_la_presence() {
+        assert!(Action::Sync.sends_presence());
+        assert!(Action::Restore.sends_presence());
+        assert!(Action::Accept("a".into()).sends_presence());
+        assert!(!Action::Info.sends_presence());
+        assert!(!Action::Logout.sends_presence());
+        assert!(!Action::DiscordLinkStart.sends_presence());
+        assert!(!Action::DiscordUnlink.sends_presence());
+    }
+
+    #[test]
+    fn deconnexion_oublie_la_presence_envoyee() {
+        let mut state = logged_in_state();
+        state.presence_sent = Some(Presence::in_game("APQuest"));
+        state.discord_linked = true;
+        deliver(&mut state, Ok(Done::LoggedOut { message: None }));
+        assert_eq!(state.presence_sent, None);
+        assert!(!state.discord_linked);
+    }
+
+    #[test]
+    fn liaison_discord_connecte_garde_l_attente() {
+        let mut state = logged_in_state();
+        // `start` réussi : le navigateur s'ouvre, l'attente commence, et elle doit rester
+        // affichée même si on est déjà connecté.
+        deliver(
+            &mut state,
+            Ok(Done::DiscordOpened {
+                local: DiscordReturn::bind().unwrap(),
+                start: DiscordStart::from_parts("https://discord.com/x", "s", "x"),
+            }),
+        );
+        assert!(matches!(state.discord, DiscordStep::Waiting { .. }));
+        assert!(matches!(state.next, Some(Action::DiscordWait { .. })));
+        assert_eq!(state.open_url.as_deref(), Some("https://discord.com/x"));
+    }
+
+    #[test]
+    fn discord_lie_puis_delie() {
+        let mut state = logged_in_state();
+        assert!(!state.discord_linked);
+        deliver(
+            &mut state,
+            Ok(Done::DiscordLinkChanged {
+                linked: true,
+                message: "Compte Discord lié.".to_string(),
+            }),
+        );
+        assert!(state.discord_linked);
+        assert!(matches!(state.discord, DiscordStep::Idle));
+        assert!(matches!(&state.notice, Some(Notice::Info(_))));
+        state.confirm_unlink = true;
+        deliver(
+            &mut state,
+            Ok(Done::DiscordLinkChanged {
+                linked: false,
+                message: "Compte Discord délié.".to_string(),
+            }),
+        );
+        assert!(!state.discord_linked);
+        assert!(!state.confirm_unlink);
+    }
+
+    #[test]
+    fn messages_de_la_liaison_discord() {
+        let api = |code| HubClientError::Api {
+            status: 409,
+            code,
+            message: "texte du hub".to_string(),
+        };
+        assert!(error_text(&api(ErrorCode::DiscordTaken)).contains("déjà lié à un autre compte"));
+        assert!(error_text(&api(ErrorCode::AlreadyLinked)).contains("déliez-le d'abord"));
+        assert!(error_text(&api(ErrorCode::LastIdentity)).contains("seul moyen"));
     }
 }

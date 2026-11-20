@@ -205,6 +205,15 @@ impl eframe::App for App {
         let shared = self.worker.lock();
         let hosting = shared.status.is_some();
 
+        // Présence sur Rafthub : « en partie » tant qu'un jeu lancé d'ici tourne ou qu'une
+        // partie est hébergée, avec le seul nom du jeu (ni adresse, ni slot, ni mot de passe).
+        // Envoyée par `friends::background` dès qu'elle change.
+        let presence = launcher_core::activity::presence_for(
+            &self.library.running_games(),
+            shared.status.as_ref().map(|status| &status.seed),
+        );
+        self.friends.set_presence(presence);
+
         let mut goto: Option<Page> = None;
         // Génération et hébergement avancent même si l'écran « Créer » n'est pas affiché.
         let started = create::background(&mut self.create, &mut self.error, &self.worker, &shared);
