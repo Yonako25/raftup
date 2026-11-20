@@ -536,3 +536,53 @@ fn reel_scenario_complet() {
     a.logout().unwrap();
     b.logout().unwrap();
 }
+
+#[test]
+fn changer_de_pseudo() {
+    let hub = FakeHub::start(|_| ok(200, r#"{"user_id":7,"username":"Mireille"}"#));
+    let client = HubClient::with_token(hub.url.clone(), SessionToken::new("abc123"));
+    let account = client.change_username("  Mireille ").unwrap();
+    assert_eq!(account.username, "Mireille");
+    let seen = hub.seen();
+    assert_eq!(seen[0].method, "PATCH");
+    assert_eq!(seen[0].path, "/v1/me");
+    assert_eq!(seen[0].authorization.as_deref(), Some("Bearer abc123"));
+    // Espaces autour retirés avant l'envoi.
+    assert_eq!(
+        body_json(&seen[0]),
+        serde_json::json!({ "username": "Mireille" })
+    );
+    // Champ vide : rien n'est envoyé.
+    assert!(matches!(
+        client.change_username("   "),
+        Err(HubClientError::EmptyUsername)
+    ));
+    assert_eq!(hub.seen().len(), 1);
+}
+
+#[test]
+fn changer_de_pseudo_refus_types() {
+    for (status, text, expected) in [
+        (409, "username_taken", ErrorCode::UsernameTaken),
+        (
+            429,
+            "username_change_too_soon",
+            ErrorCode::UsernameChangeTooSoon,
+        ),
+        (400, "invalid_username", ErrorCode::InvalidUsername),
+    ] {
+        let hub = FakeHub::start(move |_| error(status, text, "refusé"));
+        let client = HubClient::with_token(hub.url.clone(), SessionToken::new("t"));
+        match client.change_username("Mimi").unwrap_err() {
+            HubClientError::Api { code, .. } => assert_eq!(code, expected),
+            other => panic!("erreur inattendue : {other:?}"),
+        }
+    }
+    // Sans session : pas d'appel.
+    let hub = FakeHub::start(|_| ok(200, "{}"));
+    let client = HubClient::new(hub.url.clone());
+    assert!(matches!(
+        client.change_username("Mimi"),
+        Err(HubClientError::NotLoggedIn)
+    ));
+}

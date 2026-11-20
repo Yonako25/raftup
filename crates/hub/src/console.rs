@@ -15,10 +15,21 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::error::HubError;
+use crate::identity::parse_username;
 use crate::session::{new_invite_code, normalize_invite_code, token_hash};
 use crate::settings::{PublicSettings, SettingKey};
-use crate::store::{AdminEvent, DashboardCounts, InviteRow, Page, PlayerFilter, PlayerSummary};
+use crate::store::{
+    AdminEvent, DashboardCounts, InviteRow, Page, PlayerFilter, PlayerSummary, UsernameChange,
+};
 use crate::{now_unix, AppState};
+
+/// Délai entre deux changements de pseudo **par le joueur** : 24 heures.
+///
+/// Le pseudo sert à se retrouver entre amis et à se connecter (ADR 0038) : le
+/// changer sans cesse brouillerait les amis et permettrait de « tourner » sur les
+/// pseudos des autres. Une fois par jour suffit pour corriger une faute ou changer
+/// d'avis. L'admin n'a pas de limite, et ses changements ne comptent pas.
+pub const USERNAME_CHANGE_INTERVAL: Duration = Duration::from_secs(24 * 3600);
 
 /// Longueur maximale du détail d'une ligne du journal.
 const MAX_DETAIL_CHARS: usize = 200;
@@ -34,6 +45,8 @@ pub enum EventKind {
     InviteRevoked,
     GdprExport,
     GdprDelete,
+    /// Pseudo changé, par le joueur ou par l'admin ; détail « ancien → nouveau ».
+    UsernameChanged,
 }
 
 impl EventKind {
@@ -47,6 +60,7 @@ impl EventKind {
             EventKind::InviteRevoked => "invite_revoked",
             EventKind::GdprExport => "gdpr_export",
             EventKind::GdprDelete => "gdpr_delete",
+            EventKind::UsernameChanged => crate::store::USERNAME_CHANGED_KIND,
         }
     }
 }
@@ -198,6 +212,60 @@ impl AppState {
         tracing::info!(setting = key.name(), "réglage changé");
         self.record_event(actor, EventKind::SettingChanged, None, &detail)
             .await
+    }
+
+    /// Change le pseudo d'un compte : mêmes règles qu'à l'inscription, unique.
+    ///
+    /// `limited` : vrai quand le joueur change son propre pseudo (une fois par
+    /// [`USERNAME_CHANGE_INTERVAL`]) ; faux pour l'admin. Remettre le même pseudo ne
+    /// fait rien ; changer seulement la casse (`alice` → `Alice`) est permis.
+    /// Renvoie le pseudo affiché après le changement.
+    pub async fn rename_user(
+        &self,
+        actor: Option<i64>,
+        user_id: i64,
+        raw: &str,
+        limited: bool,
+    ) -> Result<String, HubError> {
+        let username = parse_username(raw)?;
+        let store = self.store();
+        let current = store
+            .user_by_id(user_id)
+            .await?
+            .ok_or(HubError::UserNotFound)?;
+        if current.username == username.display {
+            return Ok(current.username);
+        }
+        // Vérification rapide ; la contrainte d'unicité de la base garde le dernier mot.
+        if let Some(other) = store.user_by_username(&username.normalized).await? {
+            if other.id != user_id {
+                return Err(HubError::UsernameTaken);
+            }
+        }
+        let now = now_unix();
+        if limited {
+            if let Some(last) = store.last_self_rename(user_id).await? {
+                let interval =
+                    i64::try_from(USERNAME_CHANGE_INTERVAL.as_secs()).unwrap_or(i64::MAX);
+                if now < last.saturating_add(interval) {
+                    return Err(HubError::UsernameChangeTooSoon);
+                }
+            }
+        }
+        let detail = clean_detail(&format!("{} → {}", current.username, username.display));
+        let change = UsernameChange {
+            user_id,
+            actor,
+            username: &username.display,
+            username_norm: &username.normalized,
+            detail: &detail,
+            now,
+        };
+        if !store.rename_user(&change).await? {
+            return Err(HubError::UserNotFound);
+        }
+        tracing::info!(user_id, "pseudo changé");
+        Ok(username.display)
     }
 
     /// Réglages sans secret, pour la page « Réglages ».

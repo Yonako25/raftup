@@ -174,6 +174,24 @@ const EMAIL_PROVIDER: &str = "email";
 /// Fournisseur « Discord » : `subject` est l'identifiant Discord du joueur.
 pub const DISCORD_PROVIDER: &str = "discord";
 
+/// Type de la ligne du journal écrite par [`Store::rename_user`]
+/// (même texte que `EventKind::UsernameChanged`).
+pub(crate) const USERNAME_CHANGED_KIND: &str = "username_changed";
+
+/// Un changement de pseudo, prêt à écrire ([`Store::rename_user`]).
+/// `'a` : la structure emprunte les textes de l'appelant, sans les copier.
+#[derive(Debug)]
+pub struct UsernameChange<'a> {
+    pub user_id: i64,
+    /// Compte qui agit : le joueur lui-même, ou l'admin (`None` : système).
+    pub actor: Option<i64>,
+    pub username: &'a str,
+    pub username_norm: &'a str,
+    /// Détail du journal, déjà nettoyé (« ancien → nouveau »).
+    pub detail: &'a str,
+    pub now: i64,
+}
+
 /// Un compte, vu de l'extérieur : identifiant interne et pseudo affiché.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserRow {
@@ -695,6 +713,58 @@ impl Store {
         row.map(|r| user_row(&r)).transpose()
     }
 
+    /// Change le pseudo d'un compte et écrit la ligne du journal, en une seule
+    /// transaction : le journal sert aussi à compter les changements (limite de
+    /// [`crate::console::USERNAME_CHANGE_INTERVAL`]), il ne doit donc jamais manquer.
+    ///
+    /// Les amitiés, demandes et blocages pointent vers l'identifiant du compte :
+    /// rien d'autre à mettre à jour. `false` si le compte n'existe pas ;
+    /// [`HubError::UsernameTaken`] si un autre compte a pris ce pseudo entre-temps.
+    pub async fn rename_user(&self, change: &UsernameChange<'_>) -> Result<bool, HubError> {
+        let mut tx = self.pool.begin().await?;
+        let result = self
+            .q("UPDATE users SET username = $1, username_norm = $2 WHERE id = $3")
+            .bind(change.username)
+            .bind(change.username_norm)
+            .bind(change.user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_unique)?;
+        if result.rows_affected() == 0 {
+            return Ok(false);
+        }
+        self.q(
+            "INSERT INTO admin_events (created_at, actor_id, kind, target_id, detail) \
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(change.now)
+        .bind(change.actor)
+        .bind(USERNAME_CHANGED_KIND)
+        .bind(change.user_id)
+        .bind(change.detail)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    /// Date du dernier changement de pseudo fait **par le joueur lui-même**
+    /// (`actor_id` = `target_id`) ; ceux de l'admin ne comptent pas.
+    pub async fn last_self_rename(&self, user_id: i64) -> Result<Option<i64>, HubError> {
+        let row = self
+            .q("SELECT created_at FROM admin_events \
+                WHERE kind = $1 AND target_id = $2 AND actor_id = $3 \
+                ORDER BY created_at DESC LIMIT 1")
+            .bind(USERNAME_CHANGED_KIND)
+            .bind(user_id)
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.map(|r| r.try_get("created_at"))
+            .transpose()
+            .map_err(Into::into)
+    }
+
     pub async fn insert_session(
         &self,
         token_hash: &str,
@@ -1099,6 +1169,13 @@ impl Store {
     /// Renvoie `false` si le compte n'existait pas.
     pub async fn delete_account(&self, user_id: i64) -> Result<bool, HubError> {
         let mut tx = self.pool.begin().await?;
+        // Les anciens pseudos du compte sont dans le détail des changements de
+        // pseudo : on les efface aussi (droit à l'effacement).
+        self.q("UPDATE admin_events SET detail = '' WHERE kind = $1 AND target_id = $2")
+            .bind(USERNAME_CHANGED_KIND)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
         self.q("UPDATE admin_events SET actor_id = NULL WHERE actor_id = $1")
             .bind(user_id)
             .execute(&mut *tx)

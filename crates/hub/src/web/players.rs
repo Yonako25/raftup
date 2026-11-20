@@ -7,6 +7,7 @@
 //! | `GET /admin/joueurs?q=…&filtre=…&page=…` | liste |
 //! | `POST /admin/joueurs/suspendre` | suspend un compte (`csrf`, `user_id`) |
 //! | `POST /admin/joueurs/reactiver` | lève la suspension (`csrf`, `user_id`) |
+//! | `POST /admin/joueurs/renommer` | change le pseudo (`csrf`, `user_id`, `username`), sans limite |
 //! | `POST /admin/joueurs/invitations` | crée un code, montré une seule fois (`csrf`) |
 //! | `POST /admin/joueurs/invitations/revoquer` | retire un code (`csrf`, `invite_id`) |
 //!
@@ -121,6 +122,23 @@ pub struct PlayerActionForm {
     page: String,
 }
 
+/// Formulaire « Renommer » : comme [`PlayerActionForm`], plus le nouveau pseudo.
+#[derive(Debug, Deserialize)]
+pub struct RenameForm {
+    #[serde(default)]
+    csrf: String,
+    #[serde(default)]
+    user_id: String,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    q: String,
+    #[serde(default)]
+    filtre: String,
+    #[serde(default)]
+    page: String,
+}
+
 /// Formulaire des codes d'invitation (création et révocation).
 #[derive(Debug, Deserialize)]
 pub struct InviteForm {
@@ -199,6 +217,12 @@ fn notice(msg: &str) -> Option<(&'static str, bool)> {
         "reactive" => Some(("Compte réactivé.", false)),
         "soi" => Some(("Vous ne pouvez pas suspendre votre propre compte.", true)),
         "inconnu" => Some(("Ce compte n'existe plus.", true)),
+        "renomme" => Some(("Pseudo changé.", false)),
+        "pseudo-pris" => Some(("Ce pseudo est déjà pris.", true)),
+        "pseudo-invalide" => Some((
+            "Pseudo refusé : 3 à 24 caractères, lettres, chiffres, _, - et ., pas de nom réservé.",
+            true,
+        )),
         "revoque" => Some(("Code d'invitation révoqué.", false)),
         "invitation-inconnue" => Some(("Ce code d'invitation n'existe plus.", true)),
         _ => None,
@@ -398,6 +422,33 @@ async fn player_action(
         Ok(()) if suspend => "suspendu",
         Ok(()) => "reactive",
         Err(HubError::SelfSuspend) => "soi",
+        Err(HubError::UserNotFound) => "inconnu",
+        Err(error) => return internal_error(error),
+    };
+    Redirect::to(&list.url(list.page, Some(msg))).into_response()
+}
+
+/// `POST /admin/joueurs/renommer` : l'admin change le pseudo d'un compte. Mêmes
+/// règles qu'à l'inscription, mais sans la limite de 24 heures du joueur.
+pub async fn rename(
+    State(state): State<AppState>,
+    session: AdminSession,
+    Form(form): Form<RenameForm>,
+) -> Response {
+    if !session.csrf_ok(&form.csrf) {
+        return csrf_refused();
+    }
+    let list = ListState::read(&form.q, &form.filtre, &form.page);
+    let Ok(user_id) = form.user_id.trim().parse::<i64>() else {
+        return Redirect::to(&list.url(list.page, Some("inconnu"))).into_response();
+    };
+    let result = state
+        .rename_user(Some(session.user_id), user_id, form.username.trim(), false)
+        .await;
+    let msg = match result {
+        Ok(_) => "renomme",
+        Err(HubError::UsernameTaken) => "pseudo-pris",
+        Err(HubError::InvalidUsername(_)) => "pseudo-invalide",
         Err(HubError::UserNotFound) => "inconnu",
         Err(error) => return internal_error(error),
     };

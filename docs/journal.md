@@ -494,3 +494,9 @@ untime2`.
 - **Pas vérifié** : Let's Encrypt jamais essayé (ni le vrai serveur ni celui d'essai) ; HTTPS dans un vrai navigateur ; launcher contre un hub en HTTPS.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `api.rs`, `web/setup.rs`, `web/install.rs`, `.github/workflows/` (autres sessions).
 - **Suite** : au déploiement, essayer `--tls-acme-staging` puis `--tls-acme` sur un vrai domaine.
+
+### 2026-11-20 · Changement de pseudo (session `p1-pseudo`)
+- **Fait** : `PATCH /v1/me` (`username`) : règles de l'inscription, `username_taken`, une fois par 24 h (`username_change_too_soon`), compté sur `admin_events` (`username_changed`, « ancien → nouveau », écrit dans la même transaction, sans migration) ; console : « Renommer » sur la page Joueurs (CSRF, sans limite, ne compte pas pour le joueur), libellé « Pseudo changé » dans Journaux ; suppression RGPD vide le détail ; launcher : `HubClient::change_username`, bouton « Changer de pseudo » sous « Connecté en tant que… », message clair pour les 24 h. ADR 0033 complété. Tests : `tests/username_change.rs` (5), `renommer_un_compte`, 2 tests client, 3 tests d'interface.
+- **Vérifié** : fmt, clippy `-D warnings`, `cargo test --workspace` ; toute la suite du hub sur MariaDB 11.4 et PostgreSQL 18 (conteneurs `raftup-test-*`). **Pas vérifié** : écran du launcher et page Joueurs regardés à l'œil ; MySQL 8.4 non relancé.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : capture de l'écran « Amis » avec le champ ouvert et de la page Joueurs.

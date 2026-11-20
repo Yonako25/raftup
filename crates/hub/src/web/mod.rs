@@ -67,6 +67,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/admin/joueurs", get(players::list))
         .route("/admin/joueurs/suspendre", post(players::suspend))
         .route("/admin/joueurs/reactiver", post(players::reactivate))
+        .route("/admin/joueurs/renommer", post(players::rename))
         .route("/admin/joueurs/invitations", post(players::create_invite))
         .route(
             "/admin/joueurs/invitations/revoquer",

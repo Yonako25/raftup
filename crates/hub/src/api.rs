@@ -7,6 +7,7 @@
 //! | `POST /v1/sessions` | connexion (`email`, `password`) → jeton |
 //! | `DELETE /v1/sessions/current` | déconnexion (révoque le jeton) |
 //! | `GET /v1/me` | compte connecté (avec `email_verified`) |
+//! | `PATCH /v1/me` | change son pseudo (`username`) : une fois par 24 h |
 //! | `GET /v1/me/export` | toutes les données du compte, en JSON (RGPD) |
 //! | `DELETE /v1/me` | supprime le compte (`password` si le compte en a un) |
 //! | `POST /v1/email/verify` | vérifie l'adresse (`token` reçu par e-mail) |
@@ -75,7 +76,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/accounts", post(register))
         .route("/v1/sessions", post(login))
         .route("/v1/sessions/current", delete(logout))
-        .route("/v1/me", get(me).delete(delete_account))
+        .route("/v1/me", get(me).patch(rename_me).delete(delete_account))
         .route("/v1/me/export", get(export_account))
         .route(
             "/v1/email/verify",
@@ -578,6 +579,23 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> Result<Json<MeView
         email: status.map(|(email, _)| email),
         email_verified,
         discord_linked: providers.iter().any(|p| p == DISCORD_PROVIDER),
+    }))
+}
+
+/// `PATCH /v1/me` : change son pseudo. Mêmes règles qu'à l'inscription ; une fois
+/// par 24 heures (`username_change_too_soon`, voir `console::USERNAME_CHANGE_INTERVAL`).
+/// Les amis voient le nouveau pseudo tout de suite : tout pointe vers l'identifiant.
+async fn rename_me(
+    State(state): State<AppState>,
+    user: AuthUser,
+    ApiJson(body): ApiJson<UsernameBody>,
+) -> Result<Json<AccountView>, HubError> {
+    let username = state
+        .rename_user(Some(user.user_id), user.user_id, &body.username, true)
+        .await?;
+    Ok(Json(AccountView {
+        user_id: user.user_id,
+        username,
     }))
 }
 
