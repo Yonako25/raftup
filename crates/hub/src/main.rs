@@ -150,7 +150,7 @@ async fn run_install_wizard(
     args: &Args,
     dir: std::path::PathBuf,
     code: &str,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<(String, String)> {
     let public_url = args
         .public_url
         .clone()
@@ -164,6 +164,8 @@ async fn run_install_wizard(
     // `oneshot` : un canal qui porte une seule valeur, ici l'URL de la base choisie.
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<String>();
     let state = InstallState::new(code.to_string(), dir, secure, done_tx);
+    // Jeton du cookie de l'étape 1, rendu avec l'URL pour le vrai hub (étape 2).
+    let pass = state.pass_token();
 
     let listener = tokio::net::TcpListener::bind(&args.listen)
         .await
@@ -190,7 +192,7 @@ async fn run_install_wizard(
         .await
         .context("assistant d'installation")?;
     let url = chosen.lock().await.take();
-    url.context("installation interrompue")
+    Ok((url.context("installation interrompue")?, pass))
 }
 
 #[tokio::main]
@@ -206,6 +208,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Code d'installation, tiré seulement s'il sert (assistant ou premier admin).
     let mut setup_code: Option<String> = None;
+    // Jeton du cookie posé par l'étape 1 : l'étape 2 ne redemande pas le code.
+    let mut setup_pass: Option<String> = None;
 
     // Quelle base ? `--db` ou `RAFTUP_HUB_DB`, sinon le choix gardé dans
     // `rafthub-data/rafthub.toml`, sinon l'assistant de premier lancement (ADR 0037).
@@ -220,8 +224,9 @@ async fn main() -> anyhow::Result<()> {
                 ),
                 None => {
                     let code = hub::session::new_invite_code();
-                    let url = run_install_wizard(&args, dir, &code).await?;
+                    let (url, pass) = run_install_wizard(&args, dir, &code).await?;
                     setup_code = Some(code);
+                    setup_pass = Some(pass);
                     url
                 }
             }
@@ -267,6 +272,7 @@ async fn main() -> anyhow::Result<()> {
             }
         };
         config.setup_code = Some(code);
+        config.setup_pass = setup_pass;
     }
     let state = AppState::from_settings(store.clone(), config).await?;
     // Avertissements de départ : les réglages restent modifiables ensuite.

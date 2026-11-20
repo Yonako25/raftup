@@ -149,6 +149,36 @@ async fn mauvais_code_refuse_rien_n_est_garde() {
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
     assert!(reply.body.contains("installation incorrect"));
     assert_eq!(ServerConfig::load(dir.path()).unwrap(), None);
+    // Pas de laissez-passer pour l'étape 2 sans le bon code.
+    assert!(!reply
+        .set_cookie
+        .iter()
+        .any(|c| c.starts_with("rafthub_setup_pass=")));
+}
+
+#[tokio::test]
+async fn etape_1_reussie_pose_le_laissez_passer_de_l_etape_2() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, _rx) = oneshot::channel();
+    let state = InstallState::new(CODE.to_string(), dir.path().to_path_buf(), false, tx);
+    let token = state.pass_token();
+    assert!(token.len() >= 32, "jeton trop court : {token}");
+    let app = install_router(state);
+    let reply = submit(&app, &[("code", CODE), ("database", "sqlite")]).await;
+    assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+    let cookie = reply
+        .set_cookie
+        .iter()
+        .find(|c| c.starts_with("rafthub_setup_pass="))
+        .expect("cookie de l'étape 2");
+    assert!(cookie.starts_with(&format!("rafthub_setup_pass={token};")));
+    assert!(cookie.contains("HttpOnly"));
+    assert!(cookie.contains("SameSite=Strict"));
+    assert!(cookie.contains("Path=/admin/installation"));
+    // Deux assistants n'ont jamais le même jeton.
+    let (tx2, _rx2) = oneshot::channel();
+    let other = InstallState::new(CODE.to_string(), dir.path().to_path_buf(), false, tx2);
+    assert_ne!(other.pass_token(), token);
 }
 
 #[tokio::test]

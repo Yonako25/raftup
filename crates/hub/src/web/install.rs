@@ -32,6 +32,11 @@ use crate::session::{new_token, normalize_invite_code};
 use crate::store::Store;
 
 const CSRF_COOKIE: &str = "rafthub_install_csrf";
+/// Cookie posé quand l'étape 1 réussit : il porte un jeton aléatoire que le vrai hub
+/// reconnaît à l'étape 2, pour ne pas redemander le code d'installation.
+/// `HttpOnly` (illisible en JavaScript) et `SameSite=Strict` (jamais envoyé depuis
+/// un autre site) ; il n'est valable que pour `/admin/installation`.
+pub const SETUP_PASS_COOKIE: &str = "rafthub_setup_pass";
 const PATH: &str = "/admin/installation";
 /// Temps laissé à une base externe pour répondre pendant l'essai.
 const DB_TEST_TIMEOUT: Duration = Duration::from_secs(15);
@@ -41,6 +46,8 @@ const DB_TEST_TIMEOUT: Duration = Duration::from_secs(15);
 #[derive(Clone)]
 pub struct InstallState {
     setup_code: String,
+    /// Jeton du cookie [`SETUP_PASS_COOKIE`], tiré au hasard à la création de l'état.
+    pass_token: String,
     data_dir: PathBuf,
     secure_cookies: bool,
     done: Arc<Mutex<Option<oneshot::Sender<String>>>>,
@@ -57,10 +64,17 @@ impl InstallState {
     ) -> InstallState {
         InstallState {
             setup_code,
+            pass_token: new_token(),
             data_dir,
             secure_cookies,
             done: Arc::new(Mutex::new(Some(done))),
         }
+    }
+
+    /// Jeton que le vrai hub doit reconnaître à l'étape 2 (`HubConfig::setup_pass`).
+    /// `main` le lit avant de lancer l'assistant ; il ne vit qu'en mémoire.
+    pub fn pass_token(&self) -> String {
+        self.pass_token.clone()
     }
 }
 
@@ -267,5 +281,15 @@ async fn submit(
     }
     let mut finished = InstallPage::empty(String::new());
     finished.finished = true;
-    render(&state, StatusCode::OK, finished)
+    let mut response = render(&state, StatusCode::OK, finished);
+    // Le code vient d'être prouvé : ce navigateur passera l'étape 2 sans le retaper.
+    let secure = if state.secure_cookies { "; Secure" } else { "" };
+    let text = format!(
+        "{SETUP_PASS_COOKIE}={}; Path={PATH}; Max-Age=3600; HttpOnly; SameSite=Strict{secure}",
+        state.pass_token
+    );
+    if let Ok(value) = HeaderValue::from_str(&text) {
+        response.headers_mut().append(header::SET_COOKIE, value);
+    }
+    response
 }

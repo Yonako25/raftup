@@ -4,11 +4,15 @@
 //! durée de chaque joueur avec `launcher_core::estimate`. Le résultat est gardé dans la
 //! mémoire d'egui (`ui.data`) : le panneau reste affiché, pour la dernière partie
 //! générée, même après le démarrage du serveur, quand l'hôte revient sur l'écran.
+//!
+//! L'écran « Partie en cours » relit la même mémoire ([`show_running`]) : si la partie
+//! hébergée est la dernière seed générée, il montre aussi l'estimation ; sinon (seed
+//! ouverte depuis un fichier, launcher relancé), il ne montre rien.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use egui::{Id, Ui};
+use egui::{Id, RichText, Ui};
 use launcher_core::generation::GenerateOutput;
 use launcher_core::{estimate_file, Catalog, PlayerEstimate, SeedEstimate};
 
@@ -73,6 +77,47 @@ pub fn show(ui: &mut Ui, output: Option<&GenerateOutput>) {
         }
     });
     ui.add_space(10.0);
+}
+
+/// Pour « Partie en cours » : l'estimation calculée à la création, si la partie
+/// hébergée est cette seed-là et que le calcul a réussi ; `None` sinon.
+pub fn for_seed(ui: &Ui, seed_name: &str) -> Option<SeedEstimate> {
+    let remembered: Option<Arc<Remembered>> = ui.data(|d| d.get_temp(key()));
+    known_estimate(remembered.as_deref(), seed_name).cloned()
+}
+
+/// Contenu du panneau « Durée estimée » de « Partie en cours » (colonne de droite).
+pub fn running_panel(ui: &mut Ui, estimate: &SeedEstimate) {
+    ui.label(widgets::caps("Durée estimée"));
+    ui.add_space(4.0);
+    ui.label(widgets::dim(summary(estimate)).size(13.0));
+    ui.add_space(4.0);
+    for player in &estimate.players {
+        ui.label(RichText::new(short_player_line(player)).size(13.0));
+    }
+    ui.add_space(4.0);
+    ui.label(widgets::dim(NOTE).size(12.0));
+}
+
+/// L'estimation gardée, seulement si elle vient de la seed `seed_name` et a réussi.
+fn known_estimate<'a>(
+    remembered: Option<&'a Remembered>,
+    seed_name: &str,
+) -> Option<&'a SeedEstimate> {
+    let remembered = remembered?;
+    if remembered.seed_name != seed_name {
+        return None;
+    }
+    remembered.estimate.as_ref().ok()
+}
+
+/// `Alice : ≈ 2 h 40 de jeu, au plus tard 3 h 10` (colonne étroite de « Partie en cours »).
+fn short_player_line(p: &PlayerEstimate) -> String {
+    let mut text = format!("{} : ≈ {} de jeu", p.name, duration(p.play_seconds));
+    if p.wait_seconds() > 0 {
+        text.push_str(&format!(", au plus tard {}", duration(p.finish_seconds)));
+    }
+    text
 }
 
 /// Rappel affiché sous les chiffres.
@@ -146,6 +191,41 @@ mod tests {
         let line = player_line(&player(600, 600, false));
         assert!(!line.contains("au plus tard"), "{line}");
         assert!(line.ends_with("(temps par défaut)"), "{line}");
+    }
+
+    fn remembered(seed_name: &str, estimate: Result<SeedEstimate, String>) -> Remembered {
+        Remembered {
+            file: PathBuf::from("seed.archipelago"),
+            seed_name: seed_name.into(),
+            estimate,
+        }
+    }
+
+    #[test]
+    fn partie_en_cours_montre_l_estimation_de_sa_seed_seulement() {
+        let estimate = SeedEstimate {
+            players: vec![player(9600, 11_400, true)],
+            spheres: 3,
+        };
+        let kept = remembered("AP_123", Ok(estimate));
+        assert!(known_estimate(Some(&kept), "AP_123").is_some());
+        // Autre seed hébergée, rien de calculé, ou estimation ratée : rien.
+        assert!(known_estimate(Some(&kept), "AP_999").is_none());
+        assert!(known_estimate(None, "AP_123").is_none());
+        let failed = remembered("AP_123", Err("illisible".into()));
+        assert!(known_estimate(Some(&failed), "AP_123").is_none());
+    }
+
+    #[test]
+    fn ligne_courte_d_un_joueur() {
+        assert_eq!(
+            short_player_line(&player(9600, 11_400, true)),
+            "Alice : ≈ 2 h 40 de jeu, au plus tard 3 h 10"
+        );
+        assert_eq!(
+            short_player_line(&player(600, 600, false)),
+            "Alice : ≈ 10 min de jeu"
+        );
     }
 
     #[test]

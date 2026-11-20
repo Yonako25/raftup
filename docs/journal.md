@@ -476,3 +476,9 @@ untime2`.
 - **Pas vérifié** : rien sur le serveur triomyno (interdit) ; Traefik réel et certificat ; restauration ; clippy du bloc `#[cfg(unix)]` (compilé sans avertissement dans l'image seulement).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; volumes `rafthub-p2-test-data`, `rafthub-p2-test-bk` et images `rafthub:officiel-test`, `rafthub-backup:officiel-test` (essais locaux, à supprimer sur accord).
 - **Suite** : choisir le domaine, puis suivre `deploy/rafthub/README.md` sur le serveur.
+
+### 2026-11-20 · Trois correctifs : code d'installation, durée dans « Partie en cours », captures (session `p1-correctifs`)
+- **Fait** : l'étape 1 réussie de l'assistant pose le cookie `rafthub_setup_pass` (`HttpOnly`, `SameSite=Strict`, `/admin/installation`, 1 h) au jeton aléatoire que `main` passe au vrai hub (`HubConfig::setup_pass`) : l'étape 2 cache le champ du code ; sans cookie valable (hub relancé), le code est demandé ; cookie effacé une fois l'admin créé (ADR 0037, 3 tests). Panneau « Durée estimée » dans la colonne de droite de « Partie en cours » si la partie est la dernière seed générée (ADR 0030, 2 tests). Captures dans `Z:\raftup-test\captures-p1-correctifs` : connexion « E-mail ou pseudo », inscription avec code d'invitation, « Partie en cours » avec la durée (moteur Rust) ; aucun défaut vu. fmt, clippy `-D warnings`, `cargo test --workspace` passent.
+- **Pas vérifié** : enchaînement des deux étapes dans un vrai navigateur ; l'estimation n'existe que si l'écran « Créer » a dessiné la seed prête avant le passage à « Partie en cours » (vrai sur la capture).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; le générateur Python de `Z:\raftup-test\runtime` est à réinstaller (versions épinglées changées), non fait (téléchargement).
+- **Suite** : refaire l'installation d'un hub neuf dans le navigateur pour voir l'étape 2 sans code.
