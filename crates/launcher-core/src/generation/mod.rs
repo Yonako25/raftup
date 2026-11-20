@@ -17,8 +17,9 @@ pub use runtime::{
 pub use export::{fallback_line, EngineReport, EngineUsed, ExportBackend};
 pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use run::{
-    generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,
-    DEFAULT_SPOILER, DEFAULT_TIMEOUT,
+    discard_generation, generate, inspect_worlds, GenerateOutput, GenerateRequest,
+    GeneratorBackend, PythonBackend, Runtime, DEFAULT_SPOILER, DEFAULT_TIMEOUT,
+    MAX_INSPECTION_BYTES,
 };
 pub use rust::{engine_name, rust_support, RustBackend};
 

@@ -61,7 +61,7 @@ fn publier() -> Publie {
     let cles = tmp.path().join("cles");
     let cle = keygen(&cles).unwrap();
     let sortie = tmp.path().join("sortie");
-    publish(&source_path, &cles.join(SECRET_KEY_FILE), &sortie).unwrap();
+    publish(&source_path, &cles.join(SECRET_KEY_FILE), &sortie, &[]).unwrap();
     Publie {
         _tmp: tmp,
         dist,

@@ -1,0 +1,31 @@
+[package]
+name = "registry-tool"
+description = "Outil du registre de Raftup : publication signée locale et vérifications de la CI (niveaux de confiance)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+# Crate à part (ADR 0042) : `check` a besoin de `launcher-core` (générateur épinglé, bac à
+# sable, téléchargements), qui dépend lui-même de `registry`. Mettre `check` dans
+# `registry` ferait un cycle de dépendances, que Cargo refuse.
+[dependencies]
+registry = { workspace = true, features = ["publish"] }
+launcher-core.workspace = true
+py-bridge.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+zip.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "raftup-registry"
+path = "src/bin/raftup-registry.rs"

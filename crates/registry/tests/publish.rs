@@ -6,10 +6,12 @@ use std::fs;
 use std::path::Path;
 
 use registry::publish::{
-    build_index, keygen, publish, sign_index, INDEX_FILE, PUBLIC_KEY_FILE, SECRET_KEY_FILE,
-    SIGNATURE_FILE,
+    build_index, keygen, publish, sign_index, TrustClaim, INDEX_FILE, PUBLIC_KEY_FILE,
+    SECRET_KEY_FILE, SIGNATURE_FILE,
 };
-use registry::{check_package, verify_index, PackageKind, RegistryError};
+use registry::{
+    check_package, sha256_hex, verify_index, PackageKind, RegistryError, Trust, TrustLevel,
+};
 
 const PROFIL: &str = "format_version = 1\n[game]\nid = \"demo\"\n";
 
@@ -57,7 +59,7 @@ fn publication_complete_puis_verification() {
     let publique = keygen(&cles).unwrap();
     let sortie = tmp.path().join("sortie");
 
-    let rapport = publish(&source, &cles.join(SECRET_KEY_FILE), &sortie).unwrap();
+    let rapport = publish(&source, &cles.join(SECRET_KEY_FILE), &sortie, &[]).unwrap();
     assert_eq!(rapport.packages, 2);
     assert_eq!(rapport.public_key, publique);
     assert_eq!(rapport.index_path, sortie.join(INDEX_FILE));
@@ -87,9 +89,9 @@ fn republier_donne_le_meme_index() {
     let cles = tmp.path().join("cles");
     keygen(&cles).unwrap();
     let sortie = tmp.path().join("sortie");
-    publish(&source, &cles.join(SECRET_KEY_FILE), &sortie).unwrap();
+    publish(&source, &cles.join(SECRET_KEY_FILE), &sortie, &[]).unwrap();
     let premier = fs::read(sortie.join(INDEX_FILE)).unwrap();
-    publish(&source, &cles.join(SECRET_KEY_FILE), &sortie).unwrap();
+    publish(&source, &cles.join(SECRET_KEY_FILE), &sortie, &[]).unwrap();
     assert_eq!(fs::read(sortie.join(INDEX_FILE)).unwrap(), premier);
 }
 
@@ -145,4 +147,78 @@ fn signature_avec_cle_illisible_refusee() {
         sign_index(b"{}", "pas une clé"),
         Err(RegistryError::Signing(_))
     ));
+}
+
+// --- Niveaux de confiance repris d'un rapport de CI (ADR 0042) ---
+
+fn claim(name: &str, version: &str, data: &[u8], level: TrustLevel) -> TrustClaim {
+    TrustClaim {
+        kind: PackageKind::Apworld,
+        name: name.to_string(),
+        version: version.to_string(),
+        sha256: sha256_hex(data),
+        trust: Trust {
+            level,
+            detail: Some("test".to_string()),
+        },
+    }
+}
+
+#[test]
+fn niveau_du_rapport_ecrit_dans_l_index_signe() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = chantier(tmp.path(), PROFIL);
+    let cles = tmp.path().join("cles");
+    let publique = keygen(&cles).unwrap();
+    let sortie = tmp.path().join("sortie");
+    let claims = [claim(
+        "monde",
+        "0.3.2.1",
+        b"faux zip",
+        TrustLevel::Generates,
+    )];
+    let rapport = publish(&source, &cles.join(SECRET_KEY_FILE), &sortie, &claims).unwrap();
+    assert_eq!(
+        rapport.levels,
+        [
+            ("apworld monde".to_string(), TrustLevel::Generates),
+            ("profile demo".to_string(), TrustLevel::Unverified),
+        ]
+    );
+    // Le profil n'a pas de rapport : un seul avertissement, pour lui.
+    assert_eq!(rapport.warnings.len(), 1);
+    assert!(rapport.warnings[0].contains("profile demo"));
+
+    let bytes = fs::read(sortie.join(INDEX_FILE)).unwrap();
+    let signature = fs::read_to_string(sortie.join(SIGNATURE_FILE)).unwrap();
+    let index = verify_index(&bytes, &signature, &publique).unwrap();
+    let monde = index.get(PackageKind::Apworld, "monde").unwrap();
+    assert_eq!(monde.trust.level, TrustLevel::Generates);
+    assert_eq!(monde.trust.detail.as_deref(), Some("test"));
+}
+
+#[test]
+fn rapport_d_un_autre_fichier_ignore() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = chantier(tmp.path(), PROFIL);
+    let mut index = build_index(&source).unwrap();
+    // Même nom, autre contenu, puis autre version : aucun des deux ne fait monter le niveau.
+    let faux = [
+        claim("monde", "0.3.2.1", b"autre zip", TrustLevel::Fuzzed),
+        claim("monde", "9.9", b"faux zip", TrustLevel::Fuzzed),
+        claim("absent", "1", b"x", TrustLevel::Fuzzed),
+    ];
+    let warnings = registry::publish::apply_trust(&mut index, &faux);
+    assert!(index
+        .packages
+        .iter()
+        .all(|p| p.trust.level == TrustLevel::Unverified));
+    assert!(warnings.iter().any(|w| w.contains("absent")));
+    assert_eq!(
+        warnings
+            .iter()
+            .filter(|w| w.contains("pas le fichier publié"))
+            .count(),
+        2
+    );
 }

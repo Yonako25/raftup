@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use ::registry::{check_package, verify_index, RegistryError};
 // `pub use` : l'interface (`launcher-ui`) ne dépend que de `launcher-core` ; elle trouve ici
 // les types de l'index sans dépendre elle-même de la crate `registry`.
-pub use ::registry::{Index, Package, PackageKind};
+pub use ::registry::{Index, Package, PackageKind, Trust, TrustLevel};
 
 use crate::catalog::Catalog;
 use crate::download::{DownloadError, Fetcher};

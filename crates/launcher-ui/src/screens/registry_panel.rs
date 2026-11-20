@@ -375,6 +375,7 @@ mod tests {
             size: 1,
             license: "MIT".to_string(),
             authors: vec!["Auteur".to_string()],
+            trust: Default::default(),
         }
     }
 

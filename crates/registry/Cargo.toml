@@ -10,11 +10,11 @@ rust-version.workspace = true
 [lints]
 workspace = true
 
-# `publish` : signer et écrire un index (binaire `raftup-registry`). Le launcher prend la
+# `publish` : signer et écrire un index (binaire `raftup-registry` de `registry-tool`). Le launcher prend la
 # crate sans cette fonctionnalité : il ne sait que vérifier, jamais signer (ADR 0032).
 [features]
 default = ["publish"]
-publish = ["dep:minisign", "dep:toml", "dep:anyhow"]
+publish = ["dep:minisign", "dep:toml"]
 
 [dependencies]
 serde.workspace = true
@@ -25,17 +25,10 @@ minisign-verify.workspace = true
 # `optional = true` : compilées seulement avec la fonctionnalité `publish`.
 minisign = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
-# Erreurs du binaire seulement (la bibliothèque utilise thiserror).
-anyhow = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
 minisign.workspace = true
-
-[[bin]]
-name = "raftup-registry"
-path = "src/bin/raftup-registry.rs"
-required-features = ["publish"]
 
 # Ces tests signent : ils demandent la fonctionnalité `publish`.
 [[test]]
