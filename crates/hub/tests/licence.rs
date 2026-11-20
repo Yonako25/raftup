@@ -72,3 +72,41 @@ fn aucune_crate_mit_apache_ne_depend_du_hub() {
     );
     assert!(hub_dir.join("LICENSE-AGPL").exists());
 }
+
+/// Empreinte SHA-256 de https://www.gnu.org/licenses/agpl-3.0.txt, récupéré
+/// le 2026-11-20 (voir l'ADR 0003). Le fichier doit rester le texte exact de
+/// la FSF : la moindre retouche change l'empreinte et fait échouer ce test.
+const AGPL_SHA256: &str = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0";
+
+#[test]
+fn licence_agpl_est_le_texte_officiel_de_la_fsf() {
+    use sha2::{Digest, Sha256};
+
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("LICENSE-AGPL");
+    let bytes = std::fs::read(&path).unwrap();
+    let text = String::from_utf8(bytes.clone()).unwrap();
+
+    // Contrôles lisibles d'abord : ils disent ce qui ne va pas si l'empreinte diffère.
+    assert!(
+        !text.contains('\r'),
+        "LICENSE-AGPL doit avoir des fins de ligne LF (voir .gitattributes)"
+    );
+    let mut lines = text.lines();
+    assert_eq!(
+        lines.next().map(str::trim),
+        Some("GNU AFFERO GENERAL PUBLIC LICENSE")
+    );
+    assert_eq!(
+        lines.next().map(str::trim),
+        Some("Version 3, 19 November 2007")
+    );
+    assert!(text.contains("How to Apply These Terms to Your New Programs"));
+
+    // `Sha256::digest` rend un tableau d'octets ; on l'écrit en hexadécimal.
+    let digest = Sha256::digest(&bytes);
+    let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        hex, AGPL_SHA256,
+        "LICENSE-AGPL n'est plus le texte exact de gnu.org"
+    );
+}

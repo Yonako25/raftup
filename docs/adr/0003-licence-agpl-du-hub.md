@@ -15,6 +15,7 @@ La décision doit être prise avant les premières contributions extérieures : 
 - Tout le reste reste en **MIT / Apache-2.0** : `ap-protocol`, `client-core`, `multidata`, `server`, `py-bridge`, `launcher-core`, `launcher-ui`.
 - Le champ `license` du `Cargo.toml` de chaque crate indique sa licence.
 - Le fichier `LICENSE-AGPL` est ajouté à la création de la crate du hub.
+  C'est le texte exact de la FSF, récupéré le 2026-11-20 sur <https://www.gnu.org/licenses/agpl-3.0.txt> (SHA-256 `0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0`, fins de ligne LF). Le test `crates/hub/tests/licence.rs` vérifie cette empreinte.
 - Le hub ne copie pas de code depuis les crates MIT/Apache : il en dépend comme bibliothèques (compatible : du code MIT/Apache peut être utilisé par du code AGPL).
 - Les crates MIT/Apache ne dépendent jamais du hub.
 

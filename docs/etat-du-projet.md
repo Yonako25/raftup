@@ -43,7 +43,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [ ] **Durée estimée et équilibrage par temps** (ADR 0030, à relire) : estimation par joueur affichée après génération (`launcher_core::estimate`, panneau de « Créer une partie »), `fill::time_balance` branché derrière la case « Équilibrer par temps de jeu » (moteurs Rust et export, décochée par défaut, seed inchangée sans elle) ; reste à mesurer les temps par lieu en vraie partie et à afficher l'estimation dans « Partie en cours »
 - [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
 - [ ] **Relire les ADR 0029 à 0035** (acceptés en autonomie le 19 novembre 2026)
-- [ ] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (écrit de mémoire, à remplacer par celui de gnu.org)
+- [x] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (texte de gnu.org récupéré le 2026-11-20, empreinte vérifiée par `tests/licence.rs`)
 - [ ] **CI macOS et Linux** jamais lancée (rien poussé)
 
 ## Crates

@@ -463,3 +463,9 @@ untime2`.
 - **Pas vérifié** : écran du launcher regardé (capture) ; console sans Discord ouverte dans le navigateur.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
 - **Suite** : construire les deux binaires aux releases ; déploiement du Rafthub officiel.
+
+### 2026-11-20 · Texte officiel de l'AGPL pour le hub (session `p4-agpl`)
+- **Fait** : `crates/hub/LICENSE-AGPL` remplacé par le texte exact de <https://www.gnu.org/licenses/agpl-3.0.txt> (récupéré le 2026-11-20, LF) ; seule différence avec l'ancien fichier : une coupure de ligne dans « How to Apply ». Test `licence_agpl_est_le_texte_officiel_de_la_fsf` (en-tête, fin, LF, SHA-256) ; source et empreinte notées dans l'ADR 0003.
+- **Vérifié** : `cargo test -p hub --test licence`, clippy du hub, `cargo test --workspace --no-fail-fast` (108 binaires ok). Au premier passage, `py-bridge` `ignore_eof_shutdown_et_drop_rapides` (limite de 2 s) a échoué sous charge ; il passe seul et au second passage.
+- **Pas vérifié** : rien de plus ; le test de durée de `py-bridge` reste instable quand la machine est chargée.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
