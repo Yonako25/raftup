@@ -6,7 +6,7 @@
 //! qui demande :
 //! - la base intégrée (SQLite, un fichier dans `rafthub-data/`), pour un petit groupe ;
 //! - ou une base externe choisie dans une liste (PostgreSQL), avec ses informations
-//!   de connexion.
+//!   de connexion : PostgreSQL, MySQL ou MariaDB.
 //!
 //! Le choix est essayé (connexion et création des tables) avant d'être gardé dans
 //! `rafthub.toml`. Ensuite l'assistant prévient `main`, qui arrête ce petit serveur
@@ -27,7 +27,7 @@ use serde::Deserialize;
 use tokio::sync::oneshot;
 
 use super::{assets, cookie, csrf_refused, page, same_token};
-use crate::server_config::{sqlite_url, PostgresInfo, ServerConfig, EMBEDDED_URL};
+use crate::server_config::{sqlite_url, Engine, ExternalDb, ServerConfig, EMBEDDED_URL};
 use crate::session::{new_token, normalize_invite_code};
 use crate::store::Store;
 
@@ -87,12 +87,15 @@ async fn not_ready() -> Response {
 #[template(path = "admin/install.html")]
 struct InstallPage {
     csrf: String,
-    /// `sqlite` ou `postgres` : le bouton coché.
+    /// `sqlite` ou `external` : le bouton coché.
     choice: String,
-    pg_host: String,
-    pg_port: String,
-    pg_database: String,
-    pg_user: String,
+    /// Base externe choisie dans la liste : `postgres`, `mysql` ou `mariadb`.
+    engine: String,
+    db_host: String,
+    /// Vide : port habituel de la base choisie (5432 ou 3306).
+    db_port: String,
+    db_name: String,
+    db_user: String,
     error: Option<String>,
     /// Vrai une fois la base enregistrée : la page dit d'attendre puis continue.
     finished: bool,
@@ -103,10 +106,11 @@ impl InstallPage {
         InstallPage {
             csrf,
             choice: "sqlite".to_string(),
-            pg_host: "localhost".to_string(),
-            pg_port: "5432".to_string(),
-            pg_database: "rafthub".to_string(),
-            pg_user: "rafthub".to_string(),
+            engine: Engine::Postgres.as_str().to_string(),
+            db_host: "localhost".to_string(),
+            db_port: String::new(),
+            db_name: "rafthub".to_string(),
+            db_user: "rafthub".to_string(),
             error: None,
             finished: false,
         }
@@ -123,15 +127,17 @@ pub struct InstallForm {
     #[serde(default)]
     database: String,
     #[serde(default)]
-    pg_host: String,
+    engine: String,
     #[serde(default)]
-    pg_port: String,
+    db_host: String,
     #[serde(default)]
-    pg_database: String,
+    db_port: String,
     #[serde(default)]
-    pg_user: String,
+    db_name: String,
     #[serde(default)]
-    pg_password: String,
+    db_user: String,
+    #[serde(default)]
+    db_password: String,
 }
 
 /// Rend la page avec un jeton anti-CSRF neuf, posé aussi dans un cookie.
@@ -164,15 +170,18 @@ async fn submit(
     }
     // La page remontrée garde ce qui a été tapé, sauf le mot de passe et le code.
     let mut again = InstallPage::empty(String::new());
-    again.choice = if body.database == "postgres" {
-        "postgres".to_string()
+    again.choice = if body.database == "external" {
+        "external".to_string()
     } else {
         "sqlite".to_string()
     };
-    again.pg_host = body.pg_host.clone();
-    again.pg_port = body.pg_port.clone();
-    again.pg_database = body.pg_database.clone();
-    again.pg_user = body.pg_user.clone();
+    if let Some(engine) = Engine::parse(&body.engine) {
+        again.engine = engine.as_str().to_string();
+    }
+    again.db_host = body.db_host.clone();
+    again.db_port = body.db_port.clone();
+    again.db_name = body.db_name.clone();
+    again.db_user = body.db_user.clone();
 
     if !same_token(
         &normalize_invite_code(&state.setup_code),
@@ -189,13 +198,18 @@ async fn submit(
     // `stored` : ce qui est écrit dans `rafthub.toml` ; `url` : ce qui est ouvert.
     let (stored, url) = match body.database.as_str() {
         "sqlite" => (EMBEDDED_URL.to_string(), sqlite_url(&state.data_dir)),
-        "postgres" => {
-            let info = PostgresInfo {
-                host: body.pg_host,
-                port: body.pg_port,
-                database: body.pg_database,
-                user: body.pg_user,
-                password: body.pg_password,
+        "external" => {
+            let Some(engine) = Engine::parse(&body.engine) else {
+                again.error = Some("Choisissez le type de base dans la liste.".to_string());
+                return render(&state, StatusCode::BAD_REQUEST, again);
+            };
+            let info = ExternalDb {
+                engine,
+                host: body.db_host,
+                port: body.db_port,
+                database: body.db_name,
+                user: body.db_user,
+                password: body.db_password,
             };
             match info.to_url() {
                 Ok(url) => (url.clone(), url),

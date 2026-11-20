@@ -134,6 +134,7 @@ fn like_pattern(search: &str) -> String {
 /// `&mut Transaction` : on emprunte la transaction de l'appelant sans la prendre ;
 /// s'il y a une erreur, l'appelant ne valide pas et tout est annulé.
 pub(super) async fn consume_invite(
+    backend: super::Backend,
     tx: &mut Transaction<'static, Any>,
     code_hash: &str,
     user_id: i64,
@@ -141,13 +142,15 @@ pub(super) async fn consume_invite(
 ) -> Result<(), HubError> {
     // Une seule requête : deux inscriptions simultanées avec le même code ne
     // peuvent pas réussir toutes les deux (la seconde ne trouve plus `used_at IS NULL`).
-    let result = sqlx::query(
+    let result = super::query_for(
+        backend,
         "UPDATE invites SET used_by = $1, used_at = $2 \
-         WHERE code_hash = $3 AND used_at IS NULL AND expires_at > $2",
+         WHERE code_hash = $3 AND used_at IS NULL AND expires_at > $4",
     )
     .bind(user_id)
     .bind(now)
     .bind(code_hash)
+    .bind(now)
     .execute(&mut **tx)
     .await?;
     if result.rows_affected() == 0 {
@@ -163,16 +166,16 @@ impl Store {
     /// Suspendre deux fois garde la première date. `false` si le compte n'existe pas.
     pub async fn suspend_user(&self, user_id: i64, now: i64) -> Result<bool, HubError> {
         let mut tx = self.pool.begin().await?;
-        let result =
-            sqlx::query("UPDATE users SET suspended_at = COALESCE(suspended_at, $1) WHERE id = $2")
-                .bind(now)
-                .bind(user_id)
-                .execute(&mut *tx)
-                .await?;
+        let result = self
+            .q("UPDATE users SET suspended_at = COALESCE(suspended_at, $1) WHERE id = $2")
+            .bind(now)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
         if result.rows_affected() == 0 {
             return Ok(false);
         }
-        sqlx::query("DELETE FROM sessions WHERE user_id = $1")
+        self.q("DELETE FROM sessions WHERE user_id = $1")
             .bind(user_id)
             .execute(&mut *tx)
             .await?;
@@ -183,7 +186,8 @@ impl Store {
     /// Lève la suspension (le joueur devra se reconnecter). `false` si le compte
     /// n'existe pas.
     pub async fn reactivate_user(&self, user_id: i64) -> Result<bool, HubError> {
-        let result = sqlx::query("UPDATE users SET suspended_at = NULL WHERE id = $1")
+        let result = self
+            .q("UPDATE users SET suspended_at = NULL WHERE id = $1")
             .bind(user_id)
             .execute(&self.pool)
             .await?;
@@ -192,7 +196,8 @@ impl Store {
 
     /// Le compte est-il suspendu ? (`false` s'il n'existe pas)
     pub async fn is_suspended(&self, user_id: i64) -> Result<bool, HubError> {
-        let row = sqlx::query("SELECT suspended_at FROM users WHERE id = $1")
+        let row = self
+            .q("SELECT suspended_at FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -211,7 +216,8 @@ impl Store {
 impl Store {
     /// Tous les réglages écrits en base, par nom (ordre stable).
     pub async fn all_settings(&self) -> Result<BTreeMap<String, String>, HubError> {
-        let rows = sqlx::query("SELECT name, value FROM settings ORDER BY name")
+        let rows = self
+            .q("SELECT name, value FROM settings ORDER BY name")
             .fetch_all(&self.pool)
             .await?;
         let mut map = BTreeMap::new();
@@ -224,23 +230,29 @@ impl Store {
     /// Écrit (ou remplace) un réglage. La valeur doit déjà être vérifiée
     /// (voir [`crate::settings::SettingKey::validate`]).
     pub async fn put_setting(&self, name: &str, value: &str, now: i64) -> Result<(), HubError> {
-        sqlx::query(
+        // Écrire ou remplacer : MySQL a sa propre forme (`ON DUPLICATE KEY UPDATE`).
+        let upsert = if self.backend == super::Backend::Mysql {
+            "INSERT INTO settings (name, value, updated_at) VALUES ($1, $2, $3) \
+             ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = VALUES(updated_at)"
+        } else {
             "INSERT INTO settings (name, value, updated_at) VALUES ($1, $2, $3) \
              ON CONFLICT (name) DO UPDATE SET value = excluded.value, \
-             updated_at = excluded.updated_at",
-        )
-        .bind(name)
-        .bind(value)
-        .bind(now)
-        .execute(&self.pool)
-        .await?;
+             updated_at = excluded.updated_at"
+        };
+        self.q(upsert)
+            .bind(name)
+            .bind(value)
+            .bind(now)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     /// Retire un réglage de la base (on revient à l'environnement ou au défaut).
     /// `false` s'il n'y était pas.
     pub async fn delete_setting(&self, name: &str) -> Result<bool, HubError> {
-        let result = sqlx::query("DELETE FROM settings WHERE name = $1")
+        let result = self
+            .q("DELETE FROM settings WHERE name = $1")
             .bind(name)
             .execute(&self.pool)
             .await?;
@@ -259,16 +271,33 @@ impl Store {
         now: i64,
         expires_at: i64,
     ) -> Result<i64, HubError> {
-        let row = sqlx::query(
-            "INSERT INTO invites (code_hash, created_by, created_at, expires_at) \
-             VALUES ($1, $2, $3, $4) RETURNING id",
-        )
-        .bind(code_hash)
-        .bind(created_by)
-        .bind(now)
-        .bind(expires_at)
-        .fetch_one(&self.pool)
-        .await?;
+        const INSERT: &str = "INSERT INTO invites (code_hash, created_by, created_at, expires_at) \
+             VALUES ($1, $2, $3, $4)";
+        // MySQL ne connaît pas `RETURNING` : l'identifiant vient du résultat.
+        if self.backend == super::Backend::Mysql {
+            let result = self
+                .q(INSERT)
+                .bind(code_hash)
+                .bind(created_by)
+                .bind(now)
+                .bind(expires_at)
+                .execute(&self.pool)
+                .await?;
+            return result
+                .last_insert_id()
+                .ok_or_else(|| HubError::Internal("identifiant de l'invitation non rendu".into()));
+        }
+        let row = self
+            .q(concat!(
+                "INSERT INTO invites (code_hash, created_by, created_at, expires_at) ",
+                "VALUES ($1, $2, $3, $4) RETURNING id"
+            ))
+            .bind(code_hash)
+            .bind(created_by)
+            .bind(now)
+            .bind(expires_at)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(row.try_get("id")?)
     }
 
@@ -276,35 +305,36 @@ impl Store {
     /// avant le hachage du mot de passe ; la vraie consommation se fait à la création
     /// du compte.
     pub async fn invite_usable(&self, code_hash: &str, now: i64) -> Result<bool, HubError> {
-        let row = sqlx::query(
-            "SELECT 1 AS found FROM invites \
-             WHERE code_hash = $1 AND used_at IS NULL AND expires_at > $2",
-        )
-        .bind(code_hash)
-        .bind(now)
-        .fetch_optional(&self.pool)
-        .await?;
+        let row = self
+            .q("SELECT 1 AS found FROM invites \
+             WHERE code_hash = $1 AND used_at IS NULL AND expires_at > $2")
+            .bind(code_hash)
+            .bind(now)
+            .fetch_optional(&self.pool)
+            .await?;
         Ok(row.is_some())
     }
 
     /// Codes d'invitation, du plus récent au plus ancien.
     pub async fn list_invites(&self, limit: i64, offset: i64) -> Result<Page<InviteRow>, HubError> {
         let (limit, offset) = page_bounds(limit, offset);
-        let total: i64 = sqlx::query("SELECT COUNT(*) AS total FROM invites")
+        let total: i64 = self
+            .q("SELECT COUNT(*) AS total FROM invites")
             .fetch_one(&self.pool)
             .await?
             .try_get("total")?;
-        let rows = sqlx::query(
-            "SELECT i.id, c.username AS created_by, i.created_at, i.expires_at, \
+        let rows = self
+            .q(
+                "SELECT i.id, c.username AS created_by, i.created_at, i.expires_at, \
              u.username AS used_by, i.used_at FROM invites i \
              LEFT JOIN users c ON c.id = i.created_by \
              LEFT JOIN users u ON u.id = i.used_by \
              ORDER BY i.created_at DESC, i.id DESC LIMIT $1 OFFSET $2",
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
         let mut items = Vec::new();
         for row in rows {
             items.push(InviteRow {
@@ -326,7 +356,8 @@ impl Store {
 
     /// Retire un code (révocation). `false` s'il n'existait pas.
     pub async fn delete_invite(&self, id: i64) -> Result<bool, HubError> {
-        let result = sqlx::query("DELETE FROM invites WHERE id = $1")
+        let result = self
+            .q("DELETE FROM invites WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -347,7 +378,7 @@ impl Store {
         target_id: Option<i64>,
         detail: &str,
     ) -> Result<(), HubError> {
-        sqlx::query(
+        self.q(
             "INSERT INTO admin_events (created_at, actor_id, kind, target_id, detail) \
              VALUES ($1, $2, $3, $4, $5)",
         )
@@ -364,21 +395,23 @@ impl Store {
     /// Journal, du plus récent au plus ancien.
     pub async fn list_events(&self, limit: i64, offset: i64) -> Result<Page<AdminEvent>, HubError> {
         let (limit, offset) = page_bounds(limit, offset);
-        let total: i64 = sqlx::query("SELECT COUNT(*) AS total FROM admin_events")
+        let total: i64 = self
+            .q("SELECT COUNT(*) AS total FROM admin_events")
             .fetch_one(&self.pool)
             .await?
             .try_get("total")?;
-        let rows = sqlx::query(
-            "SELECT e.id, e.created_at, e.actor_id, a.username AS actor_name, e.kind, \
+        let rows = self
+            .q(
+                "SELECT e.id, e.created_at, e.actor_id, a.username AS actor_name, e.kind, \
              e.target_id, t.username AS target_name, e.detail FROM admin_events e \
              LEFT JOIN users a ON a.id = e.actor_id \
              LEFT JOIN users t ON t.id = e.target_id \
              ORDER BY e.created_at DESC, e.id DESC LIMIT $1 OFFSET $2",
-        )
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
         let items = rows.iter().map(event_row).collect::<Result<_, _>>()?;
         Ok(Page {
             items,
@@ -438,11 +471,14 @@ impl Store {
             next += 1;
         }
         if !username.is_empty() {
+            // Deux paramètres (acteur, cible) : MySQL n'a que des `?`, un par usage.
             condition.push_str(&format!(
-                " AND (a.username_norm LIKE ${next} ESCAPE '\\' \
-                 OR t.username_norm LIKE ${next} ESCAPE '\\')"
+                " AND (a.username_norm LIKE ${} ESCAPE '\\' \
+                 OR t.username_norm LIKE ${} ESCAPE '\\')",
+                next,
+                next + 1
             ));
-            next += 1;
+            next += 2;
         }
         if filter.from.is_some() {
             condition.push_str(&format!(" AND e.created_at >= ${next}"));
@@ -469,15 +505,15 @@ impl Store {
             next,
             next + 1
         );
-        let mut count = sqlx::query(&count_sql);
-        let mut list = sqlx::query(&list_sql);
+        let mut count = self.q(&count_sql);
+        let mut list = self.q(&list_sql);
         if let Some(kind) = &filter.kind {
             count = count.bind(kind.as_str());
             list = list.bind(kind.as_str());
         }
         if !username.is_empty() {
-            count = count.bind(pattern.as_str());
-            list = list.bind(pattern.as_str());
+            count = count.bind(pattern.as_str()).bind(pattern.as_str());
+            list = list.bind(pattern.as_str()).bind(pattern.as_str());
         }
         if let Some(at) = filter.from {
             count = count.bind(at);
@@ -524,11 +560,14 @@ impl Store {
         let mut condition = format!("WHERE {}", filter.condition());
         let mut next = 2;
         if !search.is_empty() {
+            // Deux paramètres (pseudo, adresse) : MySQL n'a que des `?`, un par usage.
             condition.push_str(&format!(
-                " AND (u.username_norm LIKE ${next} ESCAPE '\\' \
-                 OR e.subject LIKE ${next} ESCAPE '\\')"
+                " AND (u.username_norm LIKE ${} ESCAPE '\\' \
+                 OR e.subject LIKE ${} ESCAPE '\\')",
+                next,
+                next + 1
             ));
-            next += 1;
+            next += 2;
         }
         let from = format!(
             "FROM users u LEFT JOIN user_identities e \
@@ -537,9 +576,9 @@ impl Store {
         let pattern = like_pattern(&search);
 
         let count_sql = format!("SELECT COUNT(*) AS total {from}");
-        let mut count = sqlx::query(&count_sql).bind(EMAIL_PROVIDER);
+        let mut count = self.q(&count_sql).bind(EMAIL_PROVIDER);
         if !search.is_empty() {
-            count = count.bind(pattern.as_str());
+            count = count.bind(pattern.as_str()).bind(pattern.as_str());
         }
         let total: i64 = count.fetch_one(&self.pool).await?.try_get("total")?;
 
@@ -552,9 +591,9 @@ impl Store {
             next,
             next + 1
         );
-        let mut list = sqlx::query(&list_sql).bind(EMAIL_PROVIDER);
+        let mut list = self.q(&list_sql).bind(EMAIL_PROVIDER);
         if !search.is_empty() {
-            list = list.bind(pattern.as_str());
+            list = list.bind(pattern.as_str()).bind(pattern.as_str());
         }
         let rows = list.bind(limit).bind(offset).fetch_all(&self.pool).await?;
 
@@ -582,16 +621,17 @@ impl Store {
 
     /// Un joueur, pour sa fiche dans la console. `None` s'il n'existe pas.
     pub async fn player_summary(&self, user_id: i64) -> Result<Option<PlayerSummary>, HubError> {
-        let row = sqlx::query(
-            "SELECT u.id, u.username, u.created_at, u.suspended_at, e.subject AS email, \
+        let row = self
+            .q(
+                "SELECT u.id, u.username, u.created_at, u.suspended_at, e.subject AS email, \
              e.verified AS email_verified FROM users u \
              LEFT JOIN user_identities e ON e.user_id = u.id AND e.provider = $1 \
              WHERE u.id = $2",
-        )
-        .bind(EMAIL_PROVIDER)
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+            )
+            .bind(EMAIL_PROVIDER)
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
         let Some(row) = row else {
             return Ok(None);
         };
@@ -611,20 +651,19 @@ impl Store {
     /// Compteurs du tableau de bord, à l'instant `now`.
     pub async fn dashboard_counts(&self, now: i64) -> Result<DashboardCounts, HubError> {
         let week_ago = now.saturating_sub(7 * 24 * 3600);
-        let row = sqlx::query(
-            "SELECT \
+        let row = self
+            .q("SELECT \
              (SELECT COUNT(*) FROM users) AS accounts, \
              (SELECT COUNT(*) FROM user_identities WHERE provider = $1 AND verified = 0) \
                AS unverified, \
              (SELECT COUNT(*) FROM users WHERE suspended_at IS NOT NULL) AS suspended, \
              (SELECT COUNT(*) FROM users WHERE created_at >= $2) AS recent, \
-             (SELECT COUNT(DISTINCT user_id) FROM sessions WHERE expires_at > $3) AS active",
-        )
-        .bind(EMAIL_PROVIDER)
-        .bind(week_ago)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await?;
+             (SELECT COUNT(DISTINCT user_id) FROM sessions WHERE expires_at > $3) AS active")
+            .bind(EMAIL_PROVIDER)
+            .bind(week_ago)
+            .bind(now)
+            .fetch_one(&self.pool)
+            .await?;
         Ok(DashboardCounts {
             accounts: row.try_get("accounts")?,
             unverified: row.try_get("unverified")?,

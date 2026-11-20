@@ -4,6 +4,8 @@
 //! `RAFTUP_HUB_TEST_POSTGRES` contient l'URL d'un PostgreSQL de test
 //! (`postgres://utilisateur@localhost:5432/base`), chaque test y reçoit à la place
 //! son propre schéma, neuf, pour que les tests lancés en parallèle ne se gênent pas.
+//! De même, `RAFTUP_HUB_TEST_MYSQL` (`mysql://root:motdepasse@localhost:3306`, pour
+//! MySQL ou MariaDB) donne à chaque test sa propre base, neuve (ADR 0037).
 
 // Chaque fichier de test n'utilise pas toutes les aides.
 #![allow(dead_code)]
@@ -21,12 +23,52 @@ use tower::ServiceExt;
 /// Variable d'environnement qui active les tests sur PostgreSQL.
 pub const POSTGRES_ENV: &str = "RAFTUP_HUB_TEST_POSTGRES";
 
-/// Base de test : SQLite en mémoire, ou un schéma neuf de PostgreSQL.
+/// Variable d'environnement qui active les tests sur MySQL / MariaDB.
+pub const MYSQL_ENV: &str = "RAFTUP_HUB_TEST_MYSQL";
+
+/// Base de test : SQLite en mémoire, ou un schéma neuf de PostgreSQL, ou une base
+/// neuve de MySQL / MariaDB.
 pub async fn test_store() -> Store {
+    if let Ok(url) = std::env::var(MYSQL_ENV) {
+        if !url.trim().is_empty() {
+            return mysql_store(url.trim()).await;
+        }
+    }
     match std::env::var(POSTGRES_ENV) {
         Ok(url) if !url.trim().is_empty() => postgres_store(url.trim()).await,
         _ => Store::in_memory().await.unwrap(),
     }
+}
+
+/// Nom unique pour la base ou le schéma d'un test.
+fn unique_name() -> String {
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    format!(
+        "raftup_test_{}_{}_{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::Relaxed),
+        nanos % 1_000_000_000
+    )
+}
+
+/// Crée une base au nom unique sur le serveur MySQL / MariaDB, puis ouvre le hub dessus.
+pub async fn mysql_store(server_url: &str) -> Store {
+    let name = unique_name();
+    sqlx::any::install_default_drivers();
+    let admin = sqlx::AnyPool::connect(server_url).await.unwrap();
+    sqlx::query(&format!(
+        "CREATE DATABASE {name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    ))
+    .execute(&admin)
+    .await
+    .unwrap();
+    admin.close().await;
+    let base = server_url.trim_end_matches('/');
+    Store::open(&format!("{base}/{name}")).await.unwrap()
 }
 
 /// Crée un schéma au nom unique, puis ouvre le hub dessus (`search_path`).

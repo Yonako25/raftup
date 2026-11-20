@@ -114,10 +114,64 @@ pub fn sqlite_url(data_dir: &Path) -> String {
     format!("sqlite://{}", path.display().to_string().replace('\\', "/"))
 }
 
-/// Informations de connexion à une base PostgreSQL, telles que tapées dans
+/// Bases externes proposées par l'assistant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    Postgres,
+    Mysql,
+    Mariadb,
+}
+
+impl Engine {
+    /// Valeur du formulaire (`postgres`, `mysql`, `mariadb`).
+    pub fn parse(value: &str) -> Option<Engine> {
+        match value {
+            "postgres" => Some(Engine::Postgres),
+            "mysql" => Some(Engine::Mysql),
+            "mariadb" => Some(Engine::Mariadb),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Engine::Postgres => "postgres",
+            Engine::Mysql => "mysql",
+            Engine::Mariadb => "mariadb",
+        }
+    }
+
+    /// Nom affiché dans les messages.
+    pub fn label(self) -> &'static str {
+        match self {
+            Engine::Postgres => "PostgreSQL",
+            Engine::Mysql => "MySQL",
+            Engine::Mariadb => "MariaDB",
+        }
+    }
+
+    /// Port habituel du serveur.
+    pub fn default_port(self) -> u16 {
+        match self {
+            Engine::Postgres => 5432,
+            Engine::Mysql | Engine::Mariadb => 3306,
+        }
+    }
+
+    /// Début de l'URL. MariaDB parle le protocole de MySQL : même pilote.
+    fn scheme(self) -> &'static str {
+        match self {
+            Engine::Postgres => "postgres",
+            Engine::Mysql | Engine::Mariadb => "mysql",
+        }
+    }
+}
+
+/// Informations de connexion à une base externe, telles que tapées dans
 /// l'assistant.
-#[derive(Debug, Clone, Default)]
-pub struct PostgresInfo {
+#[derive(Debug, Clone)]
+pub struct ExternalDb {
+    pub engine: Engine,
     pub host: String,
     pub port: String,
     pub database: String,
@@ -125,17 +179,20 @@ pub struct PostgresInfo {
     pub password: String,
 }
 
-impl PostgresInfo {
-    /// URL `postgres://utilisateur:motdepasse@hote:port/base`. Le crate `url` encode
+impl ExternalDb {
+    /// URL `postgres://utilisateur:motdepasse@hote:port/base` (ou `mysql://…`). Le crate `url` encode
     /// lui-même les caractères spéciaux du nom et du mot de passe (`@`, `:`, `/`…).
     /// L'erreur est un message pour l'assistant, sans le mot de passe.
     pub fn to_url(&self) -> Result<String, String> {
         let host = self.host.trim();
         if host.is_empty() {
-            return Err("Indiquez l'adresse du serveur PostgreSQL.".to_string());
+            return Err(format!(
+                "Indiquez l'adresse du serveur {}.",
+                self.engine.label()
+            ));
         }
         let port: u16 = match self.port.trim() {
-            "" => 5432,
+            "" => self.engine.default_port(),
             text => text
                 .parse()
                 .map_err(|_| "Le port doit être un nombre entre 1 et 65535.".to_string())?,
@@ -149,7 +206,8 @@ impl PostgresInfo {
             return Err("Indiquez le nom d'utilisateur de la base.".to_string());
         }
         let invalid = || "Adresse du serveur invalide.".to_string();
-        let mut url = url::Url::parse("postgres://localhost").map_err(|_| invalid())?;
+        let mut url = url::Url::parse(&format!("{}://localhost", self.engine.scheme()))
+            .map_err(|_| invalid())?;
         url.set_host(Some(host)).map_err(|_| invalid())?;
         url.set_port(Some(port)).map_err(|_| invalid())?;
         url.set_username(user).map_err(|_| invalid())?;
@@ -167,8 +225,9 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
 
-    fn info(password: &str) -> PostgresInfo {
-        PostgresInfo {
+    fn info(password: &str) -> ExternalDb {
+        ExternalDb {
+            engine: Engine::Postgres,
             host: "db.exemple.org".to_string(),
             port: String::new(),
             database: "rafthub".to_string(),
@@ -183,6 +242,21 @@ mod tests {
             info("secret").to_url().unwrap(),
             "postgres://hub:secret@db.exemple.org:5432/rafthub"
         );
+    }
+
+    #[test]
+    fn url_mysql_et_mariadb() {
+        let mut db = info("secret");
+        db.engine = Engine::Mariadb;
+        assert_eq!(
+            db.to_url().unwrap(),
+            "mysql://hub:secret@db.exemple.org:3306/rafthub"
+        );
+        db.engine = Engine::Mysql;
+        db.port = "3307".to_string();
+        assert!(db.to_url().unwrap().ends_with(":3307/rafthub"));
+        assert_eq!(Engine::parse("mariadb"), Some(Engine::Mariadb));
+        assert_eq!(Engine::parse("oracle"), None);
     }
 
     #[test]

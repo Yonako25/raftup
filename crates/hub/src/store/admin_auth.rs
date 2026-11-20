@@ -32,26 +32,23 @@ impl Store {
     /// Donne un rôle au compte qui porte cette adresse e-mail (déjà normalisée).
     /// Renvoie `false` si aucun compte n'a cette adresse.
     pub async fn set_role_by_email(&self, email_norm: &str, role: Role) -> Result<bool, HubError> {
-        let result = sqlx::query(
-            "UPDATE users SET role = $1 WHERE id = \
-             (SELECT user_id FROM user_identities WHERE provider = $2 AND subject = $3)",
-        )
-        .bind(role.as_str())
-        .bind(EMAIL_PROVIDER)
-        .bind(email_norm)
-        .execute(&self.pool)
-        .await?;
-        let found = result.rows_affected() > 0;
-        // Un compte qui perd le rôle d'admin perd aussi ses sessions d'admin.
-        if found && role == Role::Player {
-            sqlx::query(
-                "DELETE FROM admin_sessions WHERE user_id = \
-                 (SELECT user_id FROM user_identities WHERE provider = $1 AND subject = $2)",
-            )
+        let result = self
+            .q("UPDATE users SET role = $1 WHERE id = \
+             (SELECT user_id FROM user_identities WHERE provider = $2 AND subject = $3)")
+            .bind(role.as_str())
             .bind(EMAIL_PROVIDER)
             .bind(email_norm)
             .execute(&self.pool)
             .await?;
+        let found = result.rows_affected() > 0;
+        // Un compte qui perd le rôle d'admin perd aussi ses sessions d'admin.
+        if found && role == Role::Player {
+            self.q("DELETE FROM admin_sessions WHERE user_id = \
+                 (SELECT user_id FROM user_identities WHERE provider = $1 AND subject = $2)")
+                .bind(EMAIL_PROVIDER)
+                .bind(email_norm)
+                .execute(&self.pool)
+                .await?;
         }
         Ok(found)
     }
@@ -59,7 +56,8 @@ impl Store {
     /// Vrai si au moins un compte a le rôle d'admin. Tant que c'est faux, la page
     /// d'installation peut créer le premier (ADR 0037).
     pub async fn has_admin(&self) -> Result<bool, HubError> {
-        let row = sqlx::query("SELECT COUNT(*) AS n FROM users WHERE role = $1")
+        let row = self
+            .q("SELECT COUNT(*) AS n FROM users WHERE role = $1")
             .bind(Role::Admin.as_str())
             .fetch_one(&self.pool)
             .await?;
@@ -69,7 +67,8 @@ impl Store {
 
     /// Vrai si le compte a le rôle d'admin.
     pub async fn is_admin(&self, user_id: i64) -> Result<bool, HubError> {
-        let row = sqlx::query("SELECT role FROM users WHERE id = $1")
+        let row = self
+            .q("SELECT role FROM users WHERE id = $1")
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await?;
@@ -89,7 +88,7 @@ impl Store {
         now: i64,
         expires_at: i64,
     ) -> Result<(), HubError> {
-        sqlx::query(
+        self.q(
             "INSERT INTO admin_sessions (token_hash, user_id, created_at, expires_at) \
              VALUES ($1, $2, $3, $4)",
         )
@@ -109,17 +108,18 @@ impl Store {
         token_hash: &str,
         now: i64,
     ) -> Result<Option<(i64, String)>, HubError> {
-        let row = sqlx::query(
-            "SELECT users.id AS id, users.username AS username FROM admin_sessions \
+        let row = self
+            .q(
+                "SELECT users.id AS id, users.username AS username FROM admin_sessions \
              JOIN users ON users.id = admin_sessions.user_id \
              WHERE admin_sessions.token_hash = $1 AND admin_sessions.expires_at > $2 \
              AND users.role = $3",
-        )
-        .bind(token_hash)
-        .bind(now)
-        .bind(Role::Admin.as_str())
-        .fetch_optional(&self.pool)
-        .await?;
+            )
+            .bind(token_hash)
+            .bind(now)
+            .bind(Role::Admin.as_str())
+            .fetch_optional(&self.pool)
+            .await?;
         match row {
             Some(row) => Ok(Some((row.try_get("id")?, row.try_get("username")?))),
             None => Ok(None),
@@ -127,7 +127,7 @@ impl Store {
     }
 
     pub async fn delete_admin_session(&self, token_hash: &str) -> Result<(), HubError> {
-        sqlx::query("DELETE FROM admin_sessions WHERE token_hash = $1")
+        self.q("DELETE FROM admin_sessions WHERE token_hash = $1")
             .bind(token_hash)
             .execute(&self.pool)
             .await?;
@@ -136,7 +136,8 @@ impl Store {
 
     /// Supprime les sessions d'admin expirées ; renvoie leur nombre.
     pub async fn purge_expired_admin_sessions(&self, now: i64) -> Result<u64, HubError> {
-        let result = sqlx::query("DELETE FROM admin_sessions WHERE expires_at <= $1")
+        let result = self
+            .q("DELETE FROM admin_sessions WHERE expires_at <= $1")
             .bind(now)
             .execute(&self.pool)
             .await?;
@@ -145,7 +146,7 @@ impl Store {
 
     /// Vérifie que la base répond (état des services du tableau de bord).
     pub async fn ping(&self) -> Result<(), HubError> {
-        sqlx::query("SELECT 1 AS one").fetch_one(&self.pool).await?;
+        self.q("SELECT 1 AS one").fetch_one(&self.pool).await?;
         Ok(())
     }
 }

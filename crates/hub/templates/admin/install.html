@@ -34,7 +34,7 @@
 <span><strong>Base intégrée (SQLite)</strong><br><span class="muted small">Rien à installer : un fichier à côté du hub. Pour un petit groupe, quelques dizaines de joueurs.</span></span>
 </label>
 <label class="db-option">
-<input type="radio" name="database" value="postgres" id="db-external"{% if choice == "postgres" %} checked{% endif %}>
+<input type="radio" name="database" value="external" id="db-external"{% if choice == "external" %} checked{% endif %}>
 <span><strong>Base externe</strong><br><span class="muted small">Un serveur de base de données à part, pour un grand groupe.</span></span>
 </label>
 </fieldset>
@@ -43,19 +43,20 @@
 <legend>Base externe</legend>
 <label for="engine">Type de base</label>
 <select id="engine" name="engine">
-<option value="postgres" selected>PostgreSQL</option>
-<option value="mysql" disabled>MySQL / MariaDB (pas encore pris en charge)</option>
+<option value="postgres"{% if engine == "postgres" %} selected{% endif %}>PostgreSQL</option>
+<option value="mysql"{% if engine == "mysql" %} selected{% endif %}>MySQL</option>
+<option value="mariadb"{% if engine == "mariadb" %} selected{% endif %}>MariaDB</option>
 </select>
-<label for="pg_host">Adresse du serveur</label>
-<input id="pg_host" name="pg_host" type="text" autocomplete="off" value="{{ pg_host }}">
-<label for="pg_port">Port</label>
-<input id="pg_port" name="pg_port" type="text" inputmode="numeric" autocomplete="off" value="{{ pg_port }}">
-<label for="pg_database">Nom de la base</label>
-<input id="pg_database" name="pg_database" type="text" autocomplete="off" value="{{ pg_database }}">
-<label for="pg_user">Utilisateur</label>
-<input id="pg_user" name="pg_user" type="text" autocomplete="off" value="{{ pg_user }}">
-<label for="pg_password">Mot de passe</label>
-<input id="pg_password" name="pg_password" type="password" autocomplete="new-password">
+<label for="db_host">Adresse du serveur</label>
+<input id="db_host" name="db_host" type="text" autocomplete="off" value="{{ db_host }}">
+<label for="db_port">Port</label>
+<input id="db_port" name="db_port" type="text" inputmode="numeric" autocomplete="off" placeholder="habituel : 5432 (PostgreSQL), 3306 (MySQL, MariaDB)" value="{{ db_port }}">
+<label for="db_name">Nom de la base</label>
+<input id="db_name" name="db_name" type="text" autocomplete="off" value="{{ db_name }}">
+<label for="db_user">Utilisateur</label>
+<input id="db_user" name="db_user" type="text" autocomplete="off" value="{{ db_user }}">
+<label for="db_password">Mot de passe</label>
+<input id="db_password" name="db_password" type="password" autocomplete="new-password">
 <p class="muted small">La base doit déjà exister et être vide ; le hub crée ses tables lui-même.</p>
 </fieldset>
 

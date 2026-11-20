@@ -105,6 +105,8 @@ async fn tout_mene_a_l_assistant_et_l_api_attend() {
     let page = get(&app, "/admin/installation").await;
     assert!(page.body.contains("Base intégrée (SQLite)"));
     assert!(page.body.contains("PostgreSQL"));
+    assert!(page.body.contains("MySQL") && page.body.contains("MariaDB"));
+    assert!(!page.body.contains("disabled"));
     assert!(page
         .set_cookie
         .iter()
@@ -158,11 +160,12 @@ async fn base_externe_incomplete_ou_injoignable() {
         &app,
         &[
             ("code", CODE),
-            ("database", "postgres"),
-            ("pg_host", ""),
-            ("pg_database", "mabase"),
-            ("pg_user", "moi"),
-            ("pg_password", "motdepasse-secret"),
+            ("database", "external"),
+            ("engine", "postgres"),
+            ("db_host", ""),
+            ("db_name", "mabase"),
+            ("db_user", "moi"),
+            ("db_password", "motdepasse-secret"),
         ],
     )
     .await;
@@ -176,12 +179,13 @@ async fn base_externe_incomplete_ou_injoignable() {
         &app,
         &[
             ("code", CODE),
-            ("database", "postgres"),
-            ("pg_host", "127.0.0.1"),
-            ("pg_port", "1"),
-            ("pg_database", "mabase"),
-            ("pg_user", "moi"),
-            ("pg_password", "motdepasse-secret"),
+            ("database", "external"),
+            ("engine", "postgres"),
+            ("db_host", "127.0.0.1"),
+            ("db_port", "1"),
+            ("db_name", "mabase"),
+            ("db_user", "moi"),
+            ("db_password", "motdepasse-secret"),
         ],
     )
     .await;

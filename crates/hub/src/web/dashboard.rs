@@ -45,6 +45,7 @@ pub async fn show(State(state): State<AppState>, session: AdminSession) -> Respo
             detail: match state.store().backend() {
                 crate::store::Backend::Sqlite => "SQLite · répond",
                 crate::store::Backend::Postgres => "PostgreSQL · répond",
+                crate::store::Backend::Mysql => "MySQL / MariaDB · répond",
             },
             state: "ok",
             needs_setup: false,

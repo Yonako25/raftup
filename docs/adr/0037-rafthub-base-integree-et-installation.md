@@ -18,12 +18,19 @@ Le hub savait déjà utiliser SQLite, mais :
 - Ordre pour trouver la base : `--db` ou `RAFTUP_HUB_DB`, sinon `rafthub-data/rafthub.toml` (`format_version = 1`, `database_url`), sinon **l'assistant**.
 - L'assistant : le hub ne sert alors que `/admin/installation` (le reste y renvoie, l'API `/v1` répond 503). La page propose :
   - **base intégrée (SQLite)** : rien à installer, pour un petit groupe ;
-  - **base externe**, choisie dans une liste : PostgreSQL (MySQL / MariaDB affiché « pas encore pris en charge », grisé), avec adresse, port, nom de la base, utilisateur, mot de passe.
+  - **base externe**, choisie dans une liste : PostgreSQL, MySQL ou MariaDB, avec adresse, port (vide = 5432 ou 3306), nom de la base, utilisateur, mot de passe.
 - Le choix est **essayé** (connexion et création des tables, 10 s au plus) avant d'être écrit dans `rafthub.toml`. Un échec remontre la page avec les champs tapés, sans jamais réafficher le mot de passe ni l'URL.
 - Ensuite le petit serveur s'arrête et le vrai hub démarre sur la base choisie, sur le même port ; la page passe d'elle-même à l'étape 2.
 - La base intégrée est écrite `sqlite://rafthub.db`, **relative** au dossier de données : on peut déplacer le dossier du hub.
 - L'URL d'une base externe contient son mot de passe : `rafthub.toml` est aussi secret que la base.
 - Sans JavaScript : les champs de la base externe sont cachés en CSS (`:has()`) quand la base intégrée est cochée.
+
+### MySQL et MariaDB (demandés par l'utilisatrice le 20 novembre 2026)
+- Même pilote générique `sqlx::Any` (fonction `mysql` de sqlx, MIT / Apache-2.0) ; MariaDB parle le protocole de MySQL : une seule `Backend::Mysql`, URL `mysql://…` (ou `mariadb://…`).
+- Les requêtes restent écrites une fois, avec `$1`, `$2`… ; `Store::q` les traduit en `?` pour MySQL (gardées une fois traduites). Règle nouvelle : **chaque requête numérote ses paramètres dans l'ordre, sans en réutiliser un** (un paramètre lié plusieurs fois si besoin) ; un test le vérifie sur tout le code du store.
+- Ce que MySQL fait autrement, avec une forme propre à MySQL dans le code : `INSERT … RETURNING id` (remplacé par `last_insert_id`), `DELETE … RETURNING` (lecture puis suppression, une seule réussit), `ON CONFLICT DO NOTHING` (`INSERT IGNORE`), `ON CONFLICT … DO UPDATE` (`ON DUPLICATE KEY UPDATE`), `ESCAPE '\'` (antislash doublé).
+- Schéma : les clés étrangères sont écrites en fin de table pour les trois bases (MySQL ignore la forme en ligne, et la suppression RGPD repose sur `ON DELETE CASCADE`) ; contrainte `user_identities_provider_subject` nommée. Sous MySQL seulement : `VARCHAR(255)` pour les colonnes indexées, `VARCHAR(1024)` à la place de `TEXT` (le pilote générique ne lit pas les `TEXT` de MySQL, envoyés comme binaires), tables InnoDB `utf8mb4_unicode_ci` (comparaisons sans majuscules : le hub range déjà ses clés en minuscules), pas de `CHECK` (refusé sur une clé étrangère à `ON DELETE CASCADE` ; le code garantit déjà ces règles), `CREATE INDEX` sans `IF NOT EXISTS`.
+- Tests : `RAFTUP_HUB_TEST_MYSQL=mysql://root:…@hôte:port` fait tourner toute la suite du hub sur ce serveur, une base neuve par test. Passée sur MariaDB 11.4 et MySQL 8.4 (images Docker officielles, le 20 novembre 2026).
 
 ### Étape 2 : premier admin depuis le navigateur
 - Au démarrage, si aucune base n'est choisie ou si aucun compte n'a le rôle d'admin, le hub tire un **code d'installation** (16 caractères en base32 de Crockford, comme les invitations) et l'écrit dans son journal.

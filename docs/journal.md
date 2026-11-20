@@ -432,3 +432,9 @@ untime2`.
 - **Pas vérifié** : une vraie base PostgreSQL par l'assistant (seulement le refus d'un port fermé) ; exe lancé hors de `target/debug`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html` (à jeter sur accord).
 - **Suite** : essayer l'assistant avec un vrai PostgreSQL ; champ « code d'invitation » dans le launcher ; déploiement.
+
+### 2026-11-20 · Rafthub : MySQL et MariaDB (ADR 0037)
+- **Fait** : `Backend::Mysql` (sqlx `mysql`), requêtes traduites par `Store::q` (`$n` -> `?`), paramètres numérotés dans l'ordre partout (test `parametres_dans_l_ordre`), formes MySQL de `RETURNING` / `ON CONFLICT`, clés étrangères en fin de table pour les trois bases, schéma MySQL (`VARCHAR`, InnoDB `utf8mb4_unicode_ci`, sans `CHECK`) ; assistant : PostgreSQL, MySQL, MariaDB ; `RAFTUP_HUB_TEST_MYSQL`. Toute la suite du hub passe sur MariaDB 11.4 et MySQL 8.4 (conteneurs Docker `raftup-test-mariadb`, `raftup-test-mysql`, ports 33061 et 33062 sur 127.0.0.1) ; assistant + premier admin faits dans le navigateur sur MariaDB. fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : suite PostgreSQL relancée après le changement de schéma (mot de passe du PostgreSQL local inconnu) ; base PostgreSQL existante créée avec l'ancien schéma (même sens, non rejoué).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html` (à jeter sur accord) ; conteneurs de test (à supprimer sur accord).
+- **Suite** : relancer la suite sur PostgreSQL (`RAFTUP_HUB_TEST_POSTGRES`) ; champ « code d'invitation » dans le launcher ; déploiement.

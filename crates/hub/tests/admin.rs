@@ -260,7 +260,11 @@ async fn connexion_cookie_et_tableau_de_bord() {
     // Les trois adresses viennent d'être inscrites, aucune n'est vérifiée.
     assert_eq!(page.card_value("stat-unverified"), "3");
     // Services : base qui répond, ni SMTP ni Discord dans ce hub de test.
-    assert!(page.body.contains("SQLite · répond") || page.body.contains("PostgreSQL · répond"));
+    assert!(
+        page.body.contains("SQLite · répond")
+            || page.body.contains("PostgreSQL · répond")
+            || page.body.contains("MySQL / MariaDB · répond")
+    );
     assert!(page.body.contains("E-mails (SMTP)"));
     assert!(page.body.contains("Non configurée"));
 

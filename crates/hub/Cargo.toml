@@ -21,9 +21,10 @@ path = "src/main.rs"
 [dependencies]
 # Serveur HTTP (MIT), sur tokio comme le reste de Raftup.
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"] }
-# Accès à la base (MIT OR Apache-2.0) : SQLite (compilé avec la crate) et PostgreSQL, derrière
+# Accès à la base (MIT OR Apache-2.0) : SQLite (compilé avec la crate), PostgreSQL et
+# MySQL / MariaDB (ADR 0037), derrière
 # le pilote générique `any` (ADR 0033). Pas de macros : les requêtes sont vérifiées par les tests.
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres", "mysql"] }
 # Gabarits HTML de la console d'admin (MIT OR Apache-2.0), vérifiés à la compilation,
 # échappement HTML automatique (ADR 0036).
 askama = "0.14"
