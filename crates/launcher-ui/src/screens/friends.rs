@@ -62,6 +62,8 @@ enum Action {
         email: String,
         password: Password,
         username: String,
+        /// Code d'invitation ; `None` si le champ est resté vide.
+        invite_code: Option<String>,
     },
     Logout,
     /// Changer de hub : présence « hors ligne » envoyée à l'ancien (s'il y avait une
@@ -127,6 +129,8 @@ pub struct FriendsState {
     email: String,
     password: String,
     new_username: String,
+    /// Code d'invitation tapé à l'inscription (hub en mode « sur invitation »).
+    invite_code: String,
     add_name: String,
     lists: Lists,
     notice: Option<Notice>,
@@ -168,6 +172,14 @@ impl FriendsState {
                     .map(|(e, p)| (e.to_string(), p.to_string()))
             });
         }
+        // En debug, `RAFTUP_DEV_HUB_INSCRIPTION=1` ouvre l'onglet « Créer un compte »
+        // (capture du formulaire d'inscription par la macro).
+        let mode = if cfg!(debug_assertions) && std::env::var("RAFTUP_DEV_HUB_INSCRIPTION").is_ok()
+        {
+            Mode::Register
+        } else {
+            Mode::Login
+        };
         let url = HubUrl::parse(&url_text).map_err(|e| e.to_string());
         FriendsState {
             client: url.as_ref().ok().map(|u| HubClient::new(u.clone())),
@@ -177,10 +189,11 @@ impl FriendsState {
             username: None,
             started: false,
             job: None,
-            mode: Mode::Login,
+            mode,
             email: String::new(),
             password: String::new(),
             new_username: String::new(),
+            invite_code: String::new(),
             add_name: String::new(),
             lists: Lists::default(),
             notice: None,
@@ -446,7 +459,8 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
             email,
             password,
             username,
-        } => match client.register(&email, &password, &username) {
+            invite_code,
+        } => match client.register(&email, &password, &username, invite_code.as_deref()) {
             Ok(_) => login(client, store, &email, &password),
             Err(error) => Outcome {
                 client,
@@ -620,10 +634,31 @@ fn error_text(error: &HubClientError) -> String {
             code: ErrorCode::Internal,
             ..
         } => "Rafthub a rencontré une erreur. Réessayez plus tard.".to_string(),
+        // Inscription sur un hub fermé ou sur invitation (ADR 0036) : nos propres
+        // phrases, qui disent quoi faire dans le formulaire.
+        HubClientError::Api {
+            code: ErrorCode::RegistrationClosed,
+            ..
+        } => "Ce hub n'accepte plus d'inscriptions.".to_string(),
+        HubClientError::Api {
+            code: ErrorCode::InviteRequired,
+            ..
+        } => "Ce hub demande un code d'invitation : remplissez le champ « Code d'invitation »."
+            .to_string(),
+        HubClientError::Api {
+            code: ErrorCode::InvalidInvite,
+            ..
+        } => "Code d'invitation incorrect, expiré ou déjà utilisé.".to_string(),
         // Les messages du hub sont déjà en français et sans secret.
         HubClientError::Api { message, .. } => capitalize(message),
         other => capitalize(&other.to_string()),
     }
+}
+
+/// Champ « Code d'invitation » : vide (ou des espaces) = pas de code envoyé.
+fn invite_code_or_none(text: &str) -> Option<String> {
+    let code = text.trim();
+    (!code.is_empty()).then(|| code.to_string())
 }
 
 /// Première lettre en majuscule (« ce pseudo… » → « Ce pseudo… »).
@@ -801,6 +836,17 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                 // Entrée dans le champ du mot de passe : comme un clic sur le bouton.
                 submit |= response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 ui.end_row();
+                if state.mode == Mode::Register {
+                    ui.label("Code d'invitation");
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut state.invite_code)
+                            .hint_text("si le hub en demande un")
+                            .desired_width(280.0),
+                    );
+                    submit |=
+                        response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.end_row();
+                }
             });
         ui.add_space(10.0);
         let ready = !state.busy()
@@ -822,6 +868,7 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                     email,
                     password,
                     username: state.new_username.trim().to_string(),
+                    invite_code: invite_code_or_none(&state.invite_code),
                 },
             };
             state.start(ctx, action);
@@ -1115,6 +1162,35 @@ mod tests {
         };
         assert!(error_text(&internal).starts_with("Rafthub a rencontré"));
         assert!(error_text(&HubClientError::Network("refused".into())).contains("ne répond pas"));
+    }
+
+    #[test]
+    fn messages_d_inscription_sur_invitation() {
+        let api = |code| HubClientError::Api {
+            status: 403,
+            code,
+            message: "texte du hub".to_string(),
+        };
+        assert_eq!(
+            error_text(&api(ErrorCode::RegistrationClosed)),
+            "Ce hub n'accepte plus d'inscriptions."
+        );
+        assert!(error_text(&api(ErrorCode::InviteRequired))
+            .starts_with("Ce hub demande un code d'invitation"));
+        assert_eq!(
+            error_text(&api(ErrorCode::InvalidInvite)),
+            "Code d'invitation incorrect, expiré ou déjà utilisé."
+        );
+    }
+
+    #[test]
+    fn code_d_invitation_vide_pas_envoye() {
+        assert_eq!(invite_code_or_none(""), None);
+        assert_eq!(invite_code_or_none("   "), None);
+        assert_eq!(
+            invite_code_or_none(" k7qx-2m9p "),
+            Some("k7qx-2m9p".to_string())
+        );
     }
 
     /// État de test : hub local, jeton en mémoire, rien d'écrit dans `config.toml`.

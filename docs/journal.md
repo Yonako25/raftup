@@ -438,3 +438,9 @@ untime2`.
 - **Pas vérifié** : suite PostgreSQL relancée après le changement de schéma (mot de passe du PostgreSQL local inconnu) ; base PostgreSQL existante créée avec l'ancien schéma (même sens, non rejoué).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html` (à jeter sur accord) ; conteneurs de test (à supprimer sur accord).
 - **Suite** : relancer la suite sur PostgreSQL (`RAFTUP_HUB_TEST_POSTGRES`) ; champ « code d'invitation » dans le launcher ; déploiement.
+
+### 2026-11-20 · Launcher : inscription sur un Rafthub « sur invitation » (session `launcher-invitation`)
+- **Fait** : `register` du client prend un `invite_code` facultatif (vide = non envoyé) ; codes `registration_closed`, `invite_required`, `invalid_invite` typés ; champ « Code d'invitation » dans « Nouveau compte », trois messages en français ; 3 tests client (faux serveur), 2 tests d'interface ; capture vue (`RAFTUP_DEV_HUB_INSCRIPTION=1`). fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : inscription contre un vrai Rafthub en mode `invite`. Partie Discord non faite : le launcher n'a pas de connexion Discord, rien où brancher `invite_required`.
+- **Ne pas toucher** : `crates/hub`, `docs/profils-en-attente/`.
+- **Suite** : connexion Discord dans le launcher (lire `invite_required` de `needs_username`, envoyer `invite_code` à `/register`).
