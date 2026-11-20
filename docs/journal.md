@@ -534,3 +534,10 @@ untime2`.
 - **Pas vérifié** : la première sauvegarde nuitière (3 h) ; le formulaire d'installation refusé (cookie CSRF) dans le navigateur de l'utilisatrice, alors qu'il passe dans le navigateur intégré : cause non trouvée. Pas de Cloudflare (DNS chez feelb.net, IP visible).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; sur triomyno, `~/rafthub/deploy/rafthub/.env` (droits 600) et le volume `rafthub-data`.
 - **Suite** : variable GitHub `RAFTUP_OFFICIAL_HUB_URL=https://hub.raftup-games.com` ; Réglages du hub (SMTP, Discord, inscriptions) ; site de la racine `raftup-games.com`.
+
+### 2026-11-20 · Page d'attente de `raftup-games.com`
+- **Fait** : `deploy/site/` : page statique (palette Acier, logo et polices du launcher, liens vers les releases et le code), image `nginx-unprivileged` en lecture seule, en-têtes de sécurité (CSP sans script), compose avec labels Traefik ; déployée sur triomyno (`raftup-site`). Variable GitHub `RAFTUP_OFFICIAL_HUB_URL=https://hub.raftup-games.com` créée.
+- **Vérifié** : `https://raftup-games.com` 200 avec certificat Let's Encrypt, logo et polices servis, 404 sur une adresse inconnue ; vue dans le navigateur intégré.
+- **Pas vérifié** : affichage sur téléphone ; `www.raftup-games.com` (pas de DNS ni de route).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : vrai site officiel (présentation, jeux, téléchargements, doc) ; réglages SMTP, Discord et inscriptions du hub.
