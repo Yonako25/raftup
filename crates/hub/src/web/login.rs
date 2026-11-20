@@ -86,7 +86,12 @@ fn login_page(
 pub async fn form(State(state): State<AppState>, headers: HeaderMap) -> Response {
     match AdminSession::from_headers(&headers, &state).await {
         Ok(Some(_)) => Redirect::to("/admin").into_response(),
-        Ok(None) => login_page(&state, StatusCode::OK, String::new(), None),
+        Ok(None) => match state.store().has_admin().await {
+            // Hub neuf, sans admin : on va d'abord à l'installation (ADR 0037).
+            Ok(false) => Redirect::to("/admin/installation").into_response(),
+            Ok(true) => login_page(&state, StatusCode::OK, String::new(), None),
+            Err(error) => internal_error(error),
+        },
         Err(error) => internal_error(error),
     }
 }
@@ -159,7 +164,10 @@ async fn check_admin(
 }
 
 /// Crée la session d'admin, pose le cookie et renvoie vers le tableau de bord.
-async fn open_admin_session(state: &AppState, user_id: i64) -> Result<Response, HubError> {
+pub(super) async fn open_admin_session(
+    state: &AppState,
+    user_id: i64,
+) -> Result<Response, HubError> {
     let token = new_token();
     let now = now_unix();
     let lifetime = state.inner.config.admin_session_lifetime.as_secs();

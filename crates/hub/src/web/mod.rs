@@ -35,6 +35,7 @@ mod login;
 mod logs;
 mod players;
 mod settings;
+mod setup;
 
 use askama::Template;
 use axum::extract::FromRequestParts;
@@ -61,6 +62,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/admin/", get(|| async { Redirect::to("/admin") }))
         .route("/admin/login", get(login::form).post(login::submit))
         .route("/admin/logout", post(login::logout))
+        .route("/admin/installation", get(setup::form).post(setup::submit))
         .route("/admin/joueurs", get(players::list))
         .route("/admin/joueurs/suspendre", post(players::suspend))
         .route("/admin/joueurs/reactiver", post(players::reactivate))

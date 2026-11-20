@@ -56,6 +56,17 @@ impl Store {
         Ok(found)
     }
 
+    /// Vrai si au moins un compte a le rôle d'admin. Tant que c'est faux, la page
+    /// d'installation peut créer le premier (ADR 0037).
+    pub async fn has_admin(&self) -> Result<bool, HubError> {
+        let row = sqlx::query("SELECT COUNT(*) AS n FROM users WHERE role = $1")
+            .bind(Role::Admin.as_str())
+            .fetch_one(&self.pool)
+            .await?;
+        let count: i64 = row.try_get("n")?;
+        Ok(count > 0)
+    }
+
     /// Vrai si le compte a le rôle d'admin.
     pub async fn is_admin(&self, user_id: i64) -> Result<bool, HubError> {
         let row = sqlx::query("SELECT role FROM users WHERE id = $1")

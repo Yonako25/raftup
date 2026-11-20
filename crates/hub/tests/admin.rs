@@ -424,7 +424,9 @@ async fn cookie_secure_hors_de_la_machine() {
 
 #[tokio::test]
 async fn fichiers_statiques_servis_par_le_hub() {
-    let (app, _) = hub().await;
+    let (app, store) = hub().await;
+    // Avec un admin, la connexion s'affiche (sans admin, elle mène à l'installation).
+    make_admin(&app, &store, "chef@exemple.org", "Chef").await;
     let css = get(&app, "/admin/static/rafthub.css", None).await;
     assert_eq!(css.status, StatusCode::OK);
     assert!(css.headers[header::CONTENT_TYPE]
@@ -451,4 +453,127 @@ async fn fichiers_statiques_servis_par_le_hub() {
     let login = get(&app, "/admin/login", None).await;
     assert!(login.body.contains("/admin/static/rafthub.css"));
     assert!(!login.body.contains("googleapis"));
+}
+
+// ---------- Installation : premier admin depuis le navigateur (ADR 0037) ----------
+
+const SETUP_CODE: &str = "K7QX-2M9P-AB12-CD34";
+
+/// Hub neuf avec un code d'installation.
+async fn fresh_hub() -> (Router, Store) {
+    hub_with(HubConfig {
+        setup_code: Some(SETUP_CODE.to_string()),
+        ..HubConfig::for_tests()
+    })
+    .await
+}
+
+/// Ouvre la page d'installation puis envoie le formulaire.
+async fn try_setup(app: &Router, code: &str, email: &str, username: &str) -> Page {
+    let form = get(app, "/admin/installation", None).await;
+    assert_eq!(form.status, StatusCode::OK, "{}", form.body);
+    let csrf = form.csrf_field();
+    let cookie = format!("rafthub_setup_csrf={csrf}");
+    post_form(
+        app,
+        "/admin/installation",
+        Some(&cookie),
+        &[
+            ("code", code),
+            ("email", email),
+            ("username", username),
+            ("password", PASSWORD),
+            ("csrf", &csrf),
+        ],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn hub_neuf_renvoie_la_connexion_vers_l_installation() {
+    let (app, _) = fresh_hub().await;
+    let page = get(&app, "/admin/login", None).await;
+    assert_eq!(page.status, StatusCode::SEE_OTHER);
+    assert_eq!(page.location(), "/admin/installation");
+}
+
+#[tokio::test]
+async fn installation_cree_le_premier_admin_et_le_connecte() {
+    let (app, store) = fresh_hub().await;
+    // Code tapé en minuscules et sans tirets : accepté.
+    let page = try_setup(&app, "k7qx2m9pab12cd34", "chef@exemple.org", "Chef").await;
+    assert_eq!(page.status, StatusCode::SEE_OTHER, "{}", page.body);
+    assert_eq!(page.location(), "/admin");
+    let token = page.cookie_value("rafthub_admin").expect("session ouverte");
+    assert!(store.has_admin().await.unwrap());
+    let dashboard = get(&app, "/admin", Some(&format!("rafthub_admin={token}"))).await;
+    assert_eq!(dashboard.status, StatusCode::OK);
+    // Le compte sert aussi pour la connexion normale.
+    login_cookie(&app, "chef@exemple.org").await;
+
+    // Une fois l'admin créé, la page d'installation est fermée.
+    let again = get(&app, "/admin/installation", None).await;
+    assert_eq!(again.location(), "/admin/login");
+}
+
+#[tokio::test]
+async fn installation_refuse_un_mauvais_code() {
+    let (app, store) = fresh_hub().await;
+    let page = try_setup(&app, "AAAA-BBBB-CCCC-DDDD", "chef@exemple.org", "Chef").await;
+    assert_eq!(page.status, StatusCode::FORBIDDEN);
+    assert!(
+        page.body.contains("installation incorrect"),
+        "{}",
+        page.body
+    );
+    assert!(!store.has_admin().await.unwrap());
+}
+
+#[tokio::test]
+async fn installation_fermee_sans_code_ou_avec_un_admin() {
+    // Sans code (hub lancé autrement que par `rafthub`) : rien ne se crée.
+    let (app, store) = hub().await;
+    let form = get(&app, "/admin/installation", None).await;
+    assert!(form.body.contains("Installation fermée"), "{}", form.body);
+    let page = post_form(
+        &app,
+        "/admin/installation",
+        Some("rafthub_setup_csrf=abc"),
+        &[
+            ("code", SETUP_CODE),
+            ("email", "chef@exemple.org"),
+            ("username", "Chef"),
+            ("password", PASSWORD),
+            ("csrf", "abc"),
+        ],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::FORBIDDEN);
+    assert!(!store.has_admin().await.unwrap());
+
+    // Avec un admin déjà là : le code ne sert plus.
+    let (app, store) = fresh_hub().await;
+    make_admin(&app, &store, "premier@exemple.org", "Premier").await;
+    let form = get(&app, "/admin/installation", None).await;
+    assert_eq!(form.location(), "/admin/login");
+}
+
+#[tokio::test]
+async fn installation_refuse_un_csrf_absent() {
+    let (app, store) = fresh_hub().await;
+    let page = post_form(
+        &app,
+        "/admin/installation",
+        None,
+        &[
+            ("code", SETUP_CODE),
+            ("email", "chef@exemple.org"),
+            ("username", "Chef"),
+            ("password", PASSWORD),
+            ("csrf", "x"),
+        ],
+    )
+    .await;
+    assert_ne!(page.status, StatusCode::SEE_OTHER);
+    assert!(!store.has_admin().await.unwrap());
 }

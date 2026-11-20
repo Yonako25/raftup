@@ -1,11 +1,19 @@
 //! Binaire `rafthub` : sert l'API du hub et sa console d'admin en HTTP (ADR 0036).
 //!
 //! ```text
-//! rafthub [--db sqlite://raftup-hub.db] [--listen 127.0.0.1:8787]
+//! rafthub [--db sqlite://chemin.db] [--listen 127.0.0.1:8787]
 //!         [--public-url https://hub.exemple.org]
 //! rafthub admin create <e-mail> [--db …]   donne le rôle d'admin à un compte existant
 //! rafthub admin remove <e-mail> [--db …]   le lui retire (et ferme ses sessions d'admin)
 //! ```
+//!
+//! **Base intégrée** : sans `--db` ni `RAFTUP_HUB_DB`, le hub range tout dans le dossier
+//! `rafthub-data/` posé à côté de l'exe (base SQLite `rafthub.db`, cache du launcher),
+//! créé au premier lancement. Rien à installer (ADR 0037).
+//!
+//! **Premier admin** : tant que le hub n'a aucun admin, il écrit au journal un code
+//! d'installation à usage unique ; la page `/admin/installation` crée le premier compte
+//! admin avec ce code, depuis le navigateur (ADR 0037).
 //!
 //! La console d'admin est sous `<public-url>/admin`. Son cookie n'a l'attribut
 //! `Secure` que si `--public-url` n'est pas en `http://127.0.0.1` (ou `localhost`) :
@@ -25,7 +33,7 @@
 //! | `RAFTUP_HUB_NAME` | nom du hub affiché (défaut : Rafthub) |
 //! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
 //! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
-//! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache (défaut : `rafthub-cache`) |
+//! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache (défaut : `rafthub-data/cache`) |
 //!
 //! Ces réglages se changent aussi depuis la console d'admin (ADR 0036) : la valeur
 //! écrite en base passe avant la variable d'environnement, qui passe avant le défaut.
@@ -42,7 +50,8 @@ use hub::store::Role;
 use hub::{AppState, EnvSettings, HubConfig, SettingKey, Store};
 
 struct Args {
-    db: String,
+    /// URL de la base ; `None` = base intégrée dans `rafthub-data/`.
+    db: Option<String>,
     listen: String,
     public_url: Option<String>,
     /// Commande d'admin (`admin create|remove <e-mail>`) au lieu de lancer le serveur.
@@ -54,9 +63,27 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
+/// Dossier `rafthub-data/` à côté de l'exe, créé s'il manque. On part de l'exe
+/// et non du dossier courant : le hub retrouve sa base d'où qu'on le lance.
+fn data_dir() -> anyhow::Result<std::path::PathBuf> {
+    let exe = std::env::current_exe().context("chemin de l'exe")?;
+    let dir = exe
+        .parent()
+        .context("dossier de l'exe")?
+        .join("rafthub-data");
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("création du dossier {}", dir.display()))?;
+    Ok(dir)
+}
+
+/// URL SQLite d'un fichier. Les `\` de Windows deviennent des `/`, que SQLite comprend.
+fn sqlite_file_url(path: &std::path::Path) -> String {
+    format!("sqlite://{}", path.display().to_string().replace('\\', "/"))
+}
+
 fn parse_args() -> anyhow::Result<Args> {
     let mut args = Args {
-        db: env("RAFTUP_HUB_DB").unwrap_or_else(|| "sqlite://raftup-hub.db".to_string()),
+        db: env("RAFTUP_HUB_DB"),
         listen: "127.0.0.1:8787".to_string(),
         public_url: None,
         admin: None,
@@ -66,7 +93,7 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut iter = std::env::args().skip(1);
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "--db" => args.db = iter.next().context("--db attend une URL")?,
+            "--db" => args.db = Some(iter.next().context("--db attend une URL")?),
             "--listen" => args.listen = iter.next().context("--listen attend une adresse")?,
             "--public-url" => {
                 args.public_url = Some(iter.next().context("--public-url attend une URL")?)
@@ -108,7 +135,16 @@ async fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
 
     // Pas d'URL dans le message d'erreur : elle peut contenir un mot de passe.
-    let store = Store::open(&args.db)
+    // Base intégrée par défaut : un fichier SQLite dans `rafthub-data/`.
+    let db = match &args.db {
+        Some(url) => url.clone(),
+        None => {
+            let path = data_dir()?.join("rafthub.db");
+            tracing::info!(chemin = %path.display(), "base intégrée");
+            sqlite_file_url(&path)
+        }
+    };
+    let store = Store::open(&db)
         .await
         .context("ouverture de la base de données")?;
 
@@ -128,8 +164,18 @@ async fn main() -> anyhow::Result<()> {
             .context("--public-url")?;
     }
     // Dossier du cache de l'exe officiel du launcher (page « Distribution »).
-    if let Some(dir) = env("RAFTUP_HUB_CACHE_DIR") {
-        config.distribution.cache_dir = dir.into();
+    config.distribution.cache_dir = match env("RAFTUP_HUB_CACHE_DIR") {
+        Some(dir) => dir.into(),
+        None => data_dir()?.join("cache"),
+    };
+    // Aucun admin encore : code d'installation à usage unique, montré au journal
+    // seulement (celui qui le lit a accès au serveur), pour `/admin/installation`.
+    if !store.has_admin().await? {
+        let code = hub::session::new_invite_code();
+        tracing::warn!(
+            "aucun admin : ouvrez /admin/installation avec le code d'installation {code}"
+        );
+        config.setup_code = Some(code);
     }
     let state = AppState::from_settings(store.clone(), config).await?;
     // Avertissements de départ : les réglages restent modifiables ensuite.

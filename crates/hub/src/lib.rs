@@ -70,6 +70,10 @@ pub struct HubConfig {
     pub admin_session_lifetime: Duration,
     /// Distribution du launcher : cache de l'exe officiel et d'où il vient (ADR 0036).
     pub distribution: distribution::DistributionConfig,
+    /// Code d'installation à usage unique, tant qu'aucun admin n'existe : il ouvre
+    /// la page `/admin/installation` qui crée le premier admin (ADR 0037). `None` :
+    /// page fermée.
+    pub setup_code: Option<String>,
 }
 
 impl Default for HubConfig {
@@ -91,6 +95,7 @@ impl Default for HubConfig {
             admin_session_lifetime: Duration::from_secs(12 * 3600),
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
+            setup_code: None,
         }
     }
 }

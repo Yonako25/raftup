@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rafthub",
+      "runtimeExecutable": "target/debug/rafthub.exe",
+      "runtimeArgs": ["--public-url", "http://127.0.0.1:8787"],
+      "port": 8787
+    }
+  ]
+}

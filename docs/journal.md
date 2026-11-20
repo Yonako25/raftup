@@ -420,3 +420,9 @@ untime2`.
 - **Pas vérifié** : console jamais ouverte dans un navigateur après fusion ; PostgreSQL pour les nouvelles pages ; vrai téléchargement GitHub.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub… » (à jeter sur accord) ; `web/soon.rs` et `templates/admin/soon.html` ne servent plus (à supprimer sur accord).
 - **Suite** : ouvrir la console dans un navigateur et la parcourir ; champ « code d'invitation » dans le launcher ; déploiement.
+
+### 2026-11-20 · Rafthub : base intégrée et premier admin depuis le navigateur (ADR 0037)
+- **Fait** : console parcourue dans le navigateur après la fusion (les 6 pages, suspension, réglage, journal). Sans `--db`, base SQLite dans `rafthub-data/rafthub.db` à côté de l'exe, cache du launcher dans `rafthub-data/cache` ; sans admin, code d'installation au journal et page `/admin/installation` (`web/setup.rs`, `setup.html`, `Store::has_admin`, `HubConfig::setup_code`), `/admin/login` y renvoie ; 5 tests dans `tests/admin.rs` ; essayé dans le navigateur sur un hub neuf. fmt, clippy `-D warnings`, `cargo test --workspace` passent.
+- **Pas vérifié** : exe lancé depuis un autre dossier que `target/debug` ; PostgreSQL avec la page d'installation ; affichage sur grand écran.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… » et `web/soon.rs` + `soon.html` (à jeter sur accord).
+- **Suite** : champ « code d'invitation » dans le launcher ; vrai téléchargement depuis la release GitHub ; déploiement.
