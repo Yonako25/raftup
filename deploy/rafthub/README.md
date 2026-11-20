@@ -47,6 +47,25 @@ Traefik demande le certificat tout seul au premier accès, si le nom pointe bien
 vers le serveur et que le port 80 ou 443 est joignable (selon le défi choisi dans
 le certresolver).
 
+### Avec Cloudflare (conseillé pour le Rafthub officiel, ADR 0040)
+
+Cloudflare se met devant le hub : les joueurs ne voient que ses adresses, jamais
+l'IP du serveur, et il filtre les attaques. C'est gratuit.
+
+1. Gérer le domaine chez Cloudflare (acheté chez eux, ou ses serveurs DNS déclarés
+   chez le registraire).
+2. Enregistrement **A** `hub` vers l'IP publique du serveur, **proxy activé**
+   (nuage orange).
+3. SSL/TLS : mode **Full (strict)** (Traefik garde son propre certificat).
+   Avec le nuage orange, le défi HTTP-01 de Let's Encrypt passe toujours par
+   Cloudflare ; le défi DNS-01 marche aussi.
+4. Dans `.env`, `RAFTHUB_ALLOWED_SOURCES` = les plages de
+   <https://www.cloudflare.com/ips/> : Traefik refuse alors (403) toute requête
+   qui ne vient pas de Cloudflare, donc personne ne le contourne en visant l'IP.
+   Seul le hub est concerné : les autres services de Traefik ne changent pas.
+
+Le launcher ne connaît que le nom `hub.<domaine>`, jamais l'IP.
+
 ## 3. Installer, pas à pas
 
 Toutes les commandes se lancent sur le serveur.
@@ -107,7 +126,9 @@ docker logs rafthub 2>&1 | grep "code d'installation"
 
 Puis, dans un navigateur :
 
-1. ouvrir `https://<votre domaine>/admin` ;
+1. ouvrir `http://<RAFTHUB_ADMIN_BIND>/admin`, par exemple
+   `http://10.10.0.1:8788/admin`, **VPN allumé** : la console n'est pas sur le
+   domaine public, où `/admin` répond 404 (ADR 0040) ;
 2. choisir la base :
    - **base intégrée** (SQLite dans le volume, rien à installer) : le bon choix
      pour commencer ;
@@ -215,6 +236,11 @@ docker volume inspect rafthub-data
 ```
 
 ## 8. Sécurité
+
+- La console d'admin n'existe pas pour Internet (ADR 0040) : elle n'est servie que
+  sur le port 8788, publié sur l'IP du VPN (`RAFTHUB_ADMIN_BIND`) ; sur le domaine,
+  `/admin` répond 404 comme une page inconnue, et Traefik ne transmet pas `/admin`.
+  La console est en HTTP clair : c'est le VPN qui chiffre.
 
 - Le conteneur tourne sans droits (uid 10001), système de fichiers en lecture
   seule sauf `/data`, sans privilège Linux.

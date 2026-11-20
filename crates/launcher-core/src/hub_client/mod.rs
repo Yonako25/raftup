@@ -29,9 +29,22 @@ pub use types::{
     RequestOutcome, Session, SessionToken, Status,
 };
 
-/// Adresse du hub tant qu'aucun hub public n'est déployé : celui qu'on lance sur ce PC
-/// avec `cargo run -p hub --bin raftup-hub` (ADR 0035).
-pub const DEFAULT_HUB_URL: &str = "http://127.0.0.1:8787";
+/// Adresse du hub par défaut (ADR 0035, 0040).
+///
+/// - Launcher des releases officielles : l'adresse du Rafthub officiel, donnée à la
+///   compilation par la variable `RAFTUP_OFFICIAL_HUB_URL` (le workflow de release la
+///   lit dans les variables du dépôt GitHub). Seul le nom de domaine est écrit, jamais
+///   l'IP du serveur.
+/// - Sinon (compilation locale) : le hub lancé sur ce PC.
+///
+/// Un `rafthub.toml` posé à côté de l'exe (Rafthub auto-hébergé) passe avant.
+///
+/// `option_env!` lit la variable **au moment de la compilation** (pas au lancement) ;
+/// le `match` est permis dans une constante.
+pub const DEFAULT_HUB_URL: &str = match option_env!("RAFTUP_OFFICIAL_HUB_URL") {
+    Some(url) => url,
+    None => "http://127.0.0.1:8787",
+};
 
 /// Version de l'API que ce client sait parler.
 pub const SUPPORTED_API_VERSION: u32 = 1;

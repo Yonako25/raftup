@@ -28,7 +28,7 @@ pub mod web;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-pub use api::router;
+pub use api::{admin_router, public_router, router};
 pub use discord::{DiscordApi, DiscordConfig, DiscordUser, FakeDiscord, HttpDiscord};
 pub use error::HubError;
 pub use mail::{DisabledMailer, Email, Mailer, MemoryMailer, SmtpMailer};
@@ -88,6 +88,11 @@ pub struct HubConfig {
     /// Vrai quand le hub sert lui-même en HTTPS (`--tls-cert` ou `--tls-acme`,
     /// ADR 0039) : les cookies de la console ont alors toujours l'attribut `Secure`.
     pub https: bool,
+    /// Vrai quand la console est servie à part, en HTTP clair, sur l'adresse de
+    /// `--admin-listen` (ADR 0040), par exemple l'IP du VPN : ses cookies n'ont alors
+    /// pas l'attribut `Secure` (un navigateur le refuserait en HTTP). Le chiffrement
+    /// vient du VPN.
+    pub admin_separate: bool,
 }
 
 impl Default for HubConfig {
@@ -112,6 +117,7 @@ impl Default for HubConfig {
             setup_code: None,
             setup_pass: None,
             https: false,
+            admin_separate: false,
             // `cfg!` vaut `true` si le binaire est compilé avec `--features officiel`.
             discord_allowed: cfg!(feature = "officiel"),
         }

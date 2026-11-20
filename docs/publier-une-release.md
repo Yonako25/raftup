@@ -21,6 +21,8 @@ Les archives de Rafthub contiennent aussi `LICENSE-AGPL`, `THIRD_PARTY_NOTICES.m
 
 Le workflow refuse de construire si le tag ne correspond pas à la version de `Cargo.toml` (`[workspace.package] version`).
 
+**Adresse du Rafthub officiel dans le launcher** (ADR 0040) : le workflow lit la variable de dépôt `RAFTUP_OFFICIAL_HUB_URL` (GitHub → Settings → Secrets and variables → Actions → onglet **Variables**), par exemple `https://hub.raftup-games.com`. Sans elle, le launcher de la release garde l'adresse locale `http://127.0.0.1:8787`.
+
 ## Étapes
 
 ### 1. Préparer la version

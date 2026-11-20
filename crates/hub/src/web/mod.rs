@@ -16,7 +16,8 @@
 //! | `GET /admin/distribution/raftup-windows.zip` | zip relié au hub, pour un admin |
 //! | `GET /telecharger/raftup-windows.zip` | le même zip, public (404 si la page est désactivée) |
 //! | `GET /admin/joueurs`, `/admin/reglages`, `/admin/journaux` | page « Bientôt » |
-//! | `GET /admin/static/…` | feuille de style et polices |
+//! | `GET /admin/static/…` | feuille de style et polices de la console |
+//! | `GET /static/…` | les mêmes fichiers, pour les pages publiques |
 //!
 //! **Connexion** : un cookie `rafthub_admin` porte un jeton opaque, dont la base ne
 //! garde que l'empreinte (table `admin_sessions`). Les jetons Bearer de l'API ne
@@ -56,8 +57,18 @@ pub const SESSION_COOKIE: &str = "rafthub_admin";
 /// Nom du cookie anti-CSRF du formulaire de connexion.
 pub const LOGIN_CSRF_COOKIE: &str = "rafthub_login_csrf";
 
-/// Routes de la console, à fusionner dans le routeur du hub.
-pub(crate) fn routes() -> Router<AppState> {
+/// Pages publiques : téléchargement du launcher et ses fichiers statiques, sous
+/// `/static/` (pas `/admin/static/` : rien de public ne mentionne la console, ADR 0040).
+pub(crate) fn public_routes() -> Router<AppState> {
+    Router::new()
+        .route("/telecharger", get(distribution::public_page))
+        .route(distribution::ZIP_PATH, get(distribution::public_zip))
+        .route("/static/{*path}", get(assets::serve))
+}
+
+/// Routes de la console sous `/admin`. Servies avec l'API, ou seules sur l'adresse
+/// de `--admin-listen` (ADR 0040).
+pub(crate) fn admin_routes() -> Router<AppState> {
     Router::new()
         .route("/admin", get(dashboard::show))
         .route("/admin/", get(|| async { Redirect::to("/admin") }))
@@ -78,9 +89,7 @@ pub(crate) fn routes() -> Router<AppState> {
             "/admin/distribution/rafraichir",
             post(distribution::refresh),
         )
-        .route("/telecharger", get(distribution::public_page))
         .route(distribution::ADMIN_ZIP_PATH, get(distribution::admin_zip))
-        .route(distribution::ZIP_PATH, get(distribution::public_zip))
         .route(
             "/admin/reglages",
             get(settings::show).post(settings::submit),
@@ -208,7 +217,8 @@ fn is_local_http(public_url: &str) -> bool {
 fn set_cookie(state: &AppState, name: &str, value: &str, path: &str, max_age: u64) -> HeaderValue {
     // En HTTPS intégré (ADR 0039), toujours `Secure`, même joint en local.
     let config = &state.inner.config;
-    let secure = if !config.https && is_local_http(&config.public_url) {
+    // Console servie à part en HTTP clair (`--admin-listen`, ADR 0040) : jamais `Secure`.
+    let secure = if config.admin_separate || (!config.https && is_local_http(&config.public_url)) {
         ""
     } else {
         "; Secure"

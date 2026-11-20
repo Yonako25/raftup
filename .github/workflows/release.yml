@@ -81,7 +81,15 @@ jobs:
       # `--locked` : on construit exactement les versions de `Cargo.lock`.
       - name: Compiler ${{ matrix.nom }}
         shell: bash
-        run: cargo build --release --locked -p ${{ matrix.paquet }} ${{ matrix.options }}
+        # Adresse du Rafthub officiel écrite dans le launcher (ADR 0040) : variable du
+        # dépôt (Settings > Secrets and variables > Actions > Variables). Vide :
+        # le launcher garde l'adresse locale par défaut.
+        env:
+          RAFTUP_OFFICIAL_HUB_URL: ${{ vars.RAFTUP_OFFICIAL_HUB_URL }}
+        run: |
+          # Une variable vide compterait comme une adresse : on la retire.
+          if [ -z "$RAFTUP_OFFICIAL_HUB_URL" ]; then unset RAFTUP_OFFICIAL_HUB_URL; fi
+          cargo build --release --locked -p ${{ matrix.paquet }} ${{ matrix.options }}
 
       - name: Préparer l'archive
         shell: bash

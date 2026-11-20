@@ -72,6 +72,21 @@ const MAX_GAME_CHARS: usize = 64;
 
 /// Construit le routeur du hub : l'API `/v1` et la console d'admin `/admin`.
 pub fn router(state: AppState) -> Router {
+    // Les deux moitiés ont déjà leur état : `merge` les réunit sur une seule adresse.
+    public_router(state.clone()).merge(admin_router(state))
+}
+
+/// Console d'admin seule (`/admin`, ADR 0036), pour l'adresse de `--admin-listen`
+/// (ADR 0040).
+pub fn admin_router(state: AppState) -> Router {
+    crate::web::admin_routes()
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .with_state(state)
+}
+
+/// API `/v1` et pages publiques, sans la console : `/admin` y répond 404 comme
+/// n'importe quelle adresse inconnue (ADR 0040).
+pub fn public_router(state: AppState) -> Router {
     Router::new()
         .route("/v1", get(api_info))
         .route("/v1/info", get(hub_info))
@@ -110,8 +125,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/blocks", get(list_blocks).post(block_player))
         .route("/v1/blocks/{username}", delete(unblock_player))
-        // Pages de la console d'admin sous `/admin` (ADR 0036) : mêmes état et limite.
-        .merge(crate::web::routes())
+        // Page publique de téléchargement et ses fichiers statiques.
+        .merge(crate::web::public_routes())
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }

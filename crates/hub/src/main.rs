@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! rafthub [--db sqlite://chemin.db] [--listen 127.0.0.1:8787]
+//!         [--admin-listen 10.10.0.1:8788]
 //!         [--public-url https://hub.exemple.org]
 //!         [--tls-cert fullchain.pem --tls-key privkey.pem]
 //!         [--tls-acme hub.exemple.org [--tls-acme-email moi@exemple.org] [--tls-acme-staging]]
@@ -37,6 +38,12 @@
 //!   prend le serveur d'essai de Let's Encrypt, pour essayer sans risquer ses limites.
 //!
 //! L'assistant d'installation est servi de la même façon (HTTPS compris).
+//!
+//! **Console à part** (ADR 0040) : avec `--admin-listen <adresse>` (ou
+//! `RAFTUP_HUB_ADMIN_LISTEN`), la console `/admin` n'est servie **que** sur cette
+//! adresse, en HTTP clair, par exemple l'IP du VPN. Sur `--listen`, `/admin` répond
+//! 404 comme une page qui n'existe pas : rien ne la signale aux joueurs. L'assistant
+//! d'installation passe aussi par cette adresse.
 //!
 //! La console d'admin est sous `<public-url>/admin`. Son cookie a l'attribut `Secure`
 //! en HTTPS intégré, et sinon dès que `--public-url` n'est pas en `http://127.0.0.1`
@@ -84,6 +91,8 @@ struct Args {
     /// URL de la base ; `None` = base intégrée dans `rafthub-data/`.
     db: Option<String>,
     listen: String,
+    /// Adresse de la console seule (ADR 0040) ; `None` : console servie avec l'API.
+    admin_listen: Option<String>,
     public_url: Option<String>,
     /// Commande d'admin (`admin create|remove <e-mail>`) au lieu de lancer le serveur.
     admin: Option<(Role, String)>,
@@ -120,6 +129,7 @@ fn parse_args() -> anyhow::Result<Args> {
     let mut args = Args {
         db: env("RAFTUP_HUB_DB"),
         listen: "127.0.0.1:8787".to_string(),
+        admin_listen: env("RAFTUP_HUB_ADMIN_LISTEN"),
         public_url: None,
         admin: None,
         healthcheck: false,
@@ -136,6 +146,9 @@ fn parse_args() -> anyhow::Result<Args> {
         match arg.as_str() {
             "--db" => args.db = Some(iter.next().context("--db attend une URL")?),
             "--listen" => args.listen = iter.next().context("--listen attend une adresse")?,
+            "--admin-listen" => {
+                args.admin_listen = Some(iter.next().context("--admin-listen attend une adresse")?)
+            }
             "--public-url" => {
                 args.public_url = Some(iter.next().context("--public-url attend une URL")?)
             }
@@ -161,6 +174,8 @@ fn parse_args() -> anyhow::Result<Args> {
                 println!("rafthub healthcheck [--listen …] vérifie qu'un hub répond");
                 println!("  --db accepte aussi postgres://utilisateur:motdepasse@hote/base");
                 println!("  --public-url : adresse publique du hub, pour les liens des e-mails");
+                println!("  --admin-listen 10.10.0.1:8788 : console /admin seulement à cette");
+                println!("    adresse (HTTP clair, VPN conseillé) ; ailleurs /admin répond 404");
                 println!(
                     "  environnement : RAFTUP_HUB_DB, RAFTUP_HUB_SMTP_URL, RAFTUP_HUB_MAIL_FROM,"
                 );
@@ -208,23 +223,28 @@ async fn run_install_wizard(
         .or_else(|| env("RAFTUP_HUB_PUBLIC_URL"));
     // Cookie `Secure` en HTTPS intégré, et sauf quand le hub est joint en local
     // en HTTP, comme la console.
-    let secure = tls.is_some()
-        || public_url.as_deref().is_some_and(|url| {
-            !["http://127.0.0.1", "http://localhost"]
-                .iter()
-                .any(|local| url.starts_with(local))
-        });
+    // Console à part (ADR 0040) : l'assistant y passe aussi, en HTTP clair, sans `Secure`.
+    let separate = args.admin_listen.is_some();
+    let tls = if separate { None } else { tls };
+    let listen = args.admin_listen.as_deref().unwrap_or(&args.listen);
+    let secure = !separate
+        && (tls.is_some()
+            || public_url.as_deref().is_some_and(|url| {
+                !["http://127.0.0.1", "http://localhost"]
+                    .iter()
+                    .any(|local| url.starts_with(local))
+            }));
     // `oneshot` : un canal qui porte une seule valeur, ici l'URL de la base choisie.
     let (done_tx, done_rx) = tokio::sync::oneshot::channel::<String>();
     let state = InstallState::new(code.to_string(), dir, secure, done_tx);
     // Jeton du cookie de l'étape 1, rendu avec l'URL pour le vrai hub (étape 2).
     let pass = state.pass_token();
 
-    let listener = tokio::net::TcpListener::bind(&args.listen)
+    let listener = tokio::net::TcpListener::bind(listen)
         .await
-        .with_context(|| format!("écoute sur {}", args.listen))?;
+        .with_context(|| format!("écoute sur {listen}"))?;
     tracing::warn!(
-        adresse = %args.listen,
+        adresse = %listen,
         "premier lancement : ouvrez /admin dans un navigateur, code d'installation {code}"
     );
     // Le petit serveur s'arrête dès que l'URL arrive ; on la garde au passage.
@@ -305,6 +325,7 @@ async fn main() -> anyhow::Result<()> {
     let mut config = HubConfig {
         settings_env: EnvSettings::from_env(),
         https: tls.is_some(),
+        admin_separate: args.admin_listen.is_some(),
         ..HubConfig::default()
     };
     // Avec Let's Encrypt, l'adresse publique par défaut est celle du domaine.
@@ -375,9 +396,35 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("écoute sur {}", args.listen))?;
     let scheme = if tls.is_some() { "https" } else { "http" };
-    tracing::info!(adresse = %args.listen, "rafthub démarré en {scheme} (console : /admin)");
 
-    hub::tls::serve(listener, tls, hub::router(state), shutdown_signal()).await?;
+    let Some(admin_listen) = &args.admin_listen else {
+        // Une seule adresse : l'API et la console ensemble.
+        tracing::info!(adresse = %args.listen, "rafthub démarré en {scheme} (console : /admin)");
+        hub::tls::serve(listener, tls, hub::router(state), shutdown_signal()).await?;
+        return Ok(());
+    };
+
+    // Console à part (ADR 0040) : l'API et les pages publiques sur `--listen`, la
+    // console seule sur `--admin-listen`, en HTTP clair.
+    let admin_listener = tokio::net::TcpListener::bind(admin_listen)
+        .await
+        .with_context(|| format!("écoute de la console sur {admin_listen}"))?;
+    tracing::info!(adresse = %args.listen, "rafthub démarré en {scheme} (sans console)");
+    tracing::info!(adresse = %admin_listen, "console d'admin : http://{admin_listen}/admin");
+    let public = hub::tls::serve(
+        listener,
+        tls,
+        hub::public_router(state.clone()),
+        shutdown_signal(),
+    );
+    let admin = hub::tls::serve(
+        admin_listener,
+        None,
+        hub::admin_router(state),
+        shutdown_signal(),
+    );
+    // `try_join!` attend les deux serveurs ; si l'un tombe en erreur, on s'arrête.
+    tokio::try_join!(public, admin)?;
     Ok(())
 }
 

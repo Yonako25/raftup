@@ -520,3 +520,10 @@ untime2`.
 - **Pas vérifié** : launcher lancé à la main hors Windows ; workflow de release (aucun tag).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : domaine du Rafthub officiel ; tag `v*` pour essayer la release.
+
+### 2026-11-20 · Rafthub officiel : console invisible, Cloudflare, adresse officielle (ADR 0040)
+- **Fait** : `--admin-listen` / `RAFTUP_HUB_ADMIN_LISTEN` : `hub::public_router` (API + `/telecharger` + `/static/`) sur `--listen`, `hub::admin_router` (console seule, HTTP clair, cookies sans `Secure` via `HubConfig::admin_separate`) sur l'autre adresse ; assistant d'installation sur l'adresse de la console ; page publique sur `/static/` ; `DEFAULT_HUB_URL` = `option_env!("RAFTUP_OFFICIAL_HUB_URL")`, lue par `release.yml` dans `vars` ; déploiement : port 8788 publié sur `RAFTHUB_ADMIN_BIND`, Traefik `!PathPrefix(/admin)` + `ipAllowList` `RAFTHUB_ALLOWED_SOURCES` (plages Cloudflare), README (Cloudflare, Full strict). Tests `tests/admin_separe.rs` (4).
+- **Vérifié** : vrai binaire avec deux adresses (`/admin` 404 public, console 200 à part, `/v1` 404 côté console) ; clippy (avec et sans `officiel`), `cargo test --workspace` (114 binaires ok).
+- **Pas vérifié** : déploiement réel, Cloudflare et `ipAllowList` dans Traefik ; launcher compilé avec l'adresse officielle (seulement `cargo check`).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : acheter le domaine (idée : `raftup-games.com`), le confier à Cloudflare, créer la variable GitHub `RAFTUP_OFFICIAL_HUB_URL`, puis déployer sur triomyno.

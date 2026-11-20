@@ -52,7 +52,8 @@ ENV RAFTUP_HUB_DATA_DIR=/data \
     RUST_LOG=info
 VOLUME ["/data"]
 USER rafthub:rafthub
-EXPOSE 8787
+# 8787 : API et pages publiques ; 8788 : console d'admin avec --admin-listen (ADR 0040).
+EXPOSE 8787 8788
 # La sonde est le binaire lui-même (pas de curl dans l'image) ; elle répond « sain »
 # aussi pendant l'assistant de premier lancement.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

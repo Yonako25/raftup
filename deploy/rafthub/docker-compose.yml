@@ -20,11 +20,15 @@ services:
     image: rafthub:officiel
     container_name: rafthub
     restart: unless-stopped
-    # Le hub écoute sur toutes les interfaces du conteneur ; aucun port publié sur
-    # l'hôte : seul Traefik le joint, par le réseau Docker.
+    # Le hub écoute sur toutes les interfaces du conteneur. Port 8787 : API et pages
+    # publiques, joint seulement par Traefik (aucun port publié sur l'hôte). Port
+    # 8788 : console d'admin seule (ADR 0040), publiée sur l'IP du VPN uniquement ;
+    # Traefik ne la connaît pas, et `/admin` répond 404 sur le port public.
     command:
       - --listen
       - 0.0.0.0:8787
+      - --admin-listen
+      - 0.0.0.0:8788
       - --public-url
       - https://${RAFTHUB_DOMAIN:?RAFTHUB_DOMAIN manquant dans .env}
     environment:
@@ -43,6 +47,10 @@ services:
       RAFTUP_HUB_MAIL_FROM: ${RAFTUP_HUB_MAIL_FROM:-}
       RAFTUP_HUB_DISCORD_CLIENT_ID: ${RAFTUP_HUB_DISCORD_CLIENT_ID:-}
       RAFTUP_HUB_DISCORD_CLIENT_SECRET: ${RAFTUP_HUB_DISCORD_CLIENT_SECRET:-}
+    ports:
+      # Console d'admin : seulement sur l'IP du VPN de l'hôte (WireGuard), jamais sur
+      # l'IP publique. `http://<RAFTHUB_ADMIN_BIND>/admin`, VPN allumé.
+      - ${RAFTHUB_ADMIN_BIND:?RAFTHUB_ADMIN_BIND manquant dans .env}:8788
     volumes:
       - rafthub-data:/data
     # Durcissement : système de fichiers en lecture seule (le hub n'écrit que dans
@@ -65,11 +73,18 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK manquant dans .env}
-      traefik.http.routers.rafthub.rule: Host(`${RAFTHUB_DOMAIN}`)
+      # `!PathPrefix(/admin)` : seconde barrière ; le port 8787 ne sert déjà pas la
+      # console, Traefik ne la transmet pas non plus.
+      traefik.http.routers.rafthub.rule: Host(`${RAFTHUB_DOMAIN}`) && !PathPrefix(`/admin`)
       traefik.http.routers.rafthub.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
       traefik.http.routers.rafthub.tls: "true"
       traefik.http.routers.rafthub.tls.certresolver: ${TRAEFIK_CERTRESOLVER:?TRAEFIK_CERTRESOLVER manquant dans .env}
       traefik.http.services.rafthub.loadbalancer.server.port: "8787"
+      # Sources admises (ADR 0040) : derrière Cloudflare, seulement ses adresses, pour
+      # que personne ne contourne Cloudflare en visant directement le serveur.
+      # Par défaut tout le monde (sans Cloudflare).
+      traefik.http.routers.rafthub.middlewares: rafthub-sources
+      traefik.http.middlewares.rafthub-sources.ipallowlist.sourcerange: ${RAFTHUB_ALLOWED_SOURCES:-0.0.0.0/0,::/0}
 
   # Sauvegarde nuitière de la base intégrée (SQLite), voir backup.sh.
   backup:
