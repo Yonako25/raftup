@@ -6,6 +6,7 @@
 //! options et même version de Raftup ⇒ mêmes octets. Elle n'est pas identique à ce que
 //! donnerait le générateur Python pour le même numéro (ADR 0027, § 4).
 
+pub mod convert;
 mod datapackage;
 pub mod imported;
 mod multidata_build;

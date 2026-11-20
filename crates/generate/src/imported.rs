@@ -134,6 +134,10 @@ pub struct PlayerExport {
     pub game: String,
     pub origin: String,
     pub regions: Vec<String>,
+    /// Ordre de création de chaque région (même position que `regions`), noté par le
+    /// worker (ADR 0042) ; vide dans un export plus ancien.
+    #[serde(default)]
+    pub region_n: Vec<Option<u64>>,
     pub entrances: Vec<EntranceExport>,
     pub locations: Vec<LocationExport>,
     pub precollected: Vec<ItemExport>,
@@ -157,7 +161,39 @@ pub struct PlayerExport {
     /// lit l'inventaire, `can_fill` redéfini) : le monde reste en Python.
     #[serde(default)]
     pub item_rule_error: Option<String>,
+    /// Options propres au monde, avec leur valeur (ADR 0042) ; lues seulement par la
+    /// conversion en monde natif.
+    #[serde(default)]
+    pub options: Vec<OptionExport>,
     pub required_client_version: Vec<u32>,
+}
+
+/// Une option propre au monde, telle que la décrit `Options.py` d'Archipelago.
+#[derive(Debug, Clone, Deserialize)]
+pub struct OptionExport {
+    pub name: String,
+    #[serde(default)]
+    pub display: String,
+    /// `toggle`, `range`, `choice` ou `other`.
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub value: Option<i64>,
+    #[serde(default)]
+    pub default: Option<i64>,
+    #[serde(default)]
+    pub min: Option<i64>,
+    #[serde(default)]
+    pub max: Option<i64>,
+    /// Noms spéciaux d'un `range` (`NamedRange`).
+    #[serde(default)]
+    pub special: Vec<String>,
+    /// Choix : `(valeur, nom)`.
+    #[serde(default)]
+    pub choices: Vec<(i64, String)>,
+    /// Alias d'un choix : `(alias, valeur)`.
+    #[serde(default)]
+    pub aliases: Vec<(String, i64)>,
 }
 
 fn default_balancing() -> u8 {
@@ -171,6 +207,9 @@ pub struct EntranceExport {
     pub from: String,
     pub to: Option<String>,
     pub rule: RuleExport,
+    /// Ordre de création (ADR 0042).
+    #[serde(default)]
+    pub n: Option<u64>,
 }
 
 /// Un lieu.
@@ -189,6 +228,9 @@ pub struct LocationExport {
     /// du pool est accepté.
     #[serde(default)]
     pub item_rule: Option<u32>,
+    /// Ordre de création (ADR 0042).
+    #[serde(default)]
+    pub n: Option<u64>,
 }
 
 /// Un objet (un exemplaire).
