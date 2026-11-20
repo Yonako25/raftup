@@ -428,6 +428,21 @@ async fn cookie_secure_hors_de_la_machine() {
 }
 
 #[tokio::test]
+async fn cookie_secure_en_https_integre() {
+    // HTTPS servi par le hub lui-même (ADR 0039) : `Secure` même joint en local.
+    let config = HubConfig {
+        https: true,
+        ..HubConfig::for_tests()
+    };
+    assert!(config.public_url.starts_with("http://127.0.0.1"));
+    let (app, store) = hub_with(config).await;
+    make_admin(&app, &store, "chef@example.org", "Chef").await;
+    let page = try_login(&app, "chef@example.org", PASSWORD).await;
+    let cookie = page.set_cookie("rafthub_admin").unwrap();
+    assert!(cookie.contains("; Secure"), "{cookie}");
+}
+
+#[tokio::test]
 async fn fichiers_statiques_servis_par_le_hub() {
     let (app, store) = hub().await;
     // Avec un admin, la connexion s'affiche (sans admin, elle mène à l'installation).

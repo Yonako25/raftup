@@ -22,6 +22,7 @@ pub mod server_config;
 pub mod session;
 pub mod settings;
 pub mod store;
+pub mod tls;
 pub mod web;
 
 use std::sync::Arc;
@@ -84,6 +85,9 @@ pub struct HubConfig {
     /// navigateur qui le présente a déjà donné le code, l'étape 2 ne le redemande
     /// pas. `None` (hub relancé, pas d'assistant) : le code est demandé.
     pub setup_pass: Option<String>,
+    /// Vrai quand le hub sert lui-même en HTTPS (`--tls-cert` ou `--tls-acme`,
+    /// ADR 0039) : les cookies de la console ont alors toujours l'attribut `Secure`.
+    pub https: bool,
 }
 
 impl Default for HubConfig {
@@ -107,6 +111,7 @@ impl Default for HubConfig {
             distribution: distribution::DistributionConfig::default(),
             setup_code: None,
             setup_pass: None,
+            https: false,
             // `cfg!` vaut `true` si le binaire est compilé avec `--features officiel`.
             discord_allowed: cfg!(feature = "officiel"),
         }
