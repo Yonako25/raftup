@@ -513,3 +513,10 @@ untime2`.
 - **Pas vérifié** : écrans regardés à l'œil (pseudo, Discord) ; workflow de release jamais lancé ; Let's Encrypt, vrai SMTP, vraie application Discord ; rien poussé.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*`, volumes et images `rafthub-p2-test-*` / `*:officiel-test` (à supprimer sur accord).
 - **Suite** : pousser ; choisir le domaine du Rafthub officiel puis suivre `deploy/rafthub/README.md` ; poser un tag `v*` pour essayer la release.
+
+### 2026-11-20 · CI verte sur Windows, macOS et Linux
+- **Fait** : poussé `main` ; première CI hors Windows : `low_copy_name` (py-bridge) compilée seulement sous Windows et en test ; tests `launch.rs` sur `/usr/bin/true` (absent : `/bin/true` sous macOS) ; `missing_rom` coupe le chemin sur `/` et `\` à la main.
+- **Vérifié** : CI GitHub verte (Windows, macOS, Linux, `hub-officiel`).
+- **Pas vérifié** : launcher lancé à la main hors Windows ; workflow de release (aucun tag).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : domaine du Rafthub officiel ; tag `v*` pour essayer la release.
