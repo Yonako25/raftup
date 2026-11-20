@@ -40,4 +40,5 @@ Le hub `raftup-hub` existe (ADR 0033) mais le launcher ne savait pas lui parler.
 - Le launcher se teste sans le hub : un faux serveur HTTP dans `launcher-core/tests/hub_client.rs` ; un test `#[ignore]` joue un scénario complet contre un vrai `raftup-hub` lancé à part (`RAFTUP_HUB_TEST_URL`).
 - Une dépendance de plus : `keyring`, qui tire `zeroize`, `log`, `byteorder` et, selon le système, `windows-sys`, `security-framework` / `core-foundation` (macOS) ou `linux-keyutils` (toutes MIT et/ou Apache-2.0, `byteorder` aussi Unlicense ; vérifié par `cargo tree -p keyring` le 19 novembre 2026).
 - Tant que l'adresse par défaut est locale, l'écran « Amis » dit « hub injoignable » chez un joueur qui n'a pas lancé de hub : normal avant le déploiement.
+- Inscription sur un hub « sur invitation » (ADR 0036) : champ « Code d'invitation » facultatif dans « Nouveau compte » (vide = rien envoyé) ; `registration_closed`, `invite_required` et `invalid_invite` sont des codes typés, avec un message en français chacun (20 novembre 2026).
 - Reste à faire : présence « en partie » (nom du jeu lancé), connexion Discord, notifications de demandes, adresse officielle du hub.

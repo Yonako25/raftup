@@ -201,6 +201,12 @@ pub enum ErrorCode {
     AlreadyFriends,
     RequestExists,
     InvalidPresence,
+    /// Le hub n'accepte plus d'inscriptions (mode `closed`, ADR 0036).
+    RegistrationClosed,
+    /// Le hub demande un code d'invitation et aucun n'a été envoyé.
+    InviteRequired,
+    /// Code d'invitation inconnu, expiré ou déjà utilisé.
+    InvalidInvite,
     BadRequest,
     Internal,
     Other(String),
@@ -224,6 +230,9 @@ impl ErrorCode {
             "already_friends" => ErrorCode::AlreadyFriends,
             "request_exists" => ErrorCode::RequestExists,
             "invalid_presence" => ErrorCode::InvalidPresence,
+            "registration_closed" => ErrorCode::RegistrationClosed,
+            "invite_required" => ErrorCode::InviteRequired,
+            "invalid_invite" => ErrorCode::InvalidInvite,
             "bad_request" => ErrorCode::BadRequest,
             "internal" => ErrorCode::Internal,
             other => ErrorCode::Other(other.to_string()),

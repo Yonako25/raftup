@@ -135,7 +135,12 @@ fn inscription_envoie_les_trois_champs() {
     let hub = FakeHub::start(|_| ok(201, r#"{"user_id":7,"username":"Mimi"}"#));
     let client = HubClient::new(hub.url.clone());
     let account = client
-        .register("mimi@example.org", &Password::new("motdepasse"), "Mimi")
+        .register(
+            "mimi@example.org",
+            &Password::new("motdepasse"),
+            "Mimi",
+            None,
+        )
         .unwrap();
     assert_eq!(account.username, "Mimi");
     assert_eq!(account.user_id, 7);
@@ -147,6 +152,78 @@ fn inscription_envoie_les_trois_champs() {
         body_json(&seen[0]),
         serde_json::json!({"email": "mimi@example.org", "password": "motdepasse", "username": "Mimi"})
     );
+}
+
+#[test]
+fn inscription_avec_code_d_invitation() {
+    let hub = FakeHub::start(|_| ok(201, r#"{"user_id":7,"username":"Mimi"}"#));
+    let client = HubClient::new(hub.url.clone());
+    client
+        .register(
+            "mimi@example.org",
+            &Password::new("motdepasse"),
+            "Mimi",
+            Some("  K7QX-2M9P-ABCD-EFGH "),
+        )
+        .unwrap();
+    // Espaces retirés ; casse et tirets laissés au hub, qui les ignore.
+    assert_eq!(
+        body_json(&hub.seen()[0])["invite_code"],
+        serde_json::json!("K7QX-2M9P-ABCD-EFGH")
+    );
+}
+
+#[test]
+fn code_d_invitation_vide_pas_envoye() {
+    let hub = FakeHub::start(|_| ok(201, r#"{"user_id":7,"username":"Mimi"}"#));
+    let client = HubClient::new(hub.url.clone());
+    for code in [None, Some(""), Some("   ")] {
+        client
+            .register(
+                "mimi@example.org",
+                &Password::new("motdepasse"),
+                "Mimi",
+                code,
+            )
+            .unwrap();
+    }
+    let seen = hub.seen();
+    assert_eq!(seen.len(), 3);
+    for request in seen {
+        assert!(
+            body_json(&request).get("invite_code").is_none(),
+            "{}",
+            request.body
+        );
+    }
+}
+
+#[test]
+fn erreurs_d_inscription_sur_invitation_typees() {
+    for (text, expected) in [
+        ("registration_closed", ErrorCode::RegistrationClosed),
+        ("invite_required", ErrorCode::InviteRequired),
+        ("invalid_invite", ErrorCode::InvalidInvite),
+    ] {
+        // `move` : la fermeture garde sa propre copie de `text` dans le thread du serveur.
+        let hub = FakeHub::start(move |_| error(403, text, "refusé"));
+        let client = HubClient::new(hub.url.clone());
+        let err = client
+            .register(
+                "a@example.org",
+                &Password::new("motdepasse"),
+                "Mimi",
+                Some("X"),
+            )
+            .unwrap_err();
+        match err {
+            HubClientError::Api { status, code, .. } => {
+                assert_eq!(status, 403);
+                assert_eq!(code, expected);
+            }
+            other => panic!("erreur inattendue : {other:?}"),
+        }
+    }
 }
 
 #[test]
@@ -184,7 +261,7 @@ fn erreur_du_hub_typee() {
     let hub = FakeHub::start(|_| error(409, "username_taken", "ce pseudo est déjà pris"));
     let client = HubClient::new(hub.url.clone());
     let err = client
-        .register("a@example.org", &Password::new("motdepasse"), "Mimi")
+        .register("a@example.org", &Password::new("motdepasse"), "Mimi", None)
         .unwrap_err();
     match &err {
         HubClientError::Api {
@@ -433,12 +510,12 @@ fn reel_scenario_complet() {
     let mut a = HubClient::new(url.clone());
     let mut b = HubClient::new(url.clone());
     a.api_info().unwrap();
-    a.register(&format!("{alice}@example.org"), &password, &alice)
+    a.register(&format!("{alice}@example.org"), &password, &alice, None)
         .unwrap();
-    b.register(&format!("{bob}@example.org"), &password, &bob)
+    b.register(&format!("{bob}@example.org"), &password, &bob, None)
         .unwrap();
     let err = a
-        .register(&format!("{alice}@example.org"), &password, &alice)
+        .register(&format!("{alice}@example.org"), &password, &alice, None)
         .unwrap_err();
     assert_eq!(err.code(), Some(&ErrorCode::UsernameTaken));
 

@@ -9,7 +9,7 @@
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
-//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis`, `changer-de-hub`, `generateur-absent` : une seule capture de l'écran,
+//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis` (`RAFTUP_DEV_HUB_INSCRIPTION=1` : onglet « Créer un compte »), `changer-de-hub`, `generateur-absent` : une seule capture de l'écran,
 //!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
 //!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
 //!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`

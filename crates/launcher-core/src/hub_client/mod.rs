@@ -257,17 +257,25 @@ impl HubClient {
     }
 
     /// `POST /v1/accounts` : crée un compte. Ne connecte pas : appeler [`Self::login`].
+    ///
+    /// `invite_code` : code d'invitation, pour un hub en mode « sur invitation »
+    /// (ADR 0036). `None` ou un texte vide : le champ n'est pas envoyé. Le hub ignore
+    /// la casse et les tirets ; ici on retire seulement les espaces autour.
     pub fn register(
         &self,
         email: &str,
         password: &Password,
         username: &str,
+        invite_code: Option<&str>,
     ) -> Result<Account, HubClientError> {
-        let body = json!({
+        let mut body = json!({
             "email": email,
             "password": password.expose(),
             "username": username,
         });
+        if let Some(code) = invite_code.map(str::trim).filter(|c| !c.is_empty()) {
+            body["invite_code"] = json!(code);
+        }
         self.call(Method::Post, "/v1/accounts", Some(body), false)
     }
 

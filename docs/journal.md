@@ -445,3 +445,15 @@ untime2`.
 - **Pas vérifié** : lenteur du disque `Z:` (cause non cherchée : disque réseau ou virtuel ?).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; session `launcher-invitation` en cours.
 - **Suite** : fusionner `launcher-invitation` ; déploiement.
+
+### 2026-11-20 · Launcher : inscription sur un Rafthub « sur invitation » (session `launcher-invitation`)
+- **Fait** : `register` du client prend un `invite_code` facultatif (vide = non envoyé) ; codes `registration_closed`, `invite_required`, `invalid_invite` typés ; champ « Code d'invitation » dans « Nouveau compte », trois messages en français ; 3 tests client (faux serveur), 2 tests d'interface ; capture vue (`RAFTUP_DEV_HUB_INSCRIPTION=1`). fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : inscription contre un vrai Rafthub en mode `invite`. Partie Discord non faite : le launcher n'a pas de connexion Discord, rien où brancher `invite_required`.
+- **Ne pas toucher** : `crates/hub`, `docs/profils-en-attente/`.
+- **Suite** : connexion Discord dans le launcher (lire `invite_required` de `needs_username`, envoyer `invite_code` à `/register`).
+
+### 2026-11-20 · Fusion de `launcher-invitation` dans `main`
+- **Fait** : branche du code d'invitation (`7f9b5a4`) fusionnée ; conflits seulement dans `etat-du-projet.md` et `journal.md` (les deux côtés gardés). Sur `main` : fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : inscription avec code depuis le launcher contre un vrai Rafthub en mode `invite`.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
+- **Suite** : connexion Discord dans le launcher ; déploiement.
