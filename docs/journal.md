@@ -402,3 +402,9 @@ untime2`.
 - **Pas vérifié** : page jamais ouverte dans un navigateur ; PostgreSQL (SQLite seulement) ; heures en UTC, pas dans le fuseau de l'admin.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; journaux techniques `tracing` (pas décidé, ADR 0036).
 - **Suite** : fusion avec les sessions Joueurs, Distribution, Réglages (conflits attendus dans `web/mod.rs`, `soon.rs`, `rafthub.css`, `store.rs`).
+
+### 2026-11-20 · Page « Réglages » de la console Rafthub (session `rafthub-reglages`, ADR 0036)
+- **Fait** : `/admin/reglages` remplace le bouchon (`web/settings.rs`, `settings.html`, CSS ajouté en fin de `rafthub.css`) : un formulaire POST + CSRF par groupe (général, inscriptions, e-mail, Discord, page publique), source affichée (base, environnement, défaut), « Revenir au défaut », secrets jamais réaffichés (hôte SMTP seul, champ vide = rien ne change), groupe vérifié en entier avant d'écrire, valeur inchangée non réécrite, e-mail de test à l'admin connecté. 7 tests dans `tests/settings_page.rs` ; fmt, clippy `-D warnings` et `cargo test -p hub` passent.
+- **Pas vérifié** : page jamais ouverte dans un navigateur ; vrai serveur SMTP pour l'e-mail de test ; PostgreSQL.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pages Joueurs, Distribution, Journaux (autres sessions) ; le tableau de la doc de `web/mod.rs` cite encore `/admin/reglages` comme « Bientôt » (laissé pour éviter un conflit, à corriger à la fusion).
+- **Suite** : fusionner les quatre pages dans `main`, puis ouvrir la console dans un navigateur.

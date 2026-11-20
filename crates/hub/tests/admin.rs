@@ -276,10 +276,9 @@ async fn connexion_cookie_et_tableau_de_bord() {
         get(&app, "/admin/login", Some(&cookie)).await.location(),
         "/admin"
     );
-    // Les pages pas encore faites existent et disent « Bientôt ».
+    // L'entrée du menu de la page ouverte est mise en avant.
     let page = get(&app, "/admin/reglages", Some(&cookie)).await;
     assert_eq!(page.status, StatusCode::OK);
-    assert!(page.body.contains("Bientôt"));
     assert!(page.body.contains("aria-current=\"page\">Réglages"));
 }
 

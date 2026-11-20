@@ -1,0 +1,58 @@
+{% extends "admin/base.html" %}
+{% block title %}Réglages{% endblock %}
+{% block content %}
+<div class="page-head">
+<div>
+<h1>Réglages</h1>
+<p class="muted">Base de données, sinon environnement du serveur, sinon valeur par défaut. Un changement vaut tout de suite.</p>
+</div>
+</div>
+
+{% if let Some(message) = notice %}<p class="notice" role="status">{{ message }}</p>{% endif %}
+{% if let Some(message) = error %}<p class="alert" role="alert">{{ message }}</p>{% endif %}
+
+{% for g in groups %}
+<section class="panel settings-group" id="{{ g.id }}" aria-label="{{ g.title }}">
+<h2>{{ g.title }}</h2>
+{% if !g.intro.is_empty() %}<div class="row"><div class="grow muted small">{{ g.intro }}</div></div>{% endif %}
+<form method="post" action="/admin/reglages">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="group" value="{{ g.id }}">
+{% for f in g.fields %}
+<div class="row setting" id="setting-{{ f.name }}">
+<div class="grow">
+<label for="field-{{ f.name }}" class="row-title">{{ f.label }}</label>
+<div class="muted small">{{ f.help }}</div>
+{% if f.secret %}<div class="small secret-status">{{ f.status }}</div>{% endif %}
+{% if f.choices.is_empty() %}
+<input id="field-{{ f.name }}" name="{{ f.name }}" type="{{ f.input_type }}" value="{{ f.value }}" placeholder="{{ f.placeholder }}"{% if f.secret %} autocomplete="new-password"{% else %} autocomplete="off"{% endif %}>
+{% else %}
+<select id="field-{{ f.name }}" name="{{ f.name }}">
+{% for c in f.choices %}<option value="{{ c.value }}"{% if c.selected %} selected{% endif %}>{{ c.label }}</option>{% endfor %}
+</select>
+{% endif %}
+</div>
+<div class="setting-side">
+<span class="source source-{{ f.source }}" title="Origine de la valeur actuelle">{{ f.source_label }}</span>
+{% if f.from_database %}<button type="submit" form="reset-{{ g.id }}" name="reset" value="{{ f.name }}" class="link-button small">Revenir au défaut</button>{% endif %}
+</div>
+</div>
+{% endfor %}
+<div class="row"><button type="submit" class="button">Enregistrer</button></div>
+</form>
+{# Les boutons « Revenir au défaut » envoient ce formulaire-ci (attribut `form`) :
+   ils ne sont donc pas le bouton par défaut du formulaire du groupe (touche Entrée). #}
+<form method="post" action="/admin/reglages" id="reset-{{ g.id }}">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+</form>
+{% if g.id == "email" %}
+<form method="post" action="/admin/reglages" class="row">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="action" value="test_email">
+<div class="grow muted small">Envoie un message à l'adresse de votre compte pour vérifier les réglages enregistrés.</div>
+<button type="submit" class="button button-quiet"{% if !smtp_configured %} disabled{% endif %}>Envoyer un e-mail de test</button>
+</form>
+{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

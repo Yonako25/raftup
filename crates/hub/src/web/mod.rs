@@ -26,8 +26,9 @@
 mod assets;
 mod dashboard;
 mod login;
-mod players;
 mod logs;
+mod players;
+mod settings;
 mod soon;
 
 use askama::Template;
@@ -64,7 +65,10 @@ pub(crate) fn routes() -> Router<AppState> {
             post(players::revoke_invite),
         )
         .route("/admin/distribution", get(soon::distribution))
-        .route("/admin/reglages", get(soon::settings))
+        .route(
+            "/admin/reglages",
+            get(settings::show).post(settings::submit),
+        )
         .route("/admin/journaux", get(logs::show))
         .route("/admin/static/{*path}", get(assets::serve))
 }

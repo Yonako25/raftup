@@ -202,6 +202,30 @@ h1 { margin: 0 0 4px; font-family: "Chakra Petch", sans-serif; font-weight: 600;
 .event-date { flex: none; width: 150px; padding-top: 2px; }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
+/* ---------- Réglages ---------- */
+
+.settings-group { margin-top: 18px; }
+.setting { align-items: flex-start; }
+.setting input, .setting select {
+  display: block; width: 100%; max-width: 520px; margin-top: 8px;
+  font: inherit; color: var(--text); background: rgba(8, 12, 16, 0.6);
+  border: 1px solid var(--border); border-radius: 2px; padding: 10px 12px;
+}
+.setting input:focus, .setting select:focus { outline: 2px solid var(--accent-bright); outline-offset: 0; border-color: transparent; }
+.setting-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.source { font-size: 12px; padding: 2px 8px; border-radius: 2px; border: 1px solid var(--border); color: var(--muted); }
+.source-database { color: var(--link); border-color: rgba(61, 139, 255, 0.5); }
+.source-environment { color: var(--warn); border-color: rgba(232, 163, 61, 0.5); }
+.secret-status { margin-top: 6px; color: var(--text); }
+.button-quiet { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.button-quiet:hover { background: rgba(31, 111, 224, 0.12); }
+.button:disabled { opacity: 0.5; cursor: not-allowed; }
+.notice {
+  margin: 18px 0 0; padding: 10px 12px; border-radius: 2px; font-size: 14px;
+  background: rgba(63, 209, 139, 0.12); border: 1px solid rgba(63, 209, 139, 0.5); color: #D2F5E3;
+}
+.content > .alert { margin-top: 18px; }
+
 /* Téléphone : le menu passe au-dessus du contenu. */
 @media (max-width: 700px) {
   .sidebar { max-width: none; flex-basis: 100%; border-right: 0; border-bottom: 1px solid #1F2A36; }
