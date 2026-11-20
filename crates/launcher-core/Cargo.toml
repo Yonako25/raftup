@@ -33,6 +33,8 @@ client-core.workspace = true
 py-bridge.workspace = true
 # Moteur de génération Rust (ADR 0027).
 generate.workspace = true
+# Mondes natifs déclaratifs (ADR 0041), lus dans le dossier des données.
+worlds-native.workspace = true
 sha2.workspace = true
 # Lire les manifestes Epic (JSON) et fusionner les fichiers de config des mods.
 serde_json.workspace = true

@@ -553,3 +553,10 @@ untime2`.
 - **Pas vérifié** : écran « Profil » jamais regardé (captures à faire) ; vraie liaison avec une vraie application Discord ; jeu passant par Steam (le processus rend la main tout de suite, la présence revient alors à « en ligne ») ; pendant l'attente de Discord (5 min au plus), la présence n'est pas renouvelée.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : captures de l'écran « Amis » connecté (panneau « Profil ») avec la macro `RAFTUP_DEV_CAPTURE`.
+
+### 2026-11-20 · V3 phase A : format de monde natif (ADR 0041)
+- **Fait** : `193df45` ADR 0041 (accepté en autonomie, à relire) et spécification autonome `spec/monde-natif/` ; `b51a093` crate `worlds-native` (TOML borné, mini-langage de règles, erreurs ligne/colonne, compilation vers `logic`), `GameOptions::Native`, YAML des mondes natifs, APQuest natif identique au portage (même empreinte) ; launcher : dossier `mondes-natifs/` lu pour le moteur Rust.
+- **Vérifié** : `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -D warnings`, `cargo test --workspace -j 4` (aucun échec).
+- **Pas vérifié** : un monde natif joué en vrai depuis le launcher (seulement en test) ; affichage des mondes natifs dans la Bibliothèque (pas fait).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/registry`, `launcher-core::registry`, `.github/` (session confiance du registre) ; `launcher-ui/src/screens/friends.rs`, `hub_client` (session « Amis »).
+- **Suite** : phase B, conversion apworld → natif à partir de l'export de l'ADR 0028 (note de relais dans le dossier partagé).

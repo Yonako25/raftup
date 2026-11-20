@@ -28,8 +28,9 @@ use thiserror::Error;
 pub use datapackage::{archipelago_package, game_package, PackageSource};
 pub use fill::{TimeBalance, TimeBalanceReport};
 pub use spoiler::Spoiler;
-pub use worlds::{GameOptions, SUPPORTED_GAMES};
-pub use yaml::{read_players, read_players_with_meta, Unsupported};
+pub use worlds::{GameOptions, NativeOptions, SUPPORTED_GAMES};
+pub use worlds_native::NativeWorld;
+pub use yaml::{read_players, read_players_with_meta, read_players_with_worlds, Unsupported};
 
 /// Longueur maximale d'un nom de joueur, comme Archipelago.
 pub const MAX_NAME_LEN: usize = 16;
@@ -104,11 +105,13 @@ pub enum GenerateError {
     #[error("option « {option} » de {player} : {message}")]
     InvalidOption {
         player: String,
-        option: &'static str,
+        option: String,
         message: String,
     },
     #[error("monde mal construit : {0}")]
     Logic(#[from] LogicError),
+    #[error("monde natif : {0}")]
+    Native(#[from] worlds_native::BuildError),
     #[error("placement impossible : {0}")]
     Fill(#[from] fill::FillError),
     #[error("écriture de la seed : {0}")]

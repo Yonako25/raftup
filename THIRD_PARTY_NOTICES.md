@@ -17,6 +17,7 @@ de copyright et le texte de licence du fichier `LICENSE` du dépôt amont, au co
 - Commit d'origine : `54803be064fc7e80c4628777ed0b46a9390f255f` (version 0.6.8)
 - Code porté :
   - `crates/generate/src/worlds/apquest.rs` : monde APQuest (`worlds/apquest` : noms et numéros, régions, règles, options, `slot_data`), réécrit en Rust ;
+  - `spec/monde-natif/exemples/apquest/world.toml` : le même monde APQuest, réécrit au format de monde natif (ADR 0041) ;
   - `crates/generate/src/datapackage.rs` et `crates/generate/src/multidata_build.rs` : calcul du `checksum` du datapackage (`worlds/AutoWorld.py`) et contenu de la seed (`Main.py`), réécrits en Rust
 - **Données de test** produites par Archipelago 0.6.8 (pas du code, mais elles contiennent du texte et des noms issus du dépôt) :
   - `crates/multidata/tests/data/seed-mit.archipelago` et son `.attendu.json` : seed générée avec les jeux ChecksFinder et Yacht Dice du dépôt officiel ;

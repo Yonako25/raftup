@@ -8,7 +8,7 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **20 novembre 2026** (présence « en partie » et liaison Discord dans le launcher).
+Mis à jour le **20 novembre 2026** (présence « en partie » et liaison Discord dans le launcher ; V3 phase A : format de monde natif, crate `worlds-native`, APQuest natif identique au portage).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
@@ -42,6 +42,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - [x] **Moteur « export » : règles d'objet, objets à placer tôt, accessibilité** (ADR 0029, à relire) : `item_rule` / `always_allow` (donc `local_items` / `non_local_items`), `early_items` / `local_early_items` et `accessibility: minimal` / `items` ne forcent plus le repli Python ; vérifiés en vrai sur le monde `raftup_sonde` ; pas encore essayé sur un monde tiers qui s'en sert
 - [ ] **Durée estimée et équilibrage par temps** (ADR 0030, à relire) : estimation par joueur affichée après génération (`launcher_core::estimate`, panneau de « Créer une partie »), `fill::time_balance` branché derrière la case « Équilibrer par temps de jeu » (moteurs Rust et export, décochée par défaut, seed inchangée sans elle) ; estimation aussi dans « Partie en cours » (20 novembre, vue sur capture) ; reste à mesurer les temps par lieu en vraie partie
 - [x] **V2, suivi async** (ADR 0031, accepté en autonomie le 19 novembre 2026, à relire) : `!away`, `!back`, `!summary`, `!vote_release`, résumé de retour à la connexion, clés `_read_raftup_…`, `.raftup` en `format_version` 2 ; actif dans le launcher, `--async_follow` pour `raftup-server` ; webhook et « Partie en cours » ; jamais regardé à l'écran ni essayé avec un vrai mod
+- [ ] **V3, format de monde natif** (ADR 0041, accepté en autonomie le 20 novembre 2026, à relire) : spécification autonome dans `spec/monde-natif/` (README + exemples `apquest` et `minimal`), prête à devenir son propre dépôt ; crate `worlds-native` (TOML borné, mini-langage de règles, erreurs avec ligne et colonne, compilation vers `logic`) ; `GameOptions::Native` et lecture des YAML d'un monde natif ; APQuest natif identique au portage (`generate/tests/natif.rs` : structures, seed, spoiler, datapackage, YAML, même empreinte) ; le launcher lit `mondes-natifs/` (dossier des données) pour le moteur Rust ; reste : phase B (conversion apworld → natif, export natif → apworld), affichage des mondes natifs dans la Bibliothèque, installation par le registre
 - [ ] **Relire les ADR 0029 à 0035** (acceptés en autonomie le 19 novembre 2026)
 - [x] **Texte officiel de l'AGPL** pour `crates/hub/LICENSE-AGPL` (texte de gnu.org récupéré le 2026-11-20, empreinte vérifiée par `tests/licence.rs`)
 - [x] **CI macOS et Linux** : verte sur les trois systèmes le 20 novembre 2026 (après deux corrections de tests propres à Windows)
@@ -62,6 +63,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 | `fill` | Placement des objets (supposé), équilibrage de progression, faisabilité avant et après, erreurs expliquées (V2) | **Fait** pour les étapes 3 et 5 de l'ADR 0027 |
 | `generate` | Générateur Rust : YAML → mondes Rust (APQuest) → placement → seed `.archipelago` (V2) | **Fait** pour l'étape 4 de l'ADR 0027 |
 | `hub` | Rafthub, binaire `rafthub` (AGPL) : comptes e-mail + mot de passe ou Discord, amis, blocages, présence, RGPD ; API HTTP `/v1` (V2) | **Côté serveur fait** : SQLite et PostgreSQL, e-mails et Discord derrière des traits (essayés avec de faux services seulement) ; client dans le launcher (ADR 0035) |
+| `worlds-native` | Format de monde natif déclaratif : lecture sûre du TOML, validation, mini-langage de règles, compilation vers `logic` (V3) | **Fait** pour la phase A (ADR 0041) |
 | `registry` | Registre de paquets signés : index versionné, signature minisign, publication locale (V2) | **Fait** (ADR 0032), branché dans la Bibliothèque ; release `registre` à créer |
 
 ## Ce que fait chaque crate
@@ -162,6 +164,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0030** : durée estimée par joueur (temps par lieu dans le profil, sphères de la seed) et équilibrage par temps de jeu (`fill::time_balance`, sur option, décochée par défaut) ; accepté en autonomie, à relire
 - **0036** : Rafthub : console d'admin web servie par le hub ; launcher relié au hub par `rafthub.toml` ou un lien `raftup://hub/<hôte>` confirmé (accepté en autonomie, à relire)
 - **0035** : client du hub dans le launcher : sans dépendre de la crate AGPL, `ureq` bloquant hors du thread d'interface, jeton dans le trousseau (`keyring`), adresse par défaut locale, HTTPS sauf vers ce PC (accepté en autonomie, à relire)
+- **0041** : format de monde natif déclaratif (TOML versionné + mini-langage de règles), compilé vers `logic` sans nouveau moteur ; spécification dans `spec/monde-natif/` ; APQuest natif identique au portage (accepté en autonomie, à relire)
 - **0031** : suivi async (option de la salle, désactivée par défaut) : absence, résumé de retour, release par vote à la majorité, fil d'activité, `.raftup` version 2
 
 ## Reporté à la fin de la V3 (décision du 18 novembre 2026)

@@ -11,8 +11,10 @@ use std::hash::{BuildHasher, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use generate::NativeWorld;
 use py_bridge::{CancelToken, GenerateParams, GenerateResult, GeneratedPlayer};
 
 use super::export::{EngineReport, EngineUsed};
@@ -26,11 +28,14 @@ pub fn engine_name() -> String {
 
 /// Le générateur écrit en Rust.
 ///
-/// `RustBackend::default()` : sans équilibrage par temps, comme avant l'ADR 0030.
-#[derive(Debug, Clone, Copy, Default)]
+/// `RustBackend::default()` : sans équilibrage par temps, comme avant l'ADR 0030, et
+/// sans monde natif.
+#[derive(Debug, Clone, Default)]
 pub struct RustBackend {
     /// Équilibrage par temps de jeu (ADR 0030), avec les temps par lieu des profils.
     pub time_balance: bool,
+    /// Mondes natifs connus (ADR 0041), en plus des mondes portés en Rust.
+    pub native_worlds: Vec<Arc<NativeWorld>>,
 }
 
 /// Le moteur Rust sait-il générer ces fichiers joueurs ? `Err` donne la raison lisible
@@ -40,8 +45,17 @@ pub struct RustBackend {
 ///
 /// Les tirages ne servent ici qu'à vérifier : la seed 0 suffit.
 pub fn rust_support(player_files: &[PathBuf], meta: Option<&str>) -> Result<(), String> {
+    rust_support_with_worlds(player_files, meta, &[])
+}
+
+/// Comme [`rust_support`], en connaissant aussi des mondes natifs (ADR 0041).
+pub fn rust_support_with_worlds(
+    player_files: &[PathBuf],
+    meta: Option<&str>,
+    natives: &[Arc<NativeWorld>],
+) -> Result<(), String> {
     let files = read_files(player_files).map_err(|e| e.to_string())?;
-    generate::read_players_with_meta(&files, meta, 0)
+    generate::read_players_with_worlds(&files, meta, 0, natives)
         .map(|_| ())
         .map_err(|e| e.0)
 }
@@ -143,8 +157,9 @@ impl GeneratorBackend for RustBackend {
         let _ = log.send(format!("{} : seed {seed}", engine_name()));
 
         let meta = meta_in(&p.player_files_dir)?;
-        let players = generate::read_players_with_meta(&files, meta.as_deref(), seed)
-            .map_err(|e| failed("Unsupported", e.0))?;
+        let players =
+            generate::read_players_with_worlds(&files, meta.as_deref(), seed, &self.native_worlds)
+                .map_err(|e| failed("Unsupported", e.0))?;
         if cancel.is_cancelled() {
             return Err(GenerationError::Cancelled);
         }

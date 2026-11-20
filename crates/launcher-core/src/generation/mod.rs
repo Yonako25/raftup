@@ -5,6 +5,7 @@
 //!   lu et validé.
 
 mod export;
+mod native;
 pub mod pins;
 mod run;
 pub mod runtime;
@@ -15,12 +16,13 @@ pub use runtime::{
 };
 
 pub use export::{fallback_line, EngineReport, EngineUsed, ExportBackend};
+pub use native::{load_native_worlds, NativeWorlds, MAX_NATIVE_WORLDS};
 pub use pins::{parse_pins, pins, GeneratorPins, PinnedArchive, PinnedSource, PinnedWheel};
 pub use run::{
     generate, GenerateOutput, GenerateRequest, GeneratorBackend, PythonBackend, Runtime,
     DEFAULT_SPOILER, DEFAULT_TIMEOUT,
 };
-pub use rust::{engine_name, rust_support, RustBackend};
+pub use rust::{engine_name, rust_support, rust_support_with_worlds, RustBackend};
 
 /// Ce qui peut échouer pendant la préparation ou le lancement d'une génération.
 ///

@@ -97,4 +97,9 @@ impl Paths {
     pub fn worlds_dir(&self, ap_version: &str) -> PathBuf {
         self.data_dir.join("worlds").join(ap_version)
     }
+
+    /// Mondes natifs (ADR 0041) : fichiers `.toml` ou dossiers avec un `world.toml`.
+    pub fn native_worlds_dir(&self) -> PathBuf {
+        self.data_dir.join("mondes-natifs")
+    }
 }

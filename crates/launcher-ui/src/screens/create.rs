@@ -14,7 +14,9 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
-use launcher_core::generation::{installed_apworlds, rust_support, GenerateRequest};
+use launcher_core::generation::{
+    installed_apworlds, load_native_worlds, rust_support_with_worlds, GenerateRequest,
+};
 use launcher_core::{Encryption, PartyHostOptions};
 
 use super::library::{load_paths, AP_VERSION};
@@ -481,7 +483,15 @@ fn choose_engine(
     if !wanted {
         return (generation::Engine::Python, None);
     }
-    match rust_support(player_files, meta) {
+    // Mondes natifs installés (ADR 0041) : un monde illisible est seulement écarté.
+    let natives = match load_paths() {
+        Ok(paths) => load_native_worlds(&paths.native_worlds_dir()),
+        Err(_) => Default::default(),
+    };
+    for (path, reason) in &natives.rejected {
+        tracing::warn!("monde natif écarté : {} ({reason})", path.display());
+    }
+    match rust_support_with_worlds(player_files, meta, &natives.worlds) {
         Ok(()) => (generation::Engine::Rust, None),
         Err(reason) => (
             generation::Engine::Export,

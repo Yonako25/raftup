@@ -109,13 +109,7 @@ pub(crate) fn build(
                 "Progression Balancing".to_string(),
                 player.progression_balancing.to_string(),
             )];
-            options.extend(
-                player
-                    .options
-                    .spoiler_options()
-                    .into_iter()
-                    .map(|(name, value)| (name.to_string(), value)),
-            );
+            options.extend(player.options.spoiler_options());
             SpoilerPlayer {
                 name: player.name.clone(),
                 game: player.options.game().to_string(),
