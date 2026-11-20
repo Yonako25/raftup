@@ -547,3 +547,9 @@ untime2`.
 - **Pas vérifié** : image Docker non construite et `nginx.conf` jamais chargé par un vrai nginx ; rien déployé ; liens des releases vides tant qu'aucun tag n'est publié ; pas de mentions légales d'éditeur ni d'hébergeur (choix de l'utilisatrice).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : sur accord, `docker compose build && docker compose up -d` dans `~/rafthub/deploy/site` sur triomyno (après `git pull`).
+
+### 2026-11-20 · V3 phase C : niveaux de confiance des paquets (ADR 0042)
+- **Fait** : `7d3e2a5` ADR 0042 ; `97070ba` index en format 2 (`trust` signé, index 1 relu « Non vérifié »), crate `registry-tool` (binaire `raftup-registry` déplacé) avec `check` (structure, N graines, fuzzing déterministe borné, `rapport.json`/`.md`) et `publish --rapport` (même sha256 exigé), `inspect_worlds` dans `launcher-core` ; `c193a2c` workflow `registre.yml` (Windows, sans secret ni publication) et procédure dans `registre/README.md` ; `f936cf6` badge et confirmation dans « Mondes du registre », vus sur captures. Essai réel : `slime_rancher` « Testé en profondeur » (2 graines, 8 cas, 46 s). fmt, clippy et `cargo test --workspace -j 4` passent.
+- **Pas vérifié** : workflow jamais lancé (rien poussé) ; réglages par défaut (5 graines, 40 cas) jamais lancés en entier ; survol du badge non vu à l'écran ; test réel `check_reel` non lancé (runtime pas au format `Paths::under`), remplacé par la CLI.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/worlds-native`, `crates/logic`, `crates/generate`, `spec/` (session format natif) ; `launcher-ui/src/screens/friends.rs`, `hub_client` (session Amis).
+- **Suite** : pousser, laisser `registre.yml` tourner sur `main`, puis signer le premier index avec son rapport (`publish --rapport`) et créer la release `registre`.
