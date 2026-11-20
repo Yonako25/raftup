@@ -390,3 +390,9 @@ untime2`.
 - **Pas vérifié** : console jamais ouverte dans un navigateur ; PostgreSQL ; migration d'une base réelle de la version 4 à 6 (seulement par les tests).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub trouvées dans main avant fusion Rafthub » (non commité, inutile à la compilation, à jeter sur accord de l'utilisatrice).
 - **Suite** : pages Joueurs, Distribution du launcher (zip + `rafthub.toml`), Réglages et Journaux de la console.
+
+### 2026-11-20 · Rafthub, page « Joueurs » de la console (session `rafthub-joueurs`, ADR 0036)
+- **Fait** : `web/players.rs` + `templates/admin/players.html` remplacent le bouchon : liste paginée (25 par page), e-mail masqué, date de création, vérifié, suspendu, présence ; recherche et filtres ; `POST` suspendre / réactiver / créer et révoquer un code d'invitation (bloc visible en mode `invite`, code montré une seule fois), tous avec CSRF et journal `admin_events` via `console.rs`. Section « Page Joueurs » ajoutée à `rafthub.css` (avant « Connexion »). Tests `tests/admin_players.rs` ; fmt, clippy workspace et `cargo test -p hub` passent.
+- **Pas vérifié** : page jamais ouverte dans un navigateur ; PostgreSQL ; export et suppression RGPD depuis la page (pas demandés).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; dans `web/mod.rs` et `soon.rs`, les lignes des autres pages (sessions parallèles). La ligne de doc `GET /admin/joueurs, …` en tête de `web/mod.rs` reste à mettre à jour à la fusion.
+- **Suite** : fusion avec les sessions Distribution, Réglages et Journaux.

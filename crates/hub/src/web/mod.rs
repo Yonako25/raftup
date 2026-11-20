@@ -26,6 +26,7 @@
 mod assets;
 mod dashboard;
 mod login;
+mod players;
 mod soon;
 
 use askama::Template;
@@ -53,7 +54,14 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/admin/", get(|| async { Redirect::to("/admin") }))
         .route("/admin/login", get(login::form).post(login::submit))
         .route("/admin/logout", post(login::logout))
-        .route("/admin/joueurs", get(soon::players))
+        .route("/admin/joueurs", get(players::list))
+        .route("/admin/joueurs/suspendre", post(players::suspend))
+        .route("/admin/joueurs/reactiver", post(players::reactivate))
+        .route("/admin/joueurs/invitations", post(players::create_invite))
+        .route(
+            "/admin/joueurs/invitations/revoquer",
+            post(players::revoke_invite),
+        )
         .route("/admin/distribution", get(soon::distribution))
         .route("/admin/reglages", get(soon::settings))
         .route("/admin/journaux", get(soon::logs))

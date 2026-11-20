@@ -1,0 +1,106 @@
+{% extends "admin/base.html" %}
+{% block title %}Joueurs{% endblock %}
+{% block content %}
+<div class="page-head">
+<div>
+<h1>Joueurs</h1>
+<p class="muted" id="players-total">{{ total }} compte{% if total > 1 %}s{% endif %}</p>
+</div>
+</div>
+
+{% if let Some(text) = notice %}<p class="{% if notice_is_error %}alert{% else %}notice{% endif %}" role="status">{{ text }}</p>{% endif %}
+
+<form method="get" action="/admin/joueurs" class="search" role="search">
+<label for="q" class="visually-hidden">Rechercher un pseudo ou une adresse</label>
+<input id="q" name="q" type="search" placeholder="Pseudo ou adresse e-mail" value="{{ search }}">
+<input type="hidden" name="filtre" value="{{ filter }}">
+<button type="submit" class="button">Rechercher</button>
+</form>
+
+<nav class="tabs" aria-label="Filtres">
+{% for tab in tabs %}<a href="/admin/joueurs?filtre={{ tab.value }}{% if !search.is_empty() %}&amp;q={{ search|urlencode }}{% endif %}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}
+</nav>
+
+<section class="panel" aria-label="Comptes">
+<h2>Comptes</h2>
+{% if rows.is_empty() %}
+<div class="row"><div class="grow muted">Aucun compte ne correspond.</div></div>
+{% endif %}
+{% for p in rows %}
+<div class="row player" id="player-{{ p.id }}">
+<span class="dot {% if p.presence == "offline" %}dot-off{% else %}dot-ok{% endif %}" aria-hidden="true"></span>
+<div class="grow">
+<div class="row-title">{{ p.username }}{% if p.is_self %} <span class="muted small">(vous)</span>{% endif %}</div>
+<div class="muted small">{% if p.has_email %}{{ p.email }}{% else %}Pas d'adresse e-mail{% endif %}{% if p.discord %} · Discord{% endif %} · créé le {{ p.created }}</div>
+</div>
+<div class="tags">
+{% if p.presence == "in_game" %}<span class="tag tag-ok">En partie</span>{% else if p.presence == "online" %}<span class="tag tag-ok">En ligne</span>{% else %}<span class="tag">Hors ligne</span>{% endif %}
+{% if p.has_email %}{% if p.verified %}<span class="tag">Vérifié</span>{% else %}<span class="tag tag-warn">Non vérifié</span>{% endif %}{% endif %}
+{% if p.suspended %}<span class="tag tag-danger">Suspendu</span>{% endif %}
+</div>
+{% if p.suspended %}
+<form method="post" action="/admin/joueurs/reactiver">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="user_id" value="{{ p.id }}">
+<input type="hidden" name="q" value="{{ search }}">
+<input type="hidden" name="filtre" value="{{ filter }}">
+<input type="hidden" name="page" value="{{ page }}">
+<button type="submit" class="button button-quiet">Réactiver</button>
+</form>
+{% else if !p.is_self %}
+<form method="post" action="/admin/joueurs/suspendre">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="user_id" value="{{ p.id }}">
+<input type="hidden" name="q" value="{{ search }}">
+<input type="hidden" name="filtre" value="{{ filter }}">
+<input type="hidden" name="page" value="{{ page }}">
+<button type="submit" class="button button-danger">Suspendre</button>
+</form>
+{% endif %}
+</div>
+{% endfor %}
+</section>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+{% if let Some(url) = prev_url %}<a href="{{ url }}">← Précédente</a>{% endif %}
+<span class="muted small">Page {{ page }} sur {{ pages }}</span>
+{% if let Some(url) = next_url %}<a href="{{ url }}">Suivante →</a>{% endif %}
+</nav>
+{% endif %}
+
+{% if invite_mode %}
+<section class="panel" aria-label="Invitations" id="invitations">
+<h2>Invitations</h2>
+{% if let Some(created) = new_invite %}
+<div class="row new-invite">
+<div class="grow">
+<div class="row-title">Nouveau code : <code id="invite-code">{{ created.code }}</code></div>
+<div class="muted small">Notez-le maintenant : il ne sera plus jamais affiché. Valable jusqu'au {{ new_invite_expires }}.</div>
+</div>
+</div>
+{% endif %}
+<div class="row">
+<div class="grow muted small">L'inscription demande un code d'invitation. Un code sert une seule fois et reste valable 7 jours.</div>
+<form method="post" action="/admin/joueurs/invitations">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<button type="submit" class="button">Créer un code</button>
+</form>
+</div>
+{% for i in invites %}
+<div class="row" id="invite-{{ i.id }}">
+<span class="dot {% if i.usable %}dot-ok{% else %}dot-off{% endif %}" aria-hidden="true"></span>
+<div class="grow">
+<div class="row-title">Code n° {{ i.id }}</div>
+<div class="muted small">Créé le {{ i.created }}{% if !i.created_by.is_empty() %} par {{ i.created_by }}{% endif %} · {{ i.status }}</div>
+</div>
+<form method="post" action="/admin/joueurs/invitations/revoquer">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="invite_id" value="{{ i.id }}">
+<button type="submit" class="button button-quiet">Révoquer</button>
+</form>
+</div>
+{% endfor %}
+</section>
+{% endif %}
+{% endblock %}

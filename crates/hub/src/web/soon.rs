@@ -32,16 +32,6 @@ fn soon(
     )
 }
 
-/// `GET /admin/joueurs`.
-pub async fn players(session: AdminSession) -> Response {
-    soon(
-        &session,
-        "players",
-        "Joueurs",
-        "Liste des comptes, recherche, suspension et réactivation, export et suppression RGPD.",
-    )
-}
-
 /// `GET /admin/distribution`.
 pub async fn distribution(session: AdminSession) -> Response {
     soon(
