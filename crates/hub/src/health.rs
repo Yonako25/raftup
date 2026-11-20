@@ -1,11 +1,14 @@
 //! Sonde de santé : `rafthub healthcheck` (déploiement Docker, `deploy/rafthub/`).
 //!
 //! L'image Docker du hub ne contient ni `curl` ni `wget`. Le binaire sait donc
-//! vérifier lui-même qu'un hub répond : il demande la feuille de style de la console
-//! (`/admin/static/rafthub.css`) et attend un code 200. Cette page répond aussi bien
+//! vérifier lui-même qu'un hub répond : il demande la feuille de style publique
+//! (`/static/rafthub.css`) et attend un code 200. Cette page répond aussi bien
 //! pendant l'assistant de premier lancement que hub installé : un hub qui attend son
 //! installation est « en bonne santé », sinon Traefik ne le publierait pas et
-//! personne ne pourrait ouvrir l'assistant.
+//! personne ne pourrait ouvrir l'assistant. Pas `/admin/static/…` : avec
+//! `--admin-listen`, `/admin` répond 404 sur l'adresse publique (ADR 0040).
+//! Avec `--admin-listen`, l'assistant tourne sur l'adresse de la console : l'adresse
+//! publique ne répond qu'une fois le hub installé.
 //!
 //! Rien que la bibliothèque standard : une requête HTTP/1.1 minimale suffit, et la
 //! sonde ne touche jamais à la base de données.
@@ -17,7 +20,7 @@ use std::time::Duration;
 use crate::error::HubError;
 
 /// Chemin demandé par la sonde.
-pub const PROBE_PATH: &str = "/admin/static/rafthub.css";
+pub const PROBE_PATH: &str = "/static/rafthub.css";
 
 /// Adresse à joindre pour une adresse d'écoute donnée. Un hub qui écoute sur
 /// `0.0.0.0` (toutes les interfaces, cas du conteneur) se joint sur `127.0.0.1` ;

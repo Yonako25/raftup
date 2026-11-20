@@ -84,6 +84,8 @@ pub fn install_router(state: InstallState) -> Router {
     Router::new()
         .route(PATH, get(form).post(submit))
         .route("/admin/static/{*path}", get(assets::serve))
+        // Mêmes fichiers sous `/static/` : c'est ce que demande la sonde de santé.
+        .route("/static/{*path}", get(assets::serve))
         .route("/v1/{*rest}", axum::routing::any(not_ready))
         .fallback(|| async { Redirect::to(PATH) })
         .with_state(state)

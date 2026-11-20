@@ -83,6 +83,10 @@ async fn la_console_est_inconnue_du_routeur_public() {
     assert_eq!(status, StatusCode::OK);
     let (status, _, _) = get(&public, "/static/rafthub.css").await;
     assert_eq!(status, StatusCode::OK);
+    // La sonde de santé de Docker vise l'adresse publique : elle doit y trouver 200,
+    // sinon le conteneur passe « malade » et Traefik ne le publie pas.
+    let (status, _, _) = get(&public, hub::health::PROBE_PATH).await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]
