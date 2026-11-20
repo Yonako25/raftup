@@ -527,3 +527,10 @@ untime2`.
 - **Pas vérifié** : déploiement réel, Cloudflare et `ipAllowList` dans Traefik ; launcher compilé avec l'adresse officielle (seulement `cargo check`).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : acheter le domaine (idée : `raftup-games.com`), le confier à Cloudflare, créer la variable GitHub `RAFTUP_OFFICIAL_HUB_URL`, puis déployer sur triomyno.
+
+### 2026-11-20 · Rafthub officiel en ligne sur triomyno (`hub.raftup-games.com`)
+- **Fait** : dépôt cloné dans `~/rafthub` (compte `claude`), `.env` (Traefik `traefik-public`, `letsencrypt`, `websecure`, console sur `10.10.0.1:8788`), dossier de sauvegarde à l'uid 10001, `docker compose build` + `up -d` (`rafthub`, `rafthub-backup`). Installation faite par l'utilisatrice (base intégrée, premier admin). Correctif : la sonde de santé visait `/admin/static/…` (404 côté public) → `/static/rafthub.css`, servi aussi par l'assistant.
+- **Vérifié** : conteneur « healthy », `https://hub.raftup-games.com/v1` 200 avec certificat Let's Encrypt, `/admin` 404 depuis Internet, console `http://10.10.0.1:8788/admin` par le VPN.
+- **Pas vérifié** : la première sauvegarde nuitière (3 h) ; le formulaire d'installation refusé (cookie CSRF) dans le navigateur de l'utilisatrice, alors qu'il passe dans le navigateur intégré : cause non trouvée. Pas de Cloudflare (DNS chez feelb.net, IP visible).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; sur triomyno, `~/rafthub/deploy/rafthub/.env` (droits 600) et le volume `rafthub-data`.
+- **Suite** : variable GitHub `RAFTUP_OFFICIAL_HUB_URL=https://hub.raftup-games.com` ; Réglages du hub (SMTP, Discord, inscriptions) ; site de la racine `raftup-games.com`.
