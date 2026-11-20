@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raftup</title>
+<meta name="description" content="Raftup : launcher multi-jeux et serveur de parties multiworld, compatible avec Archipelago.">
+<link rel="icon" type="image/png" href="/icon.png">
+<style>
+  @font-face { font-family: "Inter"; src: url("/fonts/Inter.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("/fonts/Inter-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Chakra Petch"; src: url("/fonts/ChakraPetch-SemiBold.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+
+  /* Palette « Acier » (docs/SPEC.md § 7). */
+  :root {
+    --coque: #111316; --acier: #16181B; --pont: #202328; --rivet: #30343A;
+    --brume: #A7ADB5; --ecume: #ECEEF1; --signal: #4C9AFF; --abysse: #16294A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 48px 16px;
+    background: var(--coque);
+    color: var(--ecume);
+    font: 400 16px/1.6 "Inter", system-ui, sans-serif;
+    position: relative; overflow-x: hidden;
+  }
+  /* Fond d'ambiance : halos flous. */
+  body::before, body::after {
+    content: ""; position: fixed; z-index: 0; border-radius: 50%;
+    filter: blur(110px); opacity: .55; pointer-events: none;
+  }
+  body::before { width: 520px; height: 520px; top: -160px; left: -120px; background: var(--abysse); }
+  body::after { width: 460px; height: 460px; bottom: -180px; right: -100px; background: #1d3a6b; opacity: .4; }
+
+  main {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 640px;
+    padding: 40px 36px;
+    background: rgba(32, 35, 40, .72);
+    border: 1px solid var(--rivet);
+    border-radius: 2px;
+    backdrop-filter: blur(8px);
+    text-align: center;
+  }
+  .logo { width: 100%; max-width: 360px; height: auto; display: block; margin: 0 auto 28px; }
+  h1 {
+    font: 600 26px/1.3 "Chakra Petch", "Inter", sans-serif;
+    letter-spacing: .02em; margin: 0 0 12px;
+  }
+  p { color: var(--brume); margin: 0 0 12px; }
+  .badge {
+    display: inline-block; margin: 8px 0 24px; padding: 4px 12px;
+    border: 1px solid var(--signal); border-radius: 2px;
+    color: var(--signal); font-weight: 600; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 8px; }
+  .btn {
+    display: inline-block; padding: 11px 20px; border-radius: 2px;
+    font-weight: 600; text-decoration: none; border: 1px solid var(--rivet);
+    color: var(--ecume); background: var(--pont);
+  }
+  .btn:hover, .btn:focus-visible { border-color: var(--signal); }
+  .btn.primary { background: var(--signal); border-color: var(--signal); color: #0b1220; }
+  .btn.primary:hover, .btn.primary:focus-visible { background: #6aaeff; }
+  footer {
+    position: relative; z-index: 1;
+    margin-top: 28px; font-size: 13px; color: var(--brume); text-align: center;
+  }
+  footer a { color: var(--brume); }
+  @media (max-width: 480px) { main { padding: 28px 20px; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="/logo-texte.png" alt="Raftup" width="1434" height="428">
+  <h1>Vos jeux, amarrés ensemble.</h1>
+  <p>Raftup est un launcher multi-jeux et un serveur de parties <strong>multiworld</strong>&nbsp;: les objets d'un jeu se retrouvent dans le monde d'un autre joueur.</p>
+  <p>Il installe les mods pour vous, crée et héberge les parties, et reste compatible avec Archipelago.</p>
+  <span class="badge">En préparation</span>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/Yonako25/raftup/releases">Téléchargements</a>
+    <a class="btn" href="https://github.com/Yonako25/raftup">Code source</a>
+  </div>
+</main>
+<footer>
+  Raftup est un projet libre, sans lien avec les éditeurs des jeux. Aucun jeu ni ROM n'est fourni.<br>
+  Polices Inter et Chakra Petch sous <a href="/fonts/">licence OFL</a>.
+</footer>
+</body>
+</html>

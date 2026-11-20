@@ -1,0 +1,40 @@
+# Page d'attente de raftup-games.com derrière Traefik.
+#
+#   docker compose build && docker compose up -d
+#
+# Variables lues dans `.env` (même dossier) : SITE_DOMAIN, TRAEFIK_NETWORK,
+# TRAEFIK_CERTRESOLVER, TRAEFIK_ENTRYPOINT (voir .env.example).
+
+name: raftup-site
+
+services:
+  site:
+    build:
+      context: ../..
+      dockerfile: deploy/site/Dockerfile
+    image: raftup-site:latest
+    container_name: raftup-site
+    restart: unless-stopped
+    # Aucun port sur l'hôte : seul Traefik le joint.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK manquant dans .env}
+      traefik.http.routers.raftup-site.rule: Host(`${SITE_DOMAIN:?SITE_DOMAIN manquant dans .env}`)
+      traefik.http.routers.raftup-site.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.raftup-site.tls: "true"
+      traefik.http.routers.raftup-site.tls.certresolver: ${TRAEFIK_CERTRESOLVER:?TRAEFIK_CERTRESOLVER manquant dans .env}
+      traefik.http.services.raftup-site.loadbalancer.server.port: "8080"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK}
