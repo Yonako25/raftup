@@ -42,16 +42,6 @@ pub async fn players(session: AdminSession) -> Response {
     )
 }
 
-/// `GET /admin/distribution`.
-pub async fn distribution(session: AdminSession) -> Response {
-    soon(
-        &session,
-        "distribution",
-        "Distribution du launcher",
-        "Launcher déjà relié à ce hub, à télécharger ou à partager par un lien raftup://hub/….",
-    )
-}
-
 /// `GET /admin/reglages`.
 pub async fn settings(session: AdminSession) -> Response {
     soon(

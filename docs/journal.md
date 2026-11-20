@@ -390,3 +390,9 @@ untime2`.
 - **Pas vérifié** : console jamais ouverte dans un navigateur ; PostgreSQL ; migration d'une base réelle de la version 4 à 6 (seulement par les tests).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; le stash « retouches hub trouvées dans main avant fusion Rafthub » (non commité, inutile à la compilation, à jeter sur accord de l'utilisatrice).
 - **Suite** : pages Joueurs, Distribution du launcher (zip + `rafthub.toml`), Réglages et Journaux de la console.
+
+### 2026-11-20 · Rafthub, distribution du launcher (session `rafthub-distribution`, ADR 0036)
+- **Fait** : `hub::distribution` (manifeste ADR 0022, liste blanche, sha256 + signature minisign, cache disque revérifié à chaque service, zip exe + `rafthub.toml`, pas de retour en arrière) ; page `/admin/distribution` (état du cache, « Rafraîchir » en POST + CSRF, lien `raftup://hub/…` à copier), page publique `/telecharger`, zips public et admin ; `copy.js` ; clé publique recopiée de `launcher-core` (test d'égalité) plutôt qu'une dépendance, consigné dans l'ADR 0036. 12 tests `tests/distribution.rs` sans réseau (clé générée dans le test) ; fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : vrai téléchargement depuis la release GitHub (aucun appel réseau fait) ; pages jamais ouvertes dans un navigateur ; zip jamais décompressé à côté d'un vrai launcher.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pages Joueurs, Réglages, Journaux (sessions parallèles).
+- **Suite** : publier une release avec `update.json`, puis essayer « Rafraîchir » sur un vrai hub et lancer l'exe du zip.

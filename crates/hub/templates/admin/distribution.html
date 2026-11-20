@@ -1,0 +1,74 @@
+{% extends "admin/base.html" %}
+{% block title %}Distribution du launcher{% endblock %}
+{% block content %}
+<div class="page-head">
+<div>
+<h1>Distribution du launcher</h1>
+<p class="muted">Launcher officiel signé, déjà relié à ce hub.</p>
+</div>
+{% if url_problem.is_none() && cache.is_some() %}
+<a class="button" href="{{ zip_path }}" download>Télécharger le zip</a>
+{% endif %}
+</div>
+
+{% if let Some((ok, text)) = notice %}
+<p class="alert{% if *ok %} alert-ok{% endif %}" role="status" id="notice">{{ text }}</p>
+{% endif %}
+{% if let Some(problem) = url_problem %}
+<p class="alert" role="alert" id="url-problem">{{ problem }} <a href="/admin/reglages">Régler l'adresse publique</a></p>
+{% endif %}
+
+<section class="panel" aria-label="Launcher en cache">
+<h2>Launcher en cache</h2>
+{% if let Some(c) = cache %}
+<div class="row" id="cache-state">
+<span class="dot {% if c.signature_ok %}dot-ok{% else %}dot-warn{% endif %}" aria-hidden="true"></span>
+<div class="grow">
+<div class="row-title">Version {{ c.version }}</div>
+<div class="muted small">{% if c.signature_ok %}Signature OK{% else %}Signature invalide : ce fichier n'est pas servi{% endif %} · {{ c.size_mib }} Mio · téléchargé le {{ c.fetched_at }}</div>
+</div>
+</div>
+{% else %}
+<div class="row" id="cache-state">
+<span class="dot dot-off" aria-hidden="true"></span>
+<div class="grow"><div class="row-title">Aucun launcher en cache</div><div class="muted small">« Rafraîchir » le récupère depuis la release GitHub officielle et vérifie sa signature.</div></div>
+</div>
+{% endif %}
+<div class="row">
+<div class="grow muted small">Le zip contient l'exe officiel, inchangé, et un fichier <code>rafthub.toml</code> avec l'adresse de ce hub.</div>
+<form method="post" action="/admin/distribution/rafraichir">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<button type="submit" class="button">Rafraîchir</button>
+</form>
+</div>
+</section>
+
+<section class="panel" aria-label="Partager">
+<h2>Partager</h2>
+<div class="row">
+<div class="grow">
+<div class="row-title">Lien vers ce hub</div>
+{% if let Some(link) = hub_link %}
+<div class="copy">
+<input id="hub-link" class="copy-input" type="text" readonly value="{{ link }}" aria-label="Lien raftup://hub">
+<button type="button" class="button" data-copy="hub-link">Copier</button>
+</div>
+<div class="muted small">Un joueur qui a déjà le launcher clique ce lien pour passer sur ce hub.</div>
+{% else %}
+<div class="muted small">Disponible quand l'adresse publique est en HTTPS.</div>
+{% endif %}
+</div>
+</div>
+<div class="row">
+<div class="grow">
+<div class="row-title">Page publique de téléchargement</div>
+{% if public_download %}
+<div class="muted small"><a href="/telecharger">/telecharger</a> est ouverte à tous.</div>
+{% else %}
+<div class="muted small">Désactivée dans les réglages : le zip n'est servi qu'aux admins connectés.</div>
+{% endif %}
+</div>
+</div>
+</section>
+<script src="/admin/static/copy.js"></script>
+{% endblock %}

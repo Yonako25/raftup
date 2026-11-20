@@ -25,6 +25,7 @@
 //! | `RAFTUP_HUB_NAME` | nom du hub affiché (défaut : Rafthub) |
 //! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
 //! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
+//! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache (défaut : `rafthub-cache`) |
 //!
 //! Ces réglages se changent aussi depuis la console d'admin (ADR 0036) : la valeur
 //! écrite en base passe avant la variable d'environnement, qui passe avant le défaut.
@@ -125,6 +126,10 @@ async fn main() -> anyhow::Result<()> {
             .settings_env
             .set(SettingKey::PublicUrl, &url)
             .context("--public-url")?;
+    }
+    // Dossier du cache de l'exe officiel du launcher (page « Distribution »).
+    if let Some(dir) = env("RAFTUP_HUB_CACHE_DIR") {
+        config.distribution.cache_dir = dir.into();
     }
     let state = AppState::from_settings(store.clone(), config).await?;
     // Avertissements de départ : les réglages restent modifiables ensuite.

@@ -17,6 +17,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../../static/rafthub.css"),
     ),
     (
+        "copy.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../../static/copy.js"),
+    ),
+    (
         "fonts/Inter.ttf",
         "font/ttf",
         include_bytes!("../../../launcher-ui/fonts/Inter.ttf"),
