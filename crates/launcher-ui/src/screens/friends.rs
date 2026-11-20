@@ -76,6 +76,8 @@ enum Action {
     Decline(String),
     Cancel(String),
     Remove(String),
+    /// Changer son pseudo (`PATCH /v1/me`).
+    Rename(String),
 }
 
 /// Amis et demandes, tels que relus sur le hub.
@@ -101,6 +103,8 @@ enum Done {
         lists: Lists,
         message: Option<String>,
     },
+    /// Pseudo changé : le nouveau, et les listes relues.
+    Renamed { username: String, lists: Lists },
 }
 
 /// Réponse du thread : le client revient toujours, avec le résultat.
@@ -136,6 +140,10 @@ pub struct FriendsState {
     notice: Option<Notice>,
     /// Dernière synchronisation réussie ou tentée.
     last_sync: Option<Instant>,
+    /// Le champ « Nouveau pseudo » est ouvert.
+    rename_open: bool,
+    /// Texte du champ « Nouveau pseudo ».
+    rename_text: String,
     /// Ami dont on a cliqué « Retirer » une première fois (deuxième clic = confirmation).
     confirm_remove: Option<String>,
     /// En debug : se connecter tout seul avec ces identifiants (macro de captures).
@@ -198,6 +206,8 @@ impl FriendsState {
             lists: Lists::default(),
             notice: None,
             last_sync: None,
+            rename_open: false,
+            rename_text: String::new(),
             confirm_remove: None,
             dev_login,
             pending_switch: None,
@@ -298,6 +308,16 @@ impl FriendsState {
                 if let Some(message) = message {
                     self.notice = Some(Notice::Info(message));
                 }
+            }
+            Ok(Done::Renamed { username, lists }) => {
+                self.notice = Some(Notice::Info(format!(
+                    "Votre pseudo est maintenant {username}."
+                )));
+                self.username = Some(username);
+                self.lists = lists;
+                self.last_sync = Some(Instant::now());
+                self.rename_open = false;
+                self.rename_text.clear();
             }
             Err(message) => self.notice = Some(Notice::Error(message)),
         }
@@ -530,6 +550,20 @@ fn run(client: HubClient, store: &dyn TokenStore, action: Action) -> Outcome {
                 .map(|()| Some(format!("{name} n'est plus dans vos amis.")));
             after(client, store, result)
         }
+        Action::Rename(name) => match client.change_username(&name) {
+            Ok(account) => {
+                let result = sync(&client).map(|lists| Done::Renamed {
+                    username: account.username,
+                    lists,
+                });
+                Outcome {
+                    client,
+                    result: result.map_err(|e| error_text(&e)),
+                }
+            }
+            // Session refusée, ou refus du hub : même traitement qu'une action sur les amis.
+            Err(error) => after(client, store, Err(error)),
+        },
     }
 }
 
@@ -649,6 +683,11 @@ fn error_text(error: &HubClientError) -> String {
             code: ErrorCode::InvalidInvite,
             ..
         } => "Code d'invitation incorrect, expiré ou déjà utilisé.".to_string(),
+        HubClientError::Api {
+            code: ErrorCode::UsernameChangeTooSoon,
+            ..
+        } => "Vous avez déjà changé de pseudo il y a moins de 24 heures : réessayez demain."
+            .to_string(),
         // Les messages du hub sont déjà en français et sans secret.
         HubClientError::Api { message, .. } => capitalize(message),
         other => capitalize(&other.to_string()),
@@ -898,6 +937,7 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                 None => format!("Connecté en tant que {name}"),
             };
             ui.label(widgets::dim(text));
+            rename_row(ui, state, &mut action);
             ui.add_space(6.0);
         }
         if state.lists.friends.is_empty() {
@@ -940,6 +980,46 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
         state.confirm_remove = None;
         state.start(ctx, action);
     }
+}
+
+/// « Changer de pseudo » : un bouton, puis un champ avec « Valider » et « Annuler ».
+/// Le hub n'accepte qu'un changement par 24 heures.
+fn rename_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<Action>) {
+    if !state.rename_open {
+        if widgets::ghost_button(ui, "Changer de pseudo") {
+            state.rename_open = true;
+            state.rename_text = state.username.clone().unwrap_or_default();
+        }
+        return;
+    }
+    ui.label(widgets::dim(
+        "3 à 24 caractères : lettres, chiffres, _, - et . ; vos amis verront le nouveau \
+         pseudo. Un seul changement par jour.",
+    ));
+    let mut submit = false;
+    ui.horizontal(|ui| {
+        let response = ui.add(
+            egui::TextEdit::singleline(&mut state.rename_text)
+                .hint_text("Nouveau pseudo")
+                .desired_width(220.0),
+        );
+        submit |= response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        let ready = can_rename(state);
+        submit |= widgets::primary_button(ui, "Valider", ready);
+        submit &= ready;
+        if widgets::ghost_button(ui, "Annuler") {
+            state.rename_open = false;
+        }
+    });
+    if submit {
+        *action = Some(Action::Rename(state.rename_text.trim().to_string()));
+    }
+}
+
+/// Le bouton « Valider » est actif : rien en cours, et un pseudo différent de l'actuel.
+fn can_rename(state: &FriendsState) -> bool {
+    let wanted = state.rename_text.trim();
+    !state.busy() && !wanted.is_empty() && state.username.as_deref() != Some(wanted)
 }
 
 /// Ajout par pseudo, demandes reçues, demandes envoyées.
@@ -1293,5 +1373,51 @@ mod tests {
         let summary = state.summary();
         assert_eq!(summary.online, 2);
         assert_eq!(summary.username.as_deref(), Some("Mimi"));
+    }
+
+    #[test]
+    fn message_de_pseudo_change_trop_tot() {
+        let error = HubClientError::Api {
+            status: 429,
+            code: ErrorCode::UsernameChangeTooSoon,
+            message: "texte du hub".to_string(),
+        };
+        assert!(error_text(&error).contains("moins de 24 heures"));
+    }
+
+    #[test]
+    fn valider_seulement_un_pseudo_different() {
+        let mut state = test_state();
+        state.username = Some("Mimi".into());
+        state.rename_text = " Mimi ".into();
+        assert!(!can_rename(&state));
+        state.rename_text = "   ".into();
+        assert!(!can_rename(&state));
+        state.rename_text = "Mireille".into();
+        assert!(can_rename(&state));
+    }
+
+    #[test]
+    fn pseudo_change_met_a_jour_l_ecran() {
+        let mut state = test_state();
+        state.username = Some("Mimi".into());
+        state.rename_open = true;
+        state.rename_text = "Mireille".into();
+        let (sender, receiver) = mpsc::channel();
+        let client = state.client.take().unwrap();
+        sender
+            .send(Outcome {
+                client,
+                result: Ok(Done::Renamed {
+                    username: "Mireille".into(),
+                    lists: Lists::default(),
+                }),
+            })
+            .unwrap();
+        state.job = Some(receiver);
+        state.poll();
+        assert_eq!(state.username.as_deref(), Some("Mireille"));
+        assert!(!state.rename_open);
+        assert!(matches!(&state.notice, Some(Notice::Info(m)) if m.contains("Mireille")));
     }
 }

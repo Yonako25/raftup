@@ -19,6 +19,8 @@ pub enum HubError {
     WeakPassword(&'static str),
     #[error("ce pseudo est déjà pris")]
     UsernameTaken,
+    #[error("pseudo déjà changé il y a moins de 24 heures, réessayer plus tard")]
+    UsernameChangeTooSoon,
     #[error("cette adresse e-mail a déjà un compte")]
     EmailTaken,
     #[error("e-mail ou mot de passe incorrect")]
@@ -100,6 +102,9 @@ impl HubError {
             HubError::InvalidEmail => (StatusCode::BAD_REQUEST, "invalid_email"),
             HubError::WeakPassword(_) => (StatusCode::BAD_REQUEST, "weak_password"),
             HubError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
+            HubError::UsernameChangeTooSoon => {
+                (StatusCode::TOO_MANY_REQUESTS, "username_change_too_soon")
+            }
             HubError::EmailTaken => (StatusCode::CONFLICT, "email_taken"),
             HubError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
             HubError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),

@@ -50,6 +50,14 @@ L'ADR 0002 fixe le modèle (compte séparé de ses identités, pseudo unique san
 - Présence (`online`, `in_game` avec nom du jeu, `offline`) en mémoire, jamais en base, visible seulement dans la liste d'amis ; elle expire si le launcher ne la renouvelle pas (120 s).
 - Limites en mémoire : 10 échecs de connexion par adresse en 15 minutes, 20 demandes d'ami par compte et par minute.
 
+### Changement de pseudo (ajout du 20 novembre 2026, à relire)
+
+- `PATCH /v1/me` avec `{"username": …}` : mêmes règles qu'à l'inscription (`invalid_username`, `username_taken`, sans tenir compte de la casse) ; répond `{user_id, username}`. Remettre le même pseudo ne fait rien ; changer seulement la casse est permis.
+- Une fois par **24 heures** (`429 username_change_too_soon`) : le pseudo sert à se retrouver et à se connecter (ADR 0038) ; le changer sans cesse brouillerait les amis et permettrait de « tourner » sur les pseudos. Le compte se fait sur le journal `admin_events` (type `username_changed`, joueur = acteur = cible), écrit dans la même transaction que le changement : pas de nouvelle colonne, pas de migration.
+- L'admin renomme depuis la page « Joueurs » de la console (ADR 0036), sans limite ; ses changements ne comptent pas dans celle du joueur.
+- Rien d'autre à mettre à jour : amis, demandes et blocages pointent vers l'identifiant. L'ancien pseudo redevient libre tout de suite (pas de réserve) et ne sert plus à se connecter.
+- Le détail du journal garde « ancien → nouveau » ; la suppression du compte (RGPD) vide ce détail.
+
 ### Blocages (ajout du 19 novembre 2026, à relire)
 
 - Table `blocks (blocker, blocked)`, un sens par ligne (schéma version 2). Routes `GET /v1/blocks`, `POST /v1/blocks` (`username`), `DELETE /v1/blocks/{username}`.
@@ -90,7 +98,7 @@ Toutes compatibles avec l'AGPL-3.0 : MIT, Apache-2.0, MIT OR Apache-2.0, BSD-3-C
 
 - Discord : révocation du jeton d'accès après lecture (inutile tant qu'il n'est pas gardé), vrai essai avec une application Discord.
 - L'inscription révèle toujours qu'une adresse a déjà un compte (`email_taken`) : à remplacer par un message « vous avez déjà un compte » envoyé à l'adresse, quand le launcher saura l'afficher. Connexion refusée tant que l'adresse n'est pas vérifiée : pas encore.
-- Refus de toutes les demandes, changement de pseudo avec délai, limite par adresse IP.
+- Refus de toutes les demandes, limite par adresse IP.
 - RGPD : hébergement en Europe, politique de confidentialité, sauvegardes purgées des comptes supprimés.
 - Côté launcher : client du hub, jeton rangé dans le trousseau (`keyring`), panneau d'amis.
 - Plusieurs instances du hub (présence et connexions Discord en attente dans Redis), déploiement, sauvegardes.

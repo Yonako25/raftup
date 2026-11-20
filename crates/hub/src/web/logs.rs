@@ -25,7 +25,7 @@ const PAGE_SIZE: i64 = 50;
 const DAY: i64 = 24 * 3600;
 
 /// Types du journal et leur nom en français, dans l'ordre de la liste déroulante.
-const KINDS: [(&str, &str); 8] = [
+const KINDS: [(&str, &str); 9] = [
     ("account_created", "Compte créé"),
     ("account_suspended", "Compte suspendu"),
     ("account_reactivated", "Compte réactivé"),
@@ -34,6 +34,7 @@ const KINDS: [(&str, &str); 8] = [
     ("invite_revoked", "Invitation révoquée"),
     ("gdpr_export", "Export RGPD"),
     ("gdpr_delete", "Suppression RGPD"),
+    ("username_changed", "Pseudo changé"),
 ];
 
 /// Nom en français d'un type ; un type inconnu (hub plus récent) s'affiche tel quel.
@@ -324,6 +325,7 @@ mod tests {
     #[test]
     fn types_en_francais() {
         assert_eq!(kind_label("account_suspended"), "Compte suspendu");
+        assert_eq!(kind_label("username_changed"), "Pseudo changé");
         assert_eq!(kind_label("nouveau_type"), "nouveau_type");
     }
 

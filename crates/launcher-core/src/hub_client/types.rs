@@ -190,6 +190,8 @@ pub enum ErrorCode {
     InvalidEmail,
     WeakPassword,
     UsernameTaken,
+    /// Pseudo déjà changé il y a moins de 24 heures.
+    UsernameChangeTooSoon,
     EmailTaken,
     InvalidCredentials,
     Unauthorized,
@@ -219,6 +221,7 @@ impl ErrorCode {
             "invalid_email" => ErrorCode::InvalidEmail,
             "weak_password" => ErrorCode::WeakPassword,
             "username_taken" => ErrorCode::UsernameTaken,
+            "username_change_too_soon" => ErrorCode::UsernameChangeTooSoon,
             "email_taken" => ErrorCode::EmailTaken,
             "invalid_credentials" => ErrorCode::InvalidCredentials,
             "unauthorized" => ErrorCode::Unauthorized,

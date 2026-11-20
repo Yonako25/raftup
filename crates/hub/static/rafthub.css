@@ -256,3 +256,13 @@ form:has(#db-sqlite:checked) .db-external { display: none; }
 }
 .form .db-option { margin-top: 0; color: var(--text); font-size: 14px; }
 .form .db-option input { padding: 0; accent-color: var(--accent-bright); }
+
+/* « Renommer » sur la page Joueurs : un petit formulaire qui s'ouvre sur place. */
+.rename summary { list-style: none; cursor: pointer; }
+.rename summary::-webkit-details-marker { display: none; }
+.rename[open] summary { border-color: var(--accent-bright); }
+.rename-form { display: flex; gap: 8px; margin-top: 8px; }
+.rename-form input {
+  font: inherit; color: var(--text); background: rgba(8, 12, 16, 0.9);
+  border: 1px solid var(--border); border-radius: 2px; padding: 8px 10px; width: 14em;
+}

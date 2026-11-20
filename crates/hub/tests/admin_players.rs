@@ -174,6 +174,7 @@ async fn sans_session_renvoie_vers_la_connexion() {
     for uri in [
         "/admin/joueurs/suspendre",
         "/admin/joueurs/reactiver",
+        "/admin/joueurs/renommer",
         "/admin/joueurs/invitations",
         "/admin/joueurs/invitations/revoquer",
     ] {
@@ -448,4 +449,77 @@ async fn invitations_en_mode_invite() {
     let kinds = event_kinds(&store).await;
     assert!(kinds.contains(&"invite_created".to_string()));
     assert!(kinds.contains(&"invite_revoked".to_string()));
+}
+
+/// Envoie le formulaire « Renommer » de la console (recherche `ka` en cours).
+async fn rename(app: &Router, cookie: &str, csrf: &str, id: &str, username: &str) -> Page {
+    post_form(
+        app,
+        "/admin/joueurs/renommer",
+        Some(cookie),
+        &[
+            ("csrf", csrf),
+            ("user_id", id),
+            ("username", username),
+            ("q", "ka"),
+        ],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn renommer_un_compte() {
+    let (app, store) = hub().await;
+    let cookie = admin_cookie(&app, &store).await;
+    let kael = account(&app, "Kael").await;
+    account(&app, "Mireille").await;
+    let id = user_id(&store, "Kael").await.to_string();
+    let page = get(&app, "/admin/joueurs", Some(&cookie)).await;
+    assert!(page.body.contains("/admin/joueurs/renommer"));
+    let csrf = page.csrf_field();
+
+    // Sans le bon jeton anti-CSRF : refusé, rien ne change.
+    let page = post_form(
+        &app,
+        "/admin/joueurs/renommer",
+        Some(&cookie),
+        &[("csrf", "faux"), ("user_id", &id), ("username", "Pirate")],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::FORBIDDEN);
+
+    let page = rename(&app, &cookie, &csrf, &id, "Mireille").await;
+    assert_eq!(page.location(), "/admin/joueurs?q=ka&msg=pseudo-pris");
+    let page = rename(&app, &cookie, &csrf, &id, "a b").await;
+    assert_eq!(page.location(), "/admin/joueurs?q=ka&msg=pseudo-invalide");
+    let page = rename(&app, &cookie, &csrf, &id, " Kaelis ").await;
+    assert_eq!(page.location(), "/admin/joueurs?q=ka&msg=renomme");
+    let page = get(&app, page.location(), Some(&cookie)).await;
+    assert!(page.body.contains("Pseudo changé."));
+    assert!(page.body.contains("Kaelis"));
+    // L'admin n'a pas de limite de 24 heures.
+    assert_eq!(
+        rename(&app, &cookie, &csrf, &id, "Kaelan").await.location(),
+        "/admin/joueurs?q=ka&msg=renomme"
+    );
+
+    // Journal : l'admin est l'acteur, ancien → nouveau.
+    let events = store.list_events(1, 0).await.unwrap();
+    let event = &events.items[0];
+    assert_eq!(event.kind, "username_changed");
+    assert_eq!(event.actor_name.as_deref(), Some("Chef"));
+    assert_eq!(event.detail, "Kaelis → Kaelan");
+    let page = get(&app, "/admin/journaux", Some(&cookie)).await;
+    assert!(page.body.contains("Pseudo changé"));
+
+    // Les changements de l'admin ne comptent pas dans la limite du joueur.
+    let (status, _) = common::call(
+        &app,
+        Method::PATCH,
+        "/v1/me",
+        Some(&kael),
+        Some(json!({ "username": "KaelLeVrai" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
 }

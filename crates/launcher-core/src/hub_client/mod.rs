@@ -183,6 +183,7 @@ enum Method {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -310,6 +311,15 @@ impl HubClient {
     /// `GET /v1/me` : le compte connecté.
     pub fn me(&self) -> Result<Me, HubClientError> {
         self.call(Method::Get, "/v1/me", None, true)
+    }
+
+    /// `PATCH /v1/me` : change son pseudo. Mêmes règles qu'à l'inscription ; le hub
+    /// refuse un deuxième changement en moins de 24 heures
+    /// ([`ErrorCode::UsernameChangeTooSoon`]). Renvoie le compte avec le nouveau pseudo.
+    pub fn change_username(&self, username: &str) -> Result<Account, HubClientError> {
+        let username = non_empty(username)?;
+        let body = json!({ "username": username });
+        self.call(Method::Patch, "/v1/me", Some(body), true)
     }
 
     // ---------- Jeton rangé ----------
@@ -446,7 +456,7 @@ impl HubClient {
         let body = body.map(|value| value.to_string());
 
         // ureq a deux sortes de requêtes : sans corps (GET, DELETE) et avec corps (POST,
-        // PUT). Ce sont deux types différents, d'où les deux branches.
+        // PUT, PATCH). Ce sont deux types différents, d'où les deux branches.
         let result = match method {
             Method::Get | Method::Delete => {
                 let mut request = match method {
@@ -458,9 +468,10 @@ impl HubClient {
                 }
                 request.call()
             }
-            Method::Post | Method::Put => {
+            Method::Post | Method::Put | Method::Patch => {
                 let mut request = match method {
                     Method::Post => self.agent.post(&url),
+                    Method::Patch => self.agent.patch(&url),
                     _ => self.agent.put(&url),
                 };
                 if let Some(bearer) = &bearer {

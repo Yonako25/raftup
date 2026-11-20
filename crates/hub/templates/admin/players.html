@@ -38,6 +38,19 @@
 {% if p.has_email %}{% if p.verified %}<span class="tag">Vérifié</span>{% else %}<span class="tag tag-warn">Non vérifié</span>{% endif %}{% endif %}
 {% if p.suspended %}<span class="tag tag-danger">Suspendu</span>{% endif %}
 </div>
+<details class="rename">
+<summary class="button button-quiet">Renommer</summary>
+<form method="post" action="/admin/joueurs/renommer" class="rename-form">
+<input type="hidden" name="csrf" value="{{ layout.csrf }}">
+<input type="hidden" name="user_id" value="{{ p.id }}">
+<input type="hidden" name="q" value="{{ search }}">
+<input type="hidden" name="filtre" value="{{ filter }}">
+<input type="hidden" name="page" value="{{ page }}">
+<label for="rename-{{ p.id }}" class="visually-hidden">Nouveau pseudo de {{ p.username }}</label>
+<input id="rename-{{ p.id }}" name="username" value="{{ p.username }}" minlength="3" maxlength="24" required>
+<button type="submit" class="button">Valider</button>
+</form>
+</details>
 {% if p.suspended %}
 <form method="post" action="/admin/joueurs/reactiver">
 <input type="hidden" name="csrf" value="{{ layout.csrf }}">

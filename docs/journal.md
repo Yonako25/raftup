@@ -463,3 +463,9 @@ untime2`.
 - **Pas vérifié** : écran du launcher regardé (capture) ; console sans Discord ouverte dans le navigateur.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash, `web/soon.rs` + `soon.html`, conteneurs `raftup-test-*` (à supprimer sur accord).
 - **Suite** : construire les deux binaires aux releases ; déploiement du Rafthub officiel.
+
+### 2026-11-20 · Changement de pseudo (session `p1-pseudo`)
+- **Fait** : `PATCH /v1/me` (`username`) : règles de l'inscription, `username_taken`, une fois par 24 h (`username_change_too_soon`), compté sur `admin_events` (`username_changed`, « ancien → nouveau », écrit dans la même transaction, sans migration) ; console : « Renommer » sur la page Joueurs (CSRF, sans limite, ne compte pas pour le joueur), libellé « Pseudo changé » dans Journaux ; suppression RGPD vide le détail ; launcher : `HubClient::change_username`, bouton « Changer de pseudo » sous « Connecté en tant que… », message clair pour les 24 h. ADR 0033 complété. Tests : `tests/username_change.rs` (5), `renommer_un_compte`, 2 tests client, 3 tests d'interface.
+- **Pas vérifié** : écran du launcher et page Joueurs regardés à l'œil ; suite sur PostgreSQL / MySQL / MariaDB non relancée (requêtes numérotées dans l'ordre, `parametres_dans_l_ordre` passe).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : capture de l'écran « Amis » avec le champ ouvert ; rejouer la suite du hub sur MariaDB.
