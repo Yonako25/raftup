@@ -50,6 +50,8 @@ pub struct SetupForm {
     #[serde(default)]
     username: String,
     password: Password,
+    /// Le mot de passe tapé une seconde fois, pour éviter une faute de frappe.
+    password_confirm: Password,
     #[serde(default)]
     csrf: String,
 }
@@ -160,6 +162,12 @@ async fn create_first_admin(
         body.password.validate()?;
         Ok((username, email))
     });
+    if !body.password.same_as(&body.password_confirm) {
+        return Ok(Err((
+            StatusCode::BAD_REQUEST,
+            "Les deux mots de passe ne sont pas identiques.".to_string(),
+        )));
+    }
     let (username, email) = match checked {
         Ok(values) => values,
         Err(error) => return Ok(Err((StatusCode::BAD_REQUEST, error.to_string()))),

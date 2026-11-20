@@ -34,7 +34,7 @@ use crate::store::Store;
 const CSRF_COOKIE: &str = "rafthub_install_csrf";
 const PATH: &str = "/admin/installation";
 /// Temps laissé à une base externe pour répondre pendant l'essai.
-const DB_TEST_TIMEOUT: Duration = Duration::from_secs(10);
+const DB_TEST_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// État de l'assistant. Le `Sender` est dans un `Mutex<Option<…>>` : il ne peut
 /// servir qu'une fois (`take()`), et plusieurs requêtes partagent l'état (`Arc`).
@@ -227,7 +227,15 @@ async fn submit(
 
     // Essai : connexion et création des tables. Le message d'erreur ne cite jamais
     // l'URL (elle contient le mot de passe).
-    match tokio::time::timeout(DB_TEST_TIMEOUT, Store::open(&url)).await {
+    // Limite de temps pour une base externe seulement (serveur injoignable) : la base
+    // intégrée est un fichier local, mais sur un disque lent la création des tables
+    // peut prendre plusieurs secondes, et il ne faut pas l'interrompre.
+    let opened = if stored == EMBEDDED_URL {
+        Ok(Store::open(&url).await)
+    } else {
+        tokio::time::timeout(DB_TEST_TIMEOUT, Store::open(&url)).await
+    };
+    match opened {
         Ok(Ok(_store)) => {}
         Ok(Err(error)) => {
             tracing::warn!(%error, "base refusée par l'assistant d'installation");
@@ -238,7 +246,7 @@ async fn submit(
         }
         Err(_) => {
             again.error = Some(
-                "La base n'a pas répondu en 10 secondes. Vérifiez l'adresse et le port, et qu'un pare-feu ne bloque pas la connexion."
+                "La base n'a pas répondu en 15 secondes. Vérifiez l'adresse et le port, et qu'un pare-feu ne bloque pas la connexion."
                     .to_string(),
             );
             return render(&state, StatusCode::BAD_REQUEST, again);

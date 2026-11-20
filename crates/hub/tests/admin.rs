@@ -487,6 +487,7 @@ async fn try_setup(app: &Router, code: &str, email: &str, username: &str) -> Pag
             ("email", email),
             ("username", username),
             ("password", PASSWORD),
+            ("password_confirm", PASSWORD),
             ("csrf", &csrf),
         ],
     )
@@ -548,6 +549,7 @@ async fn installation_fermee_sans_code_ou_avec_un_admin() {
             ("email", "chef@exemple.org"),
             ("username", "Chef"),
             ("password", PASSWORD),
+            ("password_confirm", PASSWORD),
             ("csrf", "abc"),
         ],
     )
@@ -574,10 +576,42 @@ async fn installation_refuse_un_csrf_absent() {
             ("email", "chef@exemple.org"),
             ("username", "Chef"),
             ("password", PASSWORD),
+            ("password_confirm", PASSWORD),
             ("csrf", "x"),
         ],
     )
     .await;
     assert_ne!(page.status, StatusCode::SEE_OTHER);
+    assert!(!store.has_admin().await.unwrap());
+}
+
+#[tokio::test]
+async fn installation_refuse_deux_mots_de_passe_differents() {
+    let (app, store) = fresh_hub().await;
+    let form = get(&app, "/admin/installation", None).await;
+    let csrf = form.csrf_field();
+    let page = post_form(
+        &app,
+        "/admin/installation",
+        Some(&format!("rafthub_setup_csrf={csrf}")),
+        &[
+            ("code", SETUP_CODE),
+            ("email", "chef@exemple.org"),
+            ("username", "Chef"),
+            ("password", PASSWORD),
+            ("password_confirm", "autre mot de passe"),
+            ("csrf", &csrf),
+        ],
+    )
+    .await;
+    assert_eq!(page.status, StatusCode::BAD_REQUEST);
+    assert!(
+        page.body.contains("ne sont pas identiques"),
+        "{}",
+        page.body
+    );
+    // Ce qui a été tapé reste dans le formulaire, sauf les mots de passe.
+    assert!(page.body.contains("chef@exemple.org"));
+    assert!(!page.body.contains(&format!("value=\"{PASSWORD}\"")));
     assert!(!store.has_admin().await.unwrap());
 }

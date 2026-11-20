@@ -26,7 +26,10 @@
 <label for="username">Pseudo</label>
 <input id="username" name="username" type="text" autocomplete="nickname" required value="{{ username }}">
 <label for="password">Mot de passe</label>
-<input id="password" name="password" type="password" autocomplete="new-password" required>
+<input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+<label for="password_confirm">Confirmer le mot de passe</label>
+<input id="password_confirm" name="password_confirm" type="password" autocomplete="new-password" minlength="8" required>
+<p class="muted small">8 caractères au moins. Ce compte a tous les droits sur le hub : choisissez un mot de passe solide.</p>
 <button type="submit" class="button">Créer le compte admin</button>
 </form>
 {% else %}

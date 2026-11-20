@@ -41,6 +41,11 @@ impl Password {
         Ok(())
     }
 
+    /// Vrai si les deux saisies sont identiques (champ « confirmer le mot de passe »).
+    pub fn same_as(&self, other: &Password) -> bool {
+        self.0 == other.0
+    }
+
     fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }

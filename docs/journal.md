@@ -439,3 +439,9 @@ untime2`.
 - **Pas vérifié** : base PostgreSQL existante créée avec l'ancien schéma (même sens, non rejoué).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; stash « retouches hub… », `web/soon.rs` + `soon.html` (à jeter sur accord) ; conteneurs de test (à supprimer sur accord).
 - **Suite** : champ « code d'invitation » dans le launcher (session `launcher-invitation`) ; déploiement.
+
+### 2026-11-20 · Rafthub : confirmation du mot de passe admin à l'installation (ADR 0037)
+- **Fait** : étape 2 de l'installation, champ « Confirmer le mot de passe » (refus si différent, `Password::same_as`), rappel « 8 caractères au moins » ; test `installation_refuse_deux_mots_de_passe_differents`. Bug trouvé dans le navigateur : sur le disque `Z:`, chaque écriture SQLite prend ~2,5 s et la création des tables dépassait la limite de 10 s de l'assistant ; la limite ne vaut plus que pour une base externe (15 s). Étape 1 SQLite et étape 2 refaites dans le navigateur. Tests du hub et clippy passent.
+- **Pas vérifié** : lenteur du disque `Z:` (cause non cherchée : disque réseau ou virtuel ?).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; session `launcher-invitation` en cours.
+- **Suite** : fusionner `launcher-invitation` ; déploiement.
