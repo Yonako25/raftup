@@ -224,3 +224,114 @@ fn apworld_natif_aller_retour() {
     }
     std::fs::remove_file(installed).unwrap();
 }
+
+// ---- Slime Rancher (ADR 0042, § 6) : converti sur le PC, jamais dans le dépôt ----
+
+/// L'apworld Slime Rancher installée sur le PC (`RAFTUP_SLIME_APWORLD`). Elle n'a pas de
+/// licence (ADR 0021) : sa version native est une œuvre dérivée, qui ne sort pas du PC.
+fn slime_apworld() -> Option<PathBuf> {
+    let path = PathBuf::from(std::env::var_os("RAFTUP_SLIME_APWORLD").or_else(|| {
+        eprintln!("RAFTUP_SLIME_APWORLD absente : test Slime Rancher sauté");
+        None
+    })?);
+    assert!(path.is_file(), "{} introuvable", path.display());
+    Some(path)
+}
+
+/// Slime Rancher (147 règles sondées) converti en monde natif : relu, compilé, et généré
+/// par le moteur Rust seul (sans Python). Même datapackage et même `slot_data` que la
+/// seed d'Archipelago, mêmes lieux, entrées et pool que l'import de l'export, tout
+/// atteignable avec le pool. Le `world.toml` (et l'export) ne sont écrits que si
+/// `RAFTUP_SLIME_NATIF_OUT` (et `RAFTUP_SLIME_EXPORT_OUT`) donnent un chemin, hors du dépôt.
+#[test]
+#[ignore = "demande RAFTUP_REAL_RUNTIME et RAFTUP_SLIME_APWORLD"]
+fn slime_rancher_converti() {
+    use std::collections::BTreeSet;
+    let Some(runtime) = runtime() else { return };
+    let Some(apworld) = slime_apworld() else {
+        return;
+    };
+    let dir = runtime.archipelago_dir.join("custom_worlds");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(&apworld, dir.join("slime_rancher.apworld")).unwrap();
+    let yaml = vec!["name: Beatrix\ngame: Slime Rancher\nSlime Rancher: {}\n".to_string()];
+
+    // La seed d'Archipelago seul (même YAML, même graine) : son slot_data et son
+    // datapackage servent de référence.
+    let work = tempfile::tempdir().unwrap();
+    let params = params(&runtime, &work.path().join("ap"), &yaml, 11);
+    let mut b = bridge(&runtime);
+    let result = b.generate(&params, Duration::from_secs(300));
+    let _ = b.shutdown();
+    let md = multidata::load_archipelago(
+        &archipelago_in(&result.unwrap().zip),
+        &multidata::ArchiveLimits::default(),
+    )
+    .unwrap();
+
+    let bytes = export_bytes(&runtime, &work.path().join("export"), &yaml, 11);
+    if let Some(out) = std::env::var_os("RAFTUP_SLIME_EXPORT_OUT") {
+        std::fs::write(out, &bytes).unwrap();
+    }
+    let export = generate::imported::read_export(&bytes).unwrap();
+    let imported = generate::imported::build_world(&export).unwrap();
+    let conversion = generate::convert::convert(&export, 1, Some(&md.slot_data[&1])).unwrap();
+    eprintln!("{} points à vérifier :", conversion.notes.len());
+    for note in &conversion.notes {
+        eprintln!("- {}", note.chars().take(300).collect::<String>());
+    }
+    if let Some(out) = std::env::var_os("RAFTUP_SLIME_NATIF_OUT") {
+        std::fs::write(out, &conversion.toml).unwrap();
+    }
+
+    let world = std::sync::Arc::new(worlds_native::parse_world(&conversion.toml).unwrap());
+    let options = generate::NativeOptions::new(world);
+    assert_eq!(options.package(), md.datapackage["Slime Rancher"]);
+    let request = generate::GenerateRequest::new(
+        11,
+        vec![generate::PlayerRequest::new(
+            "Beatrix",
+            generate::GameOptions::Native(options),
+        )],
+    );
+    let built = generate::build(&request).unwrap();
+    assert_eq!(built.slot_data[0], md.slot_data[&1]);
+
+    // Mêmes éléments que l'import de l'export (moteur « export »).
+    let names = |w: &logic::MultiWorld| {
+        let locations: BTreeSet<(String, Option<i64>)> = w
+            .locations()
+            .iter()
+            .map(|l| (l.name.clone(), l.address))
+            .collect();
+        let entrances: BTreeSet<String> = w.entrances().iter().map(|e| e.name.clone()).collect();
+        let regions: BTreeSet<String> = w.regions().iter().map(|r| r.name.clone()).collect();
+        (locations, entrances, regions)
+    };
+    assert_eq!(names(&built.world), names(&imported.world));
+    let pool = |w: &logic::MultiWorld, pool: &[logic::ItemKindId]| {
+        let mut names: Vec<String> = pool
+            .iter()
+            .map(|i| w.item_kind(*i).unwrap().name.clone())
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        pool(&built.world, &built.pool),
+        pool(&imported.world, &imported.pool)
+    );
+
+    // Seed complète par le moteur Rust seul : tout se place, la victoire est atteinte.
+    let generated = generate::generate(&request).unwrap();
+    let seed =
+        multidata::load_archipelago(&generated.archipelago, &multidata::ArchiveLimits::default())
+            .unwrap();
+    assert_eq!(seed.locations[&1].len(), md.locations[&1].len());
+    eprintln!(
+        "Slime Rancher natif : {} lieux, {} entrées, {} régions",
+        built.world.locations().len(),
+        built.world.entrances().len(),
+        built.world.regions().len()
+    );
+}

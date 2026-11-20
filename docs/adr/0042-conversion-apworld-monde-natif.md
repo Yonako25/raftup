@@ -34,8 +34,8 @@
 - Sorties : le texte du `world.toml`, relu par `worlds_native::parse_world` avant d'être rendu, et la liste des points à vérifier.
 - Règles : `has` (nombre), `has_all`, `has_any`, `has_all_counts` et `has_any_count` (dépliés en `and` / `or` de `has`), `can_reach_*`, `and`, `or`, `true`, `false` se traduisent tels quels. `at_least` et `has_from_list_unique` deviennent un `or` de `and` sur les combinaisons (256 au plus, comme l'import). `has_from_list` (somme d'exemplaires) n'existe pas dans le format 1 : traduit en `has_group` seulement si la liste est exactement un groupe d'objets déclaré, sinon refusé.
 - Pool : dans l'ordre de l'export, copies consécutives regroupées (`count`). La fin du pool, si elle n'est faite que de copies d'un même objet de remplissage, devient `[filler]` ; point à vérifier : « le monde tire-t-il des pièges au hasard ? » (ajouter `trap` et `trap_percent`).
-- Refusés (erreur claire, rien d'écrit) : règle opaque, `collect` redéfini, objet verrouillé qui n'est pas un événement (lieu avec numéro), objet d'événement posé à deux endroits, noms en double.
-- Signalés sans être convertis (points à vérifier) : règles d'objet (`item_rule`, qui peuvent aussi venir du YAML : `local_items`), objets à placer tôt (`early_items`, souvent du YAML), entrée reliée à rien (ignorée), classification d'un objet absent du pool (écrit `filler`), drapeaux de classification inconnus.
+- Refusés (erreur claire, rien d'écrit) : règle opaque, `collect` redéfini, objet verrouillé qui n'est pas un événement (lieu avec numéro), objet d'événement qui a aussi un numéro, règle qui lit l'inventaire d'un autre joueur, pool du joueur qui ne remplit pas exactement ses lieux, noms en double.
+- Signalés sans être convertis (points à vérifier) : règles d'objet (`item_rule`, qui peuvent aussi venir du YAML : `local_items`), objets à placer tôt (`early_items`, souvent du YAML), entrée reliée à rien (ignorée), classification d'un objet absent du pool (écrit `filler`), drapeaux de classification inconnus, lieux du datapackage absents avec ces options (écrits avec `when = 'false'` pour garder le datapackage).
 
 ### 4. L'export inverse (`worlds_native::apworld`, même binaire)
 
@@ -45,9 +45,15 @@
 - Texte déterministe ; noms échappés comme des chaînes Python (`repr` à la main), jamais du code venu du fichier : un monde natif hostile ne peut pas injecter de Python.
 - Vérifié contre le vrai Archipelago 0.6.8 (test `#[ignore]`) : même datapackage que le monde natif (noms, numéros, groupes, `checksum`), et seed générée puis relue.
 
-### 5. Pas de `format_version` 2 pour l'instant
+### 5. `format_version` 2, pour un seul manque
 
-Ce qui manque au format 1, et ce qu'on fait sans :
+Le premier vrai apworld converti (Slime Rancher) pose le même objet d'événement à plusieurs endroits (« Note Read » ×30, « Lucky Plort » ×18…), puis compte ces objets dans ses règles. Le format 1 l'interdit. C'est un motif courant d'Archipelago : on ouvre la **version 2**, avec ce seul changement.
+
+- Version 2 : plusieurs `[[events]]` peuvent donner le même objet d'événement ; il est créé une fois et chaque événement en pose un exemplaire. Rien d'autre ne change ; un fichier de version 1 reste lu tel quel, et la même chose écrite en version 1 reste refusée (avec un message qui cite la version 2).
+- Le convertisseur écrit `format_version = 1` quand il peut, `2` seulement si un objet d'événement est partagé.
+- L'export en apworld n'a rien à faire de plus : Archipelago fait exactement cela.
+
+Ce qui manque encore, et ce qu'on fait sans :
 
 | Manque | Aujourd'hui |
 | --- | --- |
@@ -56,13 +62,21 @@ Ce qui manque au format 1, et ce qu'on fait sans :
 | `accessibility` | Option commune du YAML : hors format. |
 | Objet verrouillé avec numéro (pas un événement) | Refusé. |
 | Somme d'exemplaires sur une liste (`has_from_list`) hors groupe déclaré | Refusé. |
-| Entrées mélangées, remplissages pondérés, noms spéciaux des `range` | Non converti (les noms spéciaux sont recopiés en commentaire). |
+| Entrées mélangées, remplissages pondérés, noms spéciaux des `range` | Non converti (les noms spéciaux sont signalés). |
 
-APQuest et Slime Rancher se convertissent sans rien de tout cela. On ouvrira une `format_version` 2 quand un vrai apworld à convertir en aura besoin, en commençant par les règles d'objet propres au monde et `has_from_list` ; d'ici là, un manque donne un refus ou un point à vérifier, jamais un monde faux.
+APQuest et Slime Rancher n'ont besoin de rien de tout cela. On ouvrira une version 3 quand un vrai apworld à convertir en aura besoin, en commençant par les règles d'objet propres au monde et `has_from_list` ; d'ici là, un manque donne un refus ou un point à vérifier, jamais un monde faux.
 
 ### 6. Slime Rancher : converti seulement sur le PC
 
-L'apworld Slime Rancher n'a **pas de licence** (ADR 0021). Sa version native serait une œuvre dérivée : elle **n'entre pas dans le dépôt**. Un test `#[ignore]` la produit sur le PC à partir de l'apworld installée (`RAFTUP_SLIME_APWORLD`), la relit et la compile ; rien n'est écrit dans le dépôt.
+L'apworld Slime Rancher n'a **pas de licence** (ADR 0021). Sa version native serait une œuvre dérivée : elle **n'entre pas dans le dépôt**. Un test `#[ignore]` (`launcher-core/tests/conversion_real.rs`) la produit sur le PC à partir de l'apworld installée (`RAFTUP_SLIME_APWORLD`) ; le fichier n'est écrit que si `RAFTUP_SLIME_NATIF_OUT` donne un chemin.
+
+Résultat (21 novembre 2026, seed 11, options par défaut) : 284 lieux, 32 entrées, 25 régions, `format_version` 2 ; même datapackage (`checksum` compris) et même `slot_data` que la seed d'Archipelago ; mêmes lieux, entrées, régions et pool que l'import de l'export ; seed complète générée par le **moteur Rust seul**, sans Python. Quatre points à vérifier : classification d'un objet absent du pool, remplissage, lieux absents avec ces options, `slot_data` en valeurs littérales.
+
+## Mise en œuvre (21 novembre 2026)
+
+- **APQuest** : l'export réel (`generate/tests/data/apquest-export.json`) converti redonne le portage Rust aux options par défaut : mêmes structures, même datapackage, **même seed `.archipelago` à l'octet près**, sans retouche (`generate/tests/conversion.rs`). Le lieu « Bottom Left Extra Chest », absent sans l'option, est gardé avec `when = 'false'` : sans lui, le datapackage (et donc la seed) changeait.
+- **Export inverse** : APQuest natif (renommé « APQuest Natif » pour ne pas heurter le vrai) devient un apworld que le vrai Archipelago 0.6.8 génère : même datapackage que le monde natif, même `slot_data` que le moteur Rust pour les mêmes options. Aller-retour : cet apworld exporté par le worker (règles en fonctions, donc sondées) passe le contrôle croisé contre Archipelago et se reconvertit.
+- Écart vu : `rule_builder` trie les noms de `has_all` ; la règle convertie a donc l'ordre trié (`has_all(Shield, Sword)`). Même sens, même seed.
 
 ## Conséquences
 

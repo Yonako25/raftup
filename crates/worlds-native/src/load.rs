@@ -22,6 +22,7 @@ use crate::model::{
 };
 use crate::{
     FORMAT_VERSION, MAX_CHOICES, MAX_ELEMENTS, MAX_FILE_BYTES, MAX_NAME_CHARS, MAX_RULE_BYTES,
+    MIN_FORMAT_VERSION,
 };
 
 // ---- Le format TOML, tel qu'il est écrit ----
@@ -37,7 +38,6 @@ struct Probe {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawWorld {
-    #[allow(dead_code)]
     format_version: i64,
     game: RawGame,
     #[serde(default)]
@@ -269,7 +269,7 @@ pub fn parse_world(text: &str) -> Result<NativeWorld, LoadError> {
     // message clair au lieu d'une liste de champs inconnus.
     let probe: Probe = toml::from_str(text).map_err(|e| toml_error(text, &e))?;
     match probe.format_version {
-        Some(FORMAT_VERSION) => {}
+        Some(MIN_FORMAT_VERSION..=FORMAT_VERSION) => {}
         Some(found) => return Err(LoadError::Format { found }),
         None => {
             return Err(LoadError::Invalid {
@@ -612,15 +612,27 @@ impl Loader<'_> {
                     ),
                 ));
             }
-            if names
-                .items
-                .insert(event.item.clone(), ItemRef::Event(index(i)))
-                .is_some()
-            {
-                return Err(self.invalid(
-                    event.name.span(),
-                    format!("événement « {} » : l'objet « {} » existe déjà (un objet d'événement est un nouvel objet)", event.name.get_ref(), event.item),
-                ));
+            match names.items.get(&event.item) {
+                None => {
+                    names
+                        .items
+                        .insert(event.item.clone(), ItemRef::Event(index(i)));
+                }
+                // Format 2 : un objet d'événement peut être posé par plusieurs événements
+                // (« Note Read » ×30) ; le nom désigne le premier, l'objet est le même.
+                Some(ItemRef::Event(_)) if raw.format_version >= 2 => {}
+                Some(ItemRef::Event(_)) => {
+                    return Err(self.invalid(
+                        event.name.span(),
+                        format!("événement « {} » : l'objet « {} » est déjà donné par un autre événement (permis à partir de format_version = 2)", event.name.get_ref(), event.item),
+                    ));
+                }
+                Some(ItemRef::Item(_)) => {
+                    return Err(self.invalid(
+                        event.name.span(),
+                        format!("événement « {} » : l'objet « {} » existe déjà (un objet d'événement est un nouvel objet)", event.name.get_ref(), event.item),
+                    ));
+                }
             }
         }
         for (i, group) in raw.item_groups.iter().enumerate() {

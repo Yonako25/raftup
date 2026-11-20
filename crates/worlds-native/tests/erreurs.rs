@@ -57,8 +57,8 @@ fn toml_illisible_avec_position() {
 #[test]
 fn version_du_format() {
     assert_eq!(
-        err(&minimal_with("format_version = 1", "format_version = 2")),
-        LoadError::Format { found: 2 }
+        err(&minimal_with("format_version = 1", "format_version = 3")),
+        LoadError::Format { found: 3 }
     );
     assert_invalid(
         &minimal_with("format_version = 1", ""),

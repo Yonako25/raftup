@@ -339,3 +339,65 @@ fn has_avec_option_et_zero() {
     assert!(matches!(w.entrances()[0].rule, Rule::Has { count: 2, .. }));
     assert!(matches!(world.goal, Expr::CanReachLocation(_)));
 }
+
+/// Format 2 (ADR 0042) : deux événements donnent le même objet, qu'une règle compte.
+const PLORTS: &str = r#"
+format_version = 2
+
+[game]
+name = "Plorts"
+goal = 'has("Pink Plort", 2)'
+
+[[items]]
+name = "Coin"
+id = 1
+classification = "filler"
+
+[[regions]]
+name = "Ranch"
+
+[[locations]]
+name = "Shop"
+id = 1
+region = "Ranch"
+
+[[events]]
+name = "Pink Slime A"
+region = "Ranch"
+item = "Pink Plort"
+
+[[events]]
+name = "Pink Slime B"
+region = "Ranch"
+item = "Pink Plort"
+
+[filler]
+item = "Coin"
+"#;
+
+#[test]
+fn format_2_objet_d_evenement_partage() {
+    let world = parse_world(PLORTS).unwrap();
+    let (w, _) = build(&world, &[]);
+    // Un seul objet « Pink Plort », posé deux fois.
+    let plorts: Vec<_> = w
+        .item_kinds()
+        .iter()
+        .filter(|k| k.name == "Pink Plort")
+        .collect();
+    assert_eq!(plorts.len(), 1);
+    let placed = w
+        .locations()
+        .iter()
+        .filter(|l| l.item.is_some() && l.address.is_none())
+        .count();
+    assert_eq!(placed, 2);
+    let result = logic::sweep(&w, logic::State::new(&w));
+    assert!(result.all_goals_reached(&w));
+}
+
+#[test]
+fn format_1_refuse_l_objet_d_evenement_partage() {
+    let e = parse_world(&PLORTS.replace("format_version = 2", "format_version = 1")).unwrap_err();
+    assert!(e.to_string().contains("format_version = 2"), "{e}");
+}

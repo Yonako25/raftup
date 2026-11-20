@@ -102,13 +102,15 @@ pub fn convert(
             }
         }
     }
+    // Un objet d'événement posé par plusieurs événements (« Note Read » ×30) demande le
+    // format 2 ; sinon on écrit le format 1, lu par plus de versions de Raftup.
     let mut event_items = BTreeSet::new();
+    let mut shared_events = false;
     for event in &events {
         let item = event.item.as_ref().map(|i| i.name.as_str()).unwrap_or("");
         if !event_items.insert(item) {
-            return Err(unsupported(format!(
-                "l'objet d'événement « {item} » est posé à deux endroits"
-            )));
+            shared_events = true;
+            continue;
         }
         if package.item_name_to_id.contains_key(item) {
             return Err(unsupported(format!(
@@ -174,7 +176,8 @@ pub fn convert(
     };
 
     let mut out = String::new();
-    header(&mut out, p);
+    let format_version = if shared_events { 2 } else { 1 };
+    header(&mut out, p, format_version);
     let head_len = out.len();
 
     // ---- Entrées (on garde celles qui mènent quelque part) ----
@@ -243,8 +246,8 @@ pub fn convert(
             }
             filler = Some(*last);
             notes.push(format!(
-                "les {} « {last} » de la fin du pool sont écrits en [filler] ; si le monde \
-                 tire des pièges au hasard, ajouter trap et trap_percent",
+                "fin du pool (« {last} » × {}) écrite en [filler] ; si le monde tire des \
+                 pièges au hasard, ajouter trap et trap_percent",
                 pool.len() - fixed
             ));
         }
@@ -427,10 +430,11 @@ pub fn convert(
 }
 
 /// En-tête du fichier : d'où il vient, et pour quelles options.
-fn header(out: &mut String, p: &PlayerExport) {
+fn header(out: &mut String, p: &PlayerExport, format_version: u32) {
     let _ = writeln!(
         out,
-        "# {} au format de monde natif (format_version 1), converti par Raftup (ADR 0042).",
+        "# {} au format de monde natif (format_version {format_version}), converti par Raftup \
+         (ADR 0042).",
         p.game.replace('\n', " ")
     );
     out.push_str(
@@ -446,7 +450,7 @@ fn header(out: &mut String, p: &PlayerExport) {
     if !values.is_empty() {
         let _ = writeln!(out, "# Options de l'instantané : {}.", values.join(", "));
     }
-    out.push_str("\nformat_version = 1\n\n");
+    let _ = write!(out, "\nformat_version = {format_version}\n\n");
 }
 
 /// Options du monde, recopiées en commentaire (squelette à décommenter).

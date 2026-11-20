@@ -65,7 +65,8 @@ pub enum LoadError {
         message: String,
     },
     #[error(
-        "format_version {found} inconnu (versions comprises : {})",
+        "format_version {found} inconnu (versions comprises : {} à {})",
+        crate::MIN_FORMAT_VERSION,
         crate::FORMAT_VERSION
     )]
     Format { found: i64 },

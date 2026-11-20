@@ -394,14 +394,25 @@ impl NativeWorld {
             let classification = *pick(&item.classification, v)?;
             items.push(w.add_item_kind(slot, item.name.clone(), Some(item.id), classification)?);
         }
+        // Un objet d'événement donné par plusieurs événements (format 2) n'est créé
+        // qu'une fois : chaque événement en pose un exemplaire.
         let mut event_items = Vec::new();
+        let mut created: std::collections::BTreeMap<&str, ItemKindId> = Default::default();
         for event in &self.events {
-            event_items.push(w.add_item_kind(
-                slot,
-                event.item.clone(),
-                None,
-                logic::Classification::PROGRESSION,
-            )?);
+            let id = match created.get(event.item.as_str()) {
+                Some(id) => *id,
+                None => {
+                    let id = w.add_item_kind(
+                        slot,
+                        event.item.clone(),
+                        None,
+                        logic::Classification::PROGRESSION,
+                    )?;
+                    created.insert(event.item.as_str(), id);
+                    id
+                }
+            };
+            event_items.push(id);
         }
         let mut groups = Vec::new();
         for group in &self.item_groups {
