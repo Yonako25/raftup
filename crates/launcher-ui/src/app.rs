@@ -2,7 +2,7 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{create, friends, join, library, matches, running, setup, soon};
+use crate::screens::{create, friends, join, library, matches, running, settings, setup, soon};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -22,6 +22,8 @@ pub enum Page {
     Join,
     /// « Amis » : compte sur le hub, amis et demandes (ADR 0035).
     Friends,
+    /// « Paramètres » : l'adresse du Rafthub, pour l'instant.
+    Settings,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
     /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
     Soon(&'static str),
@@ -131,7 +133,7 @@ impl App {
 
 /// Page d'ouverture. En debug, `RAFTUP_DEV_PAGE` choisit l'écran affiché au démarrage
 /// (captures d'écran pour les comparaisons avec la maquette) : `bibliotheque`,
-/// `partie`, `creer`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
+/// `partie`, `creer`, `rejoindre`, `amis`, `parametres`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
 fn start_page() -> Page {
     // `cfg!(debug_assertions)` vaut faux en `--release` : le binaire livré ignore la variable.
     if !cfg!(debug_assertions) {
@@ -143,6 +145,7 @@ fn start_page() -> Page {
         Some("creer") => Page::Create,
         Some("rejoindre") => Page::Join,
         Some("amis") => Page::Friends,
+        Some("parametres") => Page::Settings,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
         Some("catalogue") => Page::Soon("Catalogue"),
@@ -280,6 +283,7 @@ impl eframe::App for App {
                 }
                 Page::Join => join::show(ui, &mut self.join, &mut self.library),
                 Page::Friends => friends::show(ui, &mut self.friends),
+                Page::Settings => settings::show(ui, &mut self.friends),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
@@ -297,6 +301,10 @@ impl eframe::App for App {
             // au moins un fichier YAML. » n'a pas de sens sur « Héberger une partie »).
             if self.page != page {
                 self.error = None;
+                // Au retour sur « Rejoindre », le presse-papiers sera relu.
+                if self.page == Page::Join {
+                    join::on_leave(&mut self.join);
+                }
             }
             self.page = page;
         }
@@ -356,7 +364,7 @@ fn sidebar(
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
     let hosted = usize::from(shared.status.is_some());
     let in_progress = matches!(current, Page::InProgress | Page::Hosted | Page::Create);
-    let sections: [(&str, Vec<NavLink>); 3] = [
+    let sections: [(&str, Vec<NavLink>); 4] = [
         (
             "JEUX",
             vec![
@@ -374,6 +382,7 @@ fn sidebar(
                 ("Invitations", 0, Page::Join),
             ],
         ),
+        ("RÉGLAGES", vec![("Paramètres", 0, Page::Settings)]),
         (
             "CATALOGUE",
             vec![
@@ -382,7 +391,7 @@ fn sidebar(
             ],
         ),
     ];
-    for (heading, links) in sections {
+    for (heading, links) in visible_sections(sections) {
         section_heading(ui, heading);
         for (label, count, page) in links {
             // « En cours » reste actif quand on ouvre la partie hébergée.
@@ -428,6 +437,22 @@ fn sidebar(
         ui.ctx().request_repaint();
     }
     goto
+}
+
+/// Les liens qu'on montre : un écran qui n'existe pas encore (`Page::Soon`) est caché,
+/// pas annoncé (plan de l'interface, étape 1). Une section vidée disparaît avec son titre.
+fn visible_sections<'a>(
+    sections: impl IntoIterator<Item = (&'a str, Vec<NavLink>)>,
+) -> Vec<(&'a str, Vec<NavLink>)> {
+    sections
+        .into_iter()
+        .map(|(heading, mut links)| {
+            // `retain` garde en place les éléments pour lesquels la fonction rend vrai.
+            links.retain(|(_, _, page)| !matches!(page, Page::Soon(_)));
+            (heading, links)
+        })
+        .filter(|(_, links)| !links.is_empty())
+        .collect()
 }
 
 /// Titre de section en petites capitales espacées (« JEUX », « PARTIES »…).
@@ -655,5 +680,29 @@ fn logo(ui: &mut Ui, size: f32) {
         None => {
             ui.allocate_exact_size(size, Sense::hover());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn les_ecrans_a_venir_sont_caches_du_menu() {
+        let sections = vec![
+            (
+                "JEUX",
+                vec![
+                    ("Accueil", 0, Page::Soon("Accueil")),
+                    ("Bibliothèque", 2, Page::Library),
+                ],
+            ),
+            ("CATALOGUE", vec![("Parcourir", 0, Page::Soon("Catalogue"))]),
+        ];
+        let visible = visible_sections(sections);
+        // « Accueil » disparaît ; « CATALOGUE », vidée, disparaît avec son titre.
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].0, "JEUX");
+        assert_eq!(visible[0].1, vec![("Bibliothèque", 2, Page::Library)]);
     }
 }

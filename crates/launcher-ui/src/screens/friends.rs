@@ -37,7 +37,7 @@ use launcher_core::config;
 use launcher_core::hub_client::{
     DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, ErrorCode, Friend, FriendRequests,
     HubClient, HubClientError, HubInfo, HubUrl, KeyringStore, MemoryStore, Password, Presence,
-    RequestOutcome, Session, Status, TokenStore, DEFAULT_HUB_URL, DISCORD_WAIT,
+    RequestOutcome, Session, Status, TokenStore, DEFAULT_HUB_URL, DISCORD_WAIT, HAS_OFFICIAL_HUB,
 };
 
 use super::library::load_paths;
@@ -1237,8 +1237,7 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
         } else {
             account_panel(ui, state, &ctx);
         }
-        ui.add_space(12.0);
-        hub_panel(ui, state, &ctx);
+        // L'adresse du Rafthub se règle dans « Paramètres » (plan de l'interface, étape 1).
     });
     None
 }
@@ -1741,9 +1740,12 @@ fn requests_panels(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     }
 }
 
-/// Adresse du hub, modifiable.
-fn hub_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
+/// Adresse du hub, modifiable (écran « Paramètres »).
+pub fn hub_panel(ui: &mut Ui, state: &mut FriendsState) {
+    let ctx = ui.ctx().clone();
     widgets::panel(ui, "Rafthub", |ui| {
+        ui.label(widgets::dim("Le serveur des comptes et des amis (écran « Amis »).").size(13.0));
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut state.url_text)
@@ -1751,11 +1753,11 @@ fn hub_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                     .desired_width(320.0),
             );
             if widgets::primary_button(ui, "Enregistrer", !state.busy()) {
-                state.apply_url(ctx);
+                state.apply_url(&ctx);
             }
             if widgets::ghost_button(ui, "Par défaut") && !state.busy() {
                 state.url_text = DEFAULT_HUB_URL.to_string();
-                state.apply_url(ctx);
+                state.apply_url(&ctx);
             }
         });
         let status = match &state.url {
@@ -1763,15 +1765,20 @@ fn hub_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
             Err(e) => format!("Adresse refusée : {e}"),
         };
         ui.label(widgets::dim(status).size(12.0));
-        ui.label(
-            widgets::dim(
-                "Aucun Rafthub public pour l'instant : par défaut, celui lancé sur ce PC. \
-                 Une adresse distante doit être en https://. Un lien raftup://hub/<hôte> \
-                 change aussi de Rafthub, après confirmation.",
-            )
-            .size(12.0),
-        );
+        ui.label(widgets::dim(default_hub_note(HAS_OFFICIAL_HUB)).size(12.0));
     });
+}
+
+/// Ce que veut dire « Par défaut », selon la façon dont le launcher a été compilé.
+fn default_hub_note(official: bool) -> &'static str {
+    if official {
+        "Par défaut : le Rafthub officiel. Une adresse distante doit être en https://. \
+         Un lien raftup://hub/<hôte> change aussi de Rafthub, après confirmation."
+    } else {
+        "Version de développement : par défaut, le Rafthub lancé sur ce PC. Une adresse \
+         distante doit être en https://. Un lien raftup://hub/<hôte> change aussi de \
+         Rafthub, après confirmation."
+    }
 }
 
 /// Boîte « Passer sur le hub <hôte> ? », dessinée par-dessus n'importe quel écran tant
@@ -1858,6 +1865,15 @@ mod tests {
         Friend {
             username: name.to_string(),
             presence,
+        }
+    }
+
+    #[test]
+    fn hub_par_defaut_explique_sans_annoncer_l_absence_de_hub_public() {
+        assert!(default_hub_note(true).starts_with("Par défaut : le Rafthub officiel"));
+        assert!(default_hub_note(false).contains("lancé sur ce PC"));
+        for official in [true, false] {
+            assert!(!default_hub_note(official).contains("Aucun Rafthub public"));
         }
     }
 

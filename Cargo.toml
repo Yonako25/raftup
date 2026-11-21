@@ -35,6 +35,9 @@ tokio = { version = "1.54", features = ["rt", "net", "time", "macros"] }
 # « clipboard » : sans elle, les boutons « Copier » ne font rien ; « links » : ouvre les liens.
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "clipboard", "links", "x11", "wayland"] }
 egui = "0.37"
+# Lecture du presse-papiers (écran « Rejoindre » : lien d'invitation copié). Déjà tiré
+# par eframe (fonction « clipboard »), même version ; MIT OR Apache-2.0.
+arboard = { version = "3.7", default-features = false }
 rfd = { version = "0.18", default-features = false }
 # Heures locales (HH:MM) pour l'activité et le journal.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

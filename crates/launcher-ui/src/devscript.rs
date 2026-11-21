@@ -9,12 +9,14 @@
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
-//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis` (`RAFTUP_DEV_HUB_INSCRIPTION=1` : onglet « Créer un compte »), `changer-de-hub`, `generateur-absent` : une seule capture de l'écran,
+//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis` (`RAFTUP_DEV_HUB_INSCRIPTION=1` : onglet « Créer un compte »), `parametres`, `changer-de-hub`, `generateur-absent` : une seule capture de l'écran,
 //!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
 //!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
 //!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`
 //!   a besoin de `RAFTUP_DEV_YAML` (sinon le formulaire est refusé avant la vérification
 //!   du générateur) et d'une `RAFTUP_DEV_RACINE` vide ;
+//! - `RAFTUP_DEV_AVANCE=1` : ouvre au départ les blocs repliés (« Options avancées »,
+//!   « Se connecter à la main »…) ;
 //! - `RAFTUP_DEV_SEEDFILE=<fichier>` : la seed du scénario `heberger`
 //!   (`crates/multidata/tests/data/seed-mit.archipelago` par défaut), port 38295.
 //!
@@ -66,6 +68,8 @@ impl Scenario {
             // Écran « Amis » (avec `RAFTUP_DEV_PAGE=amis`, `RAFTUP_DEV_HUB` et, pour la
             // vue connectée, `RAFTUP_DEV_HUB_LOGIN`).
             Some("amis") => Scenario::Screen("1-amis"),
+            // Écran « Paramètres » (avec `RAFTUP_DEV_PAGE=parametres`).
+            Some("parametres") => Scenario::Screen("1-parametres"),
             // Boîte « Passer sur le hub … ? » : lancer avec un lien `raftup://hub/<hôte>`
             // en argument (ou transmis par une 2e instance avec `RAFTUP_DEV_DELAY_MS`).
             Some("changer-de-hub") => Scenario::Screen("1-changer-de-hub"),

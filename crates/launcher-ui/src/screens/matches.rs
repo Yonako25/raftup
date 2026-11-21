@@ -40,14 +40,6 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>) -> Option<Page> {
                 }
             }
         }
-
-        ui.add_space(10.0);
-        if ui
-            .link("Les salons en préparation sont dans « Salons »")
-            .clicked()
-        {
-            goto = Some(Page::Soon("Salons"));
-        }
     });
     goto
 }

@@ -37,6 +37,9 @@ pub struct SetupForm {
     encrypted: bool,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
+    /// Ouvre de force « Options avancées » à la prochaine image : le formulaire a été
+    /// refusé à cause d'un de ses champs (port, adresse, certificat, webhook).
+    open_advanced: bool,
 }
 
 impl Default for SetupForm {
@@ -53,6 +56,7 @@ impl Default for SetupForm {
             encrypted: true,
             cert: None,
             key: None,
+            open_advanced: false,
         }
     }
 }
@@ -84,10 +88,6 @@ pub fn show(
             |ui| {
                 if widgets::ghost_button(ui, "Créer depuis des YAML") {
                     goto = Some(Page::Create);
-                }
-                // L'écran des salons arrive plus tard.
-                if widgets::ghost_button(ui, "Créer un salon") {
-                    goto = Some(Page::Soon("Créer un salon"));
                 }
                 if widgets::ghost_button(ui, "Rejoindre par lien") {
                     goto = Some(Page::Join);
@@ -168,9 +168,6 @@ fn config_panel(
             );
         }
 
-        labelled(ui, "Port");
-        ui.add(egui::TextEdit::singleline(&mut form.port).desired_width(120.0));
-
         labelled(ui, "Mot de passe de la salle (facultatif)");
         ui.add(
             egui::TextEdit::singleline(&mut form.password)
@@ -178,50 +175,26 @@ fn config_panel(
                 .desired_width(f32::INFINITY),
         );
 
-        labelled(ui, "Adresse publique (nom de domaine ou IP)");
-        ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(f32::INFINITY));
-
-        labelled(ui, "Webhook Discord (facultatif)");
-        ui.add(
-            egui::TextEdit::singleline(&mut form.webhook)
-                .password(true)
-                .desired_width(f32::INFINITY),
-        );
-
-        labelled(ui, "Chiffrement");
-        let wss = widgets::choice_card(
-            ui,
-            form.encrypted,
-            "Chiffré (wss) — recommandé",
-            widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
-            |ui| {
-                ui.add_space(4.0);
-                ui.label(widgets::dim("Certificat (PEM)").size(13.0));
-                if file_row(ui, &form.cert) {
-                    form.pending_pick = Some(Pick::Cert);
-                }
-                ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
-                if file_row(ui, &form.key) {
-                    form.pending_pick = Some(Pick::Key);
-                }
-            },
-        );
-        if wss {
-            form.encrypted = true;
-        }
+        // Réglages d'expert repliés, avec un résumé d'une ligne de ce qui sera utilisé.
         ui.add_space(4.0);
-        let plain = widgets::choice_card(
-            ui,
-            !form.encrypted,
-            "En clair (ws)",
-            RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
-                .color(theme::AMBER)
-                .size(13.0),
-            |_| {},
+        ui.label(
+            widgets::dim(format::server_summary(
+                &form.port,
+                &form.public_host,
+                form.encrypted,
+            ))
+            .size(12.0),
         );
-        if plain {
-            form.encrypted = false;
-        }
+        // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
+        let mut open_now = form.open_advanced;
+        widgets::advanced(
+            ui,
+            "setup_server",
+            "Options avancées",
+            &mut open_now,
+            |ui| advanced_server(ui, form),
+        );
+        form.open_advanced = open_now;
 
         ui.add_space(12.0);
         ui.horizontal(|ui| {
@@ -233,7 +206,12 @@ fn config_panel(
                         prefs::remember(options.webhook.as_ref(), None);
                         worker.send(Command::Start(options));
                     }
-                    Err(message) => *error = Some(message),
+                    Err(message) => {
+                        // Sans seed valide, le champ fautif est visible ; sinon il est
+                        // dans les options avancées (suit l'ordre de `build_options`).
+                        form.open_advanced = form.seed.is_some();
+                        *error = Some(message);
+                    }
                 }
             }
             let scheme = if form.encrypted { "wss" } else { "ws" };
@@ -248,6 +226,58 @@ fn config_panel(
             ui.label(widgets::dim("Démarrage…"));
         }
     });
+}
+
+/// Contenu du bloc « Options avancées » : port, adresse publique, webhook, chiffrement
+/// et certificats PEM.
+fn advanced_server(ui: &mut Ui, form: &mut SetupForm) {
+    labelled(ui, "Port");
+    ui.add(egui::TextEdit::singleline(&mut form.port).desired_width(120.0));
+
+    labelled(ui, "Adresse publique (nom de domaine ou IP)");
+    ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(f32::INFINITY));
+
+    labelled(ui, "Webhook Discord (facultatif)");
+    ui.add(
+        egui::TextEdit::singleline(&mut form.webhook)
+            .password(true)
+            .desired_width(f32::INFINITY),
+    );
+
+    labelled(ui, "Chiffrement");
+    let wss = widgets::choice_card(
+        ui,
+        form.encrypted,
+        "Chiffré (wss) — recommandé",
+        widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
+        |ui| {
+            ui.add_space(4.0);
+            ui.label(widgets::dim("Certificat (PEM)").size(13.0));
+            if file_row(ui, &form.cert) {
+                form.pending_pick = Some(Pick::Cert);
+            }
+            ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
+            if file_row(ui, &form.key) {
+                form.pending_pick = Some(Pick::Key);
+            }
+        },
+    );
+    if wss {
+        form.encrypted = true;
+    }
+    ui.add_space(4.0);
+    let plain = widgets::choice_card(
+        ui,
+        !form.encrypted,
+        "En clair (ws)",
+        RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
+            .color(theme::AMBER)
+            .size(13.0),
+        |_| {},
+    );
+    if plain {
+        form.encrypted = false;
+    }
 }
 
 /// Macro de développement : choisit la seed sans boîte de fichiers, en clair, sur ce port.

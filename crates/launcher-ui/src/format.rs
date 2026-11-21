@@ -137,6 +137,21 @@ fn mode_text(mode: &str) -> &'static str {
     }
 }
 
+/// Résumé d'une ligne des options avancées du serveur, montré au-dessus du bloc replié :
+/// l'hôte voit ce qui sera utilisé sans l'ouvrir.
+pub fn server_summary(port: &str, public_host: &str, encrypted: bool) -> String {
+    let scheme = if encrypted {
+        "chiffré (wss, certificat PEM demandé)"
+    } else {
+        "en clair (ws)"
+    };
+    format!(
+        "Port {} · adresse {} · {scheme}",
+        port.trim(),
+        public_host.trim()
+    )
+}
+
 /// « Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %. »
 pub fn seed_options(release_mode: &str, collect_mode: &str, hint_cost: i64) -> String {
     let release = mode_text(release_mode);
@@ -442,6 +457,18 @@ fn plain(pieces: &[Piece]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_des_options_avancees() {
+        assert_eq!(
+            server_summary(" 38281 ", "localhost", true),
+            "Port 38281 · adresse localhost · chiffré (wss, certificat PEM demandé)"
+        );
+        assert_eq!(
+            server_summary("40000", "exemple.fr", false),
+            "Port 40000 · adresse exemple.fr · en clair (ws)"
+        );
+    }
 
     #[test]
     fn empty_webhook_means_none() {
