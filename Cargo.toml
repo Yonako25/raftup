@@ -91,6 +91,9 @@ yaml-rust2 = "0.13"
 generate = { path = "crates/generate" }
 # Dossiers temporaires pour les tests.
 tempfile = "3"
+# Tests de l'interface du launcher sans fenêtre (même version qu'egui ; MIT OR Apache-2.0).
+# « snapshot » + « wgpu » : captures de référence, rendues par la carte graphique.
+egui_kittest = { version = "0.37", features = ["snapshot", "wgpu"] }
 ap-protocol = { path = "crates/ap-protocol" }
 client-core = { path = "crates/client-core" }
 multidata = { path = "crates/multidata" }

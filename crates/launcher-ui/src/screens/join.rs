@@ -35,6 +35,18 @@ pub struct JoinState {
     from_clipboard: bool,
 }
 
+impl JoinState {
+    /// Tests de l'interface : le presse-papiers du système est déjà « regardé »,
+    /// donc jamais lu (le résultat ne dépend pas de ce que le PC a copié).
+    #[cfg(test)]
+    pub(crate) fn without_clipboard() -> JoinState {
+        JoinState {
+            clipboard_checked: true,
+            ..JoinState::default()
+        }
+    }
+}
+
 /// Où mène « Continuer ».
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Destination {

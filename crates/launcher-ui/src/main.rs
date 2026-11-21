@@ -18,6 +18,9 @@ mod screens;
 mod startup;
 mod theme;
 mod titlebar;
+// Tests de l'interface sans fenêtre (egui_kittest), voir `tests/README.md`.
+#[cfg(test)]
+mod ui_tests;
 mod update_ui;
 mod widgets;
 mod worker;

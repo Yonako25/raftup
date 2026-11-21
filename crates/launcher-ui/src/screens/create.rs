@@ -61,9 +61,14 @@ struct GameChoice {
 
 /// Les jeux du catalogue (vide si le catalogue ne se lit pas).
 fn game_choices() -> Vec<GameChoice> {
-    let Ok(catalog) = load_catalog() else {
-        return Vec::new();
-    };
+    match load_catalog() {
+        Ok(catalog) => game_choices_from(&catalog),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Les jeux d'un catalogue donné, dans l'ordre du catalogue.
+fn game_choices_from(catalog: &launcher_core::Catalog) -> Vec<GameChoice> {
     catalog
         .games()
         .map(|profile| GameChoice {
@@ -200,13 +205,26 @@ impl CreateForm {
             ..CreateForm::default()
         };
         form.refresh_installed();
-        form.games = game_choices();
-        // Un seul jeu au catalogue : il est choisi d'office.
-        if let [only] = form.games.as_slice() {
-            form.my_game = Some(only.id.clone());
-            form.new_game = Some(only.id.clone());
-        }
+        form.set_games(game_choices());
         form
+    }
+
+    /// Tests de l'interface (`ui_tests`) : formulaire par défaut avec les jeux de
+    /// `catalog`, sans rien lire sur le disque (ni préférences, ni apworlds installés).
+    #[cfg(test)]
+    pub(crate) fn for_tests(catalog: &launcher_core::Catalog) -> CreateForm {
+        let mut form = CreateForm::default();
+        form.set_games(game_choices_from(catalog));
+        form
+    }
+
+    /// Range les jeux proposés. Un seul jeu au catalogue : il est choisi d'office.
+    fn set_games(&mut self, games: Vec<GameChoice>) {
+        self.games = games;
+        if let [only] = self.games.as_slice() {
+            self.my_game = Some(only.id.clone());
+            self.new_game = Some(only.id.clone());
+        }
     }
 
     fn game(&self, id: &str) -> Option<&GameChoice> {
@@ -1264,7 +1282,10 @@ fn all_apworlds(form: &CreateForm) -> Vec<PathBuf> {
     all
 }
 
-fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions), String> {
+/// `pub(crate)` : les tests de l'interface comparent ce refus au texte affiché.
+pub(crate) fn build_request(
+    form: &CreateForm,
+) -> Result<(GenerateRequest, PartyHostOptions), String> {
     // Sans YAML importés, c'est l'équipage qui fera les joueurs : on le vérifie ici,
     // ses YAML ne sont écrits qu'au moment de générer (`on_generate`).
     if form.yamls.is_empty() {
