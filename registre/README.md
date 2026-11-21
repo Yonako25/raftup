@@ -10,13 +10,13 @@ Le registre complète le catalogue embarqué du launcher (ADR 0032) : il ajoute 
 
 Le launcher lit l'index à l'adresse `launcher_core::registry::REGISTRY_INDEX_URL` :
 `https://github.com/Yonako25/raftup/releases/download/registre/index.json`, et vérifie la
-signature avec `REGISTRY_PUBLIC_KEY` (clé `A3D76747B9BA50E2`).
+signature avec `REGISTRY_PUBLIC_KEY` (clé `40CD99C56F16E1EA`).
 
 L'outil est le binaire `raftup-registry` de la crate `registry-tool` (ADR 0045).
 
 ## Clés
 
-La paire de clés du registre est dans `C:\Users\ionak\.raftup-keys\` :
+La paire de clés du registre est dans `C:\Users\Yonako\.raftup-keys\` :
 `raftup-registry.key` (secrète, sans mot de passe) et `raftup-registry.pub`. Elle est
 distincte de celle des mises à jour (`raftup-update.*`). La clé secrète ne va **jamais**
 dans le dépôt, ni dans un message, ni dans la CI ; en faire une copie de sauvegarde hors
@@ -84,7 +84,7 @@ mêmes cas.
 2. Produire l'index signé avec ce rapport (rien n'est envoyé) :
 
    ```powershell
-   cargo run -p registry-tool --bin raftup-registry -- publish registre\registre.toml C:\Users\ionak\.raftup-keys\raftup-registry.key registre\sortie --rapport registre\rapport\rapport.json
+   cargo run -p registry-tool --bin raftup-registry -- publish registre\registre.toml C:\Users\Yonako\.raftup-keys\raftup-registry.key registre\sortie --rapport registre\rapport\rapport.json
    ```
 
    Le niveau d'un paquet n'est repris que si le rapport décrit **le même fichier** (même
@@ -96,7 +96,7 @@ mêmes cas.
    aussi le niveau de chaque paquet) :
 
    ```powershell
-   cargo run -p registry-tool --bin raftup-registry -- verify registre\sortie\index.json registre\sortie\index.json.minisig RWTiULq5R2fXo7ZsQfse7x6oTpfcKN7HDCRlg4v7c1JyGe0EZuTjWszy
+   cargo run -p registry-tool --bin raftup-registry -- verify registre\sortie\index.json registre\sortie\index.json.minisig RWTq4RZvxZnNQOqFM6x2kbpozFW70qYGXHTnUn2VKLKe5mphpi/F6wbo
    ```
 
 4. **À la main**, sur GitHub, dans la release d'étiquette `registre` du dépôt

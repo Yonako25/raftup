@@ -36,7 +36,7 @@ use thiserror::Error;
 /// **Copie** de `launcher_core::update::UPDATE_PUBLIC_KEY` (ADR 0022) : le hub ne
 /// dépend pas de `launcher-core`, qui tirerait le serveur, le générateur et le
 /// trousseau. Un test (`tests/distribution.rs`) vérifie que les deux restent égales.
-pub const UPDATE_PUBLIC_KEY: &str = "RWSHF8KA5BK0tFqXIT/KzwchBvrGFmc3NqDbkAu4lLY9cNbv4XqiagdP";
+pub const UPDATE_PUBLIC_KEY: &str = "RWS+YnudIFIVAFDtalsvodpSlxBLmoOCG7qs5tB7VUHc6n+H3dot3FjI";
 
 /// Adresse du manifeste : copie de `launcher_core::update::UPDATE_MANIFEST_URL`.
 pub const UPDATE_MANIFEST_URL: &str =

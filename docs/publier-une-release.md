@@ -62,7 +62,7 @@ La commande doit afficher `raftup-windows-x86_64.exe: OK`. Sinon, ne pas signer 
 Depuis le dossier du dépôt, en remplaçant le chemin du dossier de release :
 
 ```bash
-cargo run -p launcher-core --example update_tool -- sign C:\raftup-release\v0.2.0\raftup-windows-x86_64.exe C:\Users\ionak\.raftup-keys\raftup-update.key
+cargo run -p launcher-core --example update_tool -- sign C:\raftup-release\v0.2.0\raftup-windows-x86_64.exe C:\Users\Yonako\.raftup-keys\raftup-update.key
 ```
 
 Cela écrit `raftup-windows-x86_64.exe.minisig` à côté de l'exe. La clé n'est jamais affichée.

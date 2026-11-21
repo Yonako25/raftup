@@ -29,10 +29,10 @@ use crate::catalog::Catalog;
 use crate::download::{DownloadError, Fetcher};
 use crate::profile::Profile;
 
-/// Clé publique minisign du registre (ligne base64 « RW… », identifiant `A3D76747B9BA50E2`),
+/// Clé publique minisign du registre (ligne base64 « RW… », identifiant `40CD99C56F16E1EA`),
 /// **distincte** de celle des mises à jour (ADR 0032). Créée le 19 novembre 2026 par
 /// `raftup-registry keygen` ; la clé secrète reste hors du dépôt, chez la mainteneuse.
-pub const REGISTRY_PUBLIC_KEY: &str = "RWTiULq5R2fXo7ZsQfse7x6oTpfcKN7HDCRlg4v7c1JyGe0EZuTjWszy";
+pub const REGISTRY_PUBLIC_KEY: &str = "RWTq4RZvxZnNQOqFM6x2kbpozFW70qYGXHTnUn2VKLKe5mphpi/F6wbo";
 
 /// Adresse de publication de l'index (ADR 0032) : une release GitHub à étiquette fixe,
 /// `registre`, distincte des releases du launcher. Republier = remplacer ses deux fichiers

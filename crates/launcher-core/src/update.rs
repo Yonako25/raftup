@@ -41,7 +41,7 @@ pub const UPDATE_MAX_BYTES: u64 = 512 * 1024 * 1024;
 /// Clé PUBLIQUE de la paire générée par `examples/update_tool.rs keygen` (ADR 0022). Si elle
 /// était vide, toute vérification échouerait avec `UpdateError::PublicKeyNotConfigured`
 /// plutôt que d'accepter n'importe quoi. Les tests passent leur propre clé aux fonctions.
-pub const UPDATE_PUBLIC_KEY: &str = "RWSHF8KA5BK0tFqXIT/KzwchBvrGFmc3NqDbkAu4lLY9cNbv4XqiagdP";
+pub const UPDATE_PUBLIC_KEY: &str = "RWS+YnudIFIVAFDtalsvodpSlxBLmoOCG7qs5tB7VUHc6n+H3dot3FjI";
 
 /// Adresse du manifeste (dernière release GitHub du dépôt, ADR 0022).
 pub const UPDATE_MANIFEST_URL: &str =

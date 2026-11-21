@@ -596,3 +596,9 @@ untime2`.
 - **Pas vérifié** : clic réel d'installation d'un monde natif dans l'interface ; conversion lancée depuis le launcher avec le vrai générateur ; captures d'écran de la fiche d'un monde installé (fenêtres arrêtées à la demande de l'utilisatrice) ; captures de référence sur la CI Windows.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : créer le dépôt GitHub de la spécification (pousser la branche `spec-monde-natif`), signer le premier index du registre et créer la release `registre` ; puis relire les ADR 0041 à 0046.
+
+### 2026-11-21 · Nouvelles clés de signature après le reset du PC
+- **Fait** : spécification poussée sur `Yonako25/raftup-monde-natif` (`main` = `91e3e6a`) ; anciennes clés perdues avec le reset, jamais utilisées pour une release ni un index publié, donc remplacées sans casse : registre `40CD99C56F16E1EA`, mises à jour `001552209D7B62BE`, secrètes dans `C:\Users\Yonako\.raftup-keys` ; constantes `REGISTRY_PUBLIC_KEY` et `UPDATE_PUBLIC_KEY` (launcher-core, hub) et docs mises à jour ; index d'essai signé puis vérifié avec la nouvelle clé. fmt et tests de launcher-core, registry, registry-tool et hub passent.
+- **Pas vérifié** : aucune release ni index réel publié avec les nouvelles clés.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : copier `C:\Users\Yonako\.raftup-keys` sur une clé USB ; signer le premier index avec le rapport de la CI et créer la release `registre` ; relire les ADR 0041 à 0046.
