@@ -11,6 +11,9 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+# Binaire `raftup-monde` (ADR 0042) seulement.
+anyhow.workspace = true
+zip.workspace = true
 ap-protocol.workspace = true
 fill.workspace = true
 indexmap.workspace = true
@@ -27,4 +30,3 @@ worlds-native.workspace = true
 yaml-rust2.workspace = true
 
 [dev-dependencies]
-anyhow.workspace = true

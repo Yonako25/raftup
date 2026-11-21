@@ -425,6 +425,41 @@ class Exporter:
                 "code": item.code if isinstance(item.code, int) else None,
                 "classification": int(item.classification)}
 
+    @staticmethod
+    def options(world):
+        """Options propres au monde, avec leur valeur (ADR 0042, conversion en monde natif).
+
+        Lecture seule : rien n'est cree ni tire au hasard. Les options communes a tous
+        les jeux (PerGameCommonOptions) sont laissees de cote."""
+        import Options
+
+        common = set(Options.PerGameCommonOptions.type_hints)
+        out = []
+        for name, cls in getattr(world.options_dataclass, "type_hints", {}).items():
+            if name in common:
+                continue
+            entry = {"name": str(name), "display": str(getattr(cls, "display_name", name))}
+            try:
+                entry["value"] = int(getattr(world.options, name).value)
+                entry["default"] = int(cls.default)
+            except Exception:
+                entry["kind"] = "other"
+                out.append(entry)
+                continue
+            if issubclass(cls, Options.Toggle):
+                entry["kind"] = "toggle"
+            elif issubclass(cls, Options.Range):
+                entry.update(kind="range", min=int(cls.range_start), max=int(cls.range_end),
+                             special=sorted(getattr(cls, "special_range_names", {})))
+            elif issubclass(cls, Options.Choice):
+                entry.update(kind="choice",
+                             choices=[[int(k), str(v)] for k, v in sorted(cls.name_lookup.items())],
+                             aliases=sorted([str(k), int(v)] for k, v in cls.aliases.items()))
+            else:
+                entry["kind"] = "other"
+            out.append(entry)
+        return out
+
     def player(self, p):
         mw = self.mw
         world = mw.worlds[p]
@@ -444,6 +479,7 @@ class Exporter:
                     "from": region.name,
                     "to": None if target is None else target.name,
                     "rule": self.rule(exit_.access_rule),
+                    "n": getattr(exit_, "_raftup_n", None),
                 })
                 self.check("entrance", p, exit_.name, exit_.access_rule)
             for loc in region.locations:
@@ -458,6 +494,8 @@ class Exporter:
                     # Regle d'objet (item_rule, always_allow, local_items...) : index dans
                     # `item_rules`, ou None.
                     "item_rule": self.item_rule(p, loc),
+                    # Ordre de creation (ADR 0042), note par le worker.
+                    "n": getattr(loc, "_raftup_n", None),
                 })
                 self.check("location", p, loc.name, loc.access_rule)
         return {
@@ -466,6 +504,7 @@ class Exporter:
             "game": str(world.game),
             "origin": str(getattr(world, "origin_region_name", "Menu")),
             "regions": regions,
+            "region_n": [getattr(r, "_raftup_n", None) for r in mw.get_regions(p)],
             "entrances": entrances,
             "locations": locations,
             "precollected": [self.item(i) for i in mw.precollected_items[p]],
@@ -480,6 +519,7 @@ class Exporter:
             "local_early_items": {str(k): int(v) for k, v in mw.local_early_items[p].items()
                                   if v > 0},
             "item_rule_error": self.item_rule_errors.get(p),
+            "options": self.options(world),
             "required_client_version": list(getattr(world, "required_client_version", (0, 1, 6))),
         }
 

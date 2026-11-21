@@ -24,6 +24,7 @@ de copyright et le texte de licence du fichier `LICENSE` du dépôt amont, au co
   - `crates/ap-protocol/tests/captures/` : paquets envoyés par le serveur officiel et paquets écrits par son encodeur ;
   - `crates/server/tests/data/` : trames envoyées par le serveur officiel pour la seed ci-dessus (`RoomInfo`, scénarios de connexion) ;
   - `crates/generate/tests/data/apquest-*.archipelago` : seeds APQuest générées par Archipelago 0.6.8 (références du générateur Rust).
+  - `crates/generate/tests/data/apquest-export.json` : export d'APQuest (options par défaut) écrit par Archipelago 0.6.8 et `raftup_export.py` (ADR 0042, données de la conversion en monde natif).
 
 Notice (fichier `LICENSE` du dépôt amont, au commit ci-dessus) :
 

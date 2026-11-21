@@ -262,6 +262,15 @@ def pause_before_fill(Main, Utils, erargs, seed, out, t0):
 
     Main.distribute_items_restrictive = fill
     Main.flood_items = fill
+    # Ordre de creation (ADR 0042) : _raftup_n sur chaque region, entree et lieu.
+    import BaseClasses as B
+    n = [0]
+    for c in (B.Region, B.Entrance, B.Location):
+        def w(s, *a, _i=c.__init__, **k):
+            n[0] += 1
+            s._raftup_n = n[0]
+            _i(s, *a, **k)
+        c.__init__ = w
     # Raftup a deja equilibre la progression.
     Main.balance_multiworld_progression = lambda multiworld: None
 

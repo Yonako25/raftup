@@ -16,6 +16,7 @@
 //! Rien ici ne panique sur une entrée hostile, et tout est parcouru dans l'ordre du
 //! fichier : même fichier et mêmes options ⇒ même monde.
 
+pub mod apworld;
 mod build;
 mod error;
 mod expr;
@@ -27,8 +28,12 @@ pub use error::{BuildError, LoadError, Position};
 pub use load::{load_path, parse_world};
 pub use model::NativeWorld;
 
-/// Version du format comprise par cette crate.
-pub const FORMAT_VERSION: i64 = 1;
+/// Dernière version du format comprise par cette crate. Les versions 1 et 2 sont lues ;
+/// la 2 ajoute une seule chose : plusieurs événements peuvent donner le même objet
+/// d'événement (ADR 0042).
+pub const FORMAT_VERSION: i64 = 2;
+/// Première version du format comprise.
+pub const MIN_FORMAT_VERSION: i64 = 1;
 /// Taille maximale d'un fichier de monde.
 pub const MAX_FILE_BYTES: usize = 4 * 1024 * 1024;
 /// Nombre maximal d'éléments par liste (objets, lieux, régions…).
