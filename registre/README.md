@@ -10,7 +10,7 @@ Le registre complète le catalogue embarqué du launcher (ADR 0032) : il ajoute 
 
 Le launcher lit l'index à l'adresse `launcher_core::registry::REGISTRY_INDEX_URL` :
 `https://github.com/Yonako25/raftup/releases/download/registre/index.json`, et vérifie la
-signature avec `REGISTRY_PUBLIC_KEY` (clé `40CD99C56F16E1EA`).
+signature avec `REGISTRY_PUBLIC_KEY` (clé `2226461C5DD19D81`).
 
 L'outil est le binaire `raftup-registry` de la crate `registry-tool` (ADR 0045).
 
@@ -96,7 +96,7 @@ mêmes cas.
    aussi le niveau de chaque paquet) :
 
    ```powershell
-   cargo run -p registry-tool --bin raftup-registry -- verify registre\sortie\index.json registre\sortie\index.json.minisig RWTq4RZvxZnNQOqFM6x2kbpozFW70qYGXHTnUn2VKLKe5mphpi/F6wbo
+   cargo run -p registry-tool --bin raftup-registry -- verify registre\sortie\index.json registre\sortie\index.json.minisig RWSBndFdHEYmIvfnGFYeqwpjnIQQpjQlLb6Eo5K5oveL3ylf786Ccz/z
    ```
 
 4. **À la main**, sur GitHub, dans la release d'étiquette `registre` du dépôt

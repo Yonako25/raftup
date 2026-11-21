@@ -57,7 +57,7 @@ Règle inchangée : Raftup ne redistribue **jamais** de jeu, de ROM, d'asset ni 
 
 - **Une signature pour tout l'index** (minisign pré-haché, signatures « legacy » refusées, comme l'ADR 0022), sur les octets exacts de `index.json`. Chaque paquet est signé **par transitivité** : son sha256 est dans l'index signé. Pas de signature par paquet au MVP du registre.
 - Paire de clés **distincte** de celle des mises à jour : une fuite de l'une n'ouvre pas l'autre. `raftup-registry keygen <dossier>` la crée hors du dépôt et refuse d'écraser.
-- La clé publique est la constante `launcher_core::registry::REGISTRY_PUBLIC_KEY` (identifiant `40CD99C56F16E1EA`, recréée le 21 novembre 2026 après la perte de la première, jamais publiée). La clé secrète est hors du dépôt, à côté de celle des mises à jour (`raftup-registry.key`, dossier des clés de la mainteneuse). Une clé vide ferait tout refuser (`PublicKeyNotConfigured`) plutôt que d'accepter n'importe quoi.
+- La clé publique est la constante `launcher_core::registry::REGISTRY_PUBLIC_KEY` (identifiant `2226461C5DD19D81`, recréée le 21 novembre 2026 après la perte de la première, jamais publiée). La clé secrète est hors du dépôt, à côté de celle des mises à jour (`raftup-registry.key`, dossier des clés de la mainteneuse). Une clé vide ferait tout refuser (`PublicKeyNotConfigured`) plutôt que d'accepter n'importe quoi.
 - `publish` relit l'index écrit et le vérifie avec la clé publique tirée de la clé secrète : un index que le launcher refuserait n'est jamais produit.
 - Rotation : même règle que l'ADR 0022 (une version du launcher qui embarque la nouvelle clé).
 
