@@ -195,3 +195,23 @@ player_name = \"Ioka\"
     assert_eq!(loaded.hub_url, None);
     assert_eq!(loaded.player_name.as_deref(), Some("Ioka"));
 }
+
+#[test]
+fn assistant_du_premier_lancement_memorise() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    // Faux par défaut, et pas écrit tant qu'il est faux (fichier inchangé pour un
+    // launcher plus ancien).
+    UserConfig::default().save(&path).unwrap();
+    assert!(!fs::read_to_string(&path).unwrap().contains("welcome_done"));
+    assert!(!load(&path).unwrap().config.welcome_done);
+
+    let config = UserConfig {
+        welcome_done: true,
+        ..UserConfig::default()
+    };
+    config.save(&path).unwrap();
+    let loaded = load(&path).unwrap().config;
+    assert!(loaded.welcome_done);
+    assert_eq!(loaded.format_version, UserConfig::default().format_version);
+}

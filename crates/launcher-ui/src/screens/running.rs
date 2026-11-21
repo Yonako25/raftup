@@ -48,6 +48,26 @@ pub struct RunningState {
     salon_auto_refresh: bool,
     /// Moment de la dernière copie : la bulle « Copié » s'affiche pendant `COPIED_FOR`.
     copied_at: Option<std::time::Instant>,
+    /// Le slot que l'hôte joue lui-même (choisi dans « Ta place »), par son nom.
+    my_slot: Option<String>,
+    /// Clic sur « Lancer et connecter », pas encore traité par l'application.
+    launch_request: Option<LaunchRequest>,
+}
+
+/// « Lancer et connecter » : le jeu à lancer et où le connecter. L'application la
+/// transmet à la Bibliothèque, qui connaît les jeux installés.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchRequest {
+    /// Nom du jeu dans Archipelago (`game` du slot).
+    pub ap_game: String,
+    pub address: String,
+    pub slot: String,
+    pub needs_password: bool,
+}
+
+/// Prend la demande « Lancer et connecter » en attente, s'il y en a une.
+pub fn take_launch_request(state: &mut RunningState) -> Option<LaunchRequest> {
+    state.launch_request.take()
 }
 
 /// Durée d'affichage de la bulle « Copié dans le presse-papiers ».
@@ -64,6 +84,8 @@ impl Default for RunningState {
             salon_password: String::new(),
             salon_auto_refresh: true,
             copied_at: None,
+            my_slot: None,
+            launch_request: None,
         }
     }
 }
@@ -93,6 +115,10 @@ pub fn show(
         }
         ui.add_space(12.0);
         address_bar(ui, status, &mut copy);
+        ui.add_space(12.0);
+        if let Some(request) = my_place(ui, &mut state.my_slot, status) {
+            state.launch_request = Some(request);
+        }
         ui.add_space(14.0);
         if let Some(message) = error.as_deref() {
             widgets::error_banner(ui, message);
@@ -248,6 +274,96 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                 );
             }
         });
+}
+
+/// Les slots que l'hôte peut jouer lui-même (pas les groupes), dans l'ordre de la seed.
+fn playable(status: &HostStatus) -> impl Iterator<Item = &SlotStatus> {
+    status.server.slots.iter().filter(|slot| !slot.is_group)
+}
+
+/// Le slot choisi s'il existe toujours ; sinon le seul slot de la partie s'il n'y en
+/// a qu'un (partie solo) ; sinon aucun.
+fn chosen_slot<'a>(status: &'a HostStatus, my_slot: Option<&str>) -> Option<&'a SlotStatus> {
+    if let Some(name) = my_slot {
+        if let Some(slot) = playable(status).find(|slot| slot.name == name) {
+            return Some(slot);
+        }
+    }
+    let mut slots = playable(status);
+    match (slots.next(), slots.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
+}
+
+/// Progression d'un slot en texte : « 12 / 40 lieux · objectif atteint ».
+fn progress_text(slot: &SlotStatus) -> String {
+    let mut text = format!("{} / {} lieux", slot.checked, slot.total);
+    if slot.status >= 30 {
+        text.push_str(" · objectif atteint");
+    }
+    text
+}
+
+/// Panneau « Ta place dans la partie » : l'hôte dit quel slot il joue, puis un seul
+/// bouton lance son jeu connecté à la partie (plan de l'interface, étape 3).
+/// Renvoie la demande de lancement au clic.
+fn my_place(
+    ui: &mut Ui,
+    my_slot: &mut Option<String>,
+    status: &HostStatus,
+) -> Option<LaunchRequest> {
+    let mut request = None;
+    // `chosen` emprunte `status`, pas `my_slot` : on peut changer `my_slot` plus bas
+    // (le nouveau choix s'affiche à l'image suivante).
+    let chosen = chosen_slot(status, my_slot.as_deref());
+    Frame::new()
+        .fill(theme::panel_fill())
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius(CornerRadius::same(theme::RADIUS))
+        .inner_margin(Margin::symmetric(18, 12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Je joue :");
+                let shown = chosen.map_or("choisir mon slot".to_string(), |slot| {
+                    format!("{} · {}", slot.name, slot.game)
+                });
+                egui::ComboBox::from_id_salt("mon_slot")
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for slot in playable(status) {
+                            let selected = chosen.map(|c| &c.name) == Some(&slot.name);
+                            let text = format!("{} · {}", slot.name, slot.game);
+                            if ui.selectable_label(selected, text).clicked() {
+                                *my_slot = Some(slot.name.clone());
+                            }
+                        }
+                    });
+                if let Some(slot) = chosen {
+                    ui.label(widgets::dim(progress_text(slot)));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::primary_button(ui, "Lancer et connecter", chosen.is_some()) {
+                        request = chosen.map(|slot| LaunchRequest {
+                            ap_game: slot.game.clone(),
+                            address: status.address.clone(),
+                            slot: slot.name.clone(),
+                            needs_password: status.has_password,
+                        });
+                    }
+                });
+            });
+            if chosen.is_none() {
+                ui.label(
+                    widgets::dim(
+                        "Choisis ton slot : Raftup lance ton jeu et le connecte à la partie.",
+                    )
+                    .size(13.0),
+                );
+            }
+        });
+    request
 }
 
 /// Fenêtre de confirmation avant d'arrêter le serveur.

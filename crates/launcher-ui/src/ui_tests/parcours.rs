@@ -1,0 +1,410 @@
+//! Parcours du joueur (plan de l'interface, étapes 3 à 5) : Accueil, Catalogue,
+//! Profil, assistant du premier lancement, « Lancer et connecter » de la partie.
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use egui_kittest::kittest::Queryable;
+use egui_kittest::Harness;
+use launcher_core::{
+    DetectedGame, GameState, HostStatus, InstallStatus, Paths, SeedSummary, ServerStatus,
+    SlotStatus, Store,
+};
+
+use super::{builder, click, demo_catalog, shows, shows_part, type_into};
+use crate::app::Page;
+use crate::screens::catalog::{self, CatalogState};
+use crate::screens::friends::{self, FriendsState};
+use crate::screens::home;
+use crate::screens::join::JoinState;
+use crate::screens::library::{LibraryState, Scan};
+use crate::screens::running::{self, RunningState};
+use crate::screens::welcome::{self, WelcomeState};
+use crate::worker::{Shared, Worker};
+
+const GAME: &str = "slime-rancher";
+
+/// Une détection : Slime Rancher trouvé via Steam, mods `installed` ou non.
+fn scan(installed: bool) -> Scan {
+    let mut found = BTreeMap::new();
+    found.insert(
+        GAME.to_string(),
+        DetectedGame {
+            game_id: GAME.to_string(),
+            store: Store::Steam,
+            install_dir: PathBuf::from("C:/Jeux/Slime Rancher"),
+            build_id: None,
+            state: GameState::Ready,
+        },
+    );
+    let mut status = BTreeMap::new();
+    let receipt = if installed {
+        InstallStatus::Installed
+    } else {
+        InstallStatus::NotInstalled
+    };
+    status.insert(GAME.to_string(), Ok(receipt));
+    Scan { found, status }
+}
+
+/// La Bibliothèque des tests ; le dossier temporaire vit dans l'état de l'écran.
+fn library(scan: Scan) -> (LibraryState, tempfile::TempDir) {
+    let root = tempfile::tempdir().unwrap();
+    let state = LibraryState::for_tests(demo_catalog(), Paths::under(root.path()), scan);
+    (state, root)
+}
+
+/// Une partie hébergée à deux joueurs, sans mot de passe.
+fn hosted(has_password: bool) -> HostStatus {
+    let slot = |n: u32, name: &str, game: &str, checked: usize| SlotStatus {
+        team: 0,
+        slot: n,
+        name: name.to_string(),
+        game: game.to_string(),
+        is_group: false,
+        connections: 0,
+        tags: Vec::new(),
+        checked,
+        total: 40,
+        status: 0,
+        last_activity: None,
+        away: None,
+        release_votes: 0,
+    };
+    HostStatus {
+        seed: SeedSummary {
+            seed_name: "12345".to_string(),
+            generator_version: "0.6.8".to_string(),
+            slots: Vec::new(),
+            players: 2,
+            has_password,
+            release_mode: "auto".to_string(),
+            collect_mode: "auto".to_string(),
+            hint_cost: 10,
+        },
+        address: "wss://exemple.fr:38281".to_string(),
+        encrypted: true,
+        has_password,
+        started_at: crate::format::now() - 60.0,
+        save: None,
+        resumed: false,
+        server: ServerStatus {
+            slots: vec![
+                slot(1, "Ioka", "Slime Rancher", 10),
+                slot(2, "Mara", "A Short Hike", 0),
+            ],
+            connections: 0,
+        },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Accueil
+// ---------------------------------------------------------------------------
+
+struct Accueil {
+    shared: Shared,
+    library: LibraryState,
+    join: JoinState,
+    asked: Option<Page>,
+    _root: tempfile::TempDir,
+}
+
+fn accueil(scan: Scan, shared: Shared, join: JoinState) -> Harness<'static, Accueil> {
+    let (library, root) = library(scan);
+    let state = Accueil {
+        shared,
+        library,
+        join,
+        asked: None,
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Accueil| {
+            if let Some(page) = home::show(ui, &s.shared, &mut s.library, &s.join) {
+                s.asked = Some(page);
+            }
+        },
+        state,
+    );
+    harness.run();
+    harness
+}
+
+#[test]
+fn accueil_jeu_pret_propose_un_salon() {
+    let mut harness = accueil(
+        scan(true),
+        Shared::default(),
+        JoinState::without_clipboard(),
+    );
+    assert!(shows(&harness, "Accueil"));
+    assert!(shows(&harness, "PROCHAIN PAS"));
+    assert!(shows(&harness, "Slime Rancher est prêt"));
+    assert!(shows(&harness, "Aucune partie en cours."));
+    assert!(shows(&harness, "Jeux prêts"));
+    click(&mut harness, "Créer un salon");
+    assert_eq!(harness.state().asked, Some(Page::Create));
+
+    // « Ouvrir Slime Rancher » sélectionne le jeu et ouvre la Bibliothèque.
+    let mut harness = accueil(
+        scan(true),
+        Shared::default(),
+        JoinState::without_clipboard(),
+    );
+    click(&mut harness, "Ouvrir Slime Rancher");
+    assert_eq!(harness.state().asked, Some(Page::Library));
+    let ready: Vec<_> = harness.state().library.summaries();
+    assert!(ready[0].ready);
+}
+
+#[test]
+fn accueil_sans_jeu_pret_mene_a_la_bibliotheque() {
+    let mut harness = accueil(
+        scan(false),
+        Shared::default(),
+        JoinState::without_clipboard(),
+    );
+    assert!(shows(&harness, "Prépare ton premier jeu"));
+    assert!(shows_part(&harness, "Aucun jeu prêt pour l'instant"));
+    click(&mut harness, "Ouvrir la Bibliothèque");
+    assert_eq!(harness.state().asked, Some(Page::Library));
+}
+
+#[test]
+fn accueil_partie_hebergee_et_invitation() {
+    let shared = Shared {
+        status: Some(hosted(false)),
+        ..Shared::default()
+    };
+    let join = JoinState::with_invite(
+        "raftup://join?v=1&addr=wss%3A%2F%2Fami.fr%3A38281&slot=Ioka&game=Slime%20Rancher",
+    );
+    let mut harness = accueil(scan(true), shared, join);
+    // La partie passe avant l'invitation.
+    assert!(shows(&harness, "Une partie tourne sur ce PC"));
+    assert!(shows(&harness, "seed 12345"));
+    assert!(shows(&harness, "10 / 80 lieux"));
+    assert!(shows(&harness, "Invitation reçue"));
+    assert!(shows(&harness, "Une partie de Slime Rancher t'attend."));
+    click(&mut harness, "Ouvrir la partie");
+    assert_eq!(harness.state().asked, Some(Page::Hosted));
+}
+
+// ---------------------------------------------------------------------------
+// Catalogue
+// ---------------------------------------------------------------------------
+
+struct Catalogue {
+    state: CatalogState,
+    library: LibraryState,
+    asked: Option<Page>,
+    _root: tempfile::TempDir,
+}
+
+fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
+    let (library, root) = library(scan);
+    let state = Catalogue {
+        state: CatalogState::default(),
+        library,
+        asked: None,
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Catalogue| {
+            if let Some(page) = catalog::show(ui, &mut s.state, &mut s.library) {
+                s.asked = Some(page);
+            }
+        },
+        state,
+    );
+    harness.run();
+    harness
+}
+
+#[test]
+fn catalogue_liste_filtre_et_ouvre_la_fiche() {
+    let mut harness = catalogue(scan(false));
+    assert!(shows(&harness, "Parcourir"));
+    assert!(shows(&harness, "1 jeu"));
+    assert!(shows(&harness, "Slime Rancher"));
+    assert!(shows(&harness, "Catalogue de Raftup"));
+    type_into(&mut harness, "Chercher un jeu ou un auteur", "hollow");
+    assert!(shows(&harness, "0 jeu"));
+    assert!(shows(&harness, "Aucun jeu ne correspond à ce filtre."));
+
+    let mut harness = catalogue(scan(false));
+    // Mods pas installés : « Ajouter » ouvre la fiche, où se fait l'installation.
+    click(&mut harness, "Ajouter Slime Rancher");
+    assert_eq!(harness.state().asked, Some(Page::Library));
+}
+
+// ---------------------------------------------------------------------------
+// Profil
+// ---------------------------------------------------------------------------
+
+#[test]
+fn profil_sans_compte_propose_de_se_connecter() {
+    struct Profil {
+        friends: FriendsState,
+        asked: Option<Page>,
+    }
+    let state = Profil {
+        friends: FriendsState::for_tests(),
+        asked: None,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Profil| {
+            if let Some(page) = friends::show_profile(ui, &mut s.friends) {
+                s.asked = Some(page);
+            }
+        },
+        state,
+    );
+    harness.run();
+    assert!(shows(&harness, "Mon profil"));
+    assert!(shows(&harness, "Sans compte"));
+    click(&mut harness, "Se connecter ou créer un compte");
+    assert_eq!(harness.state().asked, Some(Page::Friends));
+}
+
+// ---------------------------------------------------------------------------
+// Assistant du premier lancement
+// ---------------------------------------------------------------------------
+
+struct Bienvenue {
+    welcome: WelcomeState,
+    library: LibraryState,
+    outcome: welcome::Outcome,
+    _root: tempfile::TempDir,
+}
+
+fn bienvenue(scan: Scan) -> Harness<'static, Bienvenue> {
+    let (library, root) = library(scan);
+    let state = Bienvenue {
+        welcome: WelcomeState::opened(),
+        library,
+        outcome: welcome::Outcome::default(),
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Bienvenue| {
+            let games = s.library.summaries();
+            let outcome = welcome::show(ui.ctx(), &mut s.welcome, None, &games);
+            if outcome != welcome::Outcome::default() {
+                s.outcome = outcome;
+            }
+        },
+        state,
+    );
+    harness.run();
+    harness
+}
+
+#[test]
+fn assistant_en_trois_pas_jusqu_au_salon() {
+    let mut harness = bienvenue(scan(true));
+    assert!(shows(&harness, "BIENVENUE · 1 / 3"));
+    assert!(shows(&harness, "Ton compte Rafthub"));
+    click(&mut harness, "Continuer sans compte");
+    assert!(shows(&harness, "Tes jeux"));
+    assert!(shows(&harness, "Slime Rancher"));
+    click(&mut harness, "Suivant");
+    assert!(shows(&harness, "Ton premier jeu"));
+    assert!(shows_part(&harness, "Slime Rancher est prêt"));
+    click(&mut harness, "Créer un salon");
+    assert!(!harness.state().welcome.is_open());
+    assert_eq!(harness.state().outcome.page, Some(Page::Create));
+    assert_eq!(harness.state().outcome.select.as_deref(), Some(GAME));
+}
+
+#[test]
+fn assistant_passe_se_ferme() {
+    let mut harness = bienvenue(scan(false));
+    click(&mut harness, "Passer");
+    assert!(!harness.state().welcome.is_open());
+    assert!(!shows(&harness, "Ton compte Rafthub"));
+    assert_eq!(harness.state().outcome, welcome::Outcome::default());
+}
+
+// ---------------------------------------------------------------------------
+// Partie en cours : « Lancer et connecter »
+// ---------------------------------------------------------------------------
+
+struct Partie {
+    running: RunningState,
+    error: Option<String>,
+    worker: Worker,
+    shared: Shared,
+}
+
+fn partie(status: HostStatus) -> Harness<'static, Partie> {
+    let state = Partie {
+        running: RunningState::default(),
+        error: None,
+        worker: Worker::detached(),
+        shared: Shared {
+            status: Some(status),
+            ..Shared::default()
+        },
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Partie| {
+            running::show(ui, &mut s.running, &mut s.error, &s.worker, &s.shared);
+        },
+        state,
+    );
+    harness.run();
+    harness
+}
+
+#[test]
+fn lancer_et_connecter_apres_le_choix_du_slot() {
+    let mut harness = partie(hosted(true));
+    assert!(shows(&harness, "Je joue :"));
+    assert!(shows_part(&harness, "Choisis ton slot"));
+    // Deux joueurs : pas de choix d'office, le bouton ne fait rien.
+    click(&mut harness, "Lancer et connecter");
+    assert_eq!(
+        running::take_launch_request(&mut harness.state_mut().running),
+        None
+    );
+
+    // La liste déroulante n'a pas de libellé : on la trouve par le texte affiché.
+    harness
+        .get_by(|node| node.data().value() == Some("choisir mon slot"))
+        .click();
+    harness.run();
+    click(&mut harness, "Ioka · Slime Rancher");
+    assert!(shows(&harness, "10 / 40 lieux"));
+    click(&mut harness, "Lancer et connecter");
+    let request = running::take_launch_request(&mut harness.state_mut().running).unwrap();
+    assert_eq!(request.ap_game, "Slime Rancher");
+    assert_eq!(request.slot, "Ioka");
+    assert_eq!(request.address, "wss://exemple.fr:38281");
+    assert!(request.needs_password);
+}
+
+#[test]
+fn lancer_et_connecter_prepare_la_fiche() {
+    use crate::screens::library::{launch_into, LaunchInto};
+    let ctx = egui::Context::default();
+    // Mot de passe demandé : la fiche est prête, le joueur le tape.
+    let (mut state, _root) = library(scan(true));
+    let outcome = launch_into(&mut state, &ctx, "Slime Rancher", "wss://h:1", "Ioka", true);
+    assert_eq!(outcome, LaunchInto::NeedsPassword);
+    // Mods pas installés : la fiche s'ouvre pour l'installation.
+    let (mut state, _root) = library(scan(false));
+    let outcome = launch_into(
+        &mut state,
+        &ctx,
+        "Slime Rancher",
+        "wss://h:1",
+        "Ioka",
+        false,
+    );
+    assert_eq!(outcome, LaunchInto::NotReady);
+    // Jeu hors catalogue : rien à lancer d'ici.
+    let outcome = launch_into(&mut state, &ctx, "A Short Hike", "wss://h:1", "Mara", false);
+    assert_eq!(outcome, LaunchInto::OutsideCatalog);
+}

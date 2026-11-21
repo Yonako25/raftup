@@ -1,11 +1,13 @@
 //! Les écrans du launcher. Chaque écran dessine dans un `Ui` et renvoie,
 //! s'il y en a une, la page vers laquelle l'utilisateur veut aller.
 
+pub mod catalog;
 pub mod create;
 pub mod estimate;
 pub mod friends;
 pub mod generation;
 pub mod generator_setup;
+pub mod home;
 pub mod hosting;
 pub mod join;
 pub mod library;
@@ -18,6 +20,7 @@ pub mod running;
 pub mod settings;
 pub mod setup;
 pub mod soon;
+pub mod welcome;
 
 use egui::{Margin, ScrollArea, Ui};
 

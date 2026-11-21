@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-21 · Plan d'interface, étapes 3 à 5 (cloud/plan-interface-3-5)
+- **Fait** : « En cours » avec la progression de chaque joueur ; « Partie en cours » : « Je joue : » et « Lancer et connecter » ; écrans Accueil (prochain pas, partie, invitation, jeux prêts), Catalogue (filtre, origine, badge de confiance) et Mon profil ; panneau « Dossiers » des Paramètres ; assistant du premier lancement (`welcome_done` dans `config.toml`) ; l'Accueil devient la page d'ouverture. Tests launcher-ui (181) et launcher-core, clippy et fmt passent sous Linux.
+- **Pas vérifié** : rendu à l'œil ; vrai lancement d'un jeu par « Lancer et connecter » (Windows) ; écriture réelle de `welcome_done` (coupée dans les tests).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : trancher les questions notées dans `docs/plan-interface-launcher.md` (parties rejointes, « qui te bloque », historique, file de téléchargements, thèmes, langue).
