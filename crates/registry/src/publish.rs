@@ -4,6 +4,10 @@
 //! taille de chaque paquet depuis un fichier local, on écrit `index.json`, puis on le signe
 //! (`index.json.minisig`). **Rien n'est envoyé** : la mise en ligne reste un geste manuel.
 //!
+//! Le niveau de confiance de chaque paquet (ADR 0045) ne vient pas de la source : il est
+//! repris d'un rapport de `raftup-registry check` ([`TrustClaim`]), si ce rapport décrit
+//! exactement le fichier publié.
+//!
 //! Exemple de source :
 //!
 //! ```toml
@@ -28,7 +32,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::error::RegistryError;
-use crate::index::{Index, Package, PackageKind, FORMAT_VERSION, PACKAGE_MAX_BYTES};
+use crate::index::{Index, Package, PackageKind, Trust, TrustLevel, PACKAGE_MAX_BYTES};
 use crate::verify::{sha256_hex, verify_index};
 
 /// Nom du fichier d'index écrit par [`publish`].
@@ -65,6 +69,21 @@ struct SourcePackage {
     authors: Vec<String>,
 }
 
+/// Format du fichier source que ce programme lit (indépendant du format de l'index).
+pub const SOURCE_FORMAT_VERSION: u32 = 1;
+
+/// Niveau de confiance calculé par la CI pour un fichier précis (ADR 0045). Il n'est
+/// repris que si sorte, nom, version **et** sha256 sont ceux du fichier publié : un rapport
+/// d'une autre version ne fait jamais monter un paquet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrustClaim {
+    pub kind: PackageKind,
+    pub name: String,
+    pub version: String,
+    pub sha256: String,
+    pub trust: Trust,
+}
+
 /// Résultat d'une publication.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishReport {
@@ -74,41 +93,99 @@ pub struct PublishReport {
     pub packages: usize,
     /// Clé publique qui vérifie la signature (à comparer à celle du launcher).
     pub public_key: String,
+    /// Niveau écrit pour chaque paquet, dans l'ordre de l'index : (« sorte nom », niveau).
+    pub levels: Vec<(String, TrustLevel)>,
+    /// Rapports de CI écartés (fichier différent, paquet absent) : à lire avant d'envoyer.
+    pub warnings: Vec<String>,
+}
+
+/// Le fichier source lu, sans encore toucher aux paquets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFile {
+    pub registry: String,
+    pub packages: Vec<SourceEntry>,
+}
+
+/// Un paquet du fichier source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceEntry {
+    pub kind: PackageKind,
+    pub name: String,
+    pub version: String,
+    pub game: Option<String>,
+    /// Chemin local du paquet, déjà joint au dossier du fichier source.
+    pub file: PathBuf,
+    pub url: String,
+    pub license: String,
+    pub authors: Vec<String>,
+}
+
+/// Lit le fichier source (format, champs), sans lire les paquets eux-mêmes.
+/// Sert à `publish` et aux vérifications de la CI (`raftup-registry check`, ADR 0045).
+pub fn read_source(source_path: &Path) -> Result<SourceFile, RegistryError> {
+    let text = read_text(source_path)?;
+    let source: Source = toml::from_str(&text).map_err(|e| {
+        RegistryError::Parse(format!("{} : {}", source_path.display(), e.message()))
+    })?;
+    if source.format_version != SOURCE_FORMAT_VERSION {
+        return Err(RegistryError::UnsupportedFormat {
+            found: source.format_version,
+            supported: SOURCE_FORMAT_VERSION,
+        });
+    }
+    // Les chemins `file` sont relatifs au dossier du fichier source.
+    let base = source_path.parent().unwrap_or(Path::new("."));
+    let packages = source
+        .packages
+        .into_iter()
+        .map(|item| SourceEntry {
+            kind: item.kind,
+            name: item.name,
+            version: item.version,
+            game: item.game,
+            file: base.join(&item.file),
+            url: item.url,
+            license: item.license,
+            authors: item.authors,
+        })
+        .collect();
+    Ok(SourceFile {
+        registry: source.registry,
+        packages,
+    })
+}
+
+impl SourceEntry {
+    /// L'entrée d'index de ce paquet pour ces octets (sha256 et taille calculés, niveau
+    /// « non vérifié »). Ne valide pas : voir [`Package::validate`].
+    pub fn to_package(&self, data: &[u8]) -> Package {
+        Package {
+            kind: self.kind,
+            name: self.name.clone(),
+            version: self.version.clone(),
+            game: self.game.clone(),
+            url: self.url.clone(),
+            sha256: sha256_hex(data),
+            size: data.len() as u64,
+            license: self.license.clone(),
+            authors: self.authors.clone(),
+            // Le niveau ne vient jamais du fichier source : seulement d'un rapport de CI.
+            trust: Trust::default(),
+        }
+    }
 }
 
 /// Construit l'index depuis un fichier source : lit chaque paquet local pour son sha256
 /// et sa taille, valide et trie. N'écrit rien.
 pub fn build_index(source_path: &Path) -> Result<Index, RegistryError> {
-    let text = read_text(source_path)?;
-    let source: Source = toml::from_str(&text).map_err(|e| {
-        RegistryError::Parse(format!("{} : {}", source_path.display(), e.message()))
-    })?;
-    if source.format_version != FORMAT_VERSION {
-        return Err(RegistryError::UnsupportedFormat {
-            found: source.format_version,
-            supported: FORMAT_VERSION,
-        });
-    }
-    // Les chemins `file` sont relatifs au dossier du fichier source.
-    let base = source_path.parent().unwrap_or(Path::new("."));
+    let source = read_source(source_path)?;
     let mut index = Index::new(&source.registry);
     for item in source.packages {
-        let path = base.join(&item.file);
-        let data = read_package(&path)?;
+        let data = read_package(&item.file)?;
         if item.kind == PackageKind::Profile {
             check_profile_text(&item.name, &data)?;
         }
-        index.packages.push(Package {
-            kind: item.kind,
-            name: item.name,
-            version: item.version,
-            game: item.game,
-            url: item.url,
-            sha256: sha256_hex(&data),
-            size: data.len() as u64,
-            license: item.license,
-            authors: item.authors,
-        });
+        index.packages.push(item.to_package(&data));
     }
     index.sort();
     index.validate()?;
@@ -135,14 +212,64 @@ pub fn sign_index(index_bytes: &[u8], secret_key: &str) -> Result<(String, Strin
     Ok((signature.into_string(), public.to_base64()))
 }
 
-/// Publie en local : construit l'index, l'écrit dans `out_dir` avec sa signature, puis
-/// relit les deux fichiers et les vérifie comme le ferait le launcher.
+/// Pose sur chaque paquet le niveau de son rapport de CI, si le rapport décrit exactement
+/// ce fichier ; sinon le paquet reste `unverified`. Rend les avertissements.
+pub fn apply_trust(index: &mut Index, claims: &[TrustClaim]) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for claim in claims {
+        let label = format!("{} {}", claim.kind.as_str(), claim.name);
+        let Some(package) = index
+            .packages
+            .iter_mut()
+            .find(|p| p.kind == claim.kind && p.name == claim.name)
+        else {
+            warnings.push(format!("{label} : dans le rapport mais pas dans la source"));
+            continue;
+        };
+        if package.version != claim.version || package.sha256 != claim.sha256 {
+            warnings.push(format!(
+                "{label} : le rapport décrit la version {} ({}), pas le fichier publié                  ({}, {}) : paquet laissé « non vérifié »",
+                claim.version,
+                short(&claim.sha256),
+                package.version,
+                short(&package.sha256)
+            ));
+            continue;
+        }
+        package.trust = claim.trust.clone();
+    }
+    for package in &index.packages {
+        let has_claim = claims
+            .iter()
+            .any(|c| c.kind == package.kind && c.name == package.name);
+        if !has_claim {
+            warnings.push(format!(
+                "{} {} : aucun rapport de CI, paquet « non vérifié »",
+                package.kind.as_str(),
+                package.name
+            ));
+        }
+    }
+    warnings
+}
+
+/// Douze premiers caractères d'une empreinte, pour les messages.
+fn short(sha256: &str) -> &str {
+    sha256.get(..12).unwrap_or(sha256)
+}
+
+/// Publie en local : construit l'index, pose les niveaux des rapports de CI (`claims`,
+/// vide = tout « non vérifié »), l'écrit dans `out_dir` avec sa signature, puis relit les
+/// deux fichiers et les vérifie comme le ferait le launcher.
 pub fn publish(
     source_path: &Path,
     secret_key_path: &Path,
     out_dir: &Path,
+    claims: &[TrustClaim],
 ) -> Result<PublishReport, RegistryError> {
-    let index = build_index(source_path)?;
+    let mut index = build_index(source_path)?;
+    let warnings = apply_trust(&mut index, claims);
+    index.validate()?;
     let bytes = index.to_bytes()?;
     let secret = read_text(secret_key_path)?;
     let (signature, public_key) = sign_index(&bytes, &secret)?;
@@ -158,11 +285,18 @@ pub fn publish(
     let written_signature = read_text(&signature_path)?;
     verify_index(&written, &written_signature, &public_key)?;
 
+    let levels = index
+        .packages
+        .iter()
+        .map(|p| (format!("{} {}", p.kind.as_str(), p.name), p.trust.level))
+        .collect();
     Ok(PublishReport {
         index_path,
         signature_path,
         packages: index.packages.len(),
         public_key,
+        levels,
+        warnings,
     })
 }
 
@@ -200,7 +334,7 @@ pub fn keygen(dir: &Path) -> Result<String, RegistryError> {
 
 /// Un profil doit être un TOML lisible dont `game.id` est le nom du paquet. Le launcher le
 /// revalide en entier (`Profile::parse`) ; ici, on arrête les erreurs grossières tôt.
-fn check_profile_text(name: &str, data: &[u8]) -> Result<(), RegistryError> {
+pub fn check_profile_text(name: &str, data: &[u8]) -> Result<(), RegistryError> {
     let bad = |reason: String| RegistryError::InvalidPackage {
         package: format!("profile {name}"),
         reason,
@@ -221,7 +355,7 @@ fn check_profile_text(name: &str, data: &[u8]) -> Result<(), RegistryError> {
 }
 
 /// Lit un paquet local, borné à [`PACKAGE_MAX_BYTES`].
-fn read_package(path: &Path) -> Result<Vec<u8>, RegistryError> {
+pub fn read_package(path: &Path) -> Result<Vec<u8>, RegistryError> {
     let file = fs::File::open(path).map_err(io(path))?;
     let mut data = Vec::new();
     // `take` borne la lecture : un fichier géant ne remplit pas la mémoire.

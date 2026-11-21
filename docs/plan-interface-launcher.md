@@ -56,7 +56,7 @@ Les problèmes principaux :
 
 ### Étape 4 : Accueil, Catalogue, Mises à jour, Téléchargements
 - Accueil : joués récemment, parties en cours, mises à jour disponibles, invitations reçues.
-- Catalogue : les jeux pris en charge (profils et registre), filtres, « Ajouter », badge du niveau de confiance (ADR 0042).
+- Catalogue : les jeux pris en charge (profils et registre), filtres, « Ajouter », badge du niveau de confiance (ADR 0045).
 - Mises à jour et Téléchargements : file d'installation avec progression, pause et reprise.
 
 ### Étape 5 : premier lancement, Paramètres, Profil

@@ -7,7 +7,9 @@ pub enum RegistryError {
     #[error("index du registre illisible : {0}")]
     Parse(String),
     /// L'index est d'un format plus récent (ou inconnu).
-    #[error("format d'index {found} non pris en charge (ce programme lit le format {supported})")]
+    #[error(
+        "format d'index {found} non pris en charge (ce programme lit les formats 1 à {supported})"
+    )]
     UnsupportedFormat { found: u32, supported: u32 },
     /// Un champ d'un paquet ne respecte pas les règles de l'ADR 0032.
     #[error("paquet « {package} » : {reason}")]

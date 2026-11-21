@@ -15,7 +15,13 @@
 //! En debug, `RAFTUP_DEV_REGISTRE=<dossier>` lit le registre dans un dossier local au lieu
 //! du réseau (`index.json`, `index.json.minisig` et les paquets, rangés sous le dernier
 //! segment de leur adresse) : de quoi regarder l'écran avant la mise en ligne. La
-//! signature est vérifiée pareil, avec la vraie clé.
+//! signature est vérifiée pareil, avec la vraie clé, sauf si `RAFTUP_DEV_REGISTRE_CLE`
+//! donne une clé publique de test. `RAFTUP_DEV_REGISTRE_CONFIRMER=<nom>` ouvre la boîte
+//! de confirmation de ce monde dès la lecture (captures de la macro).
+//!
+//! Chaque apworld porte le badge de son niveau de confiance (ADR 0045), expliqué au
+//! survol. Avant d'installer un monde « Non vérifié » ou « Structure valide », une boîte
+//! demande confirmation.
 
 use std::collections::BTreeSet;
 use std::io::Read;
@@ -26,7 +32,7 @@ use egui::{RichText, Ui};
 use launcher_core::download::{DownloadError, Fetcher};
 use launcher_core::registry::{
     apply_registry, apworld_path, fetch_registry, install_apworld, ApworldInstall, Index,
-    PackageKind, RegistryFetch, REGISTRY_INDEX_URL, REGISTRY_PUBLIC_KEY,
+    PackageKind, RegistryFetch, Trust, TrustLevel, REGISTRY_INDEX_URL, REGISTRY_PUBLIC_KEY,
 };
 use launcher_core::{Catalog, HttpFetcher};
 
@@ -66,6 +72,8 @@ pub struct RegistryPanel {
     install: Option<Install>,
     /// Résultat de la dernière installation : texte, en vert (`Ok`) ou en orange (`Err`).
     message: Option<Result<String, String>>,
+    /// Apworld de niveau bas dont l'installation attend une confirmation (ADR 0045).
+    confirm: Option<String>,
 }
 
 impl RegistryPanel {
@@ -78,6 +86,24 @@ impl RegistryPanel {
             installed: BTreeSet::new(),
             install: None,
             message: None,
+            confirm: None,
+        }
+    }
+
+    /// Niveau de confiance d'une apworld de l'index (« non vérifié » si elle est inconnue).
+    fn level_of(&self, name: &str) -> TrustLevel {
+        self.index
+            .as_ref()
+            .and_then(|i| i.get(PackageKind::Apworld, name))
+            .map_or(TrustLevel::Unverified, |p| p.trust.level)
+    }
+
+    /// Clic sur « Installer » : un monde de niveau bas demande d'abord une confirmation.
+    fn request_install(&mut self, ctx: &egui::Context, name: &str, worlds_dir: &Path) {
+        if needs_confirmation(self.level_of(name)) {
+            self.confirm = Some(name.to_string());
+        } else {
+            self.start_install(ctx, name, worlds_dir.to_path_buf());
         }
     }
 
@@ -99,7 +125,7 @@ impl RegistryPanel {
             let result = fetch_registry(
                 fetcher().as_ref(),
                 REGISTRY_INDEX_URL,
-                REGISTRY_PUBLIC_KEY,
+                &public_key(),
                 &catalog,
             )
             .map_err(|e| e.to_string());
@@ -172,6 +198,12 @@ impl RegistryPanel {
         self.index = Some(fetched.index);
         if let Some(dir) = worlds_dir {
             self.refresh_installed(dir);
+        }
+        // Debug : ouvre tout de suite la confirmation d'un monde (captures de la macro).
+        if cfg!(debug_assertions) {
+            if let Ok(name) = std::env::var("RAFTUP_DEV_REGISTRE_CONFIRMER") {
+                self.confirm = Some(name);
+            }
         }
         self.phase = Phase::Ready;
         !self.added.is_empty()
@@ -254,6 +286,117 @@ impl RegistryPanel {
     }
 }
 
+/// Clé publique du registre. En debug seulement, `RAFTUP_DEV_REGISTRE_CLE` la remplace,
+/// pour regarder un registre local signé par une clé de test (jamais la vraie clé secrète).
+fn public_key() -> String {
+    if cfg!(debug_assertions) {
+        if let Ok(key) = std::env::var("RAFTUP_DEV_REGISTRE_CLE") {
+            return key;
+        }
+    }
+    REGISTRY_PUBLIC_KEY.to_string()
+}
+
+/// Faut-il confirmer avant d'installer un monde de ce niveau ? Oui tant que la CI ne l'a
+/// pas fait générer (ADR 0045).
+pub fn needs_confirmation(level: TrustLevel) -> bool {
+    level < TrustLevel::Generates
+}
+
+/// Texte affiché au survol du badge : ce que prouve le niveau, puis le détail de la CI.
+pub fn trust_hover(trust: &Trust) -> String {
+    let mut text = format!("{} — {}", trust.level.label(), trust.level.meaning());
+    if let Some(detail) = &trust.detail {
+        text.push_str("\n\n");
+        text.push_str(detail);
+    }
+    text
+}
+
+/// Couleurs du badge (texte, fond), de plus en plus franches avec le niveau.
+fn trust_colors(level: TrustLevel) -> (egui::Color32, egui::Color32) {
+    match level {
+        TrustLevel::Unverified => (theme::TEXT_DIM, theme::FIELD),
+        TrustLevel::Valid => (theme::AMBER, egui::Color32::from_rgb(0x33, 0x27, 0x14)),
+        TrustLevel::Generates => (theme::ITEM, theme::ACCENT_BG),
+        TrustLevel::Fuzzed => (theme::GREEN, theme::GREEN_BG),
+    }
+}
+
+/// Badge du niveau de confiance, avec son explication au survol.
+fn trust_badge(ui: &mut Ui, trust: &Trust) {
+    let (fg, bg) = trust_colors(trust.level);
+    // Dessiné à la main comme `widgets::pill`, mais en gardant la réponse pour le survol.
+    let galley = ui.painter().layout_no_wrap(
+        trust.level.label().to_string(),
+        egui::FontId::proportional(12.0),
+        fg,
+    );
+    let size = galley.size() + egui::vec2(14.0, 6.0);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, egui::CornerRadius::same(theme::RADIUS), bg);
+    painter.rect_stroke(
+        rect,
+        egui::CornerRadius::same(theme::RADIUS),
+        egui::Stroke::new(1.0, fg.gamma_multiply(0.5)),
+        egui::StrokeKind::Inside,
+    );
+    painter.galley(rect.center() - galley.size() / 2.0, galley, fg);
+    response.on_hover_text(trust_hover(trust));
+}
+
+/// Boîte de confirmation avant d'installer un monde de niveau bas.
+fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, worlds_dir: &Path) {
+    let Some(name) = panel.confirm.clone() else {
+        return;
+    };
+    let trust = panel
+        .index
+        .as_ref()
+        .and_then(|i| i.get(PackageKind::Apworld, &name))
+        .map(|p| p.trust.clone())
+        .unwrap_or_default();
+    let mut install = false;
+    let mut cancel = false;
+    // `Modal` grise le reste de la fenêtre et bloque les clics derrière la boîte.
+    let modal = egui::Modal::new(egui::Id::unique("registre_confirmer")).show(ctx, |ui| {
+        ui.set_width(440.0);
+        ui.label(widgets::dim("MONDE DU REGISTRE").size(12.0));
+        ui.label(
+            RichText::new(format!("Installer « {name} » ?"))
+                .size(20.0)
+                .family(theme::bold_family())
+                .color(theme::TEXT),
+        );
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(widgets::dim("Niveau de confiance :"));
+            trust_badge(ui, &trust);
+        });
+        ui.add_space(4.0);
+        ui.label(RichText::new(trust.level.meaning()).color(theme::TEXT));
+        ui.add_space(6.0);
+        ui.label(widgets::dim(
+            "Ce monde n'a pas été généré par la CI de Raftup. Une apworld est du code \
+             Python qui s'exécute sur ce PC pendant la génération : ne l'installez que si \
+             vous faites confiance à son auteur.",
+        ));
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            install = widgets::primary_button(ui, "Installer quand même", true);
+            cancel = widgets::ghost_button(ui, "Annuler");
+        });
+    });
+    // Échap ou clic à côté de la boîte : comme « Annuler ».
+    if install {
+        panel.confirm = None;
+        panel.start_install(ctx, &name, worlds_dir.to_path_buf());
+    } else if cancel || modal.should_close() {
+        panel.confirm = None;
+    }
+}
+
 /// Le client qui lit le registre : le vrai réseau, ou en debug le dossier de
 /// `RAFTUP_DEV_REGISTRE`. `Box<dyn Fetcher>` : les deux types n'ont que le trait en commun.
 fn fetcher() -> Box<dyn Fetcher> {
@@ -311,7 +454,10 @@ pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, worlds_dir: Option<&Path>) {
                             Some(game) => format!("{game} · {}", package.name),
                             None => package.name.clone(),
                         };
-                        ui.label(RichText::new(title).color(theme::TEXT).strong());
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(title).color(theme::TEXT).strong());
+                            trust_badge(ui, &package.trust);
+                        });
                         ui.label(
                             widgets::dim(format!(
                                 "v{} · {} · licence {}",
@@ -345,8 +491,9 @@ pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, worlds_dir: Option<&Path>) {
             }
         });
         if let Some(name) = clicked {
-            panel.start_install(&ctx, &name, dir.to_path_buf());
+            panel.request_install(&ctx, &name, dir);
         }
+        confirm_modal(&ctx, panel, dir);
     }
     if let Some(text) = panel.status_text() {
         ui.add_space(10.0);
@@ -375,6 +522,7 @@ mod tests {
             size: 1,
             license: "MIT".to_string(),
             authors: vec!["Auteur".to_string()],
+            trust: Default::default(),
         }
     }
 
@@ -386,6 +534,49 @@ mod tests {
             files: BTreeMap::new(),
             failed,
         }
+    }
+
+    #[test]
+    fn confirmation_seulement_pour_les_niveaux_bas() {
+        assert!(needs_confirmation(TrustLevel::Unverified));
+        assert!(needs_confirmation(TrustLevel::Valid));
+        assert!(!needs_confirmation(TrustLevel::Generates));
+        assert!(!needs_confirmation(TrustLevel::Fuzzed));
+    }
+
+    #[test]
+    fn survol_du_badge() {
+        let sans_detail = Trust::default();
+        assert!(trust_hover(&sans_detail).starts_with("Non vérifié — "));
+        let avec = Trust {
+            level: TrustLevel::Fuzzed,
+            detail: Some("Archipelago 0.6.8 · 5 graine(s)".into()),
+        };
+        let texte = trust_hover(&avec);
+        assert!(texte.starts_with("Testé en profondeur — "));
+        assert!(texte.ends_with("\n\nArchipelago 0.6.8 · 5 graine(s)"));
+    }
+
+    #[test]
+    fn installer_un_monde_bas_demande_confirmation() {
+        let ctx = egui::Context::default();
+        let mondes = tempfile::tempdir().unwrap();
+        let mut catalog = Catalog::embedded().unwrap();
+        let mut bas = package(PackageKind::Apworld, "bas");
+        bas.trust.level = TrustLevel::Valid;
+        let mut sur = package(PackageKind::Apworld, "sur");
+        sur.trust.level = TrustLevel::Generates;
+        let mut panel = RegistryPanel::new();
+        panel.apply(&mut catalog, fetched(vec![bas, sur], Vec::new()), None);
+        // Niveau bas : rien ne part, la boîte de confirmation attend.
+        panel.request_install(&ctx, "bas", mondes.path());
+        assert_eq!(panel.confirm.as_deref(), Some("bas"));
+        assert!(panel.install.is_none());
+        // Niveau « générable » : l'installation partirait directement (pas lancée ici :
+        // elle téléchargerait pour de vrai). Un nom inconnu compte comme « non vérifié ».
+        assert_eq!(panel.level_of("sur"), TrustLevel::Generates);
+        assert!(!needs_confirmation(panel.level_of("sur")));
+        assert_eq!(panel.level_of("absent"), TrustLevel::Unverified);
     }
 
     #[test]

@@ -3742,7 +3742,6 @@ dependencies = [
 name = "registry"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "minisign",
  "minisign-verify",
  "serde",
@@ -3751,6 +3750,21 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "toml",
+]
+
+[[package]]
+name = "registry-tool"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "launcher-core",
+ "py-bridge",
+ "registry",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "zip",
 ]
 
 [[package]]

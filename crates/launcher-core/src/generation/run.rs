@@ -759,6 +759,107 @@ fn extract_archipelago(zip: &Path, output_dir: &Path) -> Result<PathBuf, Generat
     Ok(target.join(first))
 }
 
+/// Taille maximale du JSON écrit par un script d'inspection ([`inspect_worlds`]).
+pub const MAX_INSPECTION_BYTES: u64 = 1024 * 1024;
+
+/// Construit les mondes d'Archipelago jusqu'au placement, comme le moteur « export »
+/// (ADR 0028), puis lance `script` sur le `MultiWorld` et rend le JSON qu'il a écrit.
+/// Sert à la CI du registre (ADR 0045) pour lister les options d'un monde.
+///
+/// `script` est du Python qui définit `export(mw, path, max_bytes)` : il écrit son JSON
+/// dans `path` (au plus `max_bytes` octets) et rend `{"bytes": n, "opaque_rules": 0}`.
+/// Mêmes protections que `generate` : verrou, apworlds posées dans `custom_worlds`, bac à
+/// sable, réseau bloqué selon `backend`. Le dossier de travail est toujours effacé.
+pub fn inspect_worlds(
+    paths: &Paths,
+    backend: &PythonBackend,
+    req: &GenerateRequest,
+    script: &str,
+    cancel: &CancelToken,
+    log: Sender<String>,
+) -> Result<serde_json::Value, GenerationError> {
+    if req.player_files.is_empty() {
+        return Err(GenerationError::NoPlayers);
+    }
+    let _guard = LockGuard::acquire()?;
+    let archipelago_dir = make_absolute(backend.archipelago_dir())?;
+    let (generation_dir, players_dir, output_dir) = make_generation_dirs(paths)?;
+    let result = inspect_in(
+        paths,
+        archipelago_dir,
+        &generation_dir,
+        players_dir,
+        output_dir,
+        backend,
+        req,
+        script,
+        cancel,
+        log,
+    );
+    // Rien à garder : le JSON est déjà lu (meilleur effort, l'erreur d'origine compte plus).
+    let _ = remove_generation_dir(paths, &generation_dir);
+    result
+}
+
+/// Le travail d'[`inspect_worlds`] une fois les dossiers créés.
+#[allow(clippy::too_many_arguments)]
+fn inspect_in(
+    paths: &Paths,
+    archipelago_dir: PathBuf,
+    generation_dir: &Path,
+    players_dir: PathBuf,
+    output_dir: PathBuf,
+    backend: &PythonBackend,
+    req: &GenerateRequest,
+    script: &str,
+    cancel: &CancelToken,
+    log: Sender<String>,
+) -> Result<serde_json::Value, GenerationError> {
+    copy_player_files(&req.player_files, &players_dir)?;
+    if let Some(meta) = &req.meta_yaml {
+        let meta_path = players_dir.join("meta.yaml");
+        fs::write(&meta_path, meta).map_err(|e| io_err(&meta_path, e))?;
+    }
+    install_apworlds(paths, &archipelago_dir, &req.apworlds)?;
+    let params = GenerateParams {
+        archipelago_dir,
+        site_packages: None,
+        player_files_dir: players_dir,
+        output_dir,
+        seed: req.seed,
+        spoiler: 0,
+        race: false,
+    };
+    let mut bridge = backend.start_bridge(&params, log)?;
+    // Dans le dossier de la génération : le seul où le worker a le droit d'écrire.
+    let export_path = generation_dir.join("inspection.json");
+    let export = py_bridge::ExportParams {
+        generate: backend.complete(&params),
+        export_path: export_path.clone(),
+        exporter: script.to_string(),
+    };
+    let result = bridge.export_worlds_cancellable(&export, req.timeout, cancel);
+    // Le worker attend la suite du placement : on le ferme dans tous les cas.
+    let _ = bridge.shutdown();
+    result.map_err(|e| map_worker_error(GenerationError::Bridge(e)))?;
+    let bytes = multidata::read_file_bounded(&export_path, MAX_INSPECTION_BYTES)
+        .map_err(|e| io_err(&export_path, e))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| GenerationError::Seed(format!("JSON d'inspection illisible : {e}")))
+}
+
+/// Efface le dossier `generations/<horodatage>/` d'une génération dont on n'a plus besoin
+/// (CI du registre : on ne garde que le verdict). Refuse tout autre dossier.
+pub fn discard_generation(paths: &Paths, output: &GenerateOutput) -> Result<(), GenerationError> {
+    // `zip_file` = `generations/<horodatage>/output/AP_<seed>.zip`.
+    let dir = output
+        .zip_file
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| GenerationError::UnsafeOutput(output.zip_file.clone()))?;
+    remove_generation_dir(paths, dir)
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

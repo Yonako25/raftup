@@ -1,0 +1,59 @@
+name: Registre
+
+# ADR 0045 : niveaux de confiance des paquets du registre, calculés par la CI.
+# Ce workflow VÉRIFIE seulement : il ne signe rien, ne publie rien et n'utilise aucun
+# secret. La mainteneuse télécharge l'artefact `rapport-registre`, le relit, puis signe
+# l'index chez elle (`raftup-registry publish … --rapport rapport.json`, registre/README.md).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "registre/**"
+      - ".github/workflows/registre.yml"
+  pull_request:
+    paths:
+      - "registre/**"
+      - ".github/workflows/registre.yml"
+  workflow_dispatch:
+
+# Lecture seule : le jeton du workflow ne peut rien modifier dans le dépôt.
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    # Le runtime Python du générateur officiel n'existe que sous Windows (ADR 0017) : ailleurs,
+    # le niveau s'arrêterait à « Structure valide ».
+    runs-on: windows-latest
+    # Borne de sécurité : `--limite` borne déjà le fuzzing de chaque paquet à 30 minutes.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `--telecharger` : les copies locales (`registre/fichiers/`) ne sont pas dans le dépôt ;
+      # chaque paquet est pris chez son auteur, à son adresse `url`. `--donnees` : runtime du
+      # générateur (Python + Archipelago épinglés) installé dans un dossier du runner.
+      - name: Vérifier les paquets du registre
+        run: >
+          cargo run --release -p registry-tool --bin raftup-registry --
+          check registre/registre.toml rapport --telecharger
+          --donnees "${{ runner.temp }}/raftup-donnees"
+          --travail "${{ runner.temp }}/raftup-travail"
+      - name: Joindre le rapport au résumé du run
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path rapport/rapport.md) {
+            Get-Content rapport/rapport.md | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          }
+      - name: Envoyer le rapport en artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-registre
+          path: |
+            rapport/rapport.json
+            rapport/rapport.md
+          if-no-files-found: warn
