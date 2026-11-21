@@ -214,3 +214,14 @@ Raftup sait convertir un apworld en monde natif, et l'inverse (ADR 0042 du dép�
 
 - `raftup-monde importer export.json --seed AP_xxx.zip` écrit un `world.toml` à partir de l'export d'une génération. Il décrit le monde **pour les options de cette génération** ; les options de l'apworld sont recopiées en commentaire, et la liste « À vérifier » en tête du fichier dit ce que l'outil a dû supposer.
 - `raftup-monde apworld world.toml` écrit un `.apworld` pour Archipelago : même datapackage, règles en fonctions Python. Tout monde natif peut ainsi tourner dans Archipelago.
+
+Dans le launcher Raftup, « Bibliothèque › Convertir un apworld en monde natif » (options avancées) fait l'export d'un apworld installé (un joueur, options par défaut) puis la conversion, et garde l'export JSON à côté du monde (ADR 0046).
+
+## Distribuer un monde natif
+
+Un monde natif se publie dans le registre signé de Raftup (sorte `native_world`, ADR 0046), sous l'une de ces deux formes :
+
+- un `world.toml` seul ;
+- un zip qui contient `world.toml`, à la racine ou dans un dossier `<nom>/`, avec au plus 32 fichiers simples à côté (licence, lisez-moi). Pas de sous-dossier ; noms en `[A-Za-z0-9._-]`, sans point au début ; 8 Mio décompressés au plus ; `raftup-paquet.toml` est réservé.
+
+Le launcher le pose dans `mondes-natifs/<nom>/`, à côté d'un reçu (`raftup-paquet.toml`), après contrôle du sha256 de l'index signé et relecture du monde.

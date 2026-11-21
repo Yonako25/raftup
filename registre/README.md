@@ -34,6 +34,13 @@ Chaque paquet de l'index porte un niveau, calculé par la CI puis signé avec l'
 | Générable | le générateur officiel épinglé génère une partie solo sur 5 graines |
 | Testé en profondeur | en plus, 40 cas de fuzzing (options, YAML abîmés) sans plantage ni boucle |
 
+Mondes natifs (`kind = "native_world"`, ADR 0046) : « Structure valide » = paquet lisible
+(`world.toml` seul, ou zip qui le contient) dont le monde est relu et annonce le jeu de
+`game` ; « Générable » = le **moteur Rust** de Raftup génère une partie solo sur N graines,
+sans Python (même avec `--structure-seule`, même hors Windows). Pas encore de fuzzing :
+le niveau s'arrête à « Générable ». Un index qui contient un monde natif est écrit en
+`format_version` 3 ; sans monde natif, `publish` écrit toujours le format 2.
+
 Le workflow `.github/workflows/registre.yml` lance `raftup-registry check` à chaque
 modification de `registre/`, sous Windows, et range `rapport.json` et `rapport.md` dans
 l'artefact `rapport-registre` du run. Il ne signe ni ne publie rien.

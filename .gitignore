@@ -38,3 +38,4 @@ __pycache__/
 # (seules les références `<nom>.png` le sont, voir crates/launcher-ui/tests/README.md)
 *.new.png
 *.diff.png
+*.old.png

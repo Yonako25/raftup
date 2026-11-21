@@ -23,9 +23,25 @@ pub const MAX_NATIVE_WORLDS: usize = 256;
 
 /// Lit les mondes natifs du dossier. Un dossier absent donne une liste vide.
 pub fn load_native_worlds(dir: &Path) -> NativeWorlds {
-    let mut found = NativeWorlds::default();
+    let (worlds, rejected) = scan_native_worlds(dir);
+    NativeWorlds {
+        worlds: worlds
+            .into_iter()
+            .map(|(_, world)| Arc::new(world))
+            .collect(),
+        rejected,
+    }
+}
+
+/// Comme [`load_native_worlds`], mais garde le chemin de chaque monde retenu (fichier
+/// `.toml` ou dossier) : la Bibliothèque en a besoin pour la fiche et la désinstallation.
+/// Rend `(mondes retenus, mondes écartés avec la raison)`, dans l'ordre des chemins.
+#[allow(clippy::type_complexity)]
+pub fn scan_native_worlds(dir: &Path) -> (Vec<(PathBuf, NativeWorld)>, Vec<(PathBuf, String)>) {
+    let mut worlds: Vec<(PathBuf, NativeWorld)> = Vec::new();
+    let mut rejected = Vec::new();
     let Ok(entries) = std::fs::read_dir(dir) else {
-        return found;
+        return (worlds, rejected);
     };
     let mut candidates: Vec<PathBuf> = entries
         // `flatten` saute les entrées illisibles.
@@ -49,29 +65,27 @@ pub fn load_native_worlds(dir: &Path) -> NativeWorlds {
     for path in candidates.into_iter().take(MAX_NATIVE_WORLDS) {
         match worlds_native::load_path(&path) {
             Ok(world) => {
-                if let Some(first) = found.worlds.iter().find(|w| w.game == world.game) {
-                    found.rejected.push((
-                        path,
-                        format!(
-                            "le jeu « {} » est déjà fourni par un autre monde",
-                            first.game
-                        ),
-                    ));
+                if let Some((_, first)) = worlds.iter().find(|(_, w)| w.game == world.game) {
+                    let reason = format!(
+                        "le jeu « {} » est déjà fourni par un autre monde",
+                        first.game
+                    );
+                    rejected.push((path, reason));
                 } else {
-                    found.worlds.push(Arc::new(world));
+                    worlds.push((path, world));
                 }
             }
-            Err(e) => found.rejected.push((path, e.to_string())),
+            Err(e) => rejected.push((path, e.to_string())),
         }
     }
-    found
+    (worlds, rejected)
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::load_native_worlds;
+    use super::{load_native_worlds, scan_native_worlds};
 
     const MINIMAL: &str = include_str!("../../../../spec/monde-natif/exemples/minimal/world.toml");
 
@@ -106,5 +120,14 @@ mod tests {
         assert_eq!(found.rejected.len(), 2);
         assert!(found.rejected[0].1.contains("déjà fourni"));
         assert!(found.rejected[1].1.contains("format_version 9"));
+
+        // La version qui garde les chemins voit les mêmes mondes.
+        let (worlds, rejected) = scan_native_worlds(dir.path());
+        let paths: Vec<_> = worlds.iter().map(|(p, _)| p.clone()).collect();
+        assert_eq!(
+            paths,
+            [dir.path().join("a.toml"), dir.path().join("c.TOML")]
+        );
+        assert_eq!(rejected.len(), 2);
     }
 }

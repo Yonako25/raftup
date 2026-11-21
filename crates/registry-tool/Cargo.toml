@@ -17,6 +17,8 @@ workspace = true
 registry = { workspace = true, features = ["publish"] }
 launcher-core.workspace = true
 py-bridge.workspace = true
+# Niveau « générable » d'un monde natif : le moteur Rust, sans Python (ADR 0046).
+generate.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 zip.workspace = true

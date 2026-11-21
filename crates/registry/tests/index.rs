@@ -71,11 +71,12 @@ fn aller_retour_trie_et_deterministe() {
 #[test]
 fn format_inconnu_refuse_avant_le_reste() {
     // Un champ inconnu ne doit pas masquer le vrai problème : le format.
-    let texte = br#"{"format_version": 3, "nouveau": true}"#;
+    // (3 est connu depuis l'ADR 0046 : on prend un format qui n'existe pas encore.)
+    let texte = br#"{"format_version": 4, "nouveau": true}"#;
     assert!(matches!(
         Index::parse(texte),
         Err(RegistryError::UnsupportedFormat {
-            found: 3,
+            found: 4,
             supported: FORMAT_VERSION
         })
     ));
@@ -387,4 +388,66 @@ fn niveaux_ordonnes() {
     for level in TrustLevel::ALL {
         assert!(!level.label().is_empty() && !level.meaning().is_empty());
     }
+}
+
+// --- Format 3 : mondes natifs (ADR 0046) ---
+
+#[test]
+fn index_sans_monde_natif_reste_en_format_2() {
+    // Rétrocompatibilité : un launcher qui ne lit que le format 2 lit toujours cet index.
+    let bytes = sample().to_bytes().unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["format_version"], 2);
+    // Relu, il est en mémoire au dernier format, et se réécrit à l'octet près.
+    let relu = Index::parse(&bytes).unwrap();
+    assert_eq!(relu.format_version, FORMAT_VERSION);
+    assert_eq!(relu.to_bytes().unwrap(), bytes);
+}
+
+#[test]
+fn monde_natif_ecrit_en_format_3_et_trie_en_dernier() {
+    let mut index = sample();
+    index
+        .packages
+        .push(package(PackageKind::NativeWorld, "apquest", b"world"));
+    let bytes = index.to_bytes().unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["format_version"], 3);
+    assert_eq!(json["packages"][3]["kind"], "native_world");
+    let relu = Index::parse(&bytes).unwrap();
+    let noms: Vec<&str> = relu.packages.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(noms, ["alpha", "zeta", "slime-rancher", "apquest"]);
+    assert_eq!(relu.of_kind(PackageKind::NativeWorld).count(), 1);
+    assert_eq!(PackageKind::NativeWorld.as_str(), "native_world");
+}
+
+#[test]
+fn monde_natif_refuse_dans_un_ancien_format() {
+    let mut index = sample();
+    index
+        .packages
+        .push(package(PackageKind::NativeWorld, "apquest", b"world"));
+    let texte = String::from_utf8(index.to_bytes().unwrap())
+        .unwrap()
+        .replace(r#""format_version": 3"#, r#""format_version": 2"#);
+    let erreur = Index::parse(texte.as_bytes()).unwrap_err();
+    assert!(matches!(erreur, RegistryError::InvalidIndex(_)));
+    assert!(erreur.to_string().contains("native_world"), "{erreur}");
+    // Même chose en format 1 (sans `trust`, sinon c'est `trust` qui est refusé d'abord).
+    let v1 = INDEX_V1.replace(r#""kind": "apworld""#, r#""kind": "native_world""#);
+    assert!(matches!(
+        Index::parse(v1.as_bytes()),
+        Err(RegistryError::InvalidIndex(_))
+    ));
+}
+
+#[test]
+fn index_3_sans_monde_natif_accepte() {
+    // Un index écrit « 3 » à la main sans monde natif reste lisible (se réécrit en 2).
+    let texte = String::from_utf8(sample().to_bytes().unwrap())
+        .unwrap()
+        .replace(r#""format_version": 2"#, r#""format_version": 3"#);
+    let relu = Index::parse(texte.as_bytes()).unwrap();
+    assert_eq!(relu.packages.len(), 3);
+    assert_eq!(relu.minimal_format(), 2);
 }

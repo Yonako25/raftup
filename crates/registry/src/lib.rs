@@ -18,6 +18,7 @@ pub mod verify;
 
 pub use error::RegistryError;
 pub use index::{
-    Index, Package, PackageKind, Trust, TrustLevel, ALLOWED_HOSTS, FORMAT_VERSION, READABLE_FORMATS,
+    Index, Package, PackageKind, Trust, TrustLevel, ALLOWED_HOSTS, FORMAT_VERSION,
+    NATIVE_WORLD_FORMAT, READABLE_FORMATS,
 };
 pub use verify::{check_package, sha256_hex, verify_index, INDEX_MAX_BYTES, SIGNATURE_MAX_BYTES};

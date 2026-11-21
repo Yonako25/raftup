@@ -1002,6 +1002,7 @@ impl Loader<'_> {
         let goal = self.expr(&raw.game.goal, &names, "objectif")?;
 
         let world = NativeWorld {
+            format_version: raw.format_version,
             game: raw.game.name.get_ref().clone(),
             start_region,
             goal,

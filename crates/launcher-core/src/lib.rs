@@ -12,6 +12,8 @@
 //! - [`diagnose`] : expliquer en clair un échec de connexion ;
 //! - [`readiness`] : tester « prêt ? » d'un slot par une vraie connexion (F08) ;
 //! - [`registry`] : lire et vérifier le registre de paquets signés (ADR 0032) ;
+//! - [`native_worlds`] : mondes natifs de la Bibliothèque : liste, installation par le
+//!   registre, désinstallation, conversion d'un apworld installé (ADR 0046) ;
 //! - [`config`], [`paths`] : réglages du joueur et dossiers de Raftup ;
 //! - [`estimate`] : durée estimée d'une seed, par joueur (ADR 0030) ;
 //! - [`hub_client`] : client du hub de comptes et d'amis, par son API HTTP (ADR 0035).
@@ -38,6 +40,7 @@ pub mod invite;
 pub mod launch;
 pub mod lockfile;
 pub mod logs;
+pub mod native_worlds;
 pub mod party;
 pub mod paths;
 pub mod profile;
