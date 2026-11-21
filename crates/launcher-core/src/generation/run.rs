@@ -778,43 +778,96 @@ pub fn inspect_worlds(
     cancel: &CancelToken,
     log: Sender<String>,
 ) -> Result<serde_json::Value, GenerationError> {
+    let bytes = run_inspection(
+        paths,
+        backend,
+        req,
+        script,
+        MAX_INSPECTION_BYTES,
+        cancel,
+        log,
+    )?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| GenerationError::Seed(format!("JSON d'inspection illisible : {e}")))
+}
+
+/// Export JSON des mondes (ADR 0028), celui que lit `raftup-monde importer` (ADR 0042) :
+/// Archipelago construit les mondes des YAML jusqu'au placement, le worker les décrit, et
+/// rien n'est généré. Mêmes protections qu'[`inspect_worlds`] ; rend les octets du JSON
+/// (au plus `generate::imported::MAX_EXPORT_BYTES`), sans les interpréter.
+pub fn export_worlds_json(
+    paths: &Paths,
+    backend: &PythonBackend,
+    req: &GenerateRequest,
+    cancel: &CancelToken,
+    log: Sender<String>,
+) -> Result<Vec<u8>, GenerationError> {
+    run_inspection(
+        paths,
+        backend,
+        req,
+        py_bridge::EXPORTER_SCRIPT,
+        generate::imported::MAX_EXPORT_BYTES as u64,
+        cancel,
+        log,
+    )
+}
+
+/// Le travail commun d'[`inspect_worlds`] et d'[`export_worlds_json`] : verrou, dossier de
+/// travail (toujours effacé), puis le script. Rend les octets écrits par le script.
+fn run_inspection(
+    paths: &Paths,
+    backend: &PythonBackend,
+    req: &GenerateRequest,
+    script: &str,
+    max_bytes: u64,
+    cancel: &CancelToken,
+    log: Sender<String>,
+) -> Result<Vec<u8>, GenerationError> {
     if req.player_files.is_empty() {
         return Err(GenerationError::NoPlayers);
     }
     let _guard = LockGuard::acquire()?;
     let archipelago_dir = make_absolute(backend.archipelago_dir())?;
     let (generation_dir, players_dir, output_dir) = make_generation_dirs(paths)?;
-    let result = inspect_in(
-        paths,
+    let dirs = InspectionDirs {
         archipelago_dir,
-        &generation_dir,
+        generation_dir: &generation_dir,
         players_dir,
         output_dir,
-        backend,
-        req,
-        script,
-        cancel,
-        log,
-    );
+    };
+    let result = inspect_in(paths, dirs, backend, req, script, max_bytes, cancel, log);
     // Rien à garder : le JSON est déjà lu (meilleur effort, l'erreur d'origine compte plus).
     let _ = remove_generation_dir(paths, &generation_dir);
     result
+}
+
+/// Les dossiers d'une inspection (regroupés pour ne pas passer huit arguments).
+struct InspectionDirs<'a> {
+    archipelago_dir: PathBuf,
+    generation_dir: &'a Path,
+    players_dir: PathBuf,
+    output_dir: PathBuf,
 }
 
 /// Le travail d'[`inspect_worlds`] une fois les dossiers créés.
 #[allow(clippy::too_many_arguments)]
 fn inspect_in(
     paths: &Paths,
-    archipelago_dir: PathBuf,
-    generation_dir: &Path,
-    players_dir: PathBuf,
-    output_dir: PathBuf,
+    dirs: InspectionDirs<'_>,
     backend: &PythonBackend,
     req: &GenerateRequest,
     script: &str,
+    max_bytes: u64,
     cancel: &CancelToken,
     log: Sender<String>,
-) -> Result<serde_json::Value, GenerationError> {
+) -> Result<Vec<u8>, GenerationError> {
+    let InspectionDirs {
+        archipelago_dir,
+        generation_dir,
+        players_dir,
+        output_dir,
+    } = dirs;
     copy_player_files(&req.player_files, &players_dir)?;
     if let Some(meta) = &req.meta_yaml {
         let meta_path = players_dir.join("meta.yaml");
@@ -842,10 +895,7 @@ fn inspect_in(
     // Le worker attend la suite du placement : on le ferme dans tous les cas.
     let _ = bridge.shutdown();
     result.map_err(|e| map_worker_error(GenerationError::Bridge(e)))?;
-    let bytes = multidata::read_file_bounded(&export_path, MAX_INSPECTION_BYTES)
-        .map_err(|e| io_err(&export_path, e))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|e| GenerationError::Seed(format!("JSON d'inspection illisible : {e}")))
+    multidata::read_file_bounded(&export_path, max_bytes).map_err(|e| io_err(&export_path, e))
 }
 
 /// Efface le dossier `generations/<horodatage>/` d'une génération dont on n'a plus besoin

@@ -149,6 +149,9 @@ pub fn check_package(
         );
         return Ok(finish(report, None, settings, 0));
     }
+    if package.kind == PackageKind::NativeWorld {
+        return Ok(check_native_generation(candidate, report, settings));
+    }
     let generator = match generator {
         Ok(generator) => generator,
         Err(reason) => {
@@ -241,6 +244,74 @@ pub fn check_package(
     }
     let cases = if passed { settings.fuzz_cases } else { 0 };
     Ok(finish(report, Some(&generator_name), settings, cases))
+}
+
+/// Nom du moteur des mondes natifs, écrit dans le rapport.
+pub const NATIVE_ENGINE: &str = "moteur Rust de Raftup";
+
+/// Niveau 2 d'un monde natif (ADR 0046) : le moteur Rust de Raftup génère une partie
+/// solo avec les options par défaut sur N graines, sans Python ni bac à sable (un monde
+/// natif est une donnée, pas du code). Pas encore de fuzzing : le niveau s'arrête à
+/// « générable ».
+fn check_native_generation(
+    candidate: &Candidate<'_>,
+    mut report: PackageReport,
+    settings: &CheckSettings,
+) -> PackageReport {
+    let package = candidate.package;
+    let world = match launcher_core::native_worlds::read_native_package(
+        &package.name,
+        package.game.as_deref(),
+        candidate.data,
+    ) {
+        Ok(content) => std::sync::Arc::new(content.world),
+        // Déjà vérifié par l'étape de structure ; gardé pour ne jamais paniquer.
+        Err(reason) => {
+            report
+                .steps
+                .push(step(STEP_GENERATE, StepStatus::Failed, reason));
+            skip_rest(&mut report, STEP_FUZZ, "génération par défaut en échec");
+            return finish(report, Some(NATIVE_ENGINE), settings, 0);
+        }
+    };
+    if settings.seeds == 0 {
+        skip_rest(&mut report, STEP_GENERATE, "aucune graine demandée");
+        return finish(report, Some(NATIVE_ENGINE), settings, 0);
+    }
+    for seed in 1..=u64::from(settings.seeds) {
+        let options = generate::NativeOptions::new(world.clone());
+        let request = generate::GenerateRequest::new(
+            seed,
+            vec![generate::PlayerRequest::new(
+                "Testeur",
+                generate::GameOptions::Native(options),
+            )],
+        );
+        if let Err(e) = generate::generate(&request) {
+            report.steps.push(step(
+                STEP_GENERATE,
+                StepStatus::Failed,
+                format!("graine {seed} : {}", short(&e.to_string())),
+            ));
+            skip_rest(&mut report, STEP_FUZZ, "génération par défaut en échec");
+            return finish(report, Some(NATIVE_ENGINE), settings, 0);
+        }
+    }
+    report.steps.push(step(
+        STEP_GENERATE,
+        StepStatus::Passed,
+        format!(
+            "{} graine(s) générée(s) par le moteur Rust avec les options par défaut",
+            settings.seeds
+        ),
+    ));
+    report.level = TrustLevel::Generates;
+    report.steps.push(step(
+        STEP_FUZZ,
+        StepStatus::Skipped,
+        "pas encore de fuzzing pour les mondes natifs".to_string(),
+    ));
+    finish(report, Some(NATIVE_ENGINE), settings, 0)
 }
 
 /// Lance les cas de fuzzing. Rend l'étape et `true` si tous les cas sont passés.

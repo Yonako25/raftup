@@ -9,13 +9,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::RegistryError;
 
-/// Version du format d'index que ce programme écrit. Le format 2 ajoute le niveau de
-/// confiance de chaque paquet (`trust`, ADR 0045).
-pub const FORMAT_VERSION: u32 = 2;
+/// Dernière version du format d'index. Le format 2 ajoute le niveau de confiance de chaque
+/// paquet (`trust`, ADR 0045) ; le format 3 ajoute la sorte `native_world` (ADR 0046).
+///
+/// En mémoire, un index lu est toujours dans ce format. À l'écriture, on prend le plus
+/// petit format qui sait tout dire ([`Index::minimal_format`]) : un index sans monde natif
+/// reste en format 2, lisible par les launchers qui ne connaissent pas encore le 3.
+pub const FORMAT_VERSION: u32 = 3;
 
 /// Formats d'index que ce programme sait lire. Un index 1 est relu comme un index 2 dont
-/// tous les paquets sont `unverified`.
-pub const READABLE_FORMATS: &[u32] = &[1, 2];
+/// tous les paquets sont `unverified` ; un index 2 est un index 3 sans monde natif.
+pub const READABLE_FORMATS: &[u32] = &[1, 2, 3];
+
+/// Premier format qui connaît la sorte `native_world`.
+pub const NATIVE_WORLD_FORMAT: u32 = 3;
 
 /// Nombre maximal de paquets dans un index.
 pub const MAX_PACKAGES: usize = 10_000;
@@ -35,7 +42,9 @@ pub const ALLOWED_HOSTS: &[&str] = &[
 
 /// Sorte de paquet. Rien d'autre n'est accepté : jamais `rom`, `asset` ni jeu.
 ///
-/// `Ord` : l'ordre de déclaration sert au tri de l'index (apworlds puis profils).
+/// `Ord` : l'ordre de déclaration sert au tri de l'index (apworlds, profils, puis mondes
+/// natifs). Une nouvelle sorte s'ajoute **à la fin**, pour qu'un index sans elle garde
+/// exactement les mêmes octets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PackageKind {
@@ -43,6 +52,9 @@ pub enum PackageKind {
     Apworld,
     /// Un profil d'installation (`<game.id>.toml`, ADR 0015).
     Profile,
+    /// Un monde natif (ADR 0041) : un `world.toml`, ou un zip qui le contient avec sa
+    /// licence. Installé dans `mondes-natifs/` (ADR 0046). Format d'index 3 et plus.
+    NativeWorld,
 }
 
 impl PackageKind {
@@ -51,6 +63,7 @@ impl PackageKind {
         match self {
             PackageKind::Apworld => "apworld",
             PackageKind::Profile => "profile",
+            PackageKind::NativeWorld => "native_world",
         }
     }
 }
@@ -115,8 +128,9 @@ impl TrustLevel {
                  à la création de la partie."
             }
             TrustLevel::Generates => {
-                "Le générateur officiel crée une partie avec les options par défaut, sur \
-                 plusieurs graines. Les autres options n'ont pas été essayées."
+                "Le générateur (officiel pour une apworld, moteur Rust pour un monde natif) \
+                 crée une partie avec les options par défaut, sur plusieurs graines. Les \
+                 autres options n'ont pas été essayées."
             }
             TrustLevel::Fuzzed => {
                 "Généré sur plusieurs graines, puis essayé avec des options et des YAML tirés \
@@ -198,6 +212,7 @@ impl Index {
         // écrit `trust` (obligatoire en format 2, interdit en format 1), puis la vraie structure.
         let value: serde_json::Value = serde_json::from_slice(bytes).map_err(parse_err)?;
         check_trust_presence(&value, header.format_version)?;
+        check_kinds(&value, header.format_version)?;
         let mut index: Index = serde_json::from_value(value).map_err(parse_err)?;
         // Un index 1 devient un index 2 dont tous les paquets sont « non vérifiés ».
         index.format_version = FORMAT_VERSION;
@@ -211,10 +226,27 @@ impl Index {
         let mut sorted = self.clone();
         sorted.sort();
         sorted.validate()?;
+        // Le plus petit format qui sait tout dire : un index sans monde natif reste lisible
+        // par un launcher qui ne lit que le format 2.
+        sorted.format_version = sorted.minimal_format();
         let mut bytes = serde_json::to_vec_pretty(&sorted)
             .map_err(|e| RegistryError::InvalidIndex(e.to_string()))?;
         bytes.push(b'\n');
         Ok(bytes)
+    }
+
+    /// Le plus petit format d'écriture qui exprime cet index : 3 s'il contient un monde
+    /// natif, 2 sinon (le format 1 n'est plus jamais écrit : il n'a pas `trust`).
+    pub fn minimal_format(&self) -> u32 {
+        if self
+            .packages
+            .iter()
+            .any(|p| p.kind == PackageKind::NativeWorld)
+        {
+            NATIVE_WORLD_FORMAT
+        } else {
+            2
+        }
     }
 
     /// Range les paquets par (`kind`, `name`).
@@ -323,6 +355,27 @@ fn check_trust_presence(value: &serde_json::Value, format: u32) -> Result<(), Re
         if format >= 2 && !has_trust {
             return Err(RegistryError::InvalidIndex(format!(
                 "paquet n° {} : champ « trust » obligatoire en format {format}",
+                i + 1
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Formats 1 et 2 : la sorte `native_world` n'existait pas. Un tel index est refusé avec un
+/// message clair (produit à la main ou trafiqué : `publish` écrit alors le format 3).
+fn check_kinds(value: &serde_json::Value, format: u32) -> Result<(), RegistryError> {
+    if format >= NATIVE_WORLD_FORMAT {
+        return Ok(());
+    }
+    let Some(packages) = value.get("packages").and_then(|p| p.as_array()) else {
+        return Ok(());
+    };
+    for (i, package) in packages.iter().enumerate() {
+        if package.get("kind").and_then(|k| k.as_str()) == Some("native_world") {
+            return Err(RegistryError::InvalidIndex(format!(
+                "paquet n° {} : sorte « native_world » interdite dans un index de format \
+                 {format} (permise à partir du format {NATIVE_WORLD_FORMAT})",
                 i + 1
             )));
         }

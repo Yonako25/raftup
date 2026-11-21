@@ -244,6 +244,8 @@ pub struct SlotDataDef {
 /// Un monde natif lu et vérifié.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeWorld {
+    /// `format_version` écrit dans le fichier (1 ou 2), affiché par la Bibliothèque.
+    pub format_version: i64,
     pub game: String,
     /// Région de départ ; `None` : la première région présente.
     pub start_region: Option<u32>,

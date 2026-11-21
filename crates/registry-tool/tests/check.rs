@@ -452,6 +452,59 @@ authors = ["Auteur"]
     assert_eq!(publie.warnings.len(), 1);
 }
 
+// --- Mondes natifs (ADR 0046) : moteur Rust, sans Python ---
+
+const MINIMAL: &str = include_str!("../../../spec/monde-natif/exemples/minimal/world.toml");
+
+fn native(data: &[u8]) -> Package {
+    Package {
+        kind: PackageKind::NativeWorld,
+        name: "minimal".to_string(),
+        game: Some("Minimal".to_string()),
+        ..package(data)
+    }
+}
+
+fn run_native(
+    data: &[u8],
+    generator: Result<&mut dyn Generator, String>,
+) -> registry_tool::report::PackageReport {
+    let package = native(data);
+    let candidate = Candidate {
+        package: &package,
+        data,
+        apworld_path: Path::new("inutile.apworld"),
+    };
+    check_package(&candidate, generator, &settings(), &mut || Duration::ZERO).unwrap()
+}
+
+#[test]
+fn monde_natif_genere_par_le_moteur_rust() {
+    // Le générateur Python n'est jamais appelé, même s'il est là.
+    let mut fake = Fake::always_ok();
+    let report = run_native(MINIMAL.as_bytes(), Ok(&mut fake));
+    assert!(fake.calls.is_empty());
+    assert_eq!(report.level, TrustLevel::Generates);
+    assert!(report.detail.contains("moteur Rust"), "{}", report.detail);
+    assert!(report.detail.contains("3 graine(s)"));
+    assert_eq!(report.steps[0].status, StepStatus::Passed);
+    assert!(report.steps[0].detail.contains("Minimal"));
+    assert_eq!(report.steps[2].status, StepStatus::Skipped);
+    // Sans générateur Python non plus : même niveau.
+    let sans = run_native(MINIMAL.as_bytes(), Err("pas de Python".into()));
+    assert_eq!(sans.level, TrustLevel::Generates);
+}
+
+#[test]
+fn monde_natif_illisible_ou_d_un_autre_jeu() {
+    let report = run_native(b"format_version = 1\n", Err("x".into()));
+    assert_eq!(report.level, TrustLevel::Unverified);
+    let autre = MINIMAL.replace("name = \"Minimal\"", "name = \"Autre\"");
+    let report = run_native(autre.as_bytes(), Err("x".into()));
+    assert_eq!(report.level, TrustLevel::Unverified);
+    assert!(report.steps[0].detail.contains("Autre"));
+}
+
 #[test]
 fn rapport_d_un_format_inconnu_refuse() {
     assert!(Report::parse(br#"{"format_version": 9}"#)

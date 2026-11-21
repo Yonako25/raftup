@@ -82,6 +82,41 @@ fn publication_complete_puis_verification() {
     assert_eq!(noms, [INDEX_FILE, SIGNATURE_FILE]);
 }
 
+/// Un monde natif dans la source (ADR 0046) : l'index passe en format 3, signé pareil.
+#[test]
+fn publication_d_un_monde_natif() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = chantier(tmp.path(), PROFIL);
+    fs::write(tmp.path().join("dist/apquest.toml"), "format_version = 1\n").unwrap();
+    let mut texte = fs::read_to_string(&source).unwrap();
+    texte.push_str(
+        r#"
+[[package]]
+kind = "native_world"
+name = "apquest"
+version = "1.0"
+game = "APQuest"
+file = "dist/apquest.toml"
+url = "https://github.com/auteur/depot/releases/download/v1/apquest.toml"
+license = "MIT"
+authors = ["Auteur"]
+"#,
+    );
+    fs::write(&source, texte).unwrap();
+    let cles = tmp.path().join("cles");
+    let publique = keygen(&cles).unwrap();
+    let sortie = tmp.path().join("sortie");
+    publish(&source, &cles.join(SECRET_KEY_FILE), &sortie, &[]).unwrap();
+    let bytes = fs::read(sortie.join(INDEX_FILE)).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["format_version"], 3);
+    let signature = fs::read_to_string(sortie.join(SIGNATURE_FILE)).unwrap();
+    let index = verify_index(&bytes, &signature, &publique).unwrap();
+    let monde = index.get(PackageKind::NativeWorld, "apquest").unwrap();
+    check_package(monde, b"format_version = 1\n").unwrap();
+    assert_eq!(index.packages.last().unwrap().name, "apquest");
+}
+
 #[test]
 fn republier_donne_le_meme_index() {
     let tmp = tempfile::tempdir().unwrap();

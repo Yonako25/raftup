@@ -3757,6 +3757,7 @@ name = "registry-tool"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "generate",
  "launcher-core",
  "py-bridge",
  "registry",

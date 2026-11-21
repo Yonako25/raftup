@@ -2,10 +2,12 @@
 //!
 //! Pour une apworld : un zip lisible, aux chemins sûrs, qui contient le dossier du monde
 //! `<name>/` avec son `__init__.py`. Pour un profil : les règles du catalogue embarqué.
+//! Pour un monde natif : celles de l'installation par le launcher (ADR 0046).
 //! Rien n'est extrait ni exécuté : on lit seulement la table des matières du zip.
 
 use std::io::{Cursor, Read};
 
+use launcher_core::native_worlds::read_native_package;
 use launcher_core::registry::registry_profile;
 use registry::{Package, PackageKind};
 
@@ -24,6 +26,18 @@ pub fn check_structure(package: &Package, data: &[u8]) -> Result<String, String>
         PackageKind::Profile => {
             let profile = registry_profile(package, data)?;
             Ok(format!("profil lisible (jeu « {} »)", profile.game.name))
+        }
+        // Mêmes règles que l'installation par le launcher (ADR 0046).
+        PackageKind::NativeWorld => {
+            let content = read_native_package(&package.name, package.game.as_deref(), data)?;
+            Ok(format!(
+                "monde natif lisible (jeu « {} », format_version {}, {} lieu(x), {} objet(s), {} fichier(s))",
+                content.world.game,
+                content.world.format_version,
+                content.world.locations.len(),
+                content.world.items.len(),
+                content.files.len()
+            ))
         }
     }
 }
