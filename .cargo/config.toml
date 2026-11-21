@@ -7,3 +7,10 @@
 # fournissent toujours.
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
+
+# Pour `cargo test` et `cargo run` seulement (pas pour l'exe livré, lancé hors de cargo) :
+# le serveur de partie n'écoute que sur ce PC. Sans cela, chaque nouvel exécutable de
+# test ouvre la fenêtre du pare-feu Windows « Autoriser sur les réseaux publics ».
+# Une variable déjà définie dans le terminal garde la priorité (pas de `force`).
+[env]
+RAFTUP_LISTEN_HOST = "127.0.0.1"

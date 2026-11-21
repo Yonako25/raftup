@@ -1707,7 +1707,7 @@ game: Slime Rancher
         );
 
         // Port 38296 occupé exprès : le premier démarrage doit échouer.
-        let busy = std::net::TcpListener::bind(("0.0.0.0", 38296)).unwrap();
+        let busy = std::net::TcpListener::bind(("127.0.0.1", 38296)).unwrap();
         let mut form = CreateForm {
             yamls: files,
             encrypted: false,

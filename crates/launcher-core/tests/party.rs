@@ -334,7 +334,7 @@ async fn echec_de_l_hote_garde_la_seed() {
     let paths = Paths::under(work.path());
     let mut backend = FakeBackend::new(&work.path().join("ap"));
     // Un port déjà pris : `Host::start` échoue après la génération.
-    let busy = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+    let busy = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = busy.local_addr().unwrap().port();
     let mut host = Host::new();
     let (tx, _rx) = channel();
@@ -407,7 +407,7 @@ async fn bind_rate_ne_cree_pas_de_sauvegarde() {
     )
     .unwrap();
 
-    let busy = std::net::TcpListener::bind(("0.0.0.0", 0)).unwrap();
+    let busy = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = busy.local_addr().unwrap().port();
     let mut with_save = options(port);
     with_save.disable_save = false;

@@ -62,6 +62,22 @@ pub struct HostOptions {
     pub webhook: Option<WebhookUrl>,
 }
 
+/// Variable d'environnement : interface réseau où le serveur écoute.
+/// Absente : `0.0.0.0` (toutes les interfaces), pour que les amis puissent se connecter.
+/// `.cargo/config.toml` la met à `127.0.0.1` pour `cargo test` et `cargo run` : en
+/// n'écoutant que sur ce PC, les tests ne déclenchent plus la fenêtre du pare-feu Windows
+/// (« Autoriser sur les réseaux publics ») à chaque nouvel exécutable de test.
+pub const LISTEN_HOST_ENV: &str = "RAFTUP_LISTEN_HOST";
+
+/// Interface d'écoute du serveur : `RAFTUP_LISTEN_HOST`, sinon `0.0.0.0`.
+pub fn listen_host() -> String {
+    std::env::var(LISTEN_HOST_ENV)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
 impl std::fmt::Debug for HostOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Un mot de passe donné apparaît comme « *** », jamais en clair.
@@ -229,7 +245,7 @@ impl Host {
         }
         let has_password = room.password().is_some();
 
-        let mut server = Server::bind(("0.0.0.0", options.port), room).await?;
+        let mut server = Server::bind((listen_host().as_str(), options.port), room).await?;
         let encrypted = tls.is_some();
         if let Some(tls) = tls {
             server = server.with_tls(tls);
