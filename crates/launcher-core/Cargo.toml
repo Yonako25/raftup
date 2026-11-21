@@ -29,6 +29,9 @@ keyvalues-parser.workspace = true
 # Liens d'invitation `raftup://` (ADR 0020).
 percent-encoding.workspace = true
 client-core.workspace = true
+# Certificat de partie généré par Raftup, et lecture de ses fichiers PEM (ADR 0043).
+rcgen.workspace = true
+rustls.workspace = true
 # Pont vers le générateur Python officiel (ADR 0016, 0017).
 py-bridge.workspace = true
 # Moteur de génération Rust (ADR 0027).
@@ -58,8 +61,6 @@ logic.workspace = true
 minisign.workspace = true
 # Tests du registre : un index produit par la vraie publication, puis relu par le launcher.
 registry = { workspace = true, features = ["publish"] }
-# Certificat auto-signé pour le test du diagnostic TLS (diagnose.rs).
-rcgen.workspace = true
 futures-util.workspace = true
 serde_json.workspace = true
 tokio-tungstenite.workspace = true

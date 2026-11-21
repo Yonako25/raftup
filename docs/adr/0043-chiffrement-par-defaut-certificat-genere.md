@@ -1,6 +1,6 @@
 # 0043 — Chiffrement par défaut sans fichier PEM : certificat généré par Raftup
 
-- Statut : accepté (choix de l'utilisatrice le 21 novembre 2026 ; mise en œuvre à faire)
+- Statut : accepté (choix de l'utilisatrice le 21 novembre 2026) ; mis en œuvre le 21 novembre 2026 (branche `cloud/chiffrement-sans-pem`), essai réel avec un mod non modifié encore à faire sous Windows
 - Date : 2026-11-21
 - Complète l'ADR 0009 (wss par certificat PEM) et l'ADR 0020 (liens `raftup://`)
 
@@ -35,3 +35,12 @@ Option 1.
 - `client-core` gagne un vérificateur de certificat par empreinte (rustls), à relire avec soin.
 - **Essai réel d'abord** (`docs/regles-agents.md`, découpage) : avant de coder l'interface, vérifier qu'un mod non modifié (Slimipelago) retombe bien sur ws face au port mixte. Si ce n'est pas le cas, revoir la décision.
 - Renouvellement : certificat de longue durée (10 ans), régénéré seulement à la demande ; les anciens liens deviennent alors invalides pour l'épinglage.
+
+## Mise en œuvre (21 novembre 2026)
+
+- `server` : `TlsConfig::with_plain_fallback` ; chaque connexion du port mixte est lue au premier octet par `peek` (sans le consommer), dans le délai de poignée de main (10 s).
+- `client-core` : `Fingerprint` et `ConnectOptions::pinned` ; le vérificateur rustls compare l'empreinte SHA-256 du certificat (DER) et vérifie normalement la signature de la poignée de main ; le nom du serveur n'est pas vérifié.
+- `launcher-core` : module `certificate` (`<données>/tls/raftup-cert.pem` et `raftup-key.pem`, clé en droits 600 sous Unix, refaite si illisible), `Encryption::Generated`, `HostStatus::fingerprint`, `check_slot_pinned`, paramètre `fp` des liens (refusé avec `ws://`).
+- Adresse pour les mods : avec un certificat généré, l'adresse montrée et donnée au mod est `hôte:port`, **sans schéma**, pour que le client essaie `wss://` puis retombe sur `ws://`. Les liens gardent `wss://` et `fp`.
+- Interface : « Chiffré par Raftup » par défaut dans « Créer une partie » et « Héberger » ; « Mon certificat (PEM) » et « En clair (ws) » dans « Options avancées ».
+- Reste : l'essai réel avec Slimipelago non modifié face au port mixte (adresse sans schéma). Si le mod ne retombe pas sur `ws`, revoir la décision.

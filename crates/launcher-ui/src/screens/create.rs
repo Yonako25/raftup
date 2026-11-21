@@ -21,11 +21,12 @@ use launcher_core::generation::{
     installed_apworlds, load_native_worlds, rust_support_with_worlds, GenerateRequest,
 };
 use launcher_core::profile::StepKind;
-use launcher_core::{Encryption, PartyHostOptions};
+use launcher_core::PartyHostOptions;
 
 use super::library::{load_catalog, load_paths, AP_VERSION};
 use super::prefs;
 use super::presets::Preset;
+use super::security::{self, PemFile, Security};
 use super::{generation, generator_setup, hosting};
 use crate::app::Page;
 use crate::format;
@@ -130,7 +131,8 @@ pub struct CreateForm {
     public_host: String,
     /// Adresse du webhook Discord (secrète : champ masqué, jamais écrite dans un journal).
     webhook: String,
-    encrypted: bool,
+    /// Chiffrement choisi (ADR 0043) : par Raftup sans fichier, par défaut.
+    security: Security,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
     /// Le générateur : absent, en cours d'installation, prêt… (étape 2).
@@ -173,7 +175,7 @@ impl Default for CreateForm {
             password: String::new(),
             public_host: "localhost".to_string(),
             webhook: String::new(),
-            encrypted: true,
+            security: Security::default(),
             cert: None,
             key: None,
             setup: generator_setup::Setup::default(),
@@ -824,7 +826,7 @@ fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
             widgets::dim(format::server_summary(
                 &form.port,
                 &form.public_host,
-                form.encrypted,
+                form.security.summary(),
             ))
             .size(12.0),
         );
@@ -978,38 +980,12 @@ fn advanced_server(ui: &mut Ui, form: &mut CreateForm) {
     );
 
     labelled(ui, "Chiffrement");
-    let wss = widgets::choice_card(
-        ui,
-        form.encrypted,
-        "Chiffré (wss) — recommandé",
-        widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
-        |ui| {
-            ui.add_space(4.0);
-            ui.label(widgets::dim("Certificat (PEM)").size(13.0));
-            if file_row(ui, &form.cert) {
-                form.pending_pick = Some(Pick::Cert);
-            }
-            ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
-            if file_row(ui, &form.key) {
-                form.pending_pick = Some(Pick::Key);
-            }
-        },
-    );
-    if wss {
-        form.encrypted = true;
-    }
-    ui.add_space(4.0);
-    let plain = widgets::choice_card(
-        ui,
-        !form.encrypted,
-        "En clair (ws)",
-        RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
-            .color(theme::AMBER)
-            .size(13.0),
-        |_| {},
-    );
-    if plain {
-        form.encrypted = false;
+    // Copies des chemins : `form.security` est modifié pendant le dessin des cartes.
+    let (cert, key) = (form.cert.clone(), form.key.clone());
+    match security::choice(ui, &mut form.security, &cert, &key, file_row) {
+        Some(PemFile::Cert) => form.pending_pick = Some(Pick::Cert),
+        Some(PemFile::Key) => form.pending_pick = Some(Pick::Key),
+        None => {}
     }
 }
 
@@ -1147,7 +1123,7 @@ pub struct DevState {
 #[cfg(debug_assertions)]
 pub fn dev_prefill(form: &mut CreateForm, yamls: Vec<PathBuf>, port: u16) {
     form.yamls = yamls;
-    form.encrypted = false;
+    form.security = Security::Plain;
     form.port = port.to_string();
     form.rust_engine = std::env::var("RAFTUP_DEV_RUST").is_ok_and(|v| v == "1");
     form.time_balance = std::env::var("RAFTUP_DEV_TEMPS").is_ok_and(|v| v == "1");
@@ -1299,22 +1275,7 @@ pub(crate) fn build_request(
     if public_host.is_empty() {
         return Err("Indiquez l'adresse que les autres joueurs utiliseront.".into());
     }
-    let encryption =
-        if form.encrypted {
-            match (&form.cert, &form.key) {
-                (Some(cert), Some(key)) => Encryption::Wss {
-                    cert: cert.clone(),
-                    key: key.clone(),
-                },
-                _ => return Err(
-                    "Le chiffrement wss demande un certificat et une clé privée (fichiers PEM). \
-                     Sans certificat, choisissez « En clair (ws) »."
-                        .into(),
-                ),
-            }
-        } else {
-            Encryption::Plain
-        };
+    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
     let webhook = format::parse_webhook(&form.webhook)?;
 
@@ -1342,6 +1303,7 @@ pub(crate) fn build_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use launcher_core::Encryption;
 
     #[test]
     fn equilibrage_par_temps_decoche_par_defaut() {
@@ -1399,7 +1361,7 @@ game: Slime Rancher
     fn valid() -> CreateForm {
         CreateForm {
             yamls: vec![PathBuf::from("alice.yaml")],
-            encrypted: false,
+            security: Security::Plain,
             ..CreateForm::default()
         }
     }
@@ -1467,7 +1429,7 @@ game: Slime Rancher
         };
         CreateForm {
             games: vec![game("sr", "Slime Rancher"), game("hk", "Hollow Knight")],
-            encrypted: false,
+            security: Security::Plain,
             ..CreateForm::default()
         }
     }
@@ -1581,7 +1543,7 @@ game: Slime Rancher
         open_refused_block(&mut form);
         assert!(form.open_advanced && !form.open_advanced_apworlds);
         form = valid();
-        form.encrypted = true;
+        form.security = Security::Pem;
         assert!(build_request(&form).is_err());
         assert_eq!(refused_block(&form), Refused::Server);
     }
@@ -1596,7 +1558,7 @@ game: Slime Rancher
     #[test]
     fn wss_sans_certificat() {
         let mut form = valid();
-        form.encrypted = true;
+        form.security = Security::Pem;
         assert!(build_request(&form).unwrap_err().contains("certificat"));
     }
 
@@ -1731,7 +1693,7 @@ game: Slime Rancher
         let busy = std::net::TcpListener::bind(("127.0.0.1", 38296)).unwrap();
         let mut form = CreateForm {
             yamls: files,
-            encrypted: false,
+            security: Security::Plain,
             port: "38296".into(),
             ..CreateForm::default()
         };

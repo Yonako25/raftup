@@ -110,10 +110,17 @@ fn lancer_la_partie_annonce_le_refus_reel() {
     assert!(first.starts_with("Ton pseudo"), "{first}");
     assert!(shows(&harness, &first), "refus attendu : {first}");
 
-    // Avec un pseudo : le chiffrement par défaut (wss) attend un certificat.
+    // Avec un pseudo : plus rien ne bloque. Le chiffrement par défaut ne demande
+    // aucun fichier (certificat généré par Raftup, ADR 0043).
     type_into(&mut harness, MY_NAME, "Alice");
-    let second = refusal(&harness);
-    assert!(second.contains("certificat"), "{second}");
-    assert!(shows(&harness, &second), "refus attendu : {second}");
+    match create::build_request(&harness.state().form) {
+        Ok((_, host)) => assert!(
+            matches!(host.encryption, launcher_core::Encryption::Generated { .. }),
+            "{:?}",
+            host.encryption
+        ),
+        // Seul refus possible : pas de dossier personnel sur la machine de test.
+        Err(message) => assert!(message.contains("Dossiers de Raftup"), "{message}"),
+    }
     assert!(!shows(&harness, &first));
 }

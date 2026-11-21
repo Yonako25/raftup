@@ -18,6 +18,10 @@ pub enum LauncherError {
     #[error("chiffrement : {0}")]
     Tls(#[from] server::TlsError),
 
+    /// Certificat généré par Raftup impossible à créer ou à écrire (ADR 0043).
+    #[error("chiffrement : {0}")]
+    Certificate(#[from] crate::certificate::CertificateError),
+
     /// Sauvegarde `.raftup` illisible (autre seed, corrompue…) ou impossible à créer.
     #[error("sauvegarde : {0}")]
     Save(#[from] server::save::SaveSetupError),

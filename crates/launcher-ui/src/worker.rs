@@ -41,6 +41,9 @@ pub struct ReadyCheck {
     pub slot: String,
     pub game: String,
     pub password: Option<String>,
+    /// Empreinte du certificat généré par Raftup (ADR 0043) : le test passe en `wss`
+    /// épinglé. `None` : vérification habituelle.
+    pub fingerprint: Option<String>,
 }
 
 /// Où en est le test d'un slot.
@@ -255,11 +258,16 @@ async fn handle(
             let shared = Arc::clone(shared);
             let ctx = ctx.clone();
             tokio::spawn(async move {
-                let result = launcher_core::readiness::check_slot(
+                let pinned = check
+                    .fingerprint
+                    .as_deref()
+                    .and_then(launcher_core::Fingerprint::parse);
+                let result = launcher_core::readiness::check_slot_pinned(
                     &check.address,
                     &check.slot,
                     &check.game,
                     check.password.as_deref(),
+                    pinned,
                 )
                 .await;
                 with_shared(&shared, |s| {

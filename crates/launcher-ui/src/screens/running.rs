@@ -164,10 +164,10 @@ fn hero(
     let mut back = false;
     let players = status.server.slots.iter().filter(|s| !s.is_group).count();
     let plural = if players > 1 { "s" } else { "" };
-    let mode = if status.encrypted {
-        "chiffrée (wss)"
-    } else {
-        "en clair (ws)"
+    let mode = match (status.encrypted, status.fingerprint.is_some()) {
+        (true, true) => "chiffrée par Raftup (wss et ws)",
+        (true, false) => "chiffrée (wss)",
+        (false, _) => "en clair (ws)",
     };
     let resumed = if status.resumed {
         " · reprise de la sauvegarde"
@@ -202,6 +202,7 @@ fn hero(
                     if widgets::primary_button(ui, "Copier l'invitation", true) {
                         *copy = Some(format::invitation(
                             &status.address,
+                            status.fingerprint.as_deref(),
                             status.has_password,
                             &status.server.slots,
                         ));
@@ -222,9 +223,12 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
         .inner_margin(Margin::symmetric(18, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
+            // Certificat généré par Raftup (ADR 0043) : l'adresse sans schéma, pour qu'un
+            // mod de jeu essaie wss puis retombe sur ws ; les liens portent l'empreinte.
+            let shown = format::game_address(&status.address, status.fingerprint.as_deref());
             ui.horizontal_wrapped(|ui| {
                 ui.label("Adresse à donner aux joueurs :");
-                ui.label(widgets::mono(&status.address, 15.0).color(theme::ITEM));
+                ui.label(widgets::mono(&shown, 15.0).color(theme::ITEM));
                 let password = if status.has_password {
                     "avec mot de passe"
                 } else {
@@ -233,10 +237,20 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                 ui.label(widgets::dim(format!("· {password}")));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if widgets::ghost_button(ui, "Copier l'adresse") {
-                        *copy = Some(status.address.clone());
+                        *copy = Some(shown.clone());
                     }
                 });
             });
+            if status.fingerprint.is_some() {
+                ui.add_space(4.0);
+                ui.label(
+                    widgets::dim(
+                        "Chiffré pour les joueurs qui passent par Raftup (liens d'invitation) ; \
+                         un mod de jeu qui se connecte avec cette adresse passe en clair.",
+                    )
+                    .size(13.0),
+                );
+            }
             if format::is_local_host(&status.address) {
                 ui.add_space(4.0);
                 ui.label(
@@ -317,7 +331,7 @@ fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String
             crew_row(
                 ui,
                 slot,
-                &status.address,
+                status,
                 now,
                 PLAYER_COLORS[index % PLAYER_COLORS.len()],
                 copy,
@@ -329,7 +343,7 @@ fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String
 fn crew_row(
     ui: &mut Ui,
     slot: &SlotStatus,
-    address: &str,
+    status: &HostStatus,
     now: f64,
     color: Color32,
     copy: &mut Option<String>,
@@ -360,7 +374,9 @@ fn crew_row(
                 ui.label(RichText::new(note).size(12.0).color(theme::AMBER));
             }
             // Lien personnel du joueur (absent si l'adresse ne permet pas d'en fabriquer un).
-            if let Some(link) = format::player_link(address, slot) {
+            if let Some(link) =
+                format::player_link(&status.address, status.fingerprint.as_deref(), slot)
+            {
                 let button =
                     egui::Button::new(widgets::dim("Copier le lien").size(12.0)).frame(false);
                 if ui.add(button).clicked() {
@@ -650,6 +666,7 @@ fn salon_tab(
             slot: slot.name.clone(),
             game: slot.game.clone(),
             password: Some(password.to_string()).filter(|p| !p.is_empty()),
+            fingerprint: status.fingerprint.clone(),
         }));
     };
     let players: Vec<&SlotStatus> = status.server.slots.iter().filter(|s| !s.is_group).collect();
@@ -728,7 +745,9 @@ fn salon_tab(
                             .color(theme::TEXT),
                     );
                     ui.label(widgets::dim(format::game_with_tags(slot)).size(12.0));
-                    if let Some(link) = format::player_link(&status.address, slot) {
+                    if let Some(link) =
+                        format::player_link(&status.address, status.fingerprint.as_deref(), slot)
+                    {
                         let button = egui::Button::new(widgets::dim("Copier le lien").size(12.0))
                             .frame(false);
                         if ui.add(button).clicked() {

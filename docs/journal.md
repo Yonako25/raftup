@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-21 · Chiffrement par défaut sans PEM (cloud/chiffrement-sans-pem)
+- **Fait** : ADR 0043 mis en œuvre : port mixte wss + ws (`server`, premier octet par `peek`), épinglage par empreinte (`client-core::Fingerprint`), certificat généré et réutilisé (`launcher-core::certificate`), `Encryption::Generated`, `fp` dans les liens, test « prêt ? » épinglé ; « Chiffré par Raftup » par défaut dans Créer et Héberger, adresse sans schéma pour les mods. Tests server, client-core, launcher-core, launcher-ui, clippy et fmt passent sous Linux.
+- **Pas vérifié** : un mod non modifié (Slimipelago) face au port mixte avec l'adresse sans schéma (Windows) ; capture de référence du Salon (son résumé du serveur change), à refaire sous Windows.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : essai réel avec Slimipelago sous Windows, puis refaire la capture du Salon.

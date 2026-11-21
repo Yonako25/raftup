@@ -203,7 +203,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .family(theme::bold_family())
                     .color(theme::TEXT),
             );
-            if !invite.address.secure {
+            if invite.fingerprint.is_some() {
+                ui.label(widgets::dim(
+                    "Partie chiffrée par Raftup : les outils de Raftup vérifient le certificat du lien ; le mod du jeu se connecte en clair.",
+                ).size(13.0));
+            } else if !invite.address.secure {
                 ui.label(
                     RichText::new(
                         "Connexion non chiffrée : le mot de passe de la salle passera en clair.",
@@ -266,7 +270,9 @@ fn continue_to(
         return;
     }
     state.error = None;
-    let url = invite.address.to_url();
+    // Adresse donnée au mod du jeu : sans schéma pour un certificat généré par Raftup
+    // (le mod essaie wss puis retombe sur ws, ADR 0043).
+    let url = invite.address_for_game();
     let dest = library
         .catalog()
         .map(|catalog| destination(catalog, library.scan_result(), invite))
@@ -338,6 +344,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
             },
             slot: Some("Alice".into()),
             game: game.map(str::to_string),
+            fingerprint: None,
         }
     }
 

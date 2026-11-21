@@ -5,6 +5,7 @@
 
 use std::net::Ipv6Addr;
 
+use client_core::Fingerprint;
 use percent_encoding::{percent_decode_str, utf8_percent_encode, AsciiSet, CONTROLS};
 use thiserror::Error;
 
@@ -63,6 +64,8 @@ pub enum InviteError {
     BadEncoding,
     #[error("le paramètre « {0} » apparaît plusieurs fois")]
     Duplicate(String),
+    #[error("empreinte du certificat refusée (64 chiffres hexadécimaux attendus)")]
+    BadFingerprint,
 }
 
 /// Adresse d'un serveur Archipelago (`ws://` ou `wss://`).
@@ -136,6 +139,13 @@ impl ServerAddress {
         let scheme = if self.secure { "wss" } else { "ws" };
         format!("{scheme}://{}:{}", self.host, self.port)
     }
+
+    /// Forme `hôte:port`, sans schéma : celle à donner à un mod de jeu non modifié
+    /// quand le serveur a un certificat généré par Raftup (ADR 0043). Sans schéma, les
+    /// clients officiels essaient `wss://` puis retombent sur `ws://`.
+    pub fn without_scheme(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
 }
 
 /// Vérifie un nom d'hôte : ASCII `[A-Za-z0-9.-]`, sans IDN.
@@ -177,9 +187,24 @@ pub struct Invite {
     pub address: ServerAddress,
     pub slot: Option<String>,
     pub game: Option<String>,
+    /// Empreinte SHA-256 du certificat généré par Raftup (paramètre `fp`, ADR 0043).
+    /// Un ancien launcher l'ignore (paramètre inconnu), le lien reste en `v=1`.
+    pub fingerprint: Option<Fingerprint>,
 }
 
-/// Analyse un lien `raftup://join?v=1&addr=…[&slot=…][&game=…]` (espaces autour ignorés).
+impl Invite {
+    /// L'adresse à donner au mod du jeu : sans schéma si le serveur a un certificat
+    /// généré par Raftup (le mod retombera sur `ws`), telle quelle sinon.
+    pub fn address_for_game(&self) -> String {
+        if self.fingerprint.is_some() {
+            self.address.without_scheme()
+        } else {
+            self.address.to_url()
+        }
+    }
+}
+
+/// Analyse un lien `raftup://join?v=1&addr=…[&slot=…][&game=…][&fp=…]` (espaces autour ignorés).
 pub fn parse_invite(text: &str) -> Result<Invite, InviteError> {
     let text = text.trim();
     if text.len() > MAX_LINK_BYTES {
@@ -190,7 +215,7 @@ pub fn parse_invite(text: &str) -> Result<Invite, InviteError> {
         .or_else(|| text.strip_prefix(LINK_PREFIX_SLASH))
         .ok_or(InviteError::NotAnInvite)?;
 
-    let (mut v, mut addr, mut slot, mut game) = (None, None, None, None);
+    let (mut v, mut addr, mut slot, mut game, mut fp) = (None, None, None, None, None);
     for part in query.split('&').filter(|p| !p.is_empty()) {
         let (key, raw) = part.split_once('=').ok_or(InviteError::NotAnInvite)?;
         // Les paramètres inconnus sont ignorés ; les connus ne peuvent pas être doublés.
@@ -199,6 +224,7 @@ pub fn parse_invite(text: &str) -> Result<Invite, InviteError> {
             "addr" => &mut addr,
             "slot" => &mut slot,
             "game" => &mut game,
+            "fp" => &mut fp,
             _ => continue,
         };
         if target.is_some() {
@@ -225,15 +251,24 @@ pub fn parse_invite(text: &str) -> Result<Invite, InviteError> {
     if let Some(g) = &game {
         check_name(g, MAX_GAME_CHARS).map_err(|_| InviteError::BadGame)?;
     }
+    let fingerprint = match &fp {
+        None => None,
+        Some(text) => Some(Fingerprint::parse(text).ok_or(InviteError::BadFingerprint)?),
+    };
+    // L'empreinte n'a de sens qu'en `wss` : un `ws://` avec `fp` est incohérent.
+    if fingerprint.is_some() && !address.secure {
+        return Err(InviteError::BadFingerprint);
+    }
     Ok(Invite {
         address,
         slot,
         game,
+        fingerprint,
     })
 }
 
 /// Fabrique le lien d'une invitation, après les mêmes validations que `parse_invite`.
-/// L'ordre des paramètres est fixe : `v`, `addr`, `slot`, `game`.
+/// L'ordre des paramètres est fixe : `v`, `addr`, `slot`, `game`, `fp`.
 pub fn make_invite(invite: &Invite) -> Result<String, InviteError> {
     let url = invite.address.to_url();
     // Réanalyser l'adresse garantit qu'on ne fabrique jamais un lien que l'on refuserait.
@@ -251,6 +286,13 @@ pub fn make_invite(invite: &Invite) -> Result<String, InviteError> {
     if let Some(g) = &invite.game {
         check_name(g, MAX_GAME_CHARS).map_err(|_| InviteError::BadGame)?;
         link.push_str(&format!("&game={}", utf8_percent_encode(g, VALUE_SET)));
+    }
+    if let Some(fp) = &invite.fingerprint {
+        if !invite.address.secure {
+            return Err(InviteError::BadFingerprint);
+        }
+        // 64 chiffres hexadécimaux : rien à encoder.
+        link.push_str(&format!("&fp={}", fp.to_hex()));
     }
     if link.len() > MAX_LINK_BYTES {
         return Err(InviteError::TooLong);
@@ -302,6 +344,7 @@ mod tests {
 
     fn inv(a: ServerAddress, slot: Option<&str>, game: Option<&str>) -> Invite {
         Invite {
+            fingerprint: None,
             address: a,
             slot: slot.map(String::from),
             game: game.map(String::from),
@@ -567,5 +610,39 @@ mod tests {
     fn address_to_url_and_default_port() {
         let a = ServerAddress::parse("wss://h").expect("adresse valide");
         assert_eq!(a.to_url(), "wss://h:38281");
+    }
+
+    #[test]
+    fn empreinte_du_certificat_dans_le_lien() {
+        let fp = Fingerprint::of_der(b"certificat de test");
+        let mut invite = inv(addr(true, "exemple.fr", 38281), Some("Ioka"), None);
+        invite.fingerprint = Some(fp);
+        let link = make_invite(&invite).expect("lien fabriqué");
+        assert!(link.ends_with(&format!("&fp={}", fp.to_hex())), "{link}");
+        let back = parse_invite(&link).expect("lien relu");
+        assert_eq!(back, invite);
+        // Le mod du jeu reçoit l'adresse sans schéma : il essaiera wss puis ws.
+        assert_eq!(back.address_for_game(), "exemple.fr:38281");
+        // Sans empreinte : l'adresse telle quelle.
+        let plain = inv(addr(false, "h", 5), None, None);
+        assert_eq!(plain.address_for_game(), "ws://h:5");
+
+        // En majuscules, l'empreinte est acceptée et relue en minuscules.
+        let upper = link.replace(&fp.to_hex(), &fp.to_hex().to_uppercase());
+        assert_eq!(parse_invite(&upper).expect("relu").fingerprint, Some(fp));
+        // Empreinte trop courte, ou en clair : refusée.
+        let short = link.replace(&fp.to_hex(), &fp.to_hex()[..10]);
+        assert_eq!(parse_invite(&short), Err(InviteError::BadFingerprint));
+        let clear = "raftup://join?v=1&addr=ws://h:5&fp=".to_string() + &fp.to_hex();
+        assert_eq!(parse_invite(&clear), Err(InviteError::BadFingerprint));
+        let doubled = format!("{link}&fp={}", fp.to_hex());
+        assert_eq!(
+            parse_invite(&doubled),
+            Err(InviteError::Duplicate("fp".to_string()))
+        );
+        // Fabriquer un lien `ws://` avec empreinte est refusé aussi.
+        let mut bad = inv(addr(false, "h", 5), None, None);
+        bad.fingerprint = Some(fp);
+        assert_eq!(make_invite(&bad), Err(InviteError::BadFingerprint));
     }
 }
