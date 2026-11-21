@@ -602,3 +602,9 @@ untime2`.
 - **Pas vérifié** : aucune release ni index réel publié avec les nouvelles clés.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : copier `C:\Users\Yonako\.raftup-keys` sur une clé USB ; signer le premier index avec le rapport de la CI et créer la release `registre` ; relire les ADR 0041 à 0046.
+
+### 2026-11-21 · Release `registre` publiée
+- **Fait** : vraies clés recréées hors du bac à sable (`9a25a0f`, registre `2226461C5DD19D81`) ; index signé avec le rapport de la CI (run 44935765671) ; pre-release `registre` créée avec `gh` (https://github.com/Yonako25/raftup/releases/tag/registre) ; index re-téléchargé depuis la release et vérifié : valide, `slime_rancher` « Testé en profondeur ».
+- **Pas vérifié** : affichage « Registre : 1 paquet(s) » dans la Bibliothèque du launcher (pas de fenêtre ouverte).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : sauvegarder `C:\Users\Yonako\.raftup-keys` sur une clé USB ; relire les ADR 0041 à 0046.
