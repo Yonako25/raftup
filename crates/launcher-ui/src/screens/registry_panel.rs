@@ -22,6 +22,11 @@
 //! Chaque apworld porte le badge de son niveau de confiance (ADR 0045), expliqué au
 //! survol. Avant d'installer un monde « Non vérifié » ou « Structure valide », une boîte
 //! demande confirmation.
+//!
+//! Les mondes natifs du registre (index de format 3, ADR 0046) sont listés de la même
+//! façon dans « Mondes natifs du registre », avec le même badge et la même confirmation ;
+//! « Installer » les pose dans `mondes-natifs/`
+//! (`launcher_core::native_worlds::install_native_world`).
 
 use std::collections::BTreeSet;
 use std::io::Read;
@@ -30,13 +35,23 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 
 use egui::{RichText, Ui};
 use launcher_core::download::{DownloadError, Fetcher};
+use launcher_core::native_worlds::{install_native_world, NativeInstall};
 use launcher_core::registry::{
-    apply_registry, apworld_path, fetch_registry, install_apworld, ApworldInstall, Index,
+    apply_registry, apworld_path, fetch_registry, install_apworld, ApworldInstall, Index, Package,
     PackageKind, RegistryFetch, Trust, TrustLevel, REGISTRY_INDEX_URL, REGISTRY_PUBLIC_KEY,
 };
 use launcher_core::{Catalog, HttpFetcher};
 
 use crate::{theme, widgets};
+
+/// Les deux dossiers où le registre pose ses paquets.
+#[derive(Debug, Clone, Copy)]
+pub struct Targets<'a> {
+    /// Dossier des apworlds (`worlds/<version>`).
+    pub worlds_dir: &'a Path,
+    /// Dossier des mondes natifs (`mondes-natifs`).
+    pub native_dir: &'a Path,
+}
 
 /// Où en est la lecture du registre.
 enum Phase {
@@ -52,10 +67,19 @@ enum Phase {
     Failed(String),
 }
 
-/// Une installation d'apworld en cours.
+/// Issue d'une installation, déjà mise en mots par le thread.
+enum Installed {
+    /// Posé à l'instant (texte du message).
+    New(String),
+    /// Déjà là, identique.
+    AlreadyThere,
+}
+
+/// Une installation (apworld ou monde natif) en cours.
 struct Install {
+    kind: PackageKind,
     name: String,
-    receiver: Receiver<Result<ApworldInstall, String>>,
+    receiver: Receiver<Result<Installed, String>>,
 }
 
 /// L'état du registre, gardé par l'écran Bibliothèque.
@@ -69,11 +93,17 @@ pub struct RegistryPanel {
     rejected: Vec<(String, String)>,
     /// Apworlds du registre déjà présentes dans le dossier des mondes.
     installed: BTreeSet<String>,
+    /// Mondes natifs du registre déjà présents dans `mondes-natifs/`.
+    installed_native: BTreeSet<String>,
     install: Option<Install>,
     /// Résultat de la dernière installation : texte, en vert (`Ok`) ou en orange (`Err`).
     message: Option<Result<String, String>>,
-    /// Apworld de niveau bas dont l'installation attend une confirmation (ADR 0045).
-    confirm: Option<String>,
+    /// Sorte du paquet de ce message (il s'affiche sous la bonne liste).
+    message_kind: PackageKind,
+    /// Paquet de niveau bas dont l'installation attend une confirmation (ADR 0045).
+    confirm: Option<(PackageKind, String)>,
+    /// Un monde natif vient d'être posé : la Bibliothèque doit relire `mondes-natifs/`.
+    native_changed: bool,
 }
 
 impl RegistryPanel {
@@ -84,27 +114,51 @@ impl RegistryPanel {
             added: BTreeSet::new(),
             rejected: Vec::new(),
             installed: BTreeSet::new(),
+            installed_native: BTreeSet::new(),
             install: None,
             message: None,
+            message_kind: PackageKind::Apworld,
             confirm: None,
+            native_changed: false,
         }
     }
 
-    /// Niveau de confiance d'une apworld de l'index (« non vérifié » si elle est inconnue).
-    fn level_of(&self, name: &str) -> TrustLevel {
+    /// Niveau de confiance d'un paquet de l'index (« non vérifié » s'il est inconnu).
+    fn level_of(&self, kind: PackageKind, name: &str) -> TrustLevel {
         self.index
             .as_ref()
-            .and_then(|i| i.get(PackageKind::Apworld, name))
+            .and_then(|i| i.get(kind, name))
             .map_or(TrustLevel::Unverified, |p| p.trust.level)
     }
 
-    /// Clic sur « Installer » : un monde de niveau bas demande d'abord une confirmation.
-    fn request_install(&mut self, ctx: &egui::Context, name: &str, worlds_dir: &Path) {
-        if needs_confirmation(self.level_of(name)) {
-            self.confirm = Some(name.to_string());
+    /// Clic sur « Installer » : un paquet de niveau bas demande d'abord une confirmation.
+    fn request_install(
+        &mut self,
+        ctx: &egui::Context,
+        kind: PackageKind,
+        name: &str,
+        targets: Targets<'_>,
+    ) {
+        if needs_confirmation(self.level_of(kind, name)) {
+            self.confirm = Some((kind, name.to_string()));
         } else {
-            self.start_install(ctx, name, worlds_dir.to_path_buf());
+            self.start_install(ctx, kind, name, targets);
         }
+    }
+
+    /// Registre désactivé, sans thread ni réseau (tests d'écran de la Bibliothèque).
+    #[cfg(test)]
+    pub(super) fn disabled() -> RegistryPanel {
+        RegistryPanel {
+            phase: Phase::Disabled,
+            ..RegistryPanel::new()
+        }
+    }
+
+    /// Vrai une fois après la pose d'un monde natif (la Bibliothèque relit alors son
+    /// dossier). `std::mem::take` remet le drapeau à faux en le lisant.
+    pub fn take_native_changed(&mut self) -> bool {
+        std::mem::take(&mut self.native_changed)
     }
 
     /// Lance la lecture du registre une seule fois, dans un thread à part.
@@ -137,12 +191,12 @@ impl RegistryPanel {
 
     /// Lit les réponses des threads sans attendre. Ajoute au catalogue les jeux du registre
     /// et rend `true` si des jeux ont été ajoutés (il faut alors relancer la détection).
-    pub fn poll(&mut self, catalog: &mut Catalog, worlds_dir: Option<&Path>) -> bool {
+    pub fn poll(&mut self, catalog: &mut Catalog, targets: Option<Targets<'_>>) -> bool {
         let mut added_games = false;
         if let Phase::Loading(receiver) = &self.phase {
             match receiver.try_recv() {
                 Ok(Ok(fetched)) => {
-                    added_games = self.apply(catalog, fetched, worlds_dir);
+                    added_games = self.apply(catalog, fetched, targets);
                 }
                 Ok(Err(message)) => {
                     tracing::info!("registre ignoré : {message}");
@@ -158,15 +212,21 @@ impl RegistryPanel {
             match install.receiver.try_recv() {
                 Ok(result) => {
                     let name = install.name.clone();
+                    let kind = install.kind;
+                    if result.is_ok() {
+                        match kind {
+                            PackageKind::NativeWorld => {
+                                self.installed_native.insert(name.clone());
+                                self.native_changed = true;
+                            }
+                            _ => {
+                                self.installed.insert(name.clone());
+                            }
+                        }
+                    }
                     self.message = Some(match result {
-                        Ok(ApworldInstall::Installed(path)) => {
-                            self.installed.insert(name.clone());
-                            Ok(format!("{name} installée : {}", path.display()))
-                        }
-                        Ok(ApworldInstall::AlreadyThere(_)) => {
-                            self.installed.insert(name.clone());
-                            Ok(format!("{name} était déjà installée."))
-                        }
+                        Ok(Installed::New(text)) => Ok(text),
+                        Ok(Installed::AlreadyThere) => Ok(format!("{name} était déjà installé.")),
                         Err(e) => Err(format!("{name} : {e}")),
                     });
                     self.install = None;
@@ -187,7 +247,7 @@ impl RegistryPanel {
         &mut self,
         catalog: &mut Catalog,
         fetched: RegistryFetch,
-        worlds_dir: Option<&Path>,
+        targets: Option<Targets<'_>>,
     ) -> bool {
         let report = apply_registry(catalog, &fetched);
         for (name, reason) in &report.rejected {
@@ -196,25 +256,45 @@ impl RegistryPanel {
         self.added = report.added.iter().cloned().collect();
         self.rejected = report.rejected;
         self.index = Some(fetched.index);
-        if let Some(dir) = worlds_dir {
-            self.refresh_installed(dir);
+        if let Some(targets) = targets {
+            self.refresh_installed(targets);
         }
         // Debug : ouvre tout de suite la confirmation d'un monde (captures de la macro).
+        // Le nom d'une apworld est cherché d'abord, puis celui d'un monde natif.
         if cfg!(debug_assertions) {
             if let Ok(name) = std::env::var("RAFTUP_DEV_REGISTRE_CONFIRMER") {
-                self.confirm = Some(name);
+                let native = self
+                    .index
+                    .as_ref()
+                    .is_some_and(|i| i.get(PackageKind::Apworld, &name).is_none())
+                    && self
+                        .index
+                        .as_ref()
+                        .is_some_and(|i| i.get(PackageKind::NativeWorld, &name).is_some());
+                let kind = if native {
+                    PackageKind::NativeWorld
+                } else {
+                    PackageKind::Apworld
+                };
+                self.confirm = Some((kind, name));
             }
         }
         self.phase = Phase::Ready;
         !self.added.is_empty()
     }
 
-    /// Note les apworlds du registre déjà présentes (fichier `<nom>.apworld`).
-    fn refresh_installed(&mut self, worlds_dir: &Path) {
+    /// Note les paquets du registre déjà posés : apworld `<nom>.apworld`, monde natif
+    /// `mondes-natifs/<nom>/`. Appelée aussi après une désinstallation dans la Bibliothèque.
+    pub fn refresh_installed(&mut self, targets: Targets<'_>) {
         let Some(index) = &self.index else { return };
         self.installed = index
             .of_kind(PackageKind::Apworld)
-            .filter(|p| apworld_path(worlds_dir, &p.name).exists())
+            .filter(|p| apworld_path(targets.worlds_dir, &p.name).exists())
+            .map(|p| p.name.clone())
+            .collect();
+        self.installed_native = index
+            .of_kind(PackageKind::NativeWorld)
+            .filter(|p| targets.native_dir.join(&p.name).exists())
             .map(|p| p.name.clone())
             .collect();
     }
@@ -263,23 +343,55 @@ impl RegistryPanel {
         Some(reasons.join("\n"))
     }
 
-    /// Lance l'installation d'une apworld du registre dans un thread à part.
-    fn start_install(&mut self, ctx: &egui::Context, name: &str, worlds_dir: PathBuf) {
+    /// Lance l'installation d'un paquet du registre (apworld ou monde natif) dans un
+    /// thread à part.
+    fn start_install(
+        &mut self,
+        ctx: &egui::Context,
+        kind: PackageKind,
+        name: &str,
+        targets: Targets<'_>,
+    ) {
         let (Some(index), None) = (&self.index, &self.install) else {
             return;
         };
         let index = index.clone();
         let owned_name = name.to_string();
+        // Copies possédées par le thread (`move`) : il ne peut rien emprunter à l'écran.
+        let worlds_dir = targets.worlds_dir.to_path_buf();
+        let native_dir = targets.native_dir.to_path_buf();
         let ctx = ctx.clone();
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
-            let result = install_apworld(fetcher().as_ref(), &index, &owned_name, &worlds_dir)
-                .map_err(|e| e.to_string());
+            let fetcher = fetcher();
+            let result = match kind {
+                PackageKind::NativeWorld => {
+                    install_native_world(fetcher.as_ref(), &index, &owned_name, &native_dir)
+                        .map(|done| match done {
+                            NativeInstall::Installed(path) => Installed::New(format!(
+                                "Monde natif {owned_name} installé : {}",
+                                path.display()
+                            )),
+                            NativeInstall::AlreadyThere(_) => Installed::AlreadyThere,
+                        })
+                        .map_err(|e| e.to_string())
+                }
+                _ => install_apworld(fetcher.as_ref(), &index, &owned_name, &worlds_dir)
+                    .map(|done| match done {
+                        ApworldInstall::Installed(path) => {
+                            Installed::New(format!("{owned_name} installée : {}", path.display()))
+                        }
+                        ApworldInstall::AlreadyThere(_) => Installed::AlreadyThere,
+                    })
+                    .map_err(|e| e.to_string()),
+            };
             let _ = sender.send(result);
             ctx.request_repaint();
         });
         self.message = None;
+        self.message_kind = kind;
         self.install = Some(Install {
+            kind,
             name: name.to_string(),
             receiver,
         });
@@ -323,8 +435,9 @@ fn trust_colors(level: TrustLevel) -> (egui::Color32, egui::Color32) {
     }
 }
 
-/// Badge du niveau de confiance, avec son explication au survol.
-fn trust_badge(ui: &mut Ui, trust: &Trust) {
+/// Badge du niveau de confiance, avec son explication au survol (aussi sur la fiche d'un
+/// monde natif installé).
+pub(super) fn trust_badge(ui: &mut Ui, trust: &Trust) {
     let (fg, bg) = trust_colors(trust.level);
     // Dessiné à la main comme `widgets::pill`, mais en gardant la réponse pour le survol.
     let galley = ui.painter().layout_no_wrap(
@@ -347,22 +460,23 @@ fn trust_badge(ui: &mut Ui, trust: &Trust) {
 }
 
 /// Boîte de confirmation avant d'installer un monde de niveau bas.
-fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, worlds_dir: &Path) {
-    let Some(name) = panel.confirm.clone() else {
+fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, targets: Targets<'_>) {
+    let Some((kind, name)) = panel.confirm.clone() else {
         return;
     };
     let trust = panel
         .index
         .as_ref()
-        .and_then(|i| i.get(PackageKind::Apworld, &name))
+        .and_then(|i| i.get(kind, &name))
         .map(|p| p.trust.clone())
         .unwrap_or_default();
+    let (heading, warning) = confirm_texts(kind);
     let mut install = false;
     let mut cancel = false;
     // `Modal` grise le reste de la fenêtre et bloque les clics derrière la boîte.
     let modal = egui::Modal::new(egui::Id::unique("registre_confirmer")).show(ctx, |ui| {
         ui.set_width(440.0);
-        ui.label(widgets::dim("MONDE DU REGISTRE").size(12.0));
+        ui.label(widgets::dim(heading).size(12.0));
         ui.label(
             RichText::new(format!("Installer « {name} » ?"))
                 .size(20.0)
@@ -377,11 +491,7 @@ fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, worlds_dir: &Pa
         ui.add_space(4.0);
         ui.label(RichText::new(trust.level.meaning()).color(theme::TEXT));
         ui.add_space(6.0);
-        ui.label(widgets::dim(
-            "Ce monde n'a pas été généré par la CI de Raftup. Une apworld est du code \
-             Python qui s'exécute sur ce PC pendant la génération : ne l'installez que si \
-             vous faites confiance à son auteur.",
-        ));
+        ui.label(widgets::dim(warning));
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             install = widgets::primary_button(ui, "Installer quand même", true);
@@ -391,9 +501,27 @@ fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, worlds_dir: &Pa
     // Échap ou clic à côté de la boîte : comme « Annuler ».
     if install {
         panel.confirm = None;
-        panel.start_install(ctx, &name, worlds_dir.to_path_buf());
+        panel.start_install(ctx, kind, &name, targets);
     } else if cancel || modal.should_close() {
         panel.confirm = None;
+    }
+}
+
+/// Titre et avertissement de la boîte de confirmation, selon la sorte de paquet.
+fn confirm_texts(kind: PackageKind) -> (&'static str, &'static str) {
+    match kind {
+        PackageKind::NativeWorld => (
+            "MONDE NATIF DU REGISTRE",
+            "Ce monde n'a pas été généré par la CI de Raftup : il peut empêcher la création \
+             d'une partie. Un monde natif est une donnée, sans code : rien ne s'exécute sur \
+             ce PC.",
+        ),
+        _ => (
+            "MONDE DU REGISTRE",
+            "Ce monde n'a pas été généré par la CI de Raftup. Une apworld est du code \
+             Python qui s'exécute sur ce PC pendant la génération : ne l'installez que si \
+             vous faites confiance à son auteur.",
+        ),
     }
 }
 
@@ -430,70 +558,50 @@ impl Default for RegistryPanel {
     }
 }
 
-/// Bas de la Bibliothèque : les apworlds du registre (s'il y en a), puis la ligne d'état.
-pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, worlds_dir: Option<&Path>) {
+/// Bas de la Bibliothèque : les apworlds puis les mondes natifs du registre (s'il y en a),
+/// puis la ligne d'état.
+pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, targets: Option<Targets<'_>>) {
     let ctx = ui.ctx().clone();
-    let apworlds: Vec<_> = panel
-        .index
-        .as_ref()
-        .map(|i| i.of_kind(PackageKind::Apworld).cloned().collect())
-        .unwrap_or_default();
-    if let (false, Some(dir)) = (apworlds.is_empty(), worlds_dir) {
-        ui.add_space(14.0);
+    let of_kind = |kind: PackageKind| -> Vec<Package> {
+        panel
+            .index
+            .as_ref()
+            .map(|i| i.of_kind(kind).cloned().collect())
+            .unwrap_or_default()
+    };
+    let apworlds = of_kind(PackageKind::Apworld);
+    let natives = of_kind(PackageKind::NativeWorld);
+    if let Some(targets) = targets {
         let mut clicked = None;
-        widgets::panel(ui, "Mondes du registre", |ui| {
-            ui.label(widgets::dim(
-                "Apworlds référencées par le registre signé de Raftup. « Installer » les \
-                 télécharge chez leur auteur et vérifie leur empreinte avant de les poser.",
-            ));
-            ui.add_space(6.0);
-            for package in &apworlds {
-                ui.horizontal(|ui| {
-                    ui.vertical(|ui| {
-                        let title = match &package.game {
-                            Some(game) => format!("{game} · {}", package.name),
-                            None => package.name.clone(),
-                        };
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(title).color(theme::TEXT).strong());
-                            trust_badge(ui, &package.trust);
-                        });
-                        ui.label(
-                            widgets::dim(format!(
-                                "v{} · {} · licence {}",
-                                package.version,
-                                package.authors.join(", "),
-                                package.license
-                            ))
-                            .size(12.0),
-                        );
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let busy = panel.install.as_ref();
-                        if busy.is_some_and(|i| i.name == package.name) {
-                            ui.spinner();
-                        } else if panel.installed.contains(&package.name) {
-                            ui.label(RichText::new("Installée").color(theme::GREEN));
-                        } else if widgets::primary_button(ui, "Installer", busy.is_none()) {
-                            clicked = Some(package.name.clone());
-                        }
-                    });
-                });
-            }
-            match &panel.message {
-                Some(Ok(text)) => {
-                    ui.label(RichText::new(text).color(theme::GREEN).size(12.0));
-                }
-                Some(Err(text)) => {
-                    ui.label(RichText::new(text).color(theme::AMBER).size(12.0));
-                }
-                None => {}
-            }
-        });
-        if let Some(name) = clicked {
-            panel.request_install(&ctx, &name, dir);
+        if !apworlds.is_empty() {
+            ui.add_space(14.0);
+            widgets::panel(ui, "Mondes du registre", |ui| {
+                ui.label(widgets::dim(
+                    "Apworlds référencées par le registre signé de Raftup. « Installer » les \
+                     télécharge chez leur auteur et vérifie leur empreinte avant de les poser.",
+                ));
+                ui.add_space(6.0);
+                package_rows(ui, panel, &apworlds, "Installée", &mut clicked);
+                install_message(ui, panel, PackageKind::Apworld);
+            });
         }
-        confirm_modal(&ctx, panel, dir);
+        if !natives.is_empty() {
+            ui.add_space(14.0);
+            widgets::panel(ui, "Mondes natifs du registre", |ui| {
+                ui.label(widgets::dim(
+                    "Mondes décrits en TOML, sans code (format natif de Raftup). « Installer » \
+                     les télécharge chez leur auteur, vérifie leur empreinte, les relit puis les \
+                     pose dans mondes-natifs.",
+                ));
+                ui.add_space(6.0);
+                package_rows(ui, panel, &natives, "Installé", &mut clicked);
+                install_message(ui, panel, PackageKind::NativeWorld);
+            });
+        }
+        if let Some((kind, name)) = clicked {
+            panel.request_install(&ctx, kind, &name, targets);
+        }
+        confirm_modal(&ctx, panel, targets);
     }
     if let Some(text) = panel.status_text() {
         ui.add_space(10.0);
@@ -501,6 +609,70 @@ pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, worlds_dir: Option<&Path>) {
         if let Some(detail) = panel.hover_text() {
             label.on_hover_text(detail);
         }
+    }
+}
+
+/// Une ligne par paquet : titre, badge de confiance, version, auteurs, licence, puis
+/// « Installer » (ou la roue, ou `done_label`). `clicked` reçoit le paquet cliqué.
+fn package_rows(
+    ui: &mut Ui,
+    panel: &RegistryPanel,
+    packages: &[Package],
+    done_label: &str,
+    clicked: &mut Option<(PackageKind, String)>,
+) {
+    for package in packages {
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                let title = match &package.game {
+                    Some(game) => format!("{game} · {}", package.name),
+                    None => package.name.clone(),
+                };
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(title).color(theme::TEXT).strong());
+                    trust_badge(ui, &package.trust);
+                });
+                ui.label(
+                    widgets::dim(format!(
+                        "v{} · {} · licence {}",
+                        package.version,
+                        package.authors.join(", "),
+                        package.license
+                    ))
+                    .size(12.0),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let busy = panel.install.as_ref();
+                let installed = match package.kind {
+                    PackageKind::NativeWorld => &panel.installed_native,
+                    _ => &panel.installed,
+                };
+                if busy.is_some_and(|i| i.kind == package.kind && i.name == package.name) {
+                    ui.spinner();
+                } else if installed.contains(&package.name) {
+                    ui.label(RichText::new(done_label).color(theme::GREEN));
+                } else if widgets::primary_button(ui, "Installer", busy.is_none()) {
+                    *clicked = Some((package.kind, package.name.clone()));
+                }
+            });
+        });
+    }
+}
+
+/// Résultat de la dernière installation, en vert ou en orange, sous la liste de sa sorte.
+fn install_message(ui: &mut Ui, panel: &RegistryPanel, kind: PackageKind) {
+    if panel.message_kind != kind {
+        return;
+    }
+    match &panel.message {
+        Some(Ok(text)) => {
+            ui.label(RichText::new(text).color(theme::GREEN).size(12.0));
+        }
+        Some(Err(text)) => {
+            ui.label(RichText::new(text).color(theme::AMBER).size(12.0));
+        }
+        None => {}
     }
 }
 
@@ -569,14 +741,94 @@ mod tests {
         let mut panel = RegistryPanel::new();
         panel.apply(&mut catalog, fetched(vec![bas, sur], Vec::new()), None);
         // Niveau bas : rien ne part, la boîte de confirmation attend.
-        panel.request_install(&ctx, "bas", mondes.path());
-        assert_eq!(panel.confirm.as_deref(), Some("bas"));
+        let targets = Targets {
+            worlds_dir: mondes.path(),
+            native_dir: mondes.path(),
+        };
+        panel.request_install(&ctx, PackageKind::Apworld, "bas", targets);
+        assert_eq!(
+            panel.confirm,
+            Some((PackageKind::Apworld, "bas".to_string()))
+        );
         assert!(panel.install.is_none());
         // Niveau « générable » : l'installation partirait directement (pas lancée ici :
         // elle téléchargerait pour de vrai). Un nom inconnu compte comme « non vérifié ».
-        assert_eq!(panel.level_of("sur"), TrustLevel::Generates);
-        assert!(!needs_confirmation(panel.level_of("sur")));
-        assert_eq!(panel.level_of("absent"), TrustLevel::Unverified);
+        assert_eq!(
+            panel.level_of(PackageKind::Apworld, "sur"),
+            TrustLevel::Generates
+        );
+        assert!(!needs_confirmation(
+            panel.level_of(PackageKind::Apworld, "sur")
+        ));
+        assert_eq!(
+            panel.level_of(PackageKind::Apworld, "absent"),
+            TrustLevel::Unverified
+        );
+        // Même nom, autre sorte : un autre paquet.
+        assert_eq!(
+            panel.level_of(PackageKind::NativeWorld, "sur"),
+            TrustLevel::Unverified
+        );
+    }
+
+    #[test]
+    fn monde_natif_du_registre_confirme_puis_installe() {
+        let ctx = egui::Context::default();
+        let dossiers = tempfile::tempdir().unwrap();
+        let natifs = dossiers.path().join("mondes-natifs");
+        std::fs::create_dir_all(natifs.join("deja")).unwrap();
+        let targets = Targets {
+            worlds_dir: dossiers.path(),
+            native_dir: &natifs,
+        };
+        let mut catalog = Catalog::embedded().unwrap();
+        let mut panel = RegistryPanel::new();
+        let lu = fetched(
+            vec![
+                package(PackageKind::NativeWorld, "deja"),
+                package(PackageKind::NativeWorld, "apquest"),
+            ],
+            Vec::new(),
+        );
+        panel.apply(&mut catalog, lu, Some(targets));
+        // Déjà posé : marqué, sans toucher aux apworlds.
+        assert_eq!(panel.installed_native, BTreeSet::from(["deja".to_string()]));
+        assert!(panel.installed.is_empty());
+        // Non vérifié : la confirmation, avec le texte des mondes natifs (pas de code).
+        panel.request_install(&ctx, PackageKind::NativeWorld, "apquest", targets);
+        assert_eq!(
+            panel.confirm,
+            Some((PackageKind::NativeWorld, "apquest".to_string()))
+        );
+        let (titre, texte) = confirm_texts(PackageKind::NativeWorld);
+        assert!(titre.contains("NATIF") && texte.contains("sans code"));
+        assert!(confirm_texts(PackageKind::Apworld).1.contains("Python"));
+
+        // Fin d'installation (simulée) : marqué installé, la Bibliothèque est prévenue une fois.
+        let (sender, receiver) = mpsc::channel();
+        sender
+            .send(Ok(Installed::New("Monde natif apquest installé".into())))
+            .unwrap();
+        panel.install = Some(Install {
+            kind: PackageKind::NativeWorld,
+            name: "apquest".into(),
+            receiver,
+        });
+        panel.message_kind = PackageKind::NativeWorld;
+        panel.poll(&mut catalog, Some(targets));
+        assert!(panel.installed_native.contains("apquest"));
+        assert!(!panel.installed.contains("apquest"));
+        assert!(panel.take_native_changed());
+        assert!(!panel.take_native_changed());
+        assert_eq!(
+            panel.message,
+            Some(Ok("Monde natif apquest installé".to_string()))
+        );
+
+        // Désinstallé ailleurs (Bibliothèque) : la marque tombe à la relecture.
+        std::fs::remove_dir(natifs.join("deja")).unwrap();
+        panel.refresh_installed(targets);
+        assert!(!panel.installed_native.contains("deja"));
     }
 
     #[test]
@@ -621,7 +873,11 @@ mod tests {
             vec![("jeu-casse".to_string(), "404".to_string())],
         );
         // Aucun jeu ajouté : `jeu-casse` n'a pas pu être téléchargé.
-        assert!(!panel.apply(&mut catalog, lu, Some(mondes.path())));
+        let targets = Targets {
+            worlds_dir: mondes.path(),
+            native_dir: &mondes.path().join("mondes-natifs"),
+        };
+        assert!(!panel.apply(&mut catalog, lu, Some(targets)));
         assert!(matches!(panel.phase, Phase::Ready));
         assert_eq!(panel.installed, BTreeSet::from(["deja".to_string()]));
         assert_eq!(

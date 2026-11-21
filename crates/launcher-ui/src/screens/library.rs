@@ -1,5 +1,7 @@
 //! Écran « Bibliothèque » : les jeux du catalogue, leur dossier, l'état des mods,
-//! et les boutons Installer / Lancer / Désinstaller (ADR 0015).
+//! et les boutons Installer / Lancer / Désinstaller (ADR 0015). Les mondes natifs de
+//! `mondes-natifs/` s'y affichent aussi, comme des jeux, avec leur fiche (ADR 0046,
+//! module `native_panel`).
 //!
 //! Tout ce qui peut durer (détection des jeux, installation, désinstallation, lancement)
 //! tourne dans un thread à part. La boucle d'affichage ne fait que lire un canal
@@ -17,7 +19,8 @@ use launcher_core::{
     Downloader, GameState, HttpFetcher, InstallOptions, InstallStatus, Paths, Profile, Store,
 };
 
-use super::registry_panel::{self, RegistryPanel};
+use super::native_panel::{self, NativeState};
+use super::registry_panel::{self, RegistryPanel, Targets};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -103,6 +106,8 @@ pub struct LibraryState {
     rescan_pending: bool,
     /// Jeux lancés depuis la Bibliothèque qui tournent encore (présence « en partie »).
     running: RunningGames,
+    /// Mondes natifs de `mondes-natifs/` (ADR 0046).
+    native: NativeState,
 }
 
 impl LibraryState {
@@ -125,7 +130,13 @@ impl LibraryState {
             registry: RegistryPanel::new(),
             rescan_pending: false,
             running: RunningGames::new(),
+            native: NativeState::new(),
         }
+    }
+
+    /// Dossier des mondes natifs, si les dossiers de Raftup sont connus.
+    fn native_dir(&self) -> Option<PathBuf> {
+        self.paths.as_ref().ok().map(Paths::native_worlds_dir)
     }
 
     /// Les jeux lancés depuis la Bibliothèque qui tournent encore.
@@ -153,6 +164,7 @@ impl LibraryState {
 /// Le mot de passe n'est jamais dans un lien : on le vide pour que le joueur le saisisse.
 pub fn open_with_invite(state: &mut LibraryState, game_id: &str, address: &str, slot: &str) {
     state.selected = Some(game_id.to_string());
+    state.native.selected = None;
     state.confirm_uninstall = false;
     state.notice = None;
     state.form.address = address.to_string();
@@ -692,8 +704,19 @@ pub fn show(
         state.start_scan(&ctx);
     }
     state.poll(&ctx);
+    if let Some(dir) = state.native_dir() {
+        state.native.ensure_loaded(&dir);
+    }
     poll_registry(state, &ctx);
     prefill(&mut state.form, shared);
+    // Monde natif désinstallé à l'image précédente : sa fiche a disparu, le message
+    // passe dans le bandeau de l'écran.
+    if let Some(message) = native_panel::take_notice(&mut state.native) {
+        state.notice = Some(match message {
+            Ok(text) => Notice::Info(text),
+            Err(text) => Notice::Error(text),
+        });
+    }
 
     super::page(ui, |ui| {
         header(ui, state, &ctx);
@@ -722,19 +745,25 @@ pub fn show(
             None => {}
         }
 
-        let worlds_dir = state.paths.as_ref().ok().map(|p| p.worlds_dir(AP_VERSION));
-        if state.game_count() == 0 {
+        if state.game_count() == 0 && state.native.count() == 0 {
             empty_state(ui);
-            registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
+            bottom_panels(ui, state);
             return;
         }
-        // Premier jeu sélectionné par défaut.
-        if state.selected.is_none() {
+        // Premier jeu sélectionné par défaut (ou le premier monde natif s'il n'y a pas de
+        // jeu au catalogue), sauf si un monde natif est déjà sélectionné.
+        if state.selected.is_none() && state.native.selected.is_none() {
             state.selected = state
                 .catalog
                 .as_ref()
                 .ok()
                 .and_then(|c| c.profiles.keys().next().cloned());
+            if state.selected.is_none() {
+                let first = state.native.worlds().first().map(|w| w.key.clone());
+                if let Some(key) = first {
+                    state.native.select(&key);
+                }
+            }
         }
 
         if ui.available_width() >= super::WIDE {
@@ -744,7 +773,7 @@ pub fn show(
                     ui.set_width(list_width);
                     grid(ui, state);
                     missing_game_note(ui);
-                    registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
+                    bottom_panels(ui, state);
                 });
                 ui.vertical(|ui| detail(ui, state, shared, &ctx));
             });
@@ -753,10 +782,49 @@ pub fn show(
             ui.add_space(12.0);
             detail(ui, state, shared, &ctx);
             missing_game_note(ui);
-            registry_panel::show(ui, &mut state.registry, worlds_dir.as_deref());
+            bottom_panels(ui, state);
         }
     });
     None
+}
+
+/// Bas de la colonne : paquets du registre, puis la conversion d'un apworld (repliée).
+fn bottom_panels(ui: &mut Ui, state: &mut LibraryState) {
+    let Ok(paths) = state.paths.clone() else {
+        return;
+    };
+    let worlds_dir = paths.worlds_dir(AP_VERSION);
+    let native_dir = paths.native_worlds_dir();
+    let targets = Targets {
+        worlds_dir: &worlds_dir,
+        native_dir: &native_dir,
+    };
+    // Mondes natifs illisibles : une ligne discrète, la raison au survol.
+    let rejected = state.native.rejected();
+    if !rejected.is_empty() {
+        let reasons: Vec<String> = rejected
+            .iter()
+            .map(|(path, reason)| format!("{} : {reason}", path.display()))
+            .collect();
+        ui.add_space(10.0);
+        ui.label(
+            widgets::dim(format!(
+                "{} monde(s) natif(s) écarté(s) dans mondes-natifs.",
+                rejected.len()
+            ))
+            .size(12.0)
+            .color(theme::AMBER),
+        )
+        .on_hover_text(reasons.join("\n"));
+    }
+    registry_panel::show(ui, &mut state.registry, Some(targets));
+    let mut converted = false;
+    native_panel::conversion_block(ui, &mut state.native, &paths, &worlds_dir, &mut converted);
+    if converted {
+        // La liste est déjà relue (le monde apparaît dans la grille) ; les marques
+        // « Installé » du registre suivent.
+        state.registry.refresh_installed(targets);
+    }
 }
 
 /// Lance la lecture du registre (une fois) et ajoute au catalogue les jeux qu'il apporte.
@@ -767,7 +835,24 @@ fn poll_registry(state: &mut LibraryState, ctx: &egui::Context) {
     };
     state.registry.start(ctx, catalog);
     let worlds_dir = state.paths.as_ref().ok().map(|p| p.worlds_dir(AP_VERSION));
-    if state.registry.poll(catalog, worlds_dir.as_deref()) {
+    let native_dir = state.paths.as_ref().ok().map(Paths::native_worlds_dir);
+    // `zip` des deux `Option` : des cibles seulement si les deux dossiers sont connus.
+    let targets =
+        worlds_dir
+            .as_deref()
+            .zip(native_dir.as_deref())
+            .map(|(worlds_dir, native_dir)| Targets {
+                worlds_dir,
+                native_dir,
+            });
+    let added = state.registry.poll(catalog, targets);
+    // Un monde natif posé par le registre : on relit `mondes-natifs/`.
+    if state.registry.take_native_changed() {
+        if let Some(dir) = &native_dir {
+            state.native.refresh(dir);
+        }
+    }
+    if added {
         // Nouveaux jeux : il faut les chercher sur le PC.
         if state.scanning.is_some() {
             state.rescan_pending = true;
@@ -809,12 +894,22 @@ fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
     });
     let jeux = if total > 1 { "jeux" } else { "jeu" };
     let prets = if ready > 1 { "prêts" } else { "prêt" };
+    let mut summary = format!("{total} {jeux} · {ready} {prets}");
+    let natives = state.native.count();
+    if natives > 0 {
+        let mondes = if natives > 1 {
+            "mondes natifs"
+        } else {
+            "monde natif"
+        };
+        summary.push_str(&format!(" · {natives} {mondes}"));
+    }
     let scanning = state.scanning.is_some();
     let mut refresh = false;
     let mut add_dir = false;
     let row = ui.horizontal(|ui| {
         ui.label(widgets::title("Bibliothèque", 28.0));
-        ui.label(widgets::dim(format!("{total} {jeux} · {ready} {prets}")).size(14.0));
+        ui.label(widgets::dim(summary).size(14.0));
         // De droite à gauche : le premier bouton ajouté est le plus à droite.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if total == 0 {
@@ -923,6 +1018,7 @@ fn missing_game_note(ui: &mut Ui) {
 fn grid(ui: &mut Ui, state: &mut LibraryState) {
     let Ok(catalog) = &state.catalog else { return };
     let mut clicked = None;
+    let mut clicked_native = None;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(22.0, 22.0);
         for profile in catalog.games() {
@@ -937,12 +1033,34 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
                 clicked = Some(id.clone());
             }
         }
+        // Les mondes natifs, après les jeux du catalogue (ADR 0046).
+        for world in state.native.worlds() {
+            let selected = state.native.selected.as_deref() == Some(world.key.as_str());
+            let look = CardLook {
+                cover_id: &world.key,
+                name: &world.game,
+                status: native_panel::card_status(world),
+                status_color: theme::TEXT_DIM,
+                // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
+                fraction: 1.0,
+                marker: Some((native_panel::MARKER, theme::ACCENT)),
+            };
+            if cover_card(ui, &look, selected) {
+                clicked_native = Some(world.key.clone());
+            }
+        }
     });
     if let Some(id) = clicked {
         if state.selected.as_ref() != Some(&id) {
             state.confirm_uninstall = false;
         }
         state.selected = Some(id);
+        state.native.selected = None;
+    }
+    if let Some(key) = clicked_native {
+        state.native.select(&key);
+        state.selected = None;
+        state.confirm_uninstall = false;
     }
 }
 
@@ -958,7 +1076,7 @@ fn tone_color(tone: Tone) -> Color32 {
 
 /// Petite jaquette carrée de la fiche : l'aplat du jeu avec ses initiales (le titre
 /// entier ne tient pas dans 64 px ; il est écrit juste à côté).
-fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
+pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), Sense::hover());
     let painter = ui.painter();
     painter.rect_filled(
@@ -984,6 +1102,43 @@ fn card(
     busy: Option<&Task>,
     from_registry: bool,
 ) -> bool {
+    // Barre sous la jaquette : pleine si le jeu est prêt, à moitié pendant une tâche.
+    let fraction = match (busy, view.can_launch) {
+        (Some(_), _) => 0.5,
+        (None, true) => 1.0,
+        (None, false) => 0.0,
+    };
+    let (status, status_color) = match busy {
+        Some(task) => (format!("{}…", task.label), theme::ACCENT),
+        None => (view.label.clone(), tone_color(view.tone)),
+    };
+    let look = CardLook {
+        cover_id: &profile.game.id,
+        name: &profile.game.name,
+        status,
+        status_color,
+        fraction,
+        // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
+        marker: from_registry.then_some(("Registre", theme::ITEM)),
+    };
+    cover_card(ui, &look, selected)
+}
+
+/// Ce qu'une carte de la grille affiche (jeu du catalogue ou monde natif).
+struct CardLook<'a> {
+    /// Identifiant qui choisit la teinte de la jaquette.
+    cover_id: &'a str,
+    name: &'a str,
+    status: String,
+    status_color: Color32,
+    /// Remplissage de la barre sous la jaquette, de 0 à 1.
+    fraction: f32,
+    /// Marqueur en petites capitales sous l'état (« Registre », « Monde natif »).
+    marker: Option<(&'a str, Color32)>,
+}
+
+/// Dessine une carte. Renvoie vrai au clic.
+fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
     const WIDTH: f32 = 150.0;
     // Jaquette en portrait (2:3), comme les couvertures de la maquette.
     const COVER: egui::Vec2 = egui::vec2(WIDTH, 210.0);
@@ -996,10 +1151,10 @@ fn card(
             let (rect, _) = ui.allocate_exact_size(COVER, Sense::hover());
             let painter = ui.painter();
             let radius = CornerRadius::same(theme::RADIUS);
-            painter.rect_filled(rect, radius, theme::cover_color(&profile.game.id));
+            painter.rect_filled(rect, radius, theme::cover_color(look.cover_id));
             // Le titre passe à la ligne dans la jaquette (marge de 12 px de chaque côté).
             let galley = painter.layout(
-                profile.game.name.clone(),
+                look.name.to_string(),
                 theme::title_font(22.0),
                 theme::TEXT,
                 rect.width() - 24.0,
@@ -1014,28 +1169,21 @@ fn card(
                 Stroke::new(1.0, theme::BORDER)
             };
             painter.rect_stroke(rect, radius, stroke, egui::StrokeKind::Outside);
-            // Barre sous la jaquette : pleine si le jeu est prêt, à moitié pendant une tâche.
-            let fraction = match (busy, view.can_launch) {
-                (Some(_), _) => 0.5,
-                (None, true) => 1.0,
-                (None, false) => 0.0,
-            };
-            widgets::bar(ui, WIDTH, fraction, theme::ACCENT);
+            widgets::bar(ui, WIDTH, look.fraction, theme::ACCENT);
             ui.label(
-                RichText::new(&profile.game.name)
+                RichText::new(look.name)
                     .strong()
                     .family(theme::bold_family())
                     .size(15.0)
                     .color(theme::TEXT),
             );
-            let (text, color) = match busy {
-                Some(task) => (format!("{}…", task.label), theme::ACCENT),
-                None => (view.label.clone(), tone_color(view.tone)),
-            };
-            ui.label(RichText::new(text).color(color).size(13.0));
-            // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
-            if from_registry {
-                ui.label(widgets::caps("Registre").color(theme::ITEM));
+            ui.label(
+                RichText::new(&look.status)
+                    .color(look.status_color)
+                    .size(13.0),
+            );
+            if let Some((marker, color)) = look.marker {
+                ui.label(widgets::caps(marker).color(color));
             }
         })
         .response
@@ -1049,6 +1197,24 @@ fn card(
 
 /// Panneau de droite : le jeu sélectionné.
 fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Context) {
+    // Un monde natif sélectionné : sa fiche à lui (ADR 0046).
+    if state.native.selected.is_some() {
+        let Some(native_dir) = state.native_dir() else {
+            return;
+        };
+        let mut uninstalled = false;
+        native_panel::detail(ui, &mut state.native, &native_dir, &mut uninstalled);
+        if uninstalled {
+            if let Ok(paths) = &state.paths {
+                let worlds_dir = paths.worlds_dir(AP_VERSION);
+                state.registry.refresh_installed(Targets {
+                    worlds_dir: &worlds_dir,
+                    native_dir: &native_dir,
+                });
+            }
+        }
+        return;
+    }
     let Ok(catalog) = &state.catalog else { return };
     let Some(profile) = state.selected.as_ref().and_then(|id| catalog.get(id)) else {
         return;
@@ -1303,7 +1469,7 @@ fn connection_form(ui: &mut Ui, form: &mut LaunchForm, profile: &Profile, shared
 }
 
 /// Chemin en police monospace dans un cadre sombre.
-fn code_box(ui: &mut Ui, text: &str) {
+pub(super) fn code_box(ui: &mut Ui, text: &str) {
     Frame::new()
         .fill(theme::LOG_BG)
         .stroke(Stroke::new(1.0, theme::BORDER))
@@ -1582,5 +1748,139 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
     #[test]
     fn taille_lisible() {
         assert_eq!(megabytes(12_345_678), "12,3 Mo");
+    }
+
+    // --- Mondes natifs (ADR 0046) : l'écran dessiné sans fenêtre ---
+
+    const APQUEST: &str = include_str!("../../../../spec/monde-natif/exemples/apquest/world.toml");
+
+    /// Tous les textes dessinés d'une image (formes imbriquées comprises).
+    fn texts(output: &egui::FullOutput) -> Vec<String> {
+        fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => out.push(text.galley.text().to_string()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        for clipped in &output.shapes {
+            walk(&clipped.shape, &mut out);
+        }
+        out
+    }
+
+    /// Une Bibliothèque sur un dossier temporaire, avec le jeu de démo et APQuest natif,
+    /// sans registre ni détection des jeux (rien ne part sur le réseau ni dans un thread).
+    fn natif_state(temp: &Path) -> LibraryState {
+        let paths = Paths::under(temp);
+        let dir = paths.native_worlds_dir().join("apquest");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("world.toml"), APQUEST).unwrap();
+        let mut state = LibraryState::new();
+        state.catalog = Ok(catalog());
+        state.paths = Ok(paths);
+        state.scan = Some(Scan::default());
+        state.registry = RegistryPanel::disabled();
+        state.native = NativeState::default();
+        state.native.selected = None;
+        state
+    }
+
+    /// Dessine une image de l'écran, assez large pour la mise en page à deux colonnes.
+    fn draw(ctx: &egui::Context, state: &mut LibraryState) -> Vec<String> {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1400.0, 900.0),
+            )),
+            ..Default::default()
+        };
+        // `run_ui` : une image entière, l'écran dessiné dans l'`Ui` racine.
+        let mut output = ctx.run_ui(input, |ui| {
+            show(ui, state, &Shared::default(), None);
+        });
+        // Sans fenêtre, personne n'envoie les textures (police) au GPU : on les jette
+        // exprès, sinon egui s'en plaint à la destruction.
+        output.textures_delta.clear();
+        texts(&output)
+    }
+
+    #[test]
+    fn monde_natif_affiche_comme_un_jeu_avec_sa_fiche() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = natif_state(temp.path());
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+
+        let shown = draw(&ctx, &mut state);
+        assert_eq!(state.native.count(), 1);
+        // Le jeu du catalogue reste sélectionné par défaut ; la carte du monde natif est là.
+        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert!(shown.iter().any(|t| t == "MONDE NATIF"), "{shown:?}");
+        assert!(
+            shown.iter().any(|t| t.contains("1 monde natif")),
+            "{shown:?}"
+        );
+        assert!(shown.iter().any(|t| t.ends_with("lieux · format 1")));
+
+        // Clic sur la carte (comme `grid`) : la fiche du monde remplace celle du jeu.
+        state.native.select("apquest");
+        state.selected = None;
+        let shown = draw(&ctx, &mut state);
+        assert_eq!(
+            state.selected, None,
+            "la sélection par défaut ne doit pas revenir"
+        );
+        for attendu in [
+            "APQuest",
+            "Monde natif",
+            "format_version",
+            "Lieux",
+            "Objets",
+            "Désinstaller le monde natif",
+        ] {
+            assert!(shown.iter().any(|t| t == attendu), "{attendu} : {shown:?}");
+        }
+        assert!(shown.iter().any(|t| t.contains("à la main")));
+    }
+
+    #[test]
+    fn desinstaller_un_monde_natif_depuis_la_fiche() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = natif_state(temp.path());
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        state.native.select("apquest");
+        state.selected = None;
+        draw(&ctx, &mut state);
+        let native_dir = state.native_dir().unwrap();
+        // Les deux clics de la fiche, sans souris : la logique qu'ils appellent.
+        let message = native_panel::uninstall_message(
+            "APQuest",
+            launcher_core::native_worlds::uninstall_native_world(&native_dir, "apquest"),
+        );
+        assert!(message.is_ok());
+        state.native.refresh(&native_dir);
+        // L'image suivante revient au jeu du catalogue, sans monde natif.
+        let shown = draw(&ctx, &mut state);
+        assert_eq!(state.native.count(), 0);
+        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert!(!shown.iter().any(|t| t == "MONDE NATIF"));
+        assert!(!native_dir.join("apquest").exists());
+    }
+
+    #[test]
+    fn seulement_des_mondes_natifs_sans_catalogue() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = natif_state(temp.path());
+        state.catalog = Ok(Catalog::from_texts(&[]).unwrap());
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        let shown = draw(&ctx, &mut state);
+        // Pas d'état vide : le monde natif est sélectionné et sa fiche affichée.
+        assert!(!shown.iter().any(|t| t == "Aucun jeu dans le catalogue"));
+        assert_eq!(state.native.selected.as_deref(), Some("apquest"));
+        assert!(shown.iter().any(|t| t == "Désinstaller le monde natif"));
     }
 }

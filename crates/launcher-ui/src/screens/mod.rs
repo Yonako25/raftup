@@ -10,6 +10,7 @@ pub mod hosting;
 pub mod join;
 pub mod library;
 pub mod matches;
+pub mod native_panel;
 pub mod prefs;
 pub mod presets;
 pub mod registry_panel;
