@@ -621,3 +621,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : régénérer le secret Twitch (il est passé dans la conversation) et saisir le nouveau dans la console `/admin` du hub.
 
+### 2026-11-21 · Illustrations en service sur le hub officiel
+- **Fait** : `757b3e8` variables IGDB transmises au conteneur (`docker-compose.yml`, `.env.example`) ; sur triomyno : `git pull`, clé Twitch ajoutée au `.env` du serveur (droits 600, pas dans le dépôt), image reconstruite et hub redémarré (healthy). `https://hub.raftup-games.com/v1/art/steam/433340` rend la fiche de Slime Rancher, jaquette et fond servis en JPEG (vus).
+- **Pas vérifié** : jaquettes à l'écran dans le launcher (il faut choisir `https://hub.raftup-games.com` dans « Amis », ou compiler avec `RAFTUP_OFFICIAL_HUB_URL`).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
+
