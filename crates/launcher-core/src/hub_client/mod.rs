@@ -181,7 +181,7 @@ impl HubUrl {
     }
 
     /// Adresse complète d'une route (`path` commence par `/v1`).
-    fn join(&self, path: &str) -> String {
+    pub(crate) fn join(&self, path: &str) -> String {
         format!("{}{path}", self.0)
     }
 }

@@ -9,6 +9,7 @@
 //! Pas encore fait (ADR 0033) : changement de pseudo, refus de toutes les demandes.
 
 pub mod api;
+pub mod art;
 pub mod console;
 pub mod discord;
 pub mod distribution;
@@ -73,6 +74,8 @@ pub struct HubConfig {
     pub admin_session_lifetime: Duration,
     /// Distribution du launcher : cache de l'exe officiel et d'où il vient (ADR 0036).
     pub distribution: distribution::DistributionConfig,
+    /// Illustrations des jeux : cache et source (ADR 0047).
+    pub art: art::ArtConfig,
     /// Connexion Discord permise : vrai seulement dans la version officielle
     /// (option de compilation `officiel`, ADR 0038). Faux : Discord reste éteint,
     /// même avec des réglages, et la console ne le propose pas.
@@ -114,6 +117,7 @@ impl Default for HubConfig {
             admin_session_lifetime: Duration::from_secs(12 * 3600),
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
+            art: art::ArtConfig::default(),
             setup_code: None,
             setup_pass: None,
             https: false,
@@ -182,6 +186,8 @@ struct Inner {
     dummy_hash: String,
     /// Exe officiel du launcher en cache, et zip relié à ce hub.
     distribution: distribution::Distribution,
+    /// Illustrations des jeux (cache disque devant IGDB).
+    art: art::ArtService,
 }
 
 impl AppState {
@@ -245,6 +251,7 @@ impl AppState {
                     config.oauth_max_pending,
                 ),
                 distribution: distribution::Distribution::new(config.distribution.clone()),
+                art: art::ArtService::new(config.art.clone()),
                 store,
                 config,
                 dummy_hash,
@@ -255,6 +262,11 @@ impl AppState {
     /// Distribution du launcher (cache de l'exe officiel).
     pub fn distribution(&self) -> &distribution::Distribution {
         &self.inner.distribution
+    }
+
+    /// Illustrations des jeux (ADR 0047).
+    pub fn art(&self) -> &art::ArtService {
+        &self.inner.art
     }
 
     pub fn store(&self) -> &Store {

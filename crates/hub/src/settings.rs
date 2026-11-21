@@ -73,13 +73,16 @@ pub enum SettingKey {
     MailFrom,
     DiscordClientId,
     DiscordClientSecret,
+    /// Application Twitch qui donne accès à IGDB (illustrations des jeux, ADR 0047).
+    IgdbClientId,
+    IgdbClientSecret,
     /// Page publique `/telecharger` active (`true` / `false`).
     PublicDownload,
 }
 
 impl SettingKey {
     /// Tous les réglages, dans l'ordre d'affichage.
-    pub const ALL: [SettingKey; 8] = [
+    pub const ALL: [SettingKey; 10] = [
         SettingKey::HubName,
         SettingKey::PublicUrl,
         SettingKey::RegistrationMode,
@@ -87,6 +90,8 @@ impl SettingKey {
         SettingKey::MailFrom,
         SettingKey::DiscordClientId,
         SettingKey::DiscordClientSecret,
+        SettingKey::IgdbClientId,
+        SettingKey::IgdbClientSecret,
         SettingKey::PublicDownload,
     ];
 
@@ -100,6 +105,8 @@ impl SettingKey {
             SettingKey::MailFrom => "mail_from",
             SettingKey::DiscordClientId => "discord_client_id",
             SettingKey::DiscordClientSecret => "discord_client_secret",
+            SettingKey::IgdbClientId => "igdb_client_id",
+            SettingKey::IgdbClientSecret => "igdb_client_secret",
             SettingKey::PublicDownload => "public_download",
         }
     }
@@ -114,6 +121,8 @@ impl SettingKey {
             SettingKey::MailFrom => "RAFTUP_HUB_MAIL_FROM",
             SettingKey::DiscordClientId => "RAFTUP_HUB_DISCORD_CLIENT_ID",
             SettingKey::DiscordClientSecret => "RAFTUP_HUB_DISCORD_CLIENT_SECRET",
+            SettingKey::IgdbClientId => "RAFTUP_HUB_IGDB_CLIENT_ID",
+            SettingKey::IgdbClientSecret => "RAFTUP_HUB_IGDB_CLIENT_SECRET",
             SettingKey::PublicDownload => "RAFTUP_HUB_PUBLIC_DOWNLOAD",
         }
     }
@@ -124,7 +133,10 @@ impl SettingKey {
 
     /// Valeur jamais réaffichée.
     pub fn is_secret(self) -> bool {
-        matches!(self, SettingKey::SmtpUrl | SettingKey::DiscordClientSecret)
+        matches!(
+            self,
+            SettingKey::SmtpUrl | SettingKey::DiscordClientSecret | SettingKey::IgdbClientSecret
+        )
     }
 
     /// Vérifie une valeur et renvoie sa forme rangée (espaces retirés…).
@@ -197,6 +209,17 @@ impl SettingKey {
                     Ok(value.to_string())
                 } else {
                     Err(HubError::InvalidSetting("secret Discord illisible"))
+                }
+            }
+            // Identifiant et secret Twitch : lettres et chiffres ASCII (30 caractères
+            // chez Twitch) ; on laisse de la marge sans accepter d'espaces ni de `&`.
+            SettingKey::IgdbClientId | SettingKey::IgdbClientSecret => {
+                if value.len() <= 128 && value.chars().all(|c| c.is_ascii_alphanumeric()) {
+                    Ok(value.to_string())
+                } else {
+                    Err(HubError::InvalidSetting(
+                        "identifiant ou secret Twitch : lettres et chiffres seulement",
+                    ))
                 }
             }
             SettingKey::PublicDownload => match value {
@@ -283,6 +306,8 @@ pub struct Settings {
     pub mail_from: Option<String>,
     pub discord_client_id: Option<String>,
     pub discord_client_secret: Option<String>,
+    pub igdb_client_id: Option<String>,
+    pub igdb_client_secret: Option<String>,
     pub public_download: bool,
     /// Source de chaque réglage (pour la console).
     sources: BTreeMap<SettingKey, SettingSource>,
@@ -297,6 +322,7 @@ impl fmt::Debug for Settings {
             .field("registration_mode", &self.registration_mode)
             .field("smtp_configured", &self.smtp_url.is_some())
             .field("discord_client_id", &self.discord_client_id)
+            .field("igdb_client_id", &self.igdb_client_id)
             .field("public_download", &self.public_download)
             .finish_non_exhaustive()
     }
@@ -345,6 +371,8 @@ impl Settings {
         let mail_from = pick(SettingKey::MailFrom);
         let discord_client_id = pick(SettingKey::DiscordClientId);
         let discord_client_secret = pick(SettingKey::DiscordClientSecret);
+        let igdb_client_id = pick(SettingKey::IgdbClientId);
+        let igdb_client_secret = pick(SettingKey::IgdbClientSecret);
         // Page publique active par défaut (ADR 0036 : « désactivable »).
         let public_download = pick(SettingKey::PublicDownload).is_none_or(|v| v == "true");
 
@@ -356,6 +384,8 @@ impl Settings {
             mail_from,
             discord_client_id,
             discord_client_secret,
+            igdb_client_id,
+            igdb_client_secret,
             public_download,
             sources,
         }
@@ -398,6 +428,19 @@ impl Settings {
         })
     }
 
+    /// Application Twitch pour IGDB (ADR 0047), si l'identifiant et le secret sont réglés.
+    pub fn igdb_credentials(&self) -> Option<crate::art::IgdbCredentials> {
+        let (Some(client_id), Some(client_secret)) =
+            (&self.igdb_client_id, &self.igdb_client_secret)
+        else {
+            return None;
+        };
+        Some(crate::art::IgdbCredentials {
+            client_id: client_id.clone(),
+            client_secret: client_secret.clone(),
+        })
+    }
+
     /// Vue sans secret, pour la console.
     pub fn public(&self) -> PublicSettings {
         let entries = SettingKey::ALL
@@ -409,14 +452,18 @@ impl Settings {
                     SettingKey::RegistrationMode => {
                         Some(self.registration_mode.as_str().to_string())
                     }
-                    SettingKey::SmtpUrl | SettingKey::DiscordClientSecret => None,
+                    SettingKey::SmtpUrl
+                    | SettingKey::DiscordClientSecret
+                    | SettingKey::IgdbClientSecret => None,
                     SettingKey::MailFrom => self.mail_from.clone(),
                     SettingKey::DiscordClientId => self.discord_client_id.clone(),
+                    SettingKey::IgdbClientId => self.igdb_client_id.clone(),
                     SettingKey::PublicDownload => Some(self.public_download.to_string()),
                 };
                 let configured = match key {
                     SettingKey::SmtpUrl => self.smtp_url.is_some(),
                     SettingKey::DiscordClientSecret => self.discord_client_secret.is_some(),
+                    SettingKey::IgdbClientSecret => self.igdb_client_secret.is_some(),
                     _ => self.source(key) != SettingSource::Default,
                 };
                 PublicSetting {

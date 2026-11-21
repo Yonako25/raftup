@@ -82,13 +82,17 @@ struct SettingsPage {
 }
 
 /// Les réglages de chaque groupe, dans l'ordre d'affichage.
-const GROUPS: [(&str, &[SettingKey]); 5] = [
+const GROUPS: [(&str, &[SettingKey]); 6] = [
     ("general", &[SettingKey::HubName, SettingKey::PublicUrl]),
     ("registration", &[SettingKey::RegistrationMode]),
     ("email", &[SettingKey::SmtpUrl, SettingKey::MailFrom]),
     (
         "discord",
         &[SettingKey::DiscordClientId, SettingKey::DiscordClientSecret],
+    ),
+    (
+        "art",
+        &[SettingKey::IgdbClientId, SettingKey::IgdbClientSecret],
     ),
     ("download", &[SettingKey::PublicDownload]),
 ];
@@ -136,6 +140,16 @@ fn describe(key: SettingKey) -> (&'static str, &'static str, &'static str) {
         ),
         SettingKey::DiscordClientSecret => (
             "Secret de l'application Discord",
+            "« Client secret » : jamais réaffiché. Laisser vide pour ne rien changer.",
+            "",
+        ),
+        SettingKey::IgdbClientId => (
+            "Identifiant de l'application Twitch",
+            "« Client ID » de la console des développeurs Twitch (dev.twitch.tv), qui donne accès à IGDB.",
+            "",
+        ),
+        SettingKey::IgdbClientSecret => (
+            "Secret de l'application Twitch",
             "« Client secret » : jamais réaffiché. Laisser vide pour ne rien changer.",
             "",
         ),
@@ -199,6 +213,8 @@ fn build_groups(settings: &PublicSettings, discord_allowed: bool) -> Vec<Group> 
                             "Configuré".to_string()
                         }
                         SettingKey::DiscordClientSecret => "Non configuré".to_string(),
+                        SettingKey::IgdbClientSecret if entry.configured => "Configuré".to_string(),
+                        SettingKey::IgdbClientSecret => "Non configuré".to_string(),
                         _ => String::new(),
                     };
                     Some(Field {
@@ -247,6 +263,10 @@ fn build_groups(settings: &PublicSettings, discord_allowed: bool) -> Vec<Group> 
                         "Adresse de retour à déclarer chez Discord : {}/v1/oauth/discord/callback",
                         settings.public_url
                     ),
+                ),
+                "art" => (
+                    "Illustrations des jeux",
+                    "Jaquettes et images des jeux de la Bibliothèque, prises chez IGDB et gardées en cache par le hub (ADR 0047). Sans application Twitch, le launcher garde ses aplats colorés.".to_string(),
                 ),
                 _ => ("Page publique", String::new()),
             };

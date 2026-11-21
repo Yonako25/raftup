@@ -84,6 +84,15 @@ pub enum HubError {
     UnknownSetting,
     #[error("réglage refusé : {0}")]
     InvalidSetting(&'static str),
+    /// Illustrations des jeux (ADR 0047).
+    #[error("illustrations non configurées sur ce hub")]
+    ArtDisabled,
+    #[error("aucune illustration pour ce jeu")]
+    ArtNotFound,
+    #[error("IGDB ne répond pas, réessayer plus tard")]
+    ArtUnavailable,
+    #[error("trop de demandes d'illustrations, réessayer plus tard")]
+    ArtRateLimited,
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
     #[error("requête invalide : {0}")]
     BadRequest(String),
@@ -136,6 +145,10 @@ impl HubError {
             HubError::InviteNotFound => (StatusCode::NOT_FOUND, "invite_not_found"),
             HubError::UnknownSetting => (StatusCode::BAD_REQUEST, "unknown_setting"),
             HubError::InvalidSetting(_) => (StatusCode::BAD_REQUEST, "invalid_setting"),
+            HubError::ArtDisabled => (StatusCode::SERVICE_UNAVAILABLE, "art_disabled"),
+            HubError::ArtNotFound => (StatusCode::NOT_FOUND, "art_not_found"),
+            HubError::ArtUnavailable => (StatusCode::BAD_GATEWAY, "art_unavailable"),
+            HubError::ArtRateLimited => (StatusCode::TOO_MANY_REQUESTS, "art_rate_limited"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
@@ -158,5 +171,25 @@ impl IntoResponse for HubError {
             self.to_string()
         };
         (status, Json(json!({ "error": code, "message": message }))).into_response()
+    }
+}
+
+/// Erreur des illustrations vue par l'API. Le détail d'une panne d'IGDB reste au
+/// journal du hub.
+impl From<crate::art::ArtError> for HubError {
+    fn from(error: crate::art::ArtError) -> HubError {
+        use crate::art::ArtError;
+        match error {
+            ArtError::Disabled => HubError::ArtDisabled,
+            ArtError::NotFound => HubError::ArtNotFound,
+            ArtError::RateLimited => HubError::ArtRateLimited,
+            ArtError::BadId => {
+                HubError::BadRequest("identifiant d'illustration refusé".to_string())
+            }
+            ArtError::Unavailable(_) | ArtError::TooLarge | ArtError::NotAnImage => {
+                tracing::warn!(%error, "illustration indisponible");
+                HubError::ArtUnavailable
+            }
+        }
     }
 }

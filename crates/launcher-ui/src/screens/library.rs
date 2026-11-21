@@ -19,9 +19,13 @@ use launcher_core::{
     Downloader, GameState, HttpFetcher, InstallOptions, InstallStatus, Paths, Profile, Store,
 };
 
+use launcher_core::art::{ArtKind, ArtRef};
+use launcher_core::hub_client::HubUrl;
+
 use super::native_panel::{self, NativeState};
 use super::registry_panel::{self, RegistryPanel, Targets};
 use crate::app::Page;
+use crate::art_ui::{self, Artwork};
 use crate::format;
 use crate::theme;
 use crate::widgets;
@@ -108,6 +112,8 @@ pub struct LibraryState {
     running: RunningGames,
     /// Mondes natifs de `mondes-natifs/` (ADR 0046).
     native: NativeState,
+    /// Illustrations des jeux venues du hub (ADR 0047).
+    pub(crate) art: Artwork,
 }
 
 impl LibraryState {
@@ -131,6 +137,7 @@ impl LibraryState {
             rescan_pending: false,
             running: RunningGames::new(),
             native: NativeState::new(),
+            art: Artwork::new(),
         }
     }
 
@@ -155,7 +162,15 @@ impl LibraryState {
             rescan_pending: false,
             running: RunningGames::new(),
             native: NativeState::new(),
+            art: Artwork::new(),
         }
+    }
+
+    /// Hub d'où viennent les illustrations (celui de « Amis »). `None` : aplats seuls.
+    /// Le cache disque va dans le dossier de cache de Raftup.
+    pub fn set_hub(&mut self, hub: Option<&HubUrl>) {
+        let cache = self.paths.as_ref().ok().map(|p| p.cache_dir.clone());
+        self.art.set_hub(hub, cache.as_deref());
     }
 
     /// Dossier des mondes natifs, si les dossiers de Raftup sont connus.
@@ -729,6 +744,7 @@ pub fn show(
         state.start_scan(&ctx);
     }
     state.poll(&ctx);
+    state.art.poll(&ctx);
     if let Some(dir) = state.native_dir() {
         state.native.ensure_loaded(&dir);
     }
@@ -1054,7 +1070,11 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
             let selected = state.selected.as_deref() == Some(id.as_str());
             let busy = state.task.as_ref().filter(|t| &t.game_id == id);
             let from_registry = state.registry.is_from_registry(id);
-            if card(ui, profile, &view, selected, busy, from_registry) {
+            // Jaquette du hub si elle est prête, sinon l'aplat (ADR 0047).
+            let cover = state
+                .art
+                .texture(ui.ctx(), ArtRef::of(profile), ArtKind::Cover);
+            if card(ui, profile, &view, selected, busy, from_registry, cover) {
                 clicked = Some(id.clone());
             }
         }
@@ -1069,12 +1089,19 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
                 // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
                 fraction: 1.0,
                 marker: Some((native_panel::MARKER, theme::ACCENT)),
+                // Un monde natif n'a pas d'identifiant IGDB : il garde son aplat.
+                cover: None,
             };
             if cover_card(ui, &look, selected) {
                 clicked_native = Some(world.key.clone());
             }
         }
     });
+    // Attribution demandée par IGDB, dès qu'une illustration est à l'écran.
+    if let Some((text, url)) = state.art.attribution() {
+        ui.add_space(6.0);
+        attribution_line(ui, text, url);
+    }
     if let Some(id) = clicked {
         if state.selected.as_ref() != Some(&id) {
             state.confirm_uninstall = false;
@@ -1102,7 +1129,23 @@ fn tone_color(tone: Tone) -> Color32 {
 /// Petite jaquette carrée de la fiche : l'aplat du jeu avec ses initiales (le titre
 /// entier ne tient pas dans 64 px ; il est écrit juste à côté).
 pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
+    small_cover_with(ui, size, game_id, name, None);
+}
+
+/// Comme [`small_cover`], avec la jaquette du hub (ADR 0047) quand elle est prête :
+/// découpée au centre pour tenir dans le carré.
+fn small_cover_with(
+    ui: &mut Ui,
+    size: f32,
+    game_id: &str,
+    name: &str,
+    texture: Option<&egui::TextureHandle>,
+) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), Sense::hover());
+    if let Some(texture) = texture {
+        art_ui::paint_cover(ui, texture, rect);
+        return;
+    }
     let painter = ui.painter();
     painter.rect_filled(
         rect,
@@ -1118,6 +1161,17 @@ pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
     );
 }
 
+/// Image large du jeu en haut de sa fiche : toute la largeur du panneau, en 16:9,
+/// 180 px de haut au plus.
+fn hero_banner(ui: &mut Ui, texture: &egui::TextureHandle, name: &str) {
+    let width = ui.available_width();
+    let height = (width * 9.0 / 16.0).min(180.0);
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
+    art_ui::paint_cover(ui, texture, rect);
+    let label = format!("Illustration de {name}");
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+}
+
 /// Une carte de jeu. Renvoie vrai au clic.
 fn card(
     ui: &mut Ui,
@@ -1126,6 +1180,7 @@ fn card(
     selected: bool,
     busy: Option<&Task>,
     from_registry: bool,
+    cover: Option<egui::TextureHandle>,
 ) -> bool {
     // Barre sous la jaquette : pleine si le jeu est prêt, à moitié pendant une tâche.
     let fraction = match (busy, view.can_launch) {
@@ -1145,8 +1200,22 @@ fn card(
         fraction,
         // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
         marker: from_registry.then_some(("Registre", theme::ITEM)),
+        cover,
     };
     cover_card(ui, &look, selected)
+}
+
+/// « Illustrations : IGDB.com », avec le lien vers la page du jeu chez IGDB.
+fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        ui.label(widgets::dim("Illustrations :").size(12.0));
+        if url.is_empty() {
+            ui.label(widgets::dim(text).size(12.0));
+        } else {
+            ui.hyperlink_to(RichText::new(text).size(12.0), url);
+        }
+    });
 }
 
 /// Ce qu'une carte de la grille affiche (jeu du catalogue ou monde natif).
@@ -1160,6 +1229,8 @@ struct CardLook<'a> {
     fraction: f32,
     /// Marqueur en petites capitales sous l'état (« Registre », « Monde natif »).
     marker: Option<(&'a str, Color32)>,
+    /// Jaquette venue du hub (ADR 0047) ; `None` : l'aplat coloré avec le titre.
+    cover: Option<egui::TextureHandle>,
 }
 
 /// Dessine une carte. Renvoie vrai au clic.
@@ -1171,22 +1242,35 @@ fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
         .vertical(|ui| {
             ui.set_width(WIDTH);
             ui.spacing_mut().item_spacing.y = 6.0;
-            // La « jaquette » : un aplat coloré avec le titre du jeu (SPEC § 7 : jamais de
-            // visuel officiel sans autorisation). La teinte dépend de l'identifiant du jeu.
-            let (rect, _) = ui.allocate_exact_size(COVER, Sense::hover());
-            let painter = ui.painter();
+            // La jaquette : l'illustration venue du hub (IGDB, ADR 0047) si elle est
+            // prête ; sinon un aplat coloré avec le titre du jeu, dont la teinte dépend
+            // de l'identifiant du jeu.
+            let (rect, cover_response) = ui.allocate_exact_size(COVER, Sense::hover());
             let radius = CornerRadius::same(theme::RADIUS);
-            painter.rect_filled(rect, radius, theme::cover_color(look.cover_id));
-            // Le titre passe à la ligne dans la jaquette (marge de 12 px de chaque côté).
-            let galley = painter.layout(
-                look.name.to_string(),
-                theme::title_font(22.0),
-                theme::TEXT,
-                rect.width() - 24.0,
-            );
-            // Centré dans la jaquette : on part du coin haut gauche du bloc de texte.
-            let top_left = rect.center() - galley.size() / 2.0;
-            painter.galley(top_left, galley, theme::TEXT);
+            match &look.cover {
+                Some(texture) => {
+                    art_ui::paint_cover(ui, texture, rect);
+                    // Nom lu par un lecteur d'écran (et par les tests sans fenêtre).
+                    let label = format!("Jaquette de {}", look.name);
+                    cover_response
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+                }
+                None => {
+                    let painter = ui.painter();
+                    painter.rect_filled(rect, radius, theme::cover_color(look.cover_id));
+                    // Le titre passe à la ligne dans la jaquette (marge de 12 px de chaque côté).
+                    let galley = painter.layout(
+                        look.name.to_string(),
+                        theme::title_font(22.0),
+                        theme::TEXT,
+                        rect.width() - 24.0,
+                    );
+                    // Centré dans la jaquette : on part du coin haut gauche du bloc de texte.
+                    let top_left = rect.center() - galley.size() / 2.0;
+                    painter.galley(top_left, galley, theme::TEXT);
+                }
+            }
+            let painter = ui.painter();
             // Jeu sélectionné : liseré bleu de 2 px autour de la jaquette seulement.
             let stroke = if selected {
                 Stroke::new(2.0, theme::ACCENT)
@@ -1252,10 +1336,25 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
     let status = state.scan.as_ref().and_then(|s| s.status.get(&id)).cloned();
     let view = view(&profile, found.as_ref(), status.as_ref());
     let busy = state.task.is_some();
+    // Illustrations du hub (ADR 0047) : image large en haut de la fiche, jaquette à
+    // côté du titre. Absentes : rien en haut, et l'aplat avec les initiales.
+    let reference = ArtRef::of(&profile);
+    let cover = state.art.texture(ctx, reference, ArtKind::Cover);
+    let hero = state.art.texture(ctx, reference, ArtKind::Hero);
 
     widgets::panel(ui, "", |ui| {
+        if let Some(hero) = &hero {
+            hero_banner(ui, hero, &profile.game.name);
+            ui.add_space(10.0);
+        }
         ui.horizontal(|ui| {
-            small_cover(ui, 64.0, &profile.game.id, &profile.game.name);
+            small_cover_with(
+                ui,
+                64.0,
+                &profile.game.id,
+                &profile.game.name,
+                cover.as_ref(),
+            );
             ui.vertical(|ui| {
                 ui.label(widgets::title(&profile.game.name, 26.0));
                 ui.label(RichText::new(&view.label).color(tone_color(view.tone)));

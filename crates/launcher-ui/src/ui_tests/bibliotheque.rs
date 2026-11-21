@@ -2,12 +2,17 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
+use launcher_core::art::{ArtError, ArtImage, ArtKind, ArtRef};
 use launcher_core::{DetectedGame, GameState, InstallStatus, Paths, Store};
 
 use super::{builder, click, count, demo_catalog, shows};
+use crate::art_ui::{Artwork, Loader};
 use crate::screens::library::{self, LibraryState, Scan};
 use crate::worker::Shared;
 
@@ -43,10 +48,21 @@ fn scan_ready() -> Scan {
 }
 
 /// La Bibliothèque, jeu prêt. Les dossiers de Raftup sont dans un dossier temporaire.
+/// Sans hub : aucune illustration, les aplats.
 pub fn bibliotheque() -> Harness<'static, Bibliotheque> {
+    bibliotheque_with(None)
+}
+
+/// Comme [`bibliotheque`], avec des illustrations données par `art` (faux hub).
+fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Bibliotheque> {
     let root = tempfile::tempdir().unwrap();
+    let mut library =
+        LibraryState::for_tests(demo_catalog(), Paths::under(root.path()), scan_ready());
+    if let Some(art) = art {
+        library.art = art;
+    }
     let state = Bibliotheque {
-        library: LibraryState::for_tests(demo_catalog(), Paths::under(root.path()), scan_ready()),
+        library,
         shared: Shared::default(),
         _root: root,
     };
@@ -93,4 +109,100 @@ fn se_connecter_a_la_main_est_replie() {
     // Un clic sur l'en-tête l'ouvre.
     click(&mut harness, "Se connecter à la main");
     assert!(address_field_shown(&harness));
+}
+
+// ---------------------------------------------------------------------------
+// Illustrations des jeux (ADR 0047)
+// ---------------------------------------------------------------------------
+
+const COVER_LABEL: &str = "Jaquette de Slime Rancher";
+const HERO_LABEL: &str = "Illustration de Slime Rancher";
+
+/// Un vrai petit JPEG (4 × 6 pixels), pour passer par le décodage de l'interface.
+fn tiny_jpeg() -> Vec<u8> {
+    let image = image::RgbImage::from_pixel(4, 6, image::Rgb([200, 80, 40]));
+    let mut bytes = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new(&mut bytes)
+        .encode_image(&image)
+        .unwrap();
+    bytes
+}
+
+/// Laisse tourner l'écran jusqu'à ce que `done` soit vrai (le chargement se fait
+/// dans un thread à part), 5 s au plus.
+fn run_until(
+    harness: &mut Harness<'_, Bibliotheque>,
+    done: impl Fn(&Harness<'_, Bibliotheque>) -> bool,
+) -> bool {
+    let start = Instant::now();
+    loop {
+        harness.run();
+        if done(harness) {
+            return true;
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[test]
+fn sans_hub_la_jaquette_reste_un_aplat() {
+    let harness = bibliotheque();
+    assert!(!shows(&harness, COVER_LABEL));
+    assert!(!shows(&harness, HERO_LABEL));
+    assert!(!shows(&harness, "IGDB.com"));
+    // Le titre reste écrit dans l'aplat et sous la carte.
+    assert!(count(&harness, "Slime Rancher") >= 2);
+}
+
+#[test]
+fn jaquette_et_illustration_venues_du_hub() {
+    let asked = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&asked);
+    let jpeg = tiny_jpeg();
+    // Faux hub : il connaît Slime Rancher par son appid Steam (profil du dépôt).
+    let loader: Loader = Arc::new(move |reference, _kind| {
+        counter.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(reference, ArtRef::Steam(433340));
+        Ok(Some(ArtImage {
+            bytes: jpeg.clone(),
+            attribution: "IGDB.com".to_string(),
+            attribution_url: "https://www.igdb.com/games/slime-rancher".to_string(),
+        }))
+    });
+    let mut harness = bibliotheque_with(Some(Artwork::with_loader(loader)));
+    assert!(run_until(&mut harness, |h| shows(h, COVER_LABEL)
+        && shows(h, HERO_LABEL)));
+    assert!(shows(&harness, "IGDB.com"));
+    // Une demande par image (jaquette, image large), pas une par image de l'écran.
+    harness.run();
+    assert_eq!(asked.load(Ordering::SeqCst), 2);
+    // La fiche reste complète.
+    assert!(shows(&harness, "Lancer le jeu"));
+}
+
+#[test]
+fn hub_sans_image_ou_en_panne_aplat_garde() {
+    for answer in [Ok(None), Err(ArtError::Network("hors ligne".to_string()))] {
+        let asked = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&asked);
+        let loader: Loader = Arc::new(move |_reference: ArtRef, _kind: ArtKind| {
+            counter.fetch_add(1, Ordering::SeqCst);
+            answer.clone()
+        });
+        let mut harness = bibliotheque_with(Some(Artwork::with_loader(loader)));
+        // Les deux demandes ont reçu leur réponse.
+        assert!(run_until(&mut harness, |_| asked.load(Ordering::SeqCst) == 2));
+        for _ in 0..5 {
+            harness.run();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!shows(&harness, COVER_LABEL));
+        assert!(!shows(&harness, "IGDB.com"));
+        assert!(count(&harness, "Slime Rancher") >= 2);
+        // Pas redemandé à chaque image.
+        assert_eq!(asked.load(Ordering::SeqCst), 2);
+    }
 }

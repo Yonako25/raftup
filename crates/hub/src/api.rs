@@ -32,6 +32,9 @@
 //! | `GET /v1/blocks` | joueurs bloqués |
 //! | `POST /v1/blocks` | bloquer (`username`) : retire l'amitié et les demandes |
 //! | `DELETE /v1/blocks/{username}` | lever un blocage |
+//! | `GET /v1/art/steam/{appid}` | illustrations d'un jeu Steam (ADR 0047), sans compte |
+//! | `GET /v1/art/igdb/{id}` | illustrations d'un jeu IGDB, sans compte |
+//! | `GET /v1/art/images/{image_id}/{kind}` | image JPEG (`cover` ou `hero`), sans compte |
 //!
 //! Inscription (`POST /v1/accounts` et `/v1/oauth/discord/register`) : selon le
 //! réglage `registration_mode` (ADR 0036), ouverte, sur code d'invitation
@@ -39,7 +42,7 @@
 //! connecter et n'apparaît plus chez les autres joueurs.
 //!
 //! Les routes sauf `/v1`, l'inscription, la connexion, la vérification d'adresse et
-//! le mot de passe oublié, et la connexion Discord demandent l'en-tête
+//! le mot de passe oublié, et la connexion Discord, et les illustrations demandent l'en-tête
 //! `Authorization: Bearer <jeton>`.
 
 use axum::extract::{DefaultBodyLimit, FromRequest, FromRequestParts, Path, Query, State};
@@ -125,6 +128,10 @@ pub fn public_router(state: AppState) -> Router {
         )
         .route("/v1/blocks", get(list_blocks).post(block_player))
         .route("/v1/blocks/{username}", delete(unblock_player))
+        // Illustrations des jeux (ADR 0047) : publiques, sans compte.
+        .route("/v1/art/steam/{appid}", get(art_by_steam))
+        .route("/v1/art/igdb/{id}", get(art_by_igdb))
+        .route("/v1/art/images/{image_id}/{kind}", get(art_image))
         // Page publique de téléchargement et ses fichiers statiques.
         .merge(crate::web::public_routes())
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
@@ -1413,4 +1420,86 @@ async fn discord_unlink(
         .await?;
     tracing::info!(user_id = user.user_id, "compte Discord délié");
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------- Illustrations des jeux (ADR 0047) ----------
+
+/// Fiche d'illustrations renvoyée au launcher.
+#[derive(Debug, Serialize)]
+pub struct ArtJson {
+    pub igdb_id: u64,
+    /// Identifiant d'image de la jaquette (`/v1/art/images/{id}/cover`).
+    pub cover: Option<String>,
+    /// Identifiant d'image de l'image large (`/v1/art/images/{id}/hero`).
+    pub hero: Option<String>,
+    /// Texte et lien d'attribution à afficher avec les images.
+    pub attribution: &'static str,
+    pub attribution_url: String,
+}
+
+impl From<crate::art::GameArt> for ArtJson {
+    fn from(art: crate::art::GameArt) -> ArtJson {
+        ArtJson {
+            igdb_id: art.igdb_id,
+            cover: art.cover,
+            hero: art.hero,
+            attribution: crate::art::ATTRIBUTION,
+            attribution_url: art
+                .url
+                .unwrap_or_else(|| crate::art::ATTRIBUTION_URL.to_string()),
+        }
+    }
+}
+
+/// Chiffres seulement (pas de signe, pas d'espace), dans le type demandé.
+///
+/// `T: FromStr` : tout type qui sait se lire depuis un texte (`u32`, `u64`…).
+fn parse_number<T: std::str::FromStr>(text: &str) -> Result<T, HubError> {
+    if text.is_empty() || text.len() > 20 || !text.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(HubError::BadRequest(
+            "identifiant de jeu invalide".to_string(),
+        ));
+    }
+    text.parse()
+        .map_err(|_| HubError::BadRequest("identifiant de jeu invalide".to_string()))
+}
+
+async fn art_by_steam(
+    State(state): State<AppState>,
+    Path(appid): Path<String>,
+) -> Result<Json<ArtJson>, HubError> {
+    let appid: u32 = parse_number(&appid)?;
+    let credentials = state.settings().await?.igdb_credentials();
+    // Le cache et IGDB bloquent (disque, réseau) : sur un thread à part.
+    let art = blocking(move || Ok(state.art().by_steam(credentials, appid)?)).await?;
+    Ok(Json(ArtJson::from(art)))
+}
+
+async fn art_by_igdb(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ArtJson>, HubError> {
+    let id: u64 = parse_number(&id)?;
+    let credentials = state.settings().await?.igdb_credentials();
+    let art = blocking(move || Ok(state.art().by_igdb(credentials, id)?)).await?;
+    Ok(Json(ArtJson::from(art)))
+}
+
+async fn art_image(
+    State(state): State<AppState>,
+    Path((image_id, kind)): Path<(String, String)>,
+) -> Result<Response, HubError> {
+    let kind = crate::art::ArtKind::parse(&kind)
+        .ok_or_else(|| HubError::BadRequest("sorte d'image : cover ou hero".to_string()))?;
+    let credentials = state.settings().await?.igdb_credentials();
+    let bytes = blocking(move || Ok(state.art().image(credentials, &image_id, kind)?)).await?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            // Le launcher a son propre cache ; un jour suffit aux intermédiaires.
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response())
 }

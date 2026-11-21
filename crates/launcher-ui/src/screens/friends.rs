@@ -289,6 +289,12 @@ impl FriendsState {
         state
     }
 
+    /// Hub en service, s'il y en a un de valide : la Bibliothèque y prend les
+    /// illustrations des jeux (ADR 0047), connecté ou non.
+    pub fn hub_url(&self) -> Option<&HubUrl> {
+        self.url.as_ref().ok()
+    }
+
     pub fn new() -> FriendsState {
         let saved = load_saved_url();
         let mut store: Arc<dyn TokenStore> = Arc::new(KeyringStore);

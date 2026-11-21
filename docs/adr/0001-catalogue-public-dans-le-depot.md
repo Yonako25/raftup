@@ -23,5 +23,6 @@ Un profil dit ce qui sera téléchargé et exécuté chez le joueur : tout le mo
 - La communauté peut maintenir les profils, sans dépendre d'un serveur Raftup.
 - Une mise à jour du catalogue demande une pull request fusionnée : c'est plus lent qu'une base, mais c'est relu.
 - Les profils ne contiennent que des métadonnées techniques et des URL avec leur hash : jamais de jeu, d'asset, de jaquette officielle ni de mod ré-hébergé.
+- Ajout du 21 novembre 2026 (ADR 0047) : un profil peut donner un identifiant IGDB (`igdb_id`) ; les illustrations viennent du hub, jamais du dépôt.
 - Le catalogue est embarqué dans chaque version du launcher : pas de téléchargement séparé, pas de serveur de catalogue.
 - Conséquence : corriger un profil cassé demande une nouvelle version du launcher, distribuée par l'updater (F12).

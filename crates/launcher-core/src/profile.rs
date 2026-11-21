@@ -105,6 +105,12 @@ pub struct GameInfo {
     /// Champ facultatif, donc `format_version` ne change pas.
     #[serde(default)]
     pub seconds_per_location: Option<u32>,
+    /// Identifiant du jeu chez IGDB (facultatif, ADR 0047) : les illustrations du hub
+    /// le cherchent par là, sinon par `detect.steam_appid`. Sert à corriger une
+    /// mauvaise correspondance ou à couvrir un jeu sans Steam.
+    /// Champ facultatif, donc `format_version` ne change pas.
+    #[serde(default)]
+    pub igdb_id: Option<u64>,
     #[serde(default)]
     pub detect: DetectInfo,
 }

@@ -193,7 +193,7 @@ Règles :
 - Fond d'ambiance dégradé (halos flous) et panneaux semi-transparents, dans l'esprit de GOG Galaxy ou des thèmes Discord. Thèmes : Acier (défaut), Océan, Braise, Uni.
 - Police **Chakra Petch** pour le logo et les titres, **Inter** pour l'interface.
 - Structure de l'accueil : barre latérale texte (Jeux / Parties / Catalogue, compteurs), barre du haut (précédent / suivant, « Créer un salon », « Rejoindre par lien »), centre (joués récemment, parties en cours, paquets mis à jour), panneau d'amis à droite.
-- Jaquettes : aplats colorés avec le titre du jeu, jamais de visuels officiels sans autorisation.
+- Jaquettes : illustrations servies par le hub depuis une API qui permet le cache (IGDB, ADR 0047), jamais dans le dépôt ni dans le binaire ; aplats colorés avec le titre du jeu sinon.
 
 Maquettes de référence : canevas « Raftup — maquette du launcher » (Accueil, Salon, Catalogue, Partie).
 

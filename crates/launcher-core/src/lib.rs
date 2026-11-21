@@ -22,6 +22,7 @@
 
 pub mod activity;
 pub mod archive;
+pub mod art;
 pub mod catalog;
 pub mod config;
 pub mod crew;

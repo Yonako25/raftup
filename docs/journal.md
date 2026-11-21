@@ -608,3 +608,9 @@ untime2`.
 - **Pas vérifié** : affichage « Registre : 1 paquet(s) » dans la Bibliothèque du launcher (pas de fenêtre ouverte).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : sauvegarder `C:\Users\Yonako\.raftup-keys` sur une clé USB ; relire les ADR 0041 à 0046.
+
+### 2026-11-21 · Illustrations des jeux par le hub (ADR 0047)
+- **Fait** : ADR 0047 validé (IGDB par le hub, SPEC § 7 et ADR 0001 amendés) ; hub : réglages `igdb_client_id` / `_secret`, routes `/v1/art/…`, cache disque 30 jours avec plafond, file à 4 req/s, limite hors cache ; `launcher_core::art` (champ facultatif `igdb_id`, cache par hub, cache périmé hors ligne) ; jaquettes, image de fond de la fiche et attribution dans la Bibliothèque, aplats sinon. fmt, clippy et `cargo test --workspace -j 4` passent (tests hub, launcher-core, bout en bout hub ↔ launcher, egui_kittest). Pas encore commité.
+- **Pas vérifié** : vrai IGDB (test `reel_igdb_slime_rancher` en `#[ignore]`, faute d'application Twitch ; valeur Steam `external_game_source = 1` à confirmer) ; rendu à l'œil (aucune fenêtre ouverte) ; cadre « Illustrations des jeux » de la console jamais regardé.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : créer une application Twitch, lancer le test réel, puis régler la clé sur le hub.

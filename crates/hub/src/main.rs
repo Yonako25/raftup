@@ -60,11 +60,13 @@
 //! | `RAFTUP_HUB_MAIL_FROM` | expéditeur : `Raftup <no-reply@exemple.org>` |
 //! | `RAFTUP_HUB_DISCORD_CLIENT_ID` | application Discord (portail développeur) |
 //! | `RAFTUP_HUB_DISCORD_CLIENT_SECRET` | secret de cette application |
+//! | `RAFTUP_HUB_IGDB_CLIENT_ID` | application Twitch pour les illustrations des jeux (IGDB, ADR 0047) |
+//! | `RAFTUP_HUB_IGDB_CLIENT_SECRET` | secret de cette application |
 //! | `RAFTUP_HUB_PUBLIC_URL` | adresse publique (comme `--public-url`) |
 //! | `RAFTUP_HUB_NAME` | nom du hub affiché (défaut : Rafthub) |
 //! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
 //! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
-//! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache (défaut : `rafthub-data/cache`) |
+//! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache et des illustrations (sous-dossier `art`) (défaut : `rafthub-data/cache`) |
 //! | `RAFTUP_HUB_TLS_CERT` | certificat PEM (comme `--tls-cert`) |
 //! | `RAFTUP_HUB_TLS_KEY` | clé privée PEM (comme `--tls-key`) |
 //! | `RAFTUP_HUB_TLS_ACME` | domaine pour Let's Encrypt (comme `--tls-acme`) |
@@ -180,6 +182,9 @@ fn parse_args() -> anyhow::Result<Args> {
                     "  environnement : RAFTUP_HUB_DB, RAFTUP_HUB_SMTP_URL, RAFTUP_HUB_MAIL_FROM,"
                 );
                 println!("    RAFTUP_HUB_DISCORD_CLIENT_ID, RAFTUP_HUB_DISCORD_CLIENT_SECRET");
+                println!(
+                    "    RAFTUP_HUB_IGDB_CLIENT_ID, RAFTUP_HUB_IGDB_CLIENT_SECRET (illustrations)"
+                );
                 println!("HTTPS intégré (sinon HTTP, derrière un proxy) :");
                 println!("  --tls-cert fullchain.pem --tls-key privkey.pem   certificat fourni");
                 println!("  --tls-acme hub.exemple.org [--tls-acme-email moi@exemple.org]");
@@ -343,6 +348,8 @@ async fn main() -> anyhow::Result<()> {
         Some(dir) => dir.into(),
         None => data_dir()?.join("cache"),
     };
+    // Cache des illustrations des jeux (ADR 0047), dans le même dossier.
+    config.art.cache_dir = config.distribution.cache_dir.join("art");
     // Aucun admin encore : code d'installation à usage unique, montré au journal
     // seulement (celui qui le lit a accès au serveur), pour `/admin/installation`.
     // Après l'assistant, on garde le même code : la personne l'a déjà sous les yeux.

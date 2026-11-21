@@ -9,6 +9,7 @@
 //! fenêtre Raftup n'est ouverte ; s'il y en a une, il lui passe le lien et s'arrête.
 
 mod app;
+mod art_ui;
 // Macro de développement (captures sans être devant le PC) : jamais dans `--release`.
 #[cfg(debug_assertions)]
 mod devscript;

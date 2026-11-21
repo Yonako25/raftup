@@ -29,7 +29,8 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["registry", "fmt"] }
 anyhow.workspace = true
 # PNG des captures de la macro de développement (`devscript.rs`) ; déjà tiré par eframe.
-image = { version = "0.25", default-features = false, features = ["png"] }
+# JPEG : illustrations des jeux reçues du hub (ADR 0047), décodées par zune-jpeg (MIT OR Apache-2.0 OR Zlib).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # Linux et BSD (NF11) : rfd exige exactement un moteur de boîtes de fichiers, sinon son
 # `build.rs` s'arrête. « xdg-portal » passe par le portail du bureau (D-Bus), en Rust pur,

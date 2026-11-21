@@ -266,6 +266,8 @@ impl eframe::App for App {
             let next = match &self.page {
                 Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
                 Page::Library => {
+                    // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047).
+                    self.library.set_hub(self.friends.hub_url());
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
                 }
                 Page::Hosted if hosting => running::show(
