@@ -560,3 +560,9 @@ untime2`.
 - **Pas vérifié** : un monde natif joué en vrai depuis le launcher (seulement en test) ; affichage des mondes natifs dans la Bibliothèque (pas fait).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `crates/registry`, `launcher-core::registry`, `.github/` (session confiance du registre) ; `launcher-ui/src/screens/friends.rs`, `hub_client` (session « Amis »).
 - **Suite** : phase B, conversion apworld → natif à partir de l'export de l'ADR 0028 (note de relais dans le dossier partagé).
+
+### 2026-11-21 · Analyse du projet
+- **Fait** : analyse du dépôt sans rien coder : 13 crates, environ 64 000 lignes de Rust et 1 230 tests ; règles du CLAUDE.md respectées dans le code (`unsafe` interdit, aucun `unwrap` hors tests, aucune crate MIT/Apache qui dépend du hub). Points d'attention : MVP jamais validé en vrai, un seul jeu au catalogue, 12 ADR « acceptés en autonomie » à relire, beaucoup de fonctions jamais essayées en vrai, 6 commits non poussés.
+- **Pas vérifié** : build, tests et clippy non lancés : sur ce PC il manque les Visual Studio Build Tools (`link.exe` introuvable ; dans Git Bash, `link` est celui de coreutils) ; clés de signature absentes de `C:\Users\ionak\.raftup-keys` et de `%USERPROFILE%\.raftup-keys` sur ce PC.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : installer les Build Tools (« Développement Desktop en C++ »), puis relire les ADR acceptés en autonomie avant toute nouvelle fonction.
