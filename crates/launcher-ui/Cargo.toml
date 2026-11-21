@@ -40,3 +40,5 @@ rfd = { workspace = true, features = ["xdg-portal"] }
 [dev-dependencies]
 # Dossier temporaire pour le test de détection de l'écran Bibliothèque.
 tempfile.workspace = true
+# Tests de l'interface sans ouvrir de fenêtre (`src/ui_tests/`, voir `tests/README.md`).
+egui_kittest.workspace = true

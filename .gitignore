@@ -32,3 +32,8 @@ __pycache__/
 # Déploiement du Rafthub : secrets locaux et sauvegardes (deploy/rafthub/README.md)
 /deploy/rafthub/.env
 /deploy/rafthub/backups/
+
+# Tests de l'interface (egui_kittest) : images du jour et différences, jamais commitées
+# (seules les références `<nom>.png` le sont, voir crates/launcher-ui/tests/README.md)
+*.new.png
+*.diff.png

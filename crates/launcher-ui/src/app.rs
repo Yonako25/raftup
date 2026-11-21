@@ -336,7 +336,8 @@ const CARD_GAP: f32 = 14.0;
 type NavLink = (&'static str, usize, Page);
 
 /// Barre latérale : logo, liens rangés par section, cartes du bas. Renvoie la page demandée.
-fn sidebar(
+/// `pub(crate)` : les tests de l'interface (`ui_tests::menu`) la dessinent seule.
+pub(crate) fn sidebar(
     ui: &mut Ui,
     current: &Page,
     shared: &crate::worker::Shared,
@@ -617,6 +618,9 @@ fn server_card(ui: &mut Ui, shared: &crate::worker::Shared) {
 fn nav_link(ui: &mut Ui, label: &str, count: usize, active: bool) -> bool {
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), Sense::click());
+    // Le texte est peint à la main : sans cette ligne, le lien n'aurait pas de nom pour un
+    // lecteur d'écran (ni pour les tests, qui cherchent les liens par leur libellé).
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
     let painter = ui.painter();
     if active {
         painter.rect_filled(rect, 0.0, theme::ACCENT_BG);

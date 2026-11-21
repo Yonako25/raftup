@@ -96,6 +96,18 @@ impl Worker {
         Worker { commands, shared }
     }
 
+    /// Tests de l'interface (`ui_tests`) : un worker sans tâche ni runtime `tokio`.
+    /// Le récepteur du canal est jeté tout de suite : les commandes envoyées sont
+    /// ignorées (comme après la fermeture de la fenêtre) et rien ne démarre.
+    #[cfg(test)]
+    pub fn detached() -> Worker {
+        let (commands, _receiver) = mpsc::unbounded_channel();
+        Worker {
+            commands,
+            shared: Arc::new(Mutex::new(Shared::default())),
+        }
+    }
+
     /// Envoie une commande ; si le worker est arrêté (fermeture), on l'ignore.
     pub fn send(&self, command: Command) {
         let _ = self.commands.send(command);

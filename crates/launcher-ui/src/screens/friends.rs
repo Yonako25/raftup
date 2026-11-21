@@ -272,6 +272,23 @@ pub struct Summary {
 }
 
 impl FriendsState {
+    /// Tests : non connecté, hub sur le port 1 de ce PC (personne n'écoute, un appel
+    /// échoue tout de suite), jeton en mémoire (trousseau du PC intact), rien d'écrit
+    /// dans `config.toml`, reprise de session déjà « tentée ».
+    #[cfg(test)]
+    pub(crate) fn for_tests() -> FriendsState {
+        let mut state = FriendsState::new();
+        if let Ok(url) = HubUrl::parse("http://127.0.0.1:1") {
+            state.client = Some(HubClient::new(url.clone()));
+            state.url_text = url.to_string();
+            state.url = Ok(url);
+        }
+        state.store = Arc::new(MemoryStore::new());
+        state.persist = false;
+        state.started = true;
+        state
+    }
+
     pub fn new() -> FriendsState {
         let saved = load_saved_url();
         let mut store: Arc<dyn TokenStore> = Arc::new(KeyringStore);
@@ -2059,16 +2076,7 @@ mod tests {
 
     /// État de test : hub local, jeton en mémoire, rien d'écrit dans `config.toml`.
     fn test_state() -> FriendsState {
-        let mut state = FriendsState::new();
-        // Port 1 : personne n'écoute, l'appel lancé en arrière-plan échoue tout de suite.
-        let url = HubUrl::parse("http://127.0.0.1:1").unwrap();
-        state.client = Some(HubClient::new(url.clone()));
-        state.url_text = url.to_string();
-        state.url = Ok(url);
-        state.store = Arc::new(MemoryStore::new());
-        state.persist = false;
-        state.started = true;
-        state
+        FriendsState::for_tests()
     }
 
     #[test]

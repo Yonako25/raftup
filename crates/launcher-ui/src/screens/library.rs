@@ -128,6 +128,29 @@ impl LibraryState {
         }
     }
 
+    /// Tests de l'interface (`ui_tests`) : catalogue, dossiers et détection donnés.
+    /// La détection est déjà « faite » (`scan`) et le registre est coupé : l'écran ne
+    /// lance aucun thread, ne lit pas Steam et n'appelle pas le réseau.
+    #[cfg(test)]
+    pub(crate) fn for_tests(catalog: Catalog, paths: Paths, scan: Scan) -> LibraryState {
+        LibraryState {
+            catalog: Ok(catalog),
+            paths: Ok(paths),
+            scan: Some(scan),
+            scanning: None,
+            selected: None,
+            task: None,
+            form: LaunchForm::default(),
+            notice: None,
+            confirm_uninstall: false,
+            pending_pick: None,
+            dev_auto_install: false,
+            registry: RegistryPanel::disabled(),
+            rescan_pending: false,
+            running: RunningGames::new(),
+        }
+    }
+
     /// Les jeux lancés depuis la Bibliothèque qui tournent encore.
     pub fn running_games(&self) -> Vec<String> {
         self.running.names()
@@ -180,7 +203,8 @@ pub(crate) fn load_catalog() -> Result<Catalog, String> {
 }
 
 /// Lit tous les `.toml` d'un dossier, triés par nom (ordre stable).
-fn dev_catalog(dir: &Path) -> Result<Catalog, String> {
+/// `pub(crate)` : les tests de l'interface lisent ainsi le dossier `profiles/`.
+pub(crate) fn dev_catalog(dir: &Path) -> Result<Catalog, String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{} : {e}", dir.display()))?;
     let mut texts: Vec<(String, String)> = Vec::new();
     for entry in entries.flatten() {

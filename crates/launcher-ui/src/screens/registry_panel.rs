@@ -81,6 +81,16 @@ impl RegistryPanel {
         }
     }
 
+    /// Tests de l'interface : registre coupé, comme avec `RAFTUP_NO_REGISTRY` (sans
+    /// toucher aux variables d'environnement, partagées par tous les tests).
+    #[cfg(test)]
+    pub fn disabled() -> RegistryPanel {
+        RegistryPanel {
+            phase: Phase::Disabled,
+            ..RegistryPanel::new()
+        }
+    }
+
     /// Lance la lecture du registre une seule fois, dans un thread à part.
     /// `catalog` : le catalogue embarqué, pour ne télécharger que les jeux qui manquent.
     pub fn start(&mut self, ctx: &egui::Context, catalog: &Catalog) {
