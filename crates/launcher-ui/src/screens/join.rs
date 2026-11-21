@@ -29,6 +29,10 @@ pub struct JoinState {
     error: Option<String>,
     /// Consignes affichées quand le jeu n'est pas dans le catalogue.
     instructions: Option<String>,
+    /// Presse-papiers déjà regardé depuis l'arrivée sur l'écran (une fois par visite).
+    clipboard_checked: bool,
+    /// Le lien du champ vient du presse-papiers (on le dit au joueur).
+    from_clipboard: bool,
 }
 
 /// Où mène « Continuer ».
@@ -65,7 +69,53 @@ pub fn destination(catalog: &Catalog, scan: Option<&Scan>, invite: &Invite) -> D
 /// Un lien est arrivé de Windows (ou du presse-papiers) : on remplit le champ et on l'analyse.
 pub fn receive(state: &mut JoinState, link: &str) {
     state.link = link.trim().to_string();
+    state.from_clipboard = false;
+    // Un lien vient d'arriver : le presse-papiers ne doit pas le remplacer pendant
+    // cette visite de l'écran.
+    state.clipboard_checked = true;
     read_link(state);
+}
+
+/// Le joueur quitte l'écran : à son retour, le presse-papiers sera relu.
+pub fn on_leave(state: &mut JoinState) {
+    state.clipboard_checked = false;
+}
+
+/// Le lien d'invitation à prendre dans le presse-papiers, s'il y en a un : texte qui
+/// commence par `raftup://`, différent du champ actuel. Un lien `raftup://hub/…` n'est
+/// pas une invitation (il demande une confirmation à part) : il est laissé de côté.
+/// Fonction pure : testée sans presse-papiers.
+fn invite_in_clipboard<'a>(clipboard: &'a str, current: &str) -> Option<&'a str> {
+    let text = clipboard.trim();
+    // Un lien tient sur une ligne : un long texte copié n'est pas lu.
+    let looks_like_link = text.len() <= 2048 && !text.contains(['\n', '\r']);
+    let is_invite = text.starts_with("raftup://") && !launcher_core::rafthub::is_hub_link(text);
+    (looks_like_link && is_invite && text != current.trim()).then_some(text)
+}
+
+/// Texte du presse-papiers du système, ou `None` (vide, image, accès refusé…).
+/// Rien n'est écrit au journal : le presse-papiers peut contenir un secret.
+fn read_clipboard() -> Option<String> {
+    // `arboard::Clipboard` s'ouvre à chaque lecture : rare (une fois par visite).
+    arboard::Clipboard::new().ok()?.get_text().ok()
+}
+
+/// Arrivée sur l'écran : si le presse-papiers contient un lien d'invitation, il est lu
+/// tout seul (plan de l'interface, étape 1). Rien ne se connecte : le joueur vérifie
+/// l'hôte puis clique « Continuer », comme pour un lien collé à la main.
+fn check_clipboard(state: &mut JoinState) {
+    if state.clipboard_checked {
+        return;
+    }
+    state.clipboard_checked = true;
+    let Some(text) = read_clipboard() else {
+        return;
+    };
+    if let Some(link) = invite_in_clipboard(&text, &state.link) {
+        let link = link.to_string();
+        receive(state, &link);
+        state.from_clipboard = true;
+    }
 }
 
 /// Analyse le texte du champ. Les erreurs de `InviteError` sont montrées telles quelles.
@@ -92,6 +142,7 @@ fn host_text(invite: &Invite) -> String {
 pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> Option<Page> {
     let mut goto = None;
     let ctx = ui.ctx().clone();
+    check_clipboard(state);
     super::page(ui, |ui| {
         super::header(ui, "Parties › Invitations", "Rejoindre une partie", |ui| {
             if widgets::ghost_button(ui, "Retour") {
@@ -115,6 +166,10 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             if edit.changed() {
                 state.invite = None;
                 state.instructions = None;
+                state.from_clipboard = false;
+            }
+            if state.from_clipboard {
+                ui.label(widgets::dim("Lien trouvé dans le presse-papiers.").size(12.0));
             }
             ui.add_space(6.0);
             if widgets::primary_button(ui, "Lire le lien", !state.link.trim().is_empty()) {
@@ -332,6 +387,25 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         assert_eq!(state.invite, Some(invite(Some("Demo Game"))));
         assert_eq!(state.slot, "Alice");
         assert!(state.error.is_none());
+        // Le lien reçu n'est pas remplacé par le presse-papiers pendant cette visite ;
+        // en quittant l'écran, le presse-papiers sera relu au retour.
+        assert!(state.clipboard_checked);
+        on_leave(&mut state);
+        assert!(!state.clipboard_checked);
+    }
+
+    #[test]
+    fn lien_du_presse_papiers() {
+        let link = "raftup://join?v=1&addr=wss%3A%2F%2Fh.example%3A38281";
+        // Un lien d'invitation, espaces autour : pris, sans les espaces.
+        assert_eq!(invite_in_clipboard(&format!("  {link}\n"), ""), Some(link));
+        // Déjà dans le champ : rien à faire.
+        assert_eq!(invite_in_clipboard(link, link), None);
+        // Autre texte, lien du hub, texte sur plusieurs lignes : laissés de côté.
+        assert_eq!(invite_in_clipboard("mon mot de passe", ""), None);
+        assert_eq!(invite_in_clipboard("raftup://hub/hub.example", ""), None);
+        assert_eq!(invite_in_clipboard(&format!("{link}\nsuite"), ""), None);
+        assert_eq!(invite_in_clipboard("", ""), None);
     }
 
     #[test]

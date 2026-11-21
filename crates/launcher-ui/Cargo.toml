@@ -21,6 +21,7 @@ path = "src/main.rs"
 launcher-core.workspace = true
 eframe.workspace = true
 egui.workspace = true
+arboard.workspace = true
 rfd.workspace = true
 chrono.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time", "macros"] }

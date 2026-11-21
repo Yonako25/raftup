@@ -68,6 +68,8 @@ struct LaunchForm {
     /// Adresse de la partie hébergée déjà recopiée : on ne la recopie qu'une fois,
     /// pour ne pas effacer ce que le joueur a tapé.
     prefilled_from: Option<String>,
+    /// Ouvre « Se connecter à la main » à la prochaine image (invitation reçue).
+    open_now: bool,
 }
 
 /// Message affiché sous l'en-tête.
@@ -156,6 +158,8 @@ pub fn open_with_invite(state: &mut LibraryState, game_id: &str, address: &str, 
     state.form.address = address.to_string();
     state.form.slot = slot.to_string();
     state.form.password.clear();
+    // Le joueur doit voir ce que l'invitation a rempli (et taper le mot de passe).
+    state.form.open_now = true;
 }
 
 /// Variable d'environnement (builds de debug seulement) : dossier de profils `.toml`
@@ -952,6 +956,25 @@ fn tone_color(tone: Tone) -> Color32 {
     }
 }
 
+/// Petite jaquette carrée de la fiche : l'aplat du jeu avec ses initiales (le titre
+/// entier ne tient pas dans 64 px ; il est écrit juste à côté).
+fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(
+        rect,
+        CornerRadius::same(theme::RADIUS),
+        theme::cover_color(game_id),
+    );
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        format::initials(name),
+        theme::title_font(size * 0.38),
+        theme::TEXT,
+    );
+}
+
 /// Une carte de jeu. Renvoie vrai au clic.
 fn card(
     ui: &mut Ui,
@@ -968,19 +991,22 @@ fn card(
         .vertical(|ui| {
             ui.set_width(WIDTH);
             ui.spacing_mut().item_spacing.y = 6.0;
-            // La « jaquette » : un aplat avec les initiales du jeu (SPEC § 7 : jamais de
-            // visuel officiel sans autorisation).
+            // La « jaquette » : un aplat coloré avec le titre du jeu (SPEC § 7 : jamais de
+            // visuel officiel sans autorisation). La teinte dépend de l'identifiant du jeu.
             let (rect, _) = ui.allocate_exact_size(COVER, Sense::hover());
             let painter = ui.painter();
             let radius = CornerRadius::same(theme::RADIUS);
-            painter.rect_filled(rect, radius, theme::ACCENT_BG);
-            painter.text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                format::initials(&profile.game.name),
-                theme::title_font(44.0),
-                theme::ITEM,
+            painter.rect_filled(rect, radius, theme::cover_color(&profile.game.id));
+            // Le titre passe à la ligne dans la jaquette (marge de 12 px de chaque côté).
+            let galley = painter.layout(
+                profile.game.name.clone(),
+                theme::title_font(22.0),
+                theme::TEXT,
+                rect.width() - 24.0,
             );
+            // Centré dans la jaquette : on part du coin haut gauche du bloc de texte.
+            let top_left = rect.center() - galley.size() / 2.0;
+            painter.galley(top_left, galley, theme::TEXT);
             // Jeu sélectionné : liseré bleu de 2 px autour de la jaquette seulement.
             let stroke = if selected {
                 Stroke::new(2.0, theme::ACCENT)
@@ -1038,7 +1064,7 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
 
     widgets::panel(ui, "", |ui| {
         ui.horizontal(|ui| {
-            widgets::badge(ui, 64.0, &format::initials(&profile.game.name), false);
+            small_cover(ui, 64.0, &profile.game.id, &profile.game.name);
             ui.vertical(|ui| {
                 ui.label(widgets::title(&profile.game.name, 26.0));
                 ui.label(RichText::new(&view.label).color(tone_color(view.tone)));
@@ -1080,9 +1106,9 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 LaunchMode::Offline => {
                     Some("Sans adresse ni slot, le jeu démarre sans se connecter à une partie.")
                 }
-                LaunchMode::Incomplete => {
-                    Some("Renseignez l'adresse et le slot plus bas pour vous connecter.")
-                }
+                LaunchMode::Incomplete => Some(
+                    "Pour vous connecter, renseignez l'adresse et le slot sous « Se connecter à la main ».",
+                ),
             };
             if let Some(hint) = hint {
                 ui.label(widgets::dim(hint).size(12.0));
@@ -1136,11 +1162,22 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             step_row(ui, step, installed);
         }
 
-        // Connexion.
+        // Connexion : d'habitude remplie par une invitation (écran « Rejoindre ») ; la
+        // saisie à la main est repliée.
         if view.can_launch {
             ui.add_space(12.0);
             ui.label(widgets::caps("Connexion à une partie"));
-            connection_form(ui, &mut state.form, &profile, shared);
+            ui.label(widgets::dim(connection_summary(&state.form)).size(13.0));
+            // `open_now` est copié à part : `state.form` est emprunté par la fermeture.
+            let mut open_now = state.form.open_now;
+            widgets::advanced(
+                ui,
+                "library_connect_by_hand",
+                "Se connecter à la main",
+                &mut open_now,
+                |ui| connection_form(ui, &mut state.form, &profile, shared),
+            );
+            state.form.open_now = open_now;
         }
 
         // Désinstallation, en deux clics.
@@ -1202,6 +1239,19 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
                 });
             });
         });
+}
+
+/// Une ligne qui dit à quelle partie « Lancer le jeu » connectera.
+fn connection_summary(form: &LaunchForm) -> String {
+    match launch_mode(form) {
+        LaunchMode::Connect(c) => format!("Slot {} sur {}", c.slot, c.address),
+        LaunchMode::Offline => {
+            "Aucune partie choisie : ouvrez un lien d'invitation (« Invitations »).".to_string()
+        }
+        LaunchMode::Incomplete => {
+            "Connexion incomplète : il manque l'adresse ou le slot.".to_string()
+        }
+    }
 }
 
 /// Adresse, slot (avec la liste des slots de la partie hébergée) et mot de passe.
@@ -1413,6 +1463,32 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         // Les deux : connexion.
         form.address = "ws://localhost:38281".into();
         assert!(matches!(launch_mode(&form), LaunchMode::Connect(_)));
+    }
+
+    #[test]
+    fn resume_de_la_connexion() {
+        let mut form = LaunchForm::default();
+        assert!(connection_summary(&form).contains("Aucune partie"));
+        form.address = "ws://localhost:38281".into();
+        assert!(connection_summary(&form).contains("incomplète"));
+        form.slot = "Alice".into();
+        assert_eq!(
+            connection_summary(&form),
+            "Slot Alice sur ws://localhost:38281"
+        );
+    }
+
+    #[test]
+    fn une_invitation_ouvre_la_saisie_a_la_main() {
+        let mut state = LibraryState::new();
+        assert!(!state.form.open_now);
+        open_with_invite(
+            &mut state,
+            "slime_rancher",
+            "wss://h.example:38281",
+            "Alice",
+        );
+        assert!(state.form.open_now);
     }
 
     #[test]

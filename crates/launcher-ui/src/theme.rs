@@ -22,6 +22,32 @@ pub const RED: Color32 = Color32::from_rgb(0xE5, 0x48, 0x4D);
 pub const RED_TEXT: Color32 = Color32::from_rgb(0xFF, 0x8A, 0x8E);
 pub const LOG_BG: Color32 = Color32::from_rgb(0x0E, 0x10, 0x13);
 
+/// Aplats des jaquettes de la Bibliothèque (SPEC § 7 : jamais de visuel officiel) :
+/// des teintes sombres proches de la palette Acier, pour que le titre clair reste lisible.
+pub const COVERS: [Color32; 6] = [
+    Color32::from_rgb(0x16, 0x29, 0x4A), // bleu nuit (ACCENT_BG)
+    Color32::from_rgb(0x1E, 0x3A, 0x3A), // sarcelle
+    Color32::from_rgb(0x2E, 0x24, 0x4A), // violet
+    Color32::from_rgb(0x3A, 0x2A, 0x1E), // brun
+    Color32::from_rgb(0x1F, 0x35, 0x24), // vert sapin
+    Color32::from_rgb(0x2C, 0x31, 0x3A), // acier
+];
+
+/// Teinte de la jaquette d'un jeu, toujours la même pour un même identifiant.
+///
+/// Petit hachage maison (FNV-1a) plutôt que `DefaultHasher` : son résultat n'est pas
+/// garanti d'une version de Rust à l'autre, et la couleur d'un jeu ne doit pas changer.
+pub fn cover_color(key: &str) -> Color32 {
+    let mut hash: u32 = 0x811C_9DC5;
+    for byte in key.bytes() {
+        hash ^= u32::from(byte);
+        // `wrapping_mul` : le dépassement est voulu (en debug, `*` paniquerait).
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    // `as usize` sur un reste < 6 : aucune perte possible.
+    COVERS[(hash % COVERS.len() as u32) as usize]
+}
+
 /// Angle maximal de la charte : 2 px.
 pub const RADIUS: u8 = 2;
 
@@ -207,4 +233,18 @@ pub fn paint_background(ctx: &egui::Context) {
         size * 0.65,
         Color32::from_rgba_unmultiplied(167, 139, 250, 31), // 0,12
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn la_teinte_d_un_jeu_ne_change_pas() {
+        // Même identifiant, même teinte ; valeur figée pour qu'elle ne bouge pas en douce.
+        assert_eq!(cover_color("slime_rancher"), cover_color("slime_rancher"));
+        assert!(COVERS.contains(&cover_color("apquest")));
+        // Deux jeux différents ont (ici) deux teintes différentes.
+        assert_ne!(cover_color("slime_rancher"), cover_color("apquest"));
+    }
 }

@@ -79,6 +79,10 @@ pub struct CreateForm {
     pending_host: Option<PartyHostOptions>,
     /// L'hébergement de la seed générée (étape 4).
     hosting: hosting::Hosting,
+    /// Ouvrent de force un bloc replié à la prochaine image : le formulaire a été refusé
+    /// à cause d'un de ses champs (port, adresse, certificat, webhook ; apworlds).
+    open_advanced: bool,
+    open_advanced_apworlds: bool,
 }
 
 impl Default for CreateForm {
@@ -104,6 +108,8 @@ impl Default for CreateForm {
             generation: generation::Generation::default(),
             pending_host: None,
             hosting: hosting::Hosting::default(),
+            open_advanced: false,
+            open_advanced_apworlds: false,
         }
     }
 }
@@ -268,16 +274,6 @@ fn players_panel(ui: &mut Ui, form: &mut CreateForm) {
             let plural = if count > 1 { "s" } else { "" };
             ui.label(widgets::dim(format!("{count} joueur{plural}")).size(13.0));
         }
-    });
-    ui.add_space(12.0);
-    widgets::panel(ui, "Apworlds (facultatif)", |ui| {
-        ui.label(
-            RichText::new(APWORLD_WARNING)
-                .color(theme::AMBER)
-                .size(13.0),
-        );
-        ui.checkbox(&mut form.apworld_ack, "J'ai compris");
-        ui.add_space(6.0);
         if !form.installed_apworlds.is_empty() {
             let names: Vec<String> = form
                 .installed_apworlds
@@ -287,6 +283,7 @@ fn players_panel(ui: &mut Ui, form: &mut CreateForm) {
                 .collect();
             // Deux lignes courtes : le panneau justifie un texte qui passe à la ligne,
             // ce qui étirait les espaces entre les lettres.
+            ui.add_space(6.0);
             ui.label(
                 widgets::dim("Pris automatiquement (installés par la Bibliothèque) :").size(13.0),
             );
@@ -295,18 +292,33 @@ fn players_panel(ui: &mut Ui, form: &mut CreateForm) {
                     .color(theme::TEXT)
                     .size(13.0),
             );
-            ui.add_space(4.0);
         }
-        file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
-        ui.add_space(6.0);
-        // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
-        let add = ui.add_enabled(
-            form.apworld_ack,
-            egui::Button::new(RichText::new("Ajouter des apworlds…").color(theme::TEXT)),
+        // Apworlds choisis à la main : réservé à ceux qui savent ce qu'ils font.
+        widgets::advanced(
+            ui,
+            "create_apworlds",
+            "Apworlds en plus",
+            &mut form.open_advanced_apworlds,
+            |ui| {
+                ui.label(
+                    RichText::new(APWORLD_WARNING)
+                        .color(theme::AMBER)
+                        .size(13.0),
+                );
+                ui.checkbox(&mut form.apworld_ack, "J'ai compris");
+                ui.add_space(6.0);
+                file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
+                ui.add_space(6.0);
+                // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
+                let add = ui.add_enabled(
+                    form.apworld_ack,
+                    egui::Button::new(RichText::new("Ajouter des apworlds…").color(theme::TEXT)),
+                );
+                if add.clicked() {
+                    form.pending_pick = Some(Pick::Apworld);
+                }
+            },
         );
-        if add.clicked() {
-            form.pending_pick = Some(Pick::Apworld);
-        }
     });
 }
 
@@ -331,9 +343,6 @@ fn file_row(ui: &mut Ui, path: &Option<PathBuf>) -> bool {
 
 fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) {
     widgets::panel(ui, "Serveur", |ui| {
-        labelled(ui, "Port");
-        ui.add(egui::TextEdit::singleline(&mut form.port).desired_width(120.0));
-
         labelled(ui, "Mot de passe de la salle (facultatif)");
         ui.add(
             egui::TextEdit::singleline(&mut form.password)
@@ -341,50 +350,26 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
                 .desired_width(f32::INFINITY),
         );
 
-        labelled(ui, "Adresse publique (nom de domaine ou IP)");
-        ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(f32::INFINITY));
-
-        labelled(ui, "Webhook Discord (facultatif)");
-        ui.add(
-            egui::TextEdit::singleline(&mut form.webhook)
-                .password(true)
-                .desired_width(f32::INFINITY),
-        );
-
-        labelled(ui, "Chiffrement");
-        let wss = widgets::choice_card(
-            ui,
-            form.encrypted,
-            "Chiffré (wss) — recommandé",
-            widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
-            |ui| {
-                ui.add_space(4.0);
-                ui.label(widgets::dim("Certificat (PEM)").size(13.0));
-                if file_row(ui, &form.cert) {
-                    form.pending_pick = Some(Pick::Cert);
-                }
-                ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
-                if file_row(ui, &form.key) {
-                    form.pending_pick = Some(Pick::Key);
-                }
-            },
-        );
-        if wss {
-            form.encrypted = true;
-        }
+        // Réglages d'expert repliés, avec un résumé d'une ligne de ce qui sera utilisé.
         ui.add_space(4.0);
-        let plain = widgets::choice_card(
-            ui,
-            !form.encrypted,
-            "En clair (ws)",
-            RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
-                .color(theme::AMBER)
-                .size(13.0),
-            |_| {},
+        ui.label(
+            widgets::dim(format::server_summary(
+                &form.port,
+                &form.public_host,
+                form.encrypted,
+            ))
+            .size(12.0),
         );
-        if plain {
-            form.encrypted = false;
-        }
+        // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
+        let mut open_now = form.open_advanced;
+        widgets::advanced(
+            ui,
+            "create_server",
+            "Options avancées",
+            &mut open_now,
+            |ui| advanced_server(ui, form),
+        );
+        form.open_advanced = open_now;
 
         labelled(ui, "Préréglage de génération");
         ui.horizontal(|ui| {
@@ -426,6 +411,88 @@ fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
     });
 }
 
+/// Contenu du bloc « Options avancées » du serveur : port, adresse publique, webhook,
+/// chiffrement et certificats PEM.
+fn advanced_server(ui: &mut Ui, form: &mut CreateForm) {
+    labelled(ui, "Port");
+    ui.add(egui::TextEdit::singleline(&mut form.port).desired_width(120.0));
+
+    labelled(ui, "Adresse publique (nom de domaine ou IP)");
+    ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(f32::INFINITY));
+
+    labelled(ui, "Webhook Discord (facultatif)");
+    ui.add(
+        egui::TextEdit::singleline(&mut form.webhook)
+            .password(true)
+            .desired_width(f32::INFINITY),
+    );
+
+    labelled(ui, "Chiffrement");
+    let wss = widgets::choice_card(
+        ui,
+        form.encrypted,
+        "Chiffré (wss) — recommandé",
+        widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
+        |ui| {
+            ui.add_space(4.0);
+            ui.label(widgets::dim("Certificat (PEM)").size(13.0));
+            if file_row(ui, &form.cert) {
+                form.pending_pick = Some(Pick::Cert);
+            }
+            ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
+            if file_row(ui, &form.key) {
+                form.pending_pick = Some(Pick::Key);
+            }
+        },
+    );
+    if wss {
+        form.encrypted = true;
+    }
+    ui.add_space(4.0);
+    let plain = widgets::choice_card(
+        ui,
+        !form.encrypted,
+        "En clair (ws)",
+        RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
+            .color(theme::AMBER)
+            .size(13.0),
+        |_| {},
+    );
+    if plain {
+        form.encrypted = false;
+    }
+}
+
+/// Le bloc replié qui contient le champ refusé par `build_request`, à ouvrir pour que
+/// l'hôte voie quoi corriger. Suit l'ordre des vérifications de `build_request`.
+#[derive(Debug, PartialEq, Eq)]
+enum Refused {
+    /// Champ toujours visible (les YAML) : rien à ouvrir.
+    Visible,
+    Apworlds,
+    Server,
+}
+
+fn refused_block(form: &CreateForm) -> Refused {
+    if form.yamls.is_empty() {
+        Refused::Visible
+    } else if !form.apworlds.is_empty() && !form.apworld_ack {
+        Refused::Apworlds
+    } else {
+        // Toutes les vérifications suivantes portent sur les options avancées du serveur.
+        Refused::Server
+    }
+}
+
+/// Ouvre le bloc du champ refusé.
+fn open_refused_block(form: &mut CreateForm) {
+    match refused_block(form) {
+        Refused::Visible => {}
+        Refused::Apworlds => form.open_advanced_apworlds = true,
+        Refused::Server => form.open_advanced = true,
+    }
+}
+
 /// Clic sur « Générer la partie » (ou « Réessayer ») : vérifie le formulaire, puis
 /// le générateur, puis lance la génération.
 fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
@@ -465,6 +532,7 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
         }
         Err(message) => {
             form.generation = generation::Generation::Idle;
+            open_refused_block(form);
             *error = Some(message);
         }
     }
@@ -560,7 +628,10 @@ fn retry_hosting(
             form.hosting = hosting::start(worker, shared, output, host);
         }
         // Formulaire devenu invalide : message en haut, la seed reste gardée.
-        Err(message) => *error = Some(message),
+        Err(message) => {
+            open_refused_block(form);
+            *error = Some(message);
+        }
     }
 }
 
@@ -818,6 +889,31 @@ game: Slime Rancher
             build_request(&form).unwrap_err(),
             "Indiquez l'adresse que les autres joueurs utiliseront."
         );
+    }
+
+    #[test]
+    fn un_refus_ouvre_le_bloc_replie_du_champ_fautif() {
+        // Sans YAML : le champ est visible, aucun bloc à ouvrir.
+        let mut form = CreateForm::default();
+        assert!(build_request(&form).is_err());
+        assert_eq!(refused_block(&form), Refused::Visible);
+        // Apworld sans « J'ai compris » : le bloc des apworlds.
+        form = valid();
+        form.apworlds = vec![PathBuf::from("a.apworld")];
+        assert!(build_request(&form).is_err());
+        assert_eq!(refused_block(&form), Refused::Apworlds);
+        open_refused_block(&mut form);
+        assert!(form.open_advanced_apworlds && !form.open_advanced);
+        // Port, adresse, certificat : les options avancées du serveur.
+        form = valid();
+        form.port = "abc".into();
+        assert!(build_request(&form).is_err());
+        open_refused_block(&mut form);
+        assert!(form.open_advanced && !form.open_advanced_apworlds);
+        form = valid();
+        form.encrypted = true;
+        assert!(build_request(&form).is_err());
+        assert_eq!(refused_block(&form), Refused::Server);
     }
 
     #[test]

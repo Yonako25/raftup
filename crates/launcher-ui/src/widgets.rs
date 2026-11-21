@@ -35,6 +35,38 @@ pub fn panel<R>(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui) -
         .inner
 }
 
+/// Bloc repliable « Options avancées » (ou autre titre), fermé par défaut : les réglages
+/// d'expert (port, chiffrement, webhook…) y vont pour laisser le chemin principal dégagé.
+/// `id` distingue deux blocs du même titre sur des écrans différents.
+///
+/// `open_now` : vrai pour l'ouvrir de force (une erreur porte sur un de ses champs) ;
+/// la fonction le remet à faux, pour que le joueur puisse ensuite le refermer.
+///
+/// En debug, `RAFTUP_DEV_AVANCE=1` les ouvre tous au départ (captures de la macro).
+pub fn advanced<R>(
+    ui: &mut Ui,
+    id: &str,
+    heading: &str,
+    open_now: &mut bool,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let open_at_start =
+        cfg!(debug_assertions) && std::env::var_os("RAFTUP_DEV_AVANCE").is_some_and(|v| v == "1");
+    ui.add_space(6.0);
+    let mut header = egui::CollapsingHeader::new(RichText::new(heading).color(theme::TEXT_DIM))
+        .id_salt(id)
+        .default_open(open_at_start);
+    if *open_now {
+        // `open(Some(true))` impose l'état pour cette image ; ensuite egui s'en souvient.
+        header = header.open(Some(true));
+        *open_now = false;
+    }
+    header
+        .show(ui, add_contents)
+        // `body_returned` vaut `None` quand le bloc est fermé (son contenu n'est pas dessiné).
+        .body_returned
+}
+
 /// Bouton principal bleu. Renvoie vrai au clic.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> bool {
     let button = egui::Button::new(

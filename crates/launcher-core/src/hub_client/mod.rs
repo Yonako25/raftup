@@ -46,6 +46,10 @@ pub const DEFAULT_HUB_URL: &str = match option_env!("RAFTUP_OFFICIAL_HUB_URL") {
     None => "http://127.0.0.1:8787",
 };
 
+/// Vrai si ce launcher a été compilé avec l'adresse du Rafthub officiel
+/// (`RAFTUP_OFFICIAL_HUB_URL`) : `DEFAULT_HUB_URL` est alors le hub officiel.
+pub const HAS_OFFICIAL_HUB: bool = option_env!("RAFTUP_OFFICIAL_HUB_URL").is_some();
+
 /// Version de l'API que ce client sait parler.
 pub const SUPPORTED_API_VERSION: u32 = 1;
 
