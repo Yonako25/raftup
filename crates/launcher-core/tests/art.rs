@@ -131,16 +131,18 @@ fn reference_tiree_du_profil() {
     ))
     .unwrap();
     let profile = Profile::parse("slime-rancher.toml", &text).unwrap();
-    assert_eq!(ArtRef::of(&profile), Some(ArtRef::Steam(433340)));
-
-    // `igdb_id` passe avant l'appid Steam, sans changer `format_version`.
-    let text = text.replace(
-        "status = \"available\"",
-        "status = \"available\"\nigdb_id = 9999",
-    );
-    let profile = Profile::parse("slime-rancher.toml", &text).unwrap();
+    // Le profil du dépôt donne son `igdb_id`, qui passe avant l'appid Steam.
+    assert_eq!(ArtRef::of(&profile), Some(ArtRef::Igdb(16287)));
     assert_eq!(profile.format_version, 1);
-    assert_eq!(ArtRef::of(&profile), Some(ArtRef::Igdb(9999)));
+
+    // Sans `igdb_id`, l'appid Steam sert de référence.
+    let without: String = text
+        .lines()
+        .filter(|line| !line.starts_with("igdb_id"))
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let profile = Profile::parse("slime-rancher.toml", &without).unwrap();
+    assert_eq!(ArtRef::of(&profile), Some(ArtRef::Steam(433340)));
 }
 
 #[test]

@@ -1161,15 +1161,53 @@ fn small_cover_with(
     );
 }
 
-/// Image large du jeu en haut de sa fiche : toute la largeur du panneau, en 16:9,
-/// 180 px de haut au plus.
-fn hero_banner(ui: &mut Ui, texture: &egui::TextureHandle, name: &str) {
+/// Hauteur du bandeau en haut de la fiche quand il n'y a pas d'illustration.
+const FLAT_BANNER_HEIGHT: f32 = 96.0;
+
+/// Hauteur du bandeau en haut de la fiche : en 16:9 sur toute la largeur, 180 px
+/// au plus avec une illustration ; plus bas pour l'aplat, qui ne montre que le titre.
+fn hero_height(width: f32, has_image: bool) -> f32 {
+    let wide = (width * 9.0 / 16.0).min(180.0);
+    if has_image {
+        wide
+    } else {
+        wide.min(FLAT_BANNER_HEIGHT)
+    }
+}
+
+/// Bandeau en haut de la fiche du jeu, sur toute la largeur du panneau :
+/// l'image large venue du hub (ADR 0047) si elle est prête ; sinon (pas de hub,
+/// jeu inconnu d'IGDB, image pas encore arrivée) un aplat de la teinte du jeu,
+/// avec son titre, comme les jaquettes de la grille.
+fn hero_banner(ui: &mut Ui, texture: Option<&egui::TextureHandle>, game_id: &str, name: &str) {
     let width = ui.available_width();
-    let height = (width * 9.0 / 16.0).min(180.0);
+    let height = hero_height(width, texture.is_some());
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
-    art_ui::paint_cover(ui, texture, rect);
-    let label = format!("Illustration de {name}");
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+    match texture {
+        Some(texture) => {
+            art_ui::paint_cover(ui, texture, rect);
+            // Nom lu par un lecteur d'écran (et par les tests sans fenêtre).
+            let label = format!("Illustration de {name}");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+        }
+        None => {
+            let painter = ui.painter();
+            painter.rect_filled(
+                rect,
+                CornerRadius::same(theme::RADIUS),
+                theme::cover_color(game_id),
+            );
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                name,
+                theme::title_font(28.0),
+                theme::TEXT,
+            );
+            let label = format!("Aplat de {name}");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+        }
+    }
 }
 
 /// Une carte de jeu. Renvoie vrai au clic.
@@ -1337,16 +1375,14 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
     let view = view(&profile, found.as_ref(), status.as_ref());
     let busy = state.task.is_some();
     // Illustrations du hub (ADR 0047) : image large en haut de la fiche, jaquette à
-    // côté du titre. Absentes : rien en haut, et l'aplat avec les initiales.
+    // côté du titre. Absentes : un aplat en haut, et l'aplat avec les initiales.
     let reference = ArtRef::of(&profile);
     let cover = state.art.texture(ctx, reference, ArtKind::Cover);
     let hero = state.art.texture(ctx, reference, ArtKind::Hero);
 
     widgets::panel(ui, "", |ui| {
-        if let Some(hero) = &hero {
-            hero_banner(ui, hero, &profile.game.name);
-            ui.add_space(10.0);
-        }
+        hero_banner(ui, hero.as_ref(), &profile.game.id, &profile.game.name);
+        ui.add_space(10.0);
         ui.horizontal(|ui| {
             small_cover_with(
                 ui,
@@ -1622,6 +1658,16 @@ fn info_banner(ui: &mut Ui, text: &str) {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn bandeau_de_la_fiche_plus_bas_en_aplat() {
+        // Avec une image : 16:9, plafonné à 180 px.
+        assert_eq!(hero_height(160.0, true), 90.0);
+        assert_eq!(hero_height(640.0, true), 180.0);
+        // En aplat : jamais plus de 96 px, et pas plus que le 16:9 d'un panneau étroit.
+        assert_eq!(hero_height(640.0, false), FLAT_BANNER_HEIGHT);
+        assert_eq!(hero_height(160.0, false), 90.0);
+    }
 
     #[test]
     fn tache_interrompue_accordee() {

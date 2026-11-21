@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-21 · Images dans les fiches de jeu (cloud/images-fiches)
+- **Fait** : `igdb_id = 16287` dans `profiles/slime-rancher.toml` (seul profil du dépôt), vérifié par `/v1/art/steam/433340` et `/v1/art/igdb/16287` du hub officiel ; fiche de la Bibliothèque : bandeau toujours présent, image large du hub sinon aplat de la teinte du jeu avec son titre ; attribution IGDB au pied de la Bibliothèque (déjà là, ADR 0047). Tests launcher-ui (167) et launcher-core, clippy et fmt passent sous Linux.
+- **Pas vérifié** : capture de référence `bibliotheque.png` (Windows seulement) : le bandeau en aplat la change, elle est à refaire sous Windows ; rendu jamais regardé à l'œil.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : refaire la capture de la Bibliothèque sous Windows (`UPDATE_SNAPSHOTS`), puis fusionner.
