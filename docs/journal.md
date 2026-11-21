@@ -566,3 +566,9 @@ untime2`.
 - **Pas vérifié** : build, tests et clippy non lancés : sur ce PC il manque les Visual Studio Build Tools (`link.exe` introuvable ; dans Git Bash, `link` est celui de coreutils) ; clés de signature absentes de `C:\Users\ionak\.raftup-keys` et de `%USERPROFILE%\.raftup-keys` sur ce PC.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : installer les Build Tools (« Développement Desktop en C++ »), puis relire les ADR acceptés en autonomie avant toute nouvelle fonction.
+
+### 2026-11-21 · Interface, étape 1 : ménage et réglages par défaut
+- **Fait** : `f683741` : entrées « Bientôt » cachées du menu ; « Options avancées » repliées dans Créer et Héberger (port, adresse, webhook, chiffrement ; apworlds à part), ouvertes seules sur le champ refusé ; jaquettes en aplats colorés avec le titre ; « Se connecter à la main » replié ; adresse du Rafthub dans un nouvel écran « Paramètres », texte « Aucun Rafthub public » retiré ; « Rejoindre » lit un lien `raftup://` du presse-papiers. fmt, clippy et `cargo test --workspace` (1 213 tests) passent ; captures regardées (macro, `RAFTUP_DEV_AVANCE=1` ouvre les blocs).
+- **Pas vérifié** : bloc « Se connecter à la main » jamais vu à l'écran (Slime Rancher absent de ce PC) ; launcher compilé avec `RAFTUP_OFFICIAL_HUB_URL` ; presse-papiers hors Windows.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : valider la proposition « chiffrement par défaut sans PEM » (certificat généré par Raftup + port mixte TLS/clair), puis l'ADR ; d'ici là, wss reste le défaut et bloque un débutant sans certificat.
