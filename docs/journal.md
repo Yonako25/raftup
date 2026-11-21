@@ -614,3 +614,10 @@ untime2`.
 - **Pas vérifié** : vrai IGDB (test `reel_igdb_slime_rancher` en `#[ignore]`, faute d'application Twitch ; valeur Steam `external_game_source = 1` à confirmer) ; rendu à l'œil (aucune fenêtre ouverte) ; cadre « Illustrations des jeux » de la console jamais regardé.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : créer une application Twitch, lancer le test réel, puis régler la clé sur le hub.
+
+### 2026-11-21 · Illustrations : premier essai réel contre IGDB
+- **Fait** : test ignoré `hub --test art` lancé avec l'application Twitch de l'utilisatrice : Slime Rancher trouvé (IGDB 16287, jaquette `co73i2`, fond `ar5ub8`), 1,4 s. Clé passée seulement en variables d'environnement, écrite nulle part.
+- **Pas vérifié** : jaquettes vues à l'écran dans la Bibliothèque ; hub déployé avec la clé saisie dans `/admin`.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : régénérer le secret Twitch (il est passé dans la conversation) et saisir le nouveau dans la console `/admin` du hub.
+
