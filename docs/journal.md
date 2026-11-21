@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-21 · Proposition d'ADR : salon par le Rafthub (cloud/adr-salon-rafthub)
+- **Fait** : ADR 0048 rédigé avec le statut « proposé » : routes `/v1/lobbies`, accès par code ou invitation d'un ami, tables en base (schéma 7), relecture toutes les 3 s, « prêt » déclaré avant le lancement, lancement qui publie adresse et empreinte aux seuls membres, limites, RGPD. Rien n'est codé.
+- **Pas vérifié** : rien à tester (document seul).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pas de code du salon en ligne avant la validation de l'ADR 0048.
+- **Suite** : à l'utilisatrice : trancher les choix 1, 3, 4 et 6 de l'ADR 0048, puis le passer en « accepté ».
