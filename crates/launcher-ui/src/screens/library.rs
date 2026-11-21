@@ -171,7 +171,7 @@ const DEV_PROFILES: &str = "RAFTUP_DEV_PROFILS";
 const DEV_ROOT: &str = "RAFTUP_DEV_RACINE";
 
 /// Le catalogue embarqué ou, en debug, celui de `RAFTUP_DEV_PROFILS`.
-fn load_catalog() -> Result<Catalog, String> {
+pub(crate) fn load_catalog() -> Result<Catalog, String> {
     // `cfg!(debug_assertions)` vaut faux en `--release` : le binaire livré ignore la variable.
     if let (true, Some(dir)) = (cfg!(debug_assertions), std::env::var_os(DEV_PROFILES)) {
         return dev_catalog(Path::new(&dir));

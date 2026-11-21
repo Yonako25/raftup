@@ -79,6 +79,21 @@ pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> bool {
     ui.add_enabled(enabled, button).clicked()
 }
 
+/// Un bouton d'un sélecteur à segments (« Rapide | Standard | Long ») : bordure grise,
+/// fond bleu et bordure bleue quand il est choisi. Renvoie vrai au clic.
+pub fn segment(ui: &mut Ui, text: &str, selected: bool) -> bool {
+    let (fill, stroke, color) = if selected {
+        (theme::ACCENT_BG, theme::ACCENT, theme::TEXT)
+    } else {
+        (Color32::TRANSPARENT, theme::BORDER, theme::TEXT_DIM)
+    };
+    let button = egui::Button::new(RichText::new(text).color(color).size(15.0))
+        .fill(fill)
+        .stroke(Stroke::new(1.0, stroke))
+        .min_size(egui::vec2(92.0, 40.0));
+    ui.add(button).clicked()
+}
+
 /// Bouton discret (fond de panneau, bordure grise).
 pub fn ghost_button(ui: &mut Ui, text: &str) -> bool {
     ui.add(egui::Button::new(RichText::new(text).color(theme::TEXT)))

@@ -42,6 +42,9 @@ Les problèmes principaux :
 - « Rejoindre » : le lien est lu tout seul s'il est dans le presse-papiers.
 
 ### Étape 2 : Salon de préparation (le cœur)
+
+> Version locale faite le 21 novembre 2026 (ADR 0044) : l'hôte saisit l'équipage, Raftup écrit les YAML. Reste le salon par le Rafthub et « Tester ma connexion » avant le lancement.
+
 - L'écran de la maquette « Salon de préparation » : choix du jeu parmi ceux prêts, préréglage Rapide / Standard / Long, « Options avancées… », « Tester ma connexion », hébergement « Sur ce PC / Mon serveur », « Générer et héberger ».
 - Les **fichiers d'options sont produits par Raftup** à partir du préréglage du jeu (préréglages dans les profils de jeu). Importer un YAML reste possible en avancé.
 - L'équipage : invitation par lien `raftup://salon/<code>` ou à un ami du Rafthub ; état de chaque joueur (choisit son jeu, pas testé, prêt).

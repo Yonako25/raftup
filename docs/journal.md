@@ -572,3 +572,9 @@ untime2`.
 - **Pas vérifié** : bloc « Se connecter à la main » jamais vu à l'écran (Slime Rancher absent de ce PC) ; launcher compilé avec `RAFTUP_OFFICIAL_HUB_URL` ; presse-papiers hors Windows.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : ADR 0043 accepté (certificat généré, port mixte, empreinte dans le lien) : essai réel d'abord (Slimipelago face au port mixte), puis le code ; d'ici là, wss PEM reste le défaut.
+
+### 2026-11-21 · Salon de préparation, version locale (ADR 0044)
+- **Fait** : maquettes comparées à des captures du launcher (identité visuelle fidèle, parcours différent) ; ADR 0044 validé (salon local, YAML écrits par Raftup) ; `launcher_core::crew` (pseudos vérifiés, un YAML par joueur) ; « Créer une partie » refait comme la maquette du salon (ton monde, préréglages à segments, équipage, profil de session, hébergement, « Générer et héberger », YAML à la main en options avancées) ; scénario de capture `salon-preparation`. fmt, clippy et `cargo test --workspace` (1 219 tests) passent ; captures regardées.
+- **Pas vérifié** : vraie génération depuis l'équipage (aucun générateur installé sur ce PC) : la section de jeu vide `"Slime Rancher": {}` reste à valider par `Generate.py` 0.6.8 ; le bas de l'écran (ligne « Ajouter un joueur », panneau « Lancer la partie ») n'est vu qu'en partie sur la capture 1280×820.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : générer une vraie partie depuis le salon (installer le générateur, puis Slime Rancher et APQuest), puis l'étape 3 du plan (« Partie en cours » comme la maquette).

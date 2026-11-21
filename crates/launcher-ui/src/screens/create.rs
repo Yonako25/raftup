@@ -1,7 +1,9 @@
-//! Écran « Créer une partie », étape 1 : la préparation.
+//! Écran « Créer une partie », présenté comme le « Salon de préparation » de la maquette.
 //!
-//! L'hôte choisit les fichiers YAML des joueurs (un par joueur, ADR 0019 : par la
-//! boîte de fichiers seulement), d'éventuels apworlds, puis les réglages du serveur.
+//! L'hôte choisit son jeu et un préréglage, puis ajoute l'équipage (pseudo et jeu de
+//! chacun) : Raftup écrit lui-même un YAML par joueur (ADR 0044). Des YAML écrits à la
+//! main restent possibles dans les options avancées (ADR 0019 : par la boîte de
+//! fichiers seulement) ; ils remplacent alors l'équipage.
 //! `build_request` vérifie le tout et en fait une demande de génération et des
 //! réglages d'hébergement (`docs/contrat-ui-generation.md`).
 //!
@@ -14,12 +16,14 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
+use launcher_core::crew::{self, CrewMember};
 use launcher_core::generation::{
     installed_apworlds, load_native_worlds, rust_support_with_worlds, GenerateRequest,
 };
+use launcher_core::profile::StepKind;
 use launcher_core::{Encryption, PartyHostOptions};
 
-use super::library::{load_paths, AP_VERSION};
+use super::library::{load_catalog, load_paths, AP_VERSION};
 use super::prefs;
 use super::presets::Preset;
 use super::{generation, generator_setup, hosting};
@@ -42,9 +46,63 @@ enum Pick {
     Key,
 }
 
+/// Un jeu du catalogue qu'on peut choisir dans le salon.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GameChoice {
+    /// Identifiant du profil (sert aussi à la couleur de la jaquette).
+    id: String,
+    /// Nom affiché.
+    name: String,
+    /// Nom du jeu côté Archipelago, écrit dans le YAML.
+    ap_game: String,
+    /// Version de l'apworld du profil, pour le panneau « Profil de session ».
+    world_version: Option<String>,
+}
+
+/// Les jeux du catalogue (vide si le catalogue ne se lit pas).
+fn game_choices() -> Vec<GameChoice> {
+    let Ok(catalog) = load_catalog() else {
+        return Vec::new();
+    };
+    catalog
+        .games()
+        .map(|profile| GameChoice {
+            id: profile.game.id.clone(),
+            name: profile.game.name.clone(),
+            ap_game: profile.game.ap_game.clone(),
+            world_version: profile
+                .steps
+                .iter()
+                .find(|step| step.kind == StepKind::Apworld)
+                .map(|step| step.version.clone()),
+        })
+        .collect()
+}
+
+/// Un ami ajouté à l'équipage : son pseudo et l'identifiant du jeu choisi.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Mate {
+    name: String,
+    game_id: String,
+}
+
 /// Ce que l'hôte a saisi.
 pub struct CreateForm {
-    /// Fichiers YAML, dans l'ordre d'ajout (sans doublon).
+    /// Jeux proposés dans le salon (catalogue de Raftup).
+    games: Vec<GameChoice>,
+    /// Pseudo de l'hôte (son slot dans la partie).
+    my_name: String,
+    /// Jeu de l'hôte (identifiant du profil).
+    my_game: Option<String>,
+    /// Les amis de l'équipage, dans l'ordre d'ajout.
+    mates: Vec<Mate>,
+    /// Ligne « ajouter un joueur » : pseudo et jeu en cours de saisie.
+    new_name: String,
+    new_game: Option<String>,
+    /// Refus de la dernière tentative d'ajout (pseudo vide, déjà pris…).
+    crew_error: Option<String>,
+    /// Fichiers YAML importés à la main, dans l'ordre d'ajout (sans doublon).
+    /// S'il y en a, ils remplacent l'équipage.
     yamls: Vec<PathBuf>,
     /// Apworlds supplémentaires, dans l'ordre d'ajout (sans doublon).
     apworlds: Vec<PathBuf>,
@@ -83,12 +141,21 @@ pub struct CreateForm {
     /// à cause d'un de ses champs (port, adresse, certificat, webhook ; apworlds).
     open_advanced: bool,
     open_advanced_apworlds: bool,
+    /// Ouvre de force les options avancées de « Ton monde » (YAML ou apworlds refusés).
+    open_advanced_world: bool,
 }
 
 impl Default for CreateForm {
     /// Mêmes valeurs par défaut que l'écran « Héberger une partie ».
     fn default() -> CreateForm {
         CreateForm {
+            games: Vec::new(),
+            my_name: String::new(),
+            my_game: None,
+            mates: Vec::new(),
+            new_name: String::new(),
+            new_game: None,
+            crew_error: None,
             yamls: Vec::new(),
             apworlds: Vec::new(),
             apworld_ack: false,
@@ -110,6 +177,7 @@ impl Default for CreateForm {
             hosting: hosting::Hosting::default(),
             open_advanced: false,
             open_advanced_apworlds: false,
+            open_advanced_world: false,
         }
     }
 }
@@ -132,7 +200,93 @@ impl CreateForm {
             ..CreateForm::default()
         };
         form.refresh_installed();
+        form.games = game_choices();
+        // Un seul jeu au catalogue : il est choisi d'office.
+        if let [only] = form.games.as_slice() {
+            form.my_game = Some(only.id.clone());
+            form.new_game = Some(only.id.clone());
+        }
         form
+    }
+
+    fn game(&self, id: &str) -> Option<&GameChoice> {
+        self.games.iter().find(|g| g.id == id)
+    }
+
+    /// Nom affiché d'un jeu, ou son identifiant s'il n'est plus au catalogue.
+    fn game_name(&self, id: &str) -> String {
+        self.game(id)
+            .map(|g| g.name.clone())
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Clic sur « Ajouter » : vérifie le pseudo et ajoute l'ami à l'équipage.
+    fn add_mate(&mut self) {
+        let Some(game_id) = self.new_game.clone() else {
+            self.crew_error = Some("Choisis le jeu de ce joueur.".into());
+            return;
+        };
+        // On vérifie contre tout l'équipage, hôte compris.
+        let mut others: Vec<CrewMember> = self
+            .mates
+            .iter()
+            .map(|m| CrewMember {
+                name: m.name.clone(),
+                ap_game: String::new(),
+            })
+            .collect();
+        if !self.my_name.trim().is_empty() {
+            others.push(CrewMember {
+                name: self.my_name.trim().to_string(),
+                ap_game: String::new(),
+            });
+        }
+        match crew::check_name(&self.new_name, &others) {
+            Ok(name) => {
+                self.mates.push(Mate { name, game_id });
+                self.new_name.clear();
+                self.crew_error = None;
+            }
+            Err(e) => self.crew_error = Some(e.to_string()),
+        }
+    }
+
+    /// L'équipage complet (hôte en premier), vérifié, prêt à devenir des YAML.
+    fn crew_members(&self) -> Result<Vec<CrewMember>, String> {
+        let Some(my_game) = self.my_game.as_deref().and_then(|id| self.game(id)) else {
+            return Err("Choisis ton jeu dans « Ton monde ».".into());
+        };
+        let mut members: Vec<CrewMember> = Vec::new();
+        for mate in &self.mates {
+            let ap_game = self
+                .game(&mate.game_id)
+                .map(|g| g.ap_game.clone())
+                .ok_or_else(|| format!("Le jeu de {} n'est plus au catalogue.", mate.name))?;
+            members.push(CrewMember {
+                name: mate.name.clone(),
+                ap_game,
+            });
+        }
+        let my_name =
+            crew::check_name(&self.my_name, &members).map_err(|e| format!("Ton pseudo : {e}"))?;
+        // `insert(0, …)` : l'hôte passe en tête, il aura le slot 1.
+        members.insert(
+            0,
+            CrewMember {
+                name: my_name,
+                ap_game: my_game.ap_game.clone(),
+            },
+        );
+        Ok(members)
+    }
+
+    /// Nombre de joueurs de la partie : les YAML importés, sinon l'équipage.
+    fn player_count(&self) -> usize {
+        if self.yamls.is_empty() {
+            1 + self.mates.len()
+        } else {
+            self.yamls.len()
+        }
     }
 }
 
@@ -177,10 +331,12 @@ pub fn show(
 ) -> Option<Page> {
     let mut goto = None;
     super::page(ui, |ui| {
+        let count = form.player_count();
+        let plural = if count > 1 { "s" } else { "" };
         super::header(
             ui,
-            "Parties › Nouvelle partie",
-            "Créer une partie",
+            &format!("Tu organises · {count} joueur{plural}"),
+            "Salon de préparation",
             |ui| {
                 if widgets::ghost_button(ui, "Héberger un fichier .archipelago") {
                     goto = Some(Page::Hosted);
@@ -203,18 +359,526 @@ pub fn show(
             retry_hosting(form, error, worker, shared);
         }
 
+        // Deux colonnes comme la maquette : le salon à gauche, la session à droite.
+        // Fenêtre étroite : tout l'un sous l'autre.
         if ui.available_width() >= super::WIDE {
-            ui.columns(2, |columns| {
-                players_panel(&mut columns[0], form);
-                server_panel(&mut columns[1], form, error);
+            let gap = 16.0;
+            let right = (ui.available_width() * 0.34).max(300.0);
+            let left = ui.available_width() - right - gap;
+            ui.horizontal_top(|ui| {
+                column(ui, left, |ui| {
+                    world_panel(ui, form);
+                    ui.add_space(gap);
+                    crew_panel(ui, form);
+                });
+                ui.add_space(gap);
+                column(ui, right, |ui| {
+                    session_panel(ui, form);
+                    ui.add_space(gap);
+                    hosting_panel(ui, form);
+                    ui.add_space(gap);
+                    launch_panel(ui, form, error);
+                });
             });
         } else {
-            players_panel(ui, form);
+            world_panel(ui, form);
             ui.add_space(12.0);
-            server_panel(ui, form, error);
+            crew_panel(ui, form);
+            ui.add_space(12.0);
+            session_panel(ui, form);
+            ui.add_space(12.0);
+            hosting_panel(ui, form);
+            ui.add_space(12.0);
+            launch_panel(ui, form, error);
         }
     });
     goto
+}
+
+/// Une colonne de largeur fixe, remplie de haut en bas.
+fn column(ui: &mut Ui, width: f32, add_contents: impl FnOnce(&mut Ui)) {
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, 0.0),
+        egui::Layout::top_down(egui::Align::Min),
+        |ui| {
+            ui.set_width(width);
+            add_contents(ui);
+        },
+    );
+}
+
+/// Jaquette en aplat coloré avec le nom du jeu (jamais de visuel officiel, SPEC § 7).
+fn cover(ui: &mut Ui, size: egui::Vec2, game: Option<&GameChoice>) {
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    let radius = egui::CornerRadius::same(theme::RADIUS);
+    match game {
+        Some(game) => {
+            painter.rect_filled(rect, radius, theme::cover_color(&game.id));
+            let galley = painter.layout(
+                game.name.clone(),
+                theme::title_font((size.x * 0.13).clamp(9.0, 18.0)),
+                theme::TEXT,
+                size.x - 16.0,
+            );
+            painter.galley(
+                rect.left_center() + egui::vec2(8.0, -galley.size().y / 2.0),
+                galley,
+                theme::TEXT,
+            );
+        }
+        None => {
+            painter.rect_stroke(
+                rect,
+                radius,
+                egui::Stroke::new(1.0, theme::BORDER),
+                egui::StrokeKind::Inside,
+            );
+        }
+    }
+}
+
+/// Liste déroulante des jeux du catalogue. `id_salt` distingue les deux listes de l'écran.
+fn game_combo(
+    ui: &mut Ui,
+    id_salt: &str,
+    games: &[GameChoice],
+    selected: &mut Option<String>,
+    width: f32,
+) {
+    let current = selected
+        .as_deref()
+        .and_then(|id| games.iter().find(|g| g.id == id))
+        .map(|g| g.name.clone())
+        .unwrap_or_else(|| "Choisir un jeu…".to_string());
+    egui::ComboBox::from_id_salt(id_salt)
+        .selected_text(current)
+        .width(width)
+        .show_ui(ui, |ui| {
+            for game in games {
+                ui.selectable_value(selected, Some(game.id.clone()), &game.name);
+            }
+        });
+}
+
+/// Panneau « Ton monde » : pseudo, jeu, préréglage, et les options d'expert repliées.
+fn world_panel(ui: &mut Ui, form: &mut CreateForm) {
+    widgets::panel(ui, "Ton monde", |ui| {
+        ui.horizontal_top(|ui| {
+            let my_game = form
+                .my_game
+                .as_deref()
+                .and_then(|id| form.game(id))
+                .cloned();
+            cover(ui, egui::vec2(110.0, 150.0), my_game.as_ref());
+            ui.add_space(12.0);
+            ui.vertical(|ui| {
+                let width = ui.available_width();
+                ui.label(widgets::caps("Ton pseudo"));
+                ui.add(
+                    egui::TextEdit::singleline(&mut form.my_name)
+                        .hint_text("Ton nom dans la partie (16 caractères au plus)")
+                        .desired_width(width),
+                );
+                ui.add_space(8.0);
+                ui.label(widgets::caps("Jeu"));
+                game_combo(ui, "salon_my_game", &form.games, &mut form.my_game, width);
+                let hint = if form.games.is_empty() {
+                    "Aucun jeu au catalogue : importe des YAML dans les options avancées."
+                } else {
+                    "Les jeux du catalogue de Raftup."
+                };
+                ui.label(widgets::dim(hint).size(12.0));
+                ui.add_space(8.0);
+                ui.label(widgets::caps("Réglages"));
+                ui.horizontal(|ui| {
+                    // Boutons collés, comme un sélecteur à segments de la maquette.
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    for preset in Preset::ALL {
+                        if widgets::segment(ui, preset.label(), form.preset == preset) {
+                            form.preset = preset;
+                        }
+                    }
+                });
+                ui.label(widgets::dim(form.preset.description()).size(13.0));
+            });
+        });
+        let mut open_now = form.open_advanced_world;
+        widgets::advanced(
+            ui,
+            "create_world",
+            "Options avancées…",
+            &mut open_now,
+            |ui| advanced_world(ui, form),
+        );
+        form.open_advanced_world = open_now;
+    });
+}
+
+/// Options d'expert de « Ton monde » : moteur Rust, YAML importés, apworlds en plus.
+fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
+    ui.checkbox(&mut form.rust_engine, "Moteur Rust (expérimental)");
+    ui.label(
+        widgets::dim(
+            "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago \
+             construit les mondes et Raftup place les objets.",
+        )
+        .size(13.0),
+    );
+    // `add_enabled` : la case est grisée (et ignorée) sans le moteur Rust.
+    ui.add_enabled(
+        form.rust_engine,
+        egui::Checkbox::new(&mut form.time_balance, "Équilibrer par temps de jeu"),
+    );
+    ui.label(
+        widgets::dim(
+            "Avance les objets dont un joueur a besoin pour qu'il attende moins, d'après le \
+             temps moyen d'un lieu de chaque jeu (estimé, pas encore mesuré).",
+        )
+        .size(13.0),
+    );
+    ui.add_space(8.0);
+    labelled(ui, "YAML écrits à la main (remplacent l'équipage)");
+    file_list(ui, &mut form.yamls, "Aucun YAML importé.");
+    if widgets::ghost_button(ui, "Importer des YAML…") {
+        form.pending_pick = Some(Pick::Yaml);
+    }
+    if !form.installed_apworlds.is_empty() {
+        let names: Vec<String> = form
+            .installed_apworlds
+            .iter()
+            .filter_map(|p| p.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .collect();
+        ui.add_space(6.0);
+        ui.label(
+            widgets::dim("Apworlds pris automatiquement (installés par la Bibliothèque) :")
+                .size(13.0),
+        );
+        ui.label(
+            RichText::new(names.join(", "))
+                .color(theme::TEXT)
+                .size(13.0),
+        );
+    }
+    // Apworlds choisis à la main : réservé à ceux qui savent ce qu'ils font.
+    widgets::advanced(
+        ui,
+        "create_apworlds",
+        "Apworlds en plus",
+        &mut form.open_advanced_apworlds,
+        |ui| {
+            ui.label(
+                RichText::new(APWORLD_WARNING)
+                    .color(theme::AMBER)
+                    .size(13.0),
+            );
+            ui.checkbox(&mut form.apworld_ack, "J'ai compris");
+            ui.add_space(6.0);
+            file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
+            ui.add_space(6.0);
+            // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
+            let add = ui.add_enabled(
+                form.apworld_ack,
+                egui::Button::new(RichText::new("Ajouter des apworlds…").color(theme::TEXT)),
+            );
+            if add.clicked() {
+                form.pending_pick = Some(Pick::Apworld);
+            }
+        },
+    );
+}
+
+/// Carré coloré avec l'initiale du joueur, comme les avatars de la maquette.
+fn avatar(ui: &mut Ui, name: &str) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(40.0, 40.0), egui::Sense::hover());
+    let initial: String = name
+        .chars()
+        .next()
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "?".to_string());
+    let painter = ui.painter();
+    painter.rect_filled(
+        rect,
+        egui::CornerRadius::same(theme::RADIUS),
+        theme::cover_color(name),
+    );
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        initial,
+        theme::title_font(17.0),
+        theme::TEXT,
+    );
+}
+
+/// Une ligne de l'équipage. Rend vrai si l'on a cliqué « Retirer ».
+fn crew_row(ui: &mut Ui, name: &str, detail: &str, removable: bool) -> bool {
+    let mut removed = false;
+    egui::Frame::new()
+        .fill(theme::FIELD)
+        .stroke(egui::Stroke::new(1.0, theme::BORDER))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                avatar(ui, name);
+                ui.add_space(8.0);
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(name)
+                            .color(theme::TEXT)
+                            .strong()
+                            .family(theme::bold_family()),
+                    );
+                    ui.label(widgets::dim(detail).size(13.0));
+                });
+                if removable {
+                    // Mise en page de droite à gauche : le bouton se colle au bord droit.
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        removed = widgets::ghost_button(ui, "Retirer");
+                    });
+                }
+            });
+        });
+    removed
+}
+
+/// Panneau « Équipage » : l'hôte, ses amis, et la ligne pour en ajouter un.
+fn crew_panel(ui: &mut Ui, form: &mut CreateForm) {
+    ui.horizontal(|ui| {
+        ui.label(widgets::title("Équipage", 20.0));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let count = form.player_count();
+            let plural = if count > 1 { "s" } else { "" };
+            ui.label(widgets::dim(format!("{count} joueur{plural}")));
+        });
+    });
+    ui.add_space(6.0);
+    if !form.yamls.is_empty() {
+        widgets::panel(ui, "", |ui| {
+            ui.label(
+                RichText::new(format!(
+                    "{} YAML importés remplacent l'équipage (options avancées de « Ton monde »).",
+                    form.yamls.len()
+                ))
+                .color(theme::AMBER),
+            );
+        });
+        return;
+    }
+    // Ce que voit l'hôte pour sa propre ligne.
+    let preset = form.preset.label();
+    let my_name = match form.my_name.trim() {
+        "" => "Toi".to_string(),
+        name => format!("{name} (toi)"),
+    };
+    let my_game = form
+        .my_game
+        .as_deref()
+        .map(|id| form.game_name(id))
+        .unwrap_or_else(|| "Aucun jeu choisi".to_string());
+    // `spacing_mut` : les lignes se touchent, comme une liste de la maquette.
+    ui.spacing_mut().item_spacing.y = 0.0;
+    crew_row(ui, &my_name, &format!("{my_game} · {preset}"), false);
+    let mut remove = None;
+    for (index, mate) in form.mates.iter().enumerate() {
+        let detail = format!("{} · {preset}", form.game_name(&mate.game_id));
+        if crew_row(ui, &mate.name, &detail, true) {
+            remove = Some(index);
+        }
+    }
+    if let Some(index) = remove {
+        form.mates.remove(index);
+    }
+    ui.spacing_mut().item_spacing.y = 6.0;
+    ui.add_space(10.0);
+    widgets::panel(ui, "", |ui| {
+        ui.label(widgets::caps("Ajouter un joueur"));
+        ui.horizontal(|ui| {
+            let name_width = (ui.available_width() * 0.4).max(120.0);
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut form.new_name)
+                    .hint_text("Pseudo")
+                    .desired_width(name_width),
+            );
+            // Entrée dans le champ : comme un clic sur « Ajouter ».
+            let enter = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let combo_width = (ui.available_width() - 110.0).max(120.0);
+            game_combo(
+                ui,
+                "salon_new_game",
+                &form.games,
+                &mut form.new_game,
+                combo_width,
+            );
+            if widgets::ghost_button(ui, "Ajouter") || enter {
+                form.add_mate();
+            }
+        });
+        if let Some(message) = &form.crew_error {
+            ui.label(RichText::new(message).color(theme::AMBER).size(13.0));
+        }
+        ui.label(
+            widgets::dim(
+                "Chaque joueur reçoit son lien d'invitation une fois la partie hébergée ; \
+                 l'onglet « Salon » de la partie vérifie qu'il est prêt.",
+            )
+            .size(12.0),
+        );
+    });
+}
+
+/// Une ligne « nom … valeur » du panneau « Profil de session ».
+fn version_row(ui: &mut Ui, label: &str, value: &str) {
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).color(theme::TEXT));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(widgets::mono(value, 13.0).color(theme::TEXT));
+        });
+    });
+}
+
+/// Panneau « Profil de session » : les versions figées pour toute la partie.
+fn session_panel(ui: &mut Ui, form: &CreateForm) {
+    caps_panel(ui, "Profil de session", |ui| {
+        ui.label(
+            RichText::new(
+                "Toutes les versions sont figées pour l'équipage. Chaque joueur installe \
+                 exactement les mêmes.",
+            )
+            .color(theme::TEXT),
+        );
+        ui.add_space(6.0);
+        version_row(ui, "Archipelago (générateur)", AP_VERSION);
+        version_row(ui, "Raftup", env!("CARGO_PKG_VERSION"));
+        // Un monde par jeu de l'équipage, sans doublon, dans l'ordre de l'équipage.
+        let mut ids: Vec<&str> = form.my_game.as_deref().into_iter().collect();
+        for mate in &form.mates {
+            if !ids.contains(&mate.game_id.as_str()) {
+                ids.push(&mate.game_id);
+            }
+        }
+        for id in ids {
+            if let Some(game) = form.game(id) {
+                let version = game
+                    .world_version
+                    .as_deref()
+                    .map(|v| format!("v{v}"))
+                    .unwrap_or_else(|| "—".to_string());
+                version_row(ui, &format!("Monde {}", game.name), &version);
+            }
+        }
+    });
+}
+
+/// Panneau à petit titre en capitales (« HÉBERGEMENT »), comme la colonne de droite
+/// de la maquette.
+fn caps_panel(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui)) {
+    widgets::panel(ui, "", |ui| {
+        ui.label(widgets::caps(heading));
+        ui.add_space(8.0);
+        add_contents(ui);
+    });
+}
+
+/// Panneau « Hébergement » : mot de passe, résumé du serveur, options d'expert repliées.
+fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
+    caps_panel(ui, "Hébergement", |ui| {
+        widgets::pill(ui, "Sur ce PC", theme::TEXT, theme::ACCENT_BG);
+        ui.add_space(6.0);
+        ui.label(
+            widgets::dim(
+                "Serveur Raftup intégré, protocole Archipelago. Ton PC doit rester allumé \
+                 pendant la partie.",
+            )
+            .size(13.0),
+        );
+        ui.add_space(6.0);
+        labelled(ui, "Mot de passe de la salle (facultatif)");
+        ui.add(
+            egui::TextEdit::singleline(&mut form.password)
+                .password(true)
+                .desired_width(f32::INFINITY),
+        );
+        ui.label(
+            widgets::dim(format::server_summary(
+                &form.port,
+                &form.public_host,
+                form.encrypted,
+            ))
+            .size(12.0),
+        );
+        // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
+        let mut open_now = form.open_advanced;
+        widgets::advanced(
+            ui,
+            "create_server",
+            "Options avancées",
+            &mut open_now,
+            |ui| advanced_server(ui, form),
+        );
+        form.open_advanced = open_now;
+    });
+}
+
+/// Panneau « Lancer la partie » : ce qui manque, puis « Générer et héberger ».
+fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) {
+    caps_panel(ui, "Lancer la partie", |ui| {
+        // Le même contrôle que le clic : on annonce ici ce qui serait refusé.
+        let (ready, status) = match build_request(form) {
+            Ok(_) if !form.yamls.is_empty() => (
+                true,
+                format!("{} YAML importés, prêts à générer.", form.yamls.len()),
+            ),
+            Ok(_) => {
+                let n = form.player_count();
+                let plural = if n > 1 { "s" } else { "" };
+                (
+                    true,
+                    format!("{n} joueur{plural} dans l'équipage. Tu peux en ajouter, ou lancer maintenant."),
+                )
+            }
+            Err(message) => (false, message),
+        };
+        let color = if ready { theme::TEXT } else { theme::AMBER };
+        ui.label(RichText::new(status).color(color));
+        ui.add_space(10.0);
+        // Grisé pendant l'installation du générateur et pendant la génération.
+        let enabled =
+            !form.setup.is_busy() && !form.generation.is_busy() && !form.hosting.is_busy();
+        let button = egui::Button::new(
+            RichText::new("Générer et héberger")
+                .font(theme::title_font(17.0))
+                .color(egui::Color32::from_rgb(0x08, 0x12, 0x22)),
+        )
+        .fill(theme::ACCENT)
+        .min_size(egui::vec2(ui.available_width(), 46.0));
+        if ui.add_enabled(enabled, button).clicked() {
+            on_generate(ui.ctx(), form, error);
+        }
+        ui.add_space(8.0);
+        ui.label(
+            widgets::dim(
+                "La seed est créée par le générateur officiel d'Archipelago, dans un process \
+                 séparé sur ce PC.",
+            )
+            .size(12.0),
+        );
+    });
+}
+
+/// Écrit un YAML par joueur de l'équipage dans `generations/salon/` (ADR 0044).
+fn write_crew(form: &CreateForm) -> Result<Vec<PathBuf>, String> {
+    let members = form.crew_members()?;
+    let dir = load_paths()?.generations_dir().join("salon");
+    crew::write_yamls(&dir, &members).map_err(|e| {
+        format!(
+            "Impossible d'écrire les fichiers de l'équipage dans {} : {e}",
+            dir.display()
+        )
+    })
 }
 
 /// Libellé au-dessus d'un champ.
@@ -260,68 +924,6 @@ fn file_name(path: &std::path::Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn players_panel(ui: &mut Ui, form: &mut CreateForm) {
-    widgets::panel(ui, "Joueurs", |ui| {
-        ui.label(widgets::dim("Un fichier YAML par joueur.").size(13.0));
-        ui.add_space(6.0);
-        file_list(ui, &mut form.yamls, "Aucun fichier YAML pour l'instant.");
-        ui.add_space(6.0);
-        if widgets::ghost_button(ui, "Ajouter des YAML…") {
-            form.pending_pick = Some(Pick::Yaml);
-        }
-        let count = form.yamls.len();
-        if count > 0 {
-            let plural = if count > 1 { "s" } else { "" };
-            ui.label(widgets::dim(format!("{count} joueur{plural}")).size(13.0));
-        }
-        if !form.installed_apworlds.is_empty() {
-            let names: Vec<String> = form
-                .installed_apworlds
-                .iter()
-                .filter_map(|p| p.file_name())
-                .map(|n| n.to_string_lossy().into_owned())
-                .collect();
-            // Deux lignes courtes : le panneau justifie un texte qui passe à la ligne,
-            // ce qui étirait les espaces entre les lettres.
-            ui.add_space(6.0);
-            ui.label(
-                widgets::dim("Pris automatiquement (installés par la Bibliothèque) :").size(13.0),
-            );
-            ui.label(
-                RichText::new(names.join(", "))
-                    .color(theme::TEXT)
-                    .size(13.0),
-            );
-        }
-        // Apworlds choisis à la main : réservé à ceux qui savent ce qu'ils font.
-        widgets::advanced(
-            ui,
-            "create_apworlds",
-            "Apworlds en plus",
-            &mut form.open_advanced_apworlds,
-            |ui| {
-                ui.label(
-                    RichText::new(APWORLD_WARNING)
-                        .color(theme::AMBER)
-                        .size(13.0),
-                );
-                ui.checkbox(&mut form.apworld_ack, "J'ai compris");
-                ui.add_space(6.0);
-                file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
-                ui.add_space(6.0);
-                // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
-                let add = ui.add_enabled(
-                    form.apworld_ack,
-                    egui::Button::new(RichText::new("Ajouter des apworlds…").color(theme::TEXT)),
-                );
-                if add.clicked() {
-                    form.pending_pick = Some(Pick::Apworld);
-                }
-            },
-        );
-    });
-}
-
 /// Ligne « chemin en lecture seule + Parcourir… ». Renvoie vrai si on a cliqué.
 fn file_row(ui: &mut Ui, path: &Option<PathBuf>) -> bool {
     let mut clicked = false;
@@ -339,76 +941,6 @@ fn file_row(ui: &mut Ui, path: &Option<PathBuf>) -> bool {
         clicked = widgets::ghost_button(ui, "Parcourir…");
     });
     clicked
-}
-
-fn server_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) {
-    widgets::panel(ui, "Serveur", |ui| {
-        labelled(ui, "Mot de passe de la salle (facultatif)");
-        ui.add(
-            egui::TextEdit::singleline(&mut form.password)
-                .password(true)
-                .desired_width(f32::INFINITY),
-        );
-
-        // Réglages d'expert repliés, avec un résumé d'une ligne de ce qui sera utilisé.
-        ui.add_space(4.0);
-        ui.label(
-            widgets::dim(format::server_summary(
-                &form.port,
-                &form.public_host,
-                form.encrypted,
-            ))
-            .size(12.0),
-        );
-        // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
-        let mut open_now = form.open_advanced;
-        widgets::advanced(
-            ui,
-            "create_server",
-            "Options avancées",
-            &mut open_now,
-            |ui| advanced_server(ui, form),
-        );
-        form.open_advanced = open_now;
-
-        labelled(ui, "Préréglage de génération");
-        ui.horizontal(|ui| {
-            for preset in Preset::ALL {
-                ui.selectable_value(&mut form.preset, preset, preset.label());
-            }
-        });
-        ui.label(widgets::dim(form.preset.description()).size(13.0));
-
-        ui.add_space(6.0);
-        ui.checkbox(&mut form.rust_engine, "Moteur Rust (expérimental)");
-        ui.label(
-            widgets::dim(
-                "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago \
-                 construit les mondes et Raftup place les objets.",
-            )
-            .size(13.0),
-        );
-        // `add_enabled` : la case est grisée (et ignorée) sans le moteur Rust.
-        ui.add_enabled(
-            form.rust_engine,
-            egui::Checkbox::new(&mut form.time_balance, "Équilibrer par temps de jeu"),
-        );
-        ui.label(
-            widgets::dim(
-                "Avance les objets dont un joueur a besoin pour qu'il attende moins, d'après le \
-                 temps moyen d'un lieu de chaque jeu (estimé, pas encore mesuré).",
-            )
-            .size(13.0),
-        );
-
-        ui.add_space(12.0);
-        // Grisé pendant l'installation du générateur et pendant la génération.
-        let enabled =
-            !form.setup.is_busy() && !form.generation.is_busy() && !form.hosting.is_busy();
-        if widgets::primary_button(ui, "▶ Générer la partie", enabled) {
-            on_generate(ui.ctx(), form, error);
-        }
-    });
 }
 
 /// Contenu du bloc « Options avancées » du serveur : port, adresse publique, webhook,
@@ -474,7 +1006,7 @@ enum Refused {
 }
 
 fn refused_block(form: &CreateForm) -> Refused {
-    if form.yamls.is_empty() {
+    if form.yamls.is_empty() && form.crew_members().is_err() {
         Refused::Visible
     } else if !form.apworlds.is_empty() && !form.apworld_ack {
         Refused::Apworlds
@@ -488,7 +1020,11 @@ fn refused_block(form: &CreateForm) -> Refused {
 fn open_refused_block(form: &mut CreateForm) {
     match refused_block(form) {
         Refused::Visible => {}
-        Refused::Apworlds => form.open_advanced_apworlds = true,
+        Refused::Apworlds => {
+            // Le bloc des apworlds est rangé dans les options avancées de « Ton monde ».
+            form.open_advanced_world = true;
+            form.open_advanced_apworlds = true;
+        }
         Refused::Server => form.open_advanced = true,
     }
 }
@@ -499,7 +1035,17 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
     // Relu à chaque clic : un jeu a pu être installé depuis l'ouverture de l'écran.
     form.refresh_installed();
     match build_request(form) {
-        Ok((request, host)) => {
+        Ok((mut request, host)) => {
+            if request.player_files.is_empty() {
+                match write_crew(form) {
+                    Ok(files) => request.player_files = files,
+                    Err(message) => {
+                        form.generation = generation::Generation::Idle;
+                        *error = Some(message);
+                        return;
+                    }
+                }
+            }
             *error = None;
             // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage.
             prefs::remember(host.webhook.as_ref(), Some(form.preset));
@@ -587,6 +1133,22 @@ pub fn dev_prefill(form: &mut CreateForm, yamls: Vec<PathBuf>, port: u16) {
     form.port = port.to_string();
     form.rust_engine = std::env::var("RAFTUP_DEV_RUST").is_ok_and(|v| v == "1");
     form.time_balance = std::env::var("RAFTUP_DEV_TEMPS").is_ok_and(|v| v == "1");
+}
+
+/// Macro : un équipage de démonstration (l'hôte et deux amis, sur le premier jeu du
+/// catalogue), pour la capture du salon de préparation.
+#[cfg(debug_assertions)]
+pub fn dev_crew(form: &mut CreateForm) {
+    let Some(first) = form.games.first().map(|g| g.id.clone()) else {
+        return;
+    };
+    form.my_name = "Marvin".into();
+    form.my_game = Some(first.clone());
+    form.new_game = Some(first);
+    for name in ["Léa", "Tom"] {
+        form.new_name = name.into();
+        form.add_mate();
+    }
 }
 
 /// Macro : comme un clic sur « Générer la partie ».
@@ -703,8 +1265,10 @@ fn all_apworlds(form: &CreateForm) -> Vec<PathBuf> {
 }
 
 fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions), String> {
+    // Sans YAML importés, c'est l'équipage qui fera les joueurs : on le vérifie ici,
+    // ses YAML ne sont écrits qu'au moment de générer (`on_generate`).
     if form.yamls.is_empty() {
-        return Err("Ajoutez au moins un fichier YAML.".into());
+        form.crew_members()?;
     }
     if !form.apworlds.is_empty() && !form.apworld_ack {
         return Err(format!("Cochez « J'ai compris » : {APWORLD_WARNING}"));
@@ -736,6 +1300,7 @@ fn build_request(form: &CreateForm) -> Result<(GenerateRequest, PartyHostOptions
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
     let mut request = GenerateRequest {
+        // Vide sans YAML importés : `on_generate` y met ceux de l'équipage.
         player_files: form.yamls.clone(),
         apworlds: all_apworlds(form),
         ..GenerateRequest::default()
@@ -871,13 +1436,97 @@ game: Slime Rancher
         assert_eq!(request.timeout, Preset::Rapide.timeout());
     }
 
+    /// Formulaire avec deux jeux au catalogue, sans YAML importé.
+    fn salon() -> CreateForm {
+        let game = |id: &str, ap: &str| GameChoice {
+            id: id.into(),
+            name: ap.into(),
+            ap_game: ap.into(),
+            world_version: Some("1.0".into()),
+        };
+        CreateForm {
+            games: vec![game("sr", "Slime Rancher"), game("hk", "Hollow Knight")],
+            encrypted: false,
+            ..CreateForm::default()
+        }
+    }
+
+    #[test]
+    fn equipage_hote_en_tete_puis_amis() {
+        let mut form = salon();
+        form.my_game = Some("sr".into());
+        form.my_name = " Marvin ".into();
+        form.new_game = Some("hk".into());
+        form.new_name = "Léa".into();
+        form.add_mate();
+        assert_eq!(form.crew_error, None);
+        assert!(form.new_name.is_empty());
+        let crew = form.crew_members().unwrap();
+        assert_eq!(
+            crew,
+            vec![
+                CrewMember {
+                    name: "Marvin".into(),
+                    ap_game: "Slime Rancher".into()
+                },
+                CrewMember {
+                    name: "Léa".into(),
+                    ap_game: "Hollow Knight".into()
+                },
+            ]
+        );
+        // Sans YAML importé, la demande attend les YAML de l'équipage.
+        let (request, _) = build_request(&form).unwrap();
+        assert!(request.player_files.is_empty());
+        assert_eq!(form.player_count(), 2);
+    }
+
+    #[test]
+    fn equipage_refuse_doublon_et_jeu_manquant() {
+        let mut form = salon();
+        form.my_name = "Tom".into();
+        form.new_name = "tom".into();
+        form.add_mate();
+        assert_eq!(
+            form.crew_error.as_deref(),
+            Some("Choisis le jeu de ce joueur.")
+        );
+        form.new_game = Some("sr".into());
+        form.add_mate();
+        assert_eq!(
+            form.crew_error.as_deref(),
+            Some("« tom » est déjà dans l'équipage.")
+        );
+        assert!(form.mates.is_empty());
+        // Pseudo de l'hôte vide : refus clair, jeu choisi.
+        form.my_game = Some("sr".into());
+        form.my_name.clear();
+        assert_eq!(
+            build_request(&form).unwrap_err(),
+            "Ton pseudo : Indique un pseudo."
+        );
+    }
+
+    #[test]
+    fn yaml_importes_remplacent_l_equipage() {
+        let mut form = salon();
+        form.yamls = vec![
+            PathBuf::from("a.yaml"),
+            PathBuf::from("b.yaml"),
+            PathBuf::from("c.yaml"),
+        ];
+        assert_eq!(form.player_count(), 3);
+        let (request, _) = build_request(&form).unwrap();
+        assert_eq!(request.player_files.len(), 3);
+    }
+
     #[test]
     fn sans_yaml() {
         let mut form = valid();
         form.yamls.clear();
         assert_eq!(
             build_request(&form).unwrap_err(),
-            "Ajoutez au moins un fichier YAML."
+            "Choisis ton jeu dans « Ton monde »."
         );
     }
 

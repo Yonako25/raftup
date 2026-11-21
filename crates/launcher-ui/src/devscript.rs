@@ -9,7 +9,7 @@
 //! - `RAFTUP_DEV_PORT=<port>` (38296 par défaut) : premier port essayé ; s'il est
 //!   occupé, « Réessayer » passe au port suivant ;
 //! - `RAFTUP_DEV_SCENARIO` : `creer` (défaut, le scénario complet), puis `bibliotheque`,
-//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis` (`RAFTUP_DEV_HUB_INSCRIPTION=1` : onglet « Créer un compte »), `parametres`, `changer-de-hub`, `generateur-absent` : une seule capture de l'écran,
+//!   `heberger`, `en-cours`, `salon`, `rejoindre`, `amis` (`RAFTUP_DEV_HUB_INSCRIPTION=1` : onglet « Créer un compte »), `parametres`, `changer-de-hub`, `generateur-absent`, `salon-preparation` (équipage de démonstration) : une seule capture de l'écran,
 //!   `1-<scénario>.png`. L'écran affiché au départ se choisit à part, avec
 //!   `RAFTUP_DEV_PAGE` (`bibliotheque`, `partie`, `creer`…), et `RAFTUP_DEV_SEED`,
 //!   `RAFTUP_DEV_RACINE`, `RAFTUP_DEV_PROFILS` comme d'habitude ; `generateur-absent`
@@ -74,6 +74,9 @@ impl Scenario {
             // en argument (ou transmis par une 2e instance avec `RAFTUP_DEV_DELAY_MS`).
             Some("changer-de-hub") => Scenario::Screen("1-changer-de-hub"),
             Some("generateur-absent") => Scenario::NoGenerator,
+            // « Créer une partie » (salon de préparation) avec un équipage de démonstration
+            // (avec `RAFTUP_DEV_PAGE=creer`).
+            Some("salon-preparation") => Scenario::Screen("1-salon-preparation"),
             _ => Scenario::Create,
         }
     }
@@ -180,6 +183,9 @@ impl DevScript {
                 }
             }
             Step::Wait if self.frames > 5 => {
+                if self.scenario == Scenario::Screen("1-salon-preparation") {
+                    create::dev_crew(form);
+                }
                 if self.scenario == Scenario::Host {
                     let seed = std::env::var_os("RAFTUP_DEV_SEEDFILE")
                         .map(PathBuf::from)
