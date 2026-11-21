@@ -47,6 +47,9 @@ services:
       RAFTUP_HUB_MAIL_FROM: ${RAFTUP_HUB_MAIL_FROM:-}
       RAFTUP_HUB_DISCORD_CLIENT_ID: ${RAFTUP_HUB_DISCORD_CLIENT_ID:-}
       RAFTUP_HUB_DISCORD_CLIENT_SECRET: ${RAFTUP_HUB_DISCORD_CLIENT_SECRET:-}
+      # Illustrations des jeux (ADR 0047) : application Twitch pour IGDB.
+      RAFTUP_HUB_IGDB_CLIENT_ID: ${RAFTUP_HUB_IGDB_CLIENT_ID:-}
+      RAFTUP_HUB_IGDB_CLIENT_SECRET: ${RAFTUP_HUB_IGDB_CLIENT_SECRET:-}
     ports:
       # Console d'admin : seulement sur l'IP du VPN de l'hôte (WireGuard), jamais sur
       # l'IP publique. `http://<RAFTHUB_ADMIN_BIND>/admin`, VPN allumé.

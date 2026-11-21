@@ -139,7 +139,7 @@ Puis, dans un navigateur :
 Le code change à chaque redémarrage tant qu'aucun admin n'existe ; il n'est plus
 tiré ensuite. Le choix de la base est gardé dans `/data/rafthub.toml` (volume).
 
-Ensuite, dans la console : **Réglages** (nom du hub, inscriptions, SMTP, Discord),
+Ensuite, dans la console : **Réglages** (nom du hub, inscriptions, SMTP, Discord, illustrations IGDB),
 **Distribution du launcher**, **Joueurs**.
 
 Pour Discord, déclarer chez Discord l'adresse de retour
@@ -246,6 +246,6 @@ docker volume inspect rafthub-data
   seule sauf `/data`, sans privilège Linux.
 - Le code d'installation ne se lit que dans le journal : celui qui le lit a accès
   au serveur. Installer le hub juste après l'avoir lancé.
-- Le fichier `.env` peut contenir des secrets (SMTP, Discord) : ne jamais le
+- Le fichier `.env` peut contenir des secrets (SMTP, Discord, IGDB) : ne jamais le
   commiter ni le partager. Le plus simple est de régler les secrets dans la
   console (Réglages), qui ne les réaffiche jamais.
