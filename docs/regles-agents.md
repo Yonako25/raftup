@@ -13,7 +13,9 @@ Un prompt d'agent dit : « suis `docs/regles-agents.md` », puis donne **seuleme
 - Ordre déterministe : `BTreeMap`, jamais d'itération sur une `HashMap` pour produire une sortie.
 - Un bug corrigé arrive avec un test qui le reproduit.
 - Jamais de jeu, de ROM, d'asset ou de clé dans le dépôt. Jamais de téléchargement ni d'exécution de fichier téléchargé sans accord explicite de l'utilisatrice ; les téléchargements vont dans un dossier neuf et vide du scratchpad.
-- Les builds partagent le même `target` : `CARGO_TARGET_DIR=target/dev-agents`. Si la compilation échoue à cause d'un fichier qui n'est pas le sien, attendre une minute et recommencer.
+- Un agent dans son propre worktree compile dans le `target` de ce worktree (comportement par défaut, sans `CARGO_TARGET_DIR`). Un `target` partagé entre worktrees mélange des binaires de branches différentes (vu le 21 novembre 2026 : `registry-tool` compilé contre le `launcher-core` d'une autre branche).
+- Cargo se lance depuis PowerShell : dans Git Bash, `link.exe` désigne l'outil `link` de coreutils et l'édition de liens échoue.
+- Aucune fenêtre sur l'écran de l'utilisatrice : pas de `cargo run -p launcher-ui` ni de macro `RAFTUP_DEV_CAPTURE` sans qu'elle le demande ; l'interface se vérifie par les tests sans fenêtre (`crates/launcher-ui/tests/README.md`).
 
 ## Vérifications
 
