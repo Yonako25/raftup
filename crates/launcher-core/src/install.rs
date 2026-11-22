@@ -108,6 +108,8 @@ pub struct InstallReport {
     pub backed_up: Vec<PathBuf>,
     /// Fichiers `[preserve]` déjà présents, laissés tels quels.
     pub kept_preserved: Vec<PathBuf>,
+    /// Images du créateur rangées (section `[art]`, ADR 0051).
+    pub art_installed: usize,
 }
 
 /// L'état d'un jeu vu par l'interface.
@@ -336,8 +338,10 @@ pub fn install(
         }
         Some(mut record) => {
             if same_steps(&record, profile) {
+                // Les images peuvent manquer (profil complété après l'installation).
                 return Ok(InstallReport {
                     already_up_to_date: true,
+                    art_installed: art_best_effort(paths, profile, downloader),
                     ..InstallReport::default()
                 });
             }
@@ -453,7 +457,20 @@ pub fn install(
     record.state = RecordState::Complete;
     record.save(paths)?;
     report.steps_installed = planned.len();
+    report.art_installed = art_best_effort(paths, profile, downloader);
     Ok(report)
+}
+
+/// Range les images du créateur. Une image qui ne vient pas ne fait jamais échouer
+/// l'installation : le jeu marche sans, et l'interface garde sa jaquette dessinée.
+fn art_best_effort(paths: &Paths, profile: &Profile, downloader: &Downloader) -> usize {
+    match crate::art::install_art(paths, profile, downloader) {
+        Ok(count) => count,
+        Err(error) => {
+            tracing::warn!(%error, game = %profile.game.id, "images du jeu non installées");
+            0
+        }
+    }
 }
 
 /// Sauvegarde les fichiers qui vont être remplacés et remplit le reçu (hash encore inconnus).

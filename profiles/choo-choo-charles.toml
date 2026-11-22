@@ -15,7 +15,6 @@ id = "choo-choo-charles"
 name = "Choo-Choo Charles"
 ap_game = "Choo-Choo Charles"      # vérifié : game = "Choo-Choo Charles" dans worlds/cccharles/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 173432                   # vérifié : hub.raftup-games.com/v1/art/steam/1766740 → igdb_id 173432
 
 [game.detect]
 steam_appid = 1766740              # vérifié : API du Steam Store, appid 1766740 = « Choo-Choo Charles » (type game)

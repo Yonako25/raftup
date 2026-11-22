@@ -1,6 +1,6 @@
 # ADR 0047 — Illustrations des jeux servies par le hub (IGDB)
 
-- **Statut** : accepté le 21 novembre 2026 par l'utilisatrice
+- **Statut** : remplacé le 22 novembre 2026 par l'ADR 0051 (images choisies par le créateur, installées avec le world) ; accepté le 21 novembre 2026
 - Modifie la SPEC (§ 7, « Jaquettes ») et l'ADR 0001 (« jamais de jaquette officielle ») ; prolonge les ADR 0033 (API `/v1` du hub), 0035 (client du hub) et 0036 (réglages en base).
 
 ## Contexte

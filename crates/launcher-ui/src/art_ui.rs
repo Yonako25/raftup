@@ -1,48 +1,43 @@
-//! Illustrations des jeux dans l'interface (ADR 0047).
+//! Illustrations des jeux dans l'interface (ADR 0051).
 //!
-//! La Bibliothèque demande une jaquette ou une image large par [`Artwork::texture`].
-//! La première demande part dans un thread à part (réseau, disque, décodage du
-//! JPEG) ; tant que la réponse n'est pas là, ou s'il n'y en a pas (pas de hub, hub
-//! hors ligne sans cache, jeu inconnu), l'écran garde son aplat coloré. Rien n'est
-//! jamais affiché en erreur : la raison va au journal.
+//! Les écrans demandent une jaquette ou une image large par [`Artwork::texture`].
+//! L'image vient du disque : celle du créateur, rangée à l'installation du jeu, sinon
+//! celle que Steam garde déjà sur ce PC (`launcher_core::art::ArtSources`). Aucun
+//! réseau ni aucune API.
 //!
-//! Les images viennent du hub, qui les prend chez IGDB ; elles ne sont jamais dans
-//! le dépôt ni dans le binaire.
+//! La lecture et le décodage se font dans un thread à part, pour que l'écran ne
+//! saccade pas ; tant que l'image n'est pas prête, ou s'il n'y en a pas, l'écran
+//! dessine sa propre jaquette (aplat coloré et titre). Au démarrage, la Bibliothèque
+//! demande d'un coup les images de tous les jeux : elles sont prêtes avant qu'on
+//! ouvre un onglet.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
 
 use egui::{ColorImage, TextureHandle, TextureOptions};
-use launcher_core::art::{ArtClient, ArtError, ArtImage, ArtKind, ArtRef};
-use launcher_core::hub_client::HubUrl;
+use launcher_core::art::{ArtKind, ArtSources};
 
-/// Plus grande image acceptée, en pixels de côté (IGDB envoie au plus 1280 × 720 pour
-/// l'image large et 528 × 748 pour la jaquette).
+/// Plus grande image acceptée, en pixels de côté.
 const MAX_SIDE: u32 = 4096;
 
-/// Ce qui va chercher une image. `Arc<dyn Fn …>` : une fonction partagée avec le
-/// thread de chargement ; le vrai client du hub, ou un faux dans les tests.
-pub type Loader = Arc<dyn Fn(ArtRef, ArtKind) -> Result<Option<ArtImage>, ArtError> + Send + Sync>;
+/// Ce qui va chercher les octets d'une image (JPEG ou PNG). `Arc<dyn Fn …>` : une
+/// fonction partagée avec le thread de chargement ; le disque, ou un faux dans les tests.
+pub type Loader = Arc<dyn Fn(&str, ArtKind) -> Option<Vec<u8>> + Send + Sync>;
 
-/// Une image décodée, prête à devenir une texture, avec son attribution.
-struct Decoded {
-    image: ColorImage,
-    attribution: String,
-    attribution_url: String,
-}
+/// Clé d'une image : identifiant du jeu et sorte d'image.
+type Key = (String, ArtKind);
 
 /// Réponse du thread de chargement.
 struct Done {
-    key: (ArtRef, ArtKind),
+    key: Key,
     /// `Ok(None)` : pas d'image pour ce jeu. `Err` : raison (pour le journal).
-    result: Result<Option<Decoded>, String>,
+    result: Result<Option<ColorImage>, String>,
 }
 
 /// Une demande envoyée au thread.
 struct Job {
-    key: (ArtRef, ArtKind),
+    key: Key,
     ctx: egui::Context,
 }
 
@@ -50,66 +45,52 @@ struct Job {
 enum Slot {
     Loading,
     Ready(TextureHandle),
-    /// Pas d'image (ou échec) : on n'en redemande pas pendant cette session.
+    /// Pas d'image (ou échec) : pas redemandée, sauf après [`Artwork::forget`].
     Absent,
 }
 
 /// Les illustrations chargées, et le thread qui les charge.
 pub struct Artwork {
-    /// Adresse du hub et dossier du cache qui ont servi à fabriquer `loader`.
-    source: Option<(HubUrl, PathBuf)>,
     loader: Option<Loader>,
-    slots: BTreeMap<(ArtRef, ArtKind), Slot>,
+    slots: BTreeMap<Key, Slot>,
     jobs: Option<Sender<Job>>,
     results_tx: Sender<Done>,
     results: Receiver<Done>,
-    /// Texte et lien d'attribution de la dernière image reçue.
-    attribution: Option<(String, String)>,
 }
 
 impl Artwork {
-    /// Sans hub : aucune image, les aplats restent.
+    /// Sans source : aucune image, les jaquettes dessinées restent.
     pub fn new() -> Artwork {
         let (results_tx, results) = mpsc::channel();
         Artwork {
-            source: None,
             loader: None,
             slots: BTreeMap::new(),
             jobs: None,
             results_tx,
             results,
-            attribution: None,
         }
     }
 
-    /// Tests : images données par `loader`, sans hub ni disque.
-    #[cfg(test)]
+    /// Images lues sur ce PC. `appids` : l'appid Steam de chaque jeu du catalogue.
+    pub fn local(sources: ArtSources, appids: BTreeMap<String, u32>) -> Artwork {
+        // `move` : la fermeture garde les sources et la table ; elle part dans le thread.
+        let loader: Loader = Arc::new(move |game_id: &str, kind: ArtKind| {
+            sources.find(game_id, appids.get(game_id).copied(), kind)
+        });
+        Artwork::with_loader(loader)
+    }
+
+    /// Images données par `loader` (tests, ou [`Artwork::local`]).
     pub fn with_loader(loader: Loader) -> Artwork {
         let mut artwork = Artwork::new();
         artwork.loader = Some(loader);
         artwork
     }
 
-    /// Suit le hub choisi dans « Amis ». Un autre hub (ou plus de hub) oublie les
-    /// images chargées : elles viendront de son cache à lui.
-    pub fn set_hub(&mut self, hub: Option<&HubUrl>, cache_root: Option<&Path>) {
-        let wanted = match (hub, cache_root) {
-            (Some(hub), Some(root)) => Some((hub.clone(), root.to_path_buf())),
-            _ => None,
-        };
-        if wanted == self.source {
-            return;
-        }
-        self.source = wanted.clone();
-        self.loader = wanted.map(|(hub, root)| {
-            let client = ArtClient::new(hub, &root);
-            // `move` : la fermeture garde le client ; elle part dans le thread.
-            Arc::new(move |reference, kind| client.fetch(reference, kind)) as Loader
-        });
-        self.slots.clear();
-        // L'ancien thread finit ce qu'il a reçu puis s'arrête (son canal est fermé).
-        self.jobs = None;
-        self.attribution = None;
+    /// Oublie les images de ce jeu : elles seront relues (après son installation, les
+    /// images du créateur viennent d'arriver).
+    pub fn forget(&mut self, game_id: &str) {
+        self.slots.retain(|(id, _), _| id != game_id);
     }
 
     /// Texture de cette image si elle est prête. La première demande lance le
@@ -117,11 +98,10 @@ impl Artwork {
     pub fn texture(
         &mut self,
         ctx: &egui::Context,
-        reference: Option<ArtRef>,
+        game_id: &str,
         kind: ArtKind,
     ) -> Option<TextureHandle> {
-        let reference = reference?;
-        let key = (reference, kind);
+        let key = (game_id.to_string(), kind);
         match self.slots.get(&key) {
             Some(Slot::Ready(texture)) => return Some(texture.clone()),
             Some(Slot::Loading | Slot::Absent) => return None,
@@ -129,7 +109,7 @@ impl Artwork {
         }
         let jobs = self.worker()?;
         let job = Job {
-            key,
+            key: key.clone(),
             ctx: ctx.clone(),
         };
         if jobs.send(job).is_ok() {
@@ -142,29 +122,24 @@ impl Artwork {
     pub fn poll(&mut self, ctx: &egui::Context) {
         // `try_iter` : prend ce qui est déjà arrivé, sans jamais attendre.
         for done in self.results.try_iter() {
+            // Une réponse pour une image oubliée entre-temps est jetée : elle sera relue.
+            if !matches!(self.slots.get(&done.key), Some(Slot::Loading)) {
+                continue;
+            }
             let slot = match done.result {
-                Ok(Some(decoded)) => {
-                    let (reference, kind) = done.key;
-                    let name = format!("art-{reference:?}-{}", kind.as_str());
-                    let texture = ctx.load_texture(name, decoded.image, TextureOptions::LINEAR);
-                    self.attribution = Some((decoded.attribution, decoded.attribution_url));
-                    Slot::Ready(texture)
+                Ok(Some(image)) => {
+                    let (id, kind) = &done.key;
+                    let name = format!("art-{id}-{}", kind.as_str());
+                    Slot::Ready(ctx.load_texture(name, image, TextureOptions::LINEAR))
                 }
                 Ok(None) => Slot::Absent,
                 Err(reason) => {
-                    tracing::info!(%reason, "illustration non chargée : aplat gardé");
+                    tracing::info!(%reason, "illustration non chargée : jaquette dessinée gardée");
                     Slot::Absent
                 }
             };
             self.slots.insert(done.key, slot);
         }
-    }
-
-    /// Texte et lien d'attribution à afficher, dès qu'une image est à l'écran.
-    pub fn attribution(&self) -> Option<(&str, &str)> {
-        self.attribution
-            .as_ref()
-            .map(|(text, url)| (text.as_str(), url.as_str()))
     }
 
     /// Canal vers le thread de chargement, lancé à la première demande.
@@ -173,16 +148,13 @@ impl Artwork {
             let loader = Arc::clone(self.loader.as_ref()?);
             let (jobs, queue) = mpsc::channel::<Job>();
             let results = self.results_tx.clone();
-            // Un seul thread, qui traite les demandes l'une après l'autre : le hub ne
-            // reçoit pas toute la Bibliothèque d'un coup.
+            // Un seul thread, qui lit les images l'une après l'autre.
             let spawned = std::thread::Builder::new()
                 .name("illustrations".to_string())
                 .spawn(move || {
                     for job in queue {
-                        let (reference, kind) = job.key;
-                        let result = loader(reference, kind)
-                            .map_err(|e| e.to_string())
-                            .and_then(|image| image.map(decode).transpose());
+                        let (id, kind) = &job.key;
+                        let result = loader(id, *kind).map(|bytes| decode(&bytes)).transpose();
                         if results
                             .send(Done {
                                 key: job.key,
@@ -208,20 +180,15 @@ impl Artwork {
     }
 }
 
-/// Décode le JPEG reçu en image egui (RGBA).
-fn decode(image: ArtImage) -> Result<Decoded, String> {
-    let decoded = image::load_from_memory_with_format(&image.bytes, image::ImageFormat::Jpeg)
-        .map_err(|e| format!("JPEG illisible : {e}"))?;
+/// Décode une image JPEG ou PNG en image egui (RGBA).
+fn decode(bytes: &[u8]) -> Result<ColorImage, String> {
+    let decoded = image::load_from_memory(bytes).map_err(|e| format!("image illisible : {e}"))?;
     if decoded.width() > MAX_SIDE || decoded.height() > MAX_SIDE {
         return Err("image trop grande".to_string());
     }
     let rgba = decoded.to_rgba8();
     let size = [rgba.width() as usize, rgba.height() as usize];
-    Ok(Decoded {
-        image: ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()),
-        attribution: image.attribution,
-        attribution_url: image.attribution_url,
-    })
+    Ok(ColorImage::from_rgba_unmultiplied(size, rgba.as_raw()))
 }
 
 /// Partie de l'image (coordonnées de 0 à 1) qui remplit un cadre de taille `frame`

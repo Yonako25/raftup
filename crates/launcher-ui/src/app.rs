@@ -223,9 +223,7 @@ impl eframe::App for App {
         }
 
         // Détection des jeux dès l'ouverture : l'Accueil et l'assistant en ont besoin.
-        // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047), pour tous
-        // les écrans (Accueil, Catalogue, Partie en cours, Bibliothèque).
-        self.library.set_hub(self.friends.hub_url());
+        // Les illustrations sont lues sur le disque (ADR 0051), pour tous les écrans.
         self.library.background(&ctx);
 
         // Session du hub, présence et liste d'amis, quel que soit l'écran affiché.

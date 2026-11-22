@@ -17,7 +17,6 @@ id = "aquaria"
 name = "Aquaria"
 ap_game = "Aquaria"                # vérifié : game: str = "Aquaria" dans worlds/aquaria/__init__.py (0.6.8)
 status = "untested"
-# Pas d'igdb_id : hub.raftup-games.com/v1/art/steam/216250 répond « art_not_found ».
 
 [game.detect]
 steam_appid = 216250               # à vérifier : l'API du Steam Store répond success=false pour 216250 (jeu retiré de la vente ou réservé à certaines régions ?)

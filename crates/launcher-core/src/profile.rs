@@ -90,6 +90,10 @@ pub struct Profile {
     #[serde(default)]
     pub cleanup: Cleanup,
     pub launch: Launch,
+    /// Images choisies par le créateur (ADR 0051), installées avec le jeu.
+    /// Section facultative, donc `format_version` ne change pas.
+    #[serde(default)]
+    pub art: crate::art::ArtSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -105,10 +109,9 @@ pub struct GameInfo {
     /// Champ facultatif, donc `format_version` ne change pas.
     #[serde(default)]
     pub seconds_per_location: Option<u32>,
-    /// Identifiant du jeu chez IGDB (facultatif, ADR 0047) : les illustrations du hub
-    /// le cherchent par là, sinon par `detect.steam_appid`. Sert à corriger une
-    /// mauvaise correspondance ou à couvrir un jeu sans Steam.
-    /// Champ facultatif, donc `format_version` ne change pas.
+    /// Identifiant du jeu chez IGDB (ADR 0047). **Ignoré** depuis l'ADR 0051 (images
+    /// choisies par le créateur, section `[art]`) ; encore accepté pour que les profils
+    /// qui l'ont gardé restent lisibles.
     #[serde(default)]
     pub igdb_id: Option<u64>,
     #[serde(default)]
@@ -407,6 +410,14 @@ impl Profile {
             }
         }
 
+        // --- Images du créateur (ADR 0051) ---
+        for kind in crate::art::ArtKind::ALL {
+            if let Some(file) = self.art.get(kind) {
+                check_url(&file.url, crate::art::ART_HOSTS)
+                    .map_err(|reason| invalid(format!("art.{} : {reason}", kind.as_str())))?;
+            }
+        }
+
         // --- Crédits ---
         if self.credits.authors.is_empty() || self.credits.license.trim().is_empty() {
             return Err(invalid(
@@ -563,26 +574,7 @@ impl Profile {
 /// Contrôle une source : HTTPS, domaine autorisé, ou nom de paquet Thunderstore valide.
 fn check_source(source: &Source) -> Result<(), String> {
     match source {
-        Source::Url(url) => {
-            let Some(rest) = url.strip_prefix("https://") else {
-                return Err(format!("source « {url} » : HTTPS obligatoire"));
-            };
-            if url.contains(['{', '}', ' ', '\0', '\n', '\r']) {
-                return Err(format!("source « {url} » : caractère interdit"));
-            }
-            // L'hôte s'arrête au premier « / », « ? » ou « # ». Un « @ » (identifiants)
-            // ou un « : » (port) servirait à tromper la liste blanche : refusés.
-            let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-            if host.contains(['@', ':']) {
-                return Err(format!("source « {url} » : hôte invalide"));
-            }
-            if !ALLOWED_HOSTS.contains(&host.to_ascii_lowercase().as_str()) {
-                return Err(format!(
-                    "source « {url} » : domaine « {host} » hors de la liste blanche"
-                ));
-            }
-            Ok(())
-        }
+        Source::Url(url) => check_url(url, ALLOWED_HOSTS),
         Source::Thunderstore(package) => {
             let valid =
                 |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
@@ -594,6 +586,28 @@ fn check_source(source: &Source) -> Result<(), String> {
             }
         }
     }
+}
+
+/// Contrôle une adresse : HTTPS, sans caractère douteux, hôte dans `hosts`.
+fn check_url(url: &str, hosts: &[&str]) -> Result<(), String> {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return Err(format!("source « {url} » : HTTPS obligatoire"));
+    };
+    if url.contains(['{', '}', ' ', '\0', '\n', '\r']) {
+        return Err(format!("source « {url} » : caractère interdit"));
+    }
+    // L'hôte s'arrête au premier « / », « ? » ou « # ». Un « @ » (identifiants)
+    // ou un « : » (port) servirait à tromper la liste blanche : refusés.
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if host.contains(['@', ':']) {
+        return Err(format!("source « {url} » : hôte invalide"));
+    }
+    if !hosts.contains(&host.to_ascii_lowercase().as_str()) {
+        return Err(format!(
+            "source « {url} » : domaine « {host} » hors de la liste blanche"
+        ));
+    }
+    Ok(())
 }
 
 /// Contrôle un chemin du profil : gabarit valide, enraciné dans une des racines

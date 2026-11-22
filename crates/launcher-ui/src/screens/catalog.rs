@@ -112,9 +112,6 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) {
         }
 
         ui.add_space(14.0);
-        if let Some((text, url)) = library.art_attribution() {
-            super::library::attribution_line(ui, &text, &url);
-        }
         ui.label(
             widgets::dim(
                 "Raftup ne fournit aucun jeu : il installe le mod sur ta copie, après vérification de son empreinte.",
@@ -124,8 +121,8 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) {
     });
 }
 
-/// Grille de jaquettes, comme la maquette « Catalogue » : l'illustration du hub (IGDB,
-/// ADR 0047) si elle est arrivée, sinon l'aplat coloré avec le titre. Un clic sur une
+/// Grille de jaquettes, comme la maquette « Catalogue » : l'illustration du jeu (ADR
+/// 0051) si elle est lue, sinon l'aplat coloré avec le titre. Un clic sur une
 /// carte ouvre sa fiche d'information (rien ne s'ajoute d'ici).
 fn grid(
     ui: &mut Ui,

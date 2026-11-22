@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
-use launcher_core::art::{ArtError, ArtImage, ArtKind, ArtRef};
+use launcher_core::art::ArtKind;
 use launcher_core::{DetectedGame, GameState, InstallStatus, Paths, Store};
 
 use super::{builder, click, count, demo_catalog, shows};
@@ -112,7 +112,7 @@ fn se_connecter_a_la_main_est_replie() {
 }
 
 // ---------------------------------------------------------------------------
-// Illustrations des jeux (ADR 0047)
+// Illustrations des jeux (ADR 0051)
 // ---------------------------------------------------------------------------
 
 const COVER_LABEL: &str = "Jaquette de Slime Rancher";
@@ -150,39 +150,35 @@ fn run_until(
 }
 
 #[test]
-fn sans_hub_la_jaquette_reste_un_aplat() {
+fn sans_image_la_jaquette_est_dessinee() {
     let harness = bibliotheque();
     assert!(!shows(&harness, COVER_LABEL));
     assert!(!shows(&harness, HERO_LABEL));
     // La fiche garde son bandeau, en aplat coloré.
     assert!(shows(&harness, FLAT_HERO_LABEL));
-    assert!(!shows(&harness, "IGDB.com"));
     // Le titre reste écrit dans l'aplat et sous la carte.
     assert!(count(&harness, "Slime Rancher") >= 2);
 }
 
 #[test]
-fn jaquette_et_illustration_venues_du_hub() {
+fn jaquette_et_illustration_lues_sur_le_disque() {
     let asked = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&asked);
     let jpeg = tiny_jpeg();
-    // Faux hub : il connaît Slime Rancher par son identifiant IGDB (profil du dépôt).
-    let loader: Loader = Arc::new(move |reference, _kind| {
+    // Fausse source : une image pour Slime Rancher seulement (créateur ou Steam).
+    let loader: Loader = Arc::new(move |game_id: &str, _kind: ArtKind| {
+        if game_id != GAME {
+            return None;
+        }
         counter.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(reference, ArtRef::Igdb(16287));
-        Ok(Some(ArtImage {
-            bytes: jpeg.clone(),
-            attribution: "IGDB.com".to_string(),
-            attribution_url: "https://www.igdb.com/games/slime-rancher".to_string(),
-        }))
+        Some(jpeg.clone())
     });
     let mut harness = bibliotheque_with(Some(Artwork::with_loader(loader)));
     assert!(run_until(&mut harness, |h| shows(h, COVER_LABEL)
         && shows(h, HERO_LABEL)));
-    assert!(shows(&harness, "IGDB.com"));
     // L'image large a pris la place de l'aplat.
     assert!(!shows(&harness, FLAT_HERO_LABEL));
-    // Une demande par image (jaquette, image large), pas une par image de l'écran.
+    // Une lecture par image (jaquette, image large), pas une par image de l'écran.
     harness.run();
     assert_eq!(asked.load(Ordering::SeqCst), 2);
     // La fiche reste complète.
@@ -190,12 +186,14 @@ fn jaquette_et_illustration_venues_du_hub() {
 }
 
 #[test]
-fn hub_sans_image_ou_en_panne_aplat_garde() {
-    for answer in [Ok(None), Err(ArtError::Network("hors ligne".to_string()))] {
+fn image_absente_ou_illisible_jaquette_dessinee() {
+    for answer in [None, Some(b"pas une image".to_vec())] {
         let asked = Arc::new(AtomicUsize::new(0));
         let counter = Arc::clone(&asked);
-        let loader: Loader = Arc::new(move |_reference: ArtRef, _kind: ArtKind| {
-            counter.fetch_add(1, Ordering::SeqCst);
+        let loader: Loader = Arc::new(move |game_id: &str, _kind: ArtKind| {
+            if game_id == GAME {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
             answer.clone()
         });
         let mut harness = bibliotheque_with(Some(Artwork::with_loader(loader)));
@@ -208,7 +206,6 @@ fn hub_sans_image_ou_en_panne_aplat_garde() {
         assert!(!shows(&harness, COVER_LABEL));
         assert!(!shows(&harness, HERO_LABEL));
         assert!(shows(&harness, FLAT_HERO_LABEL));
-        assert!(!shows(&harness, "IGDB.com"));
         assert!(count(&harness, "Slime Rancher") >= 2);
         // Pas redemandé à chaque image.
         assert_eq!(asked.load(Ordering::SeqCst), 2);

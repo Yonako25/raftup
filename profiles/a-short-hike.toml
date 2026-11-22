@@ -15,7 +15,6 @@ id = "a-short-hike"
 name = "A Short Hike"
 ap_game = "A Short Hike"           # vérifié : game = "A Short Hike" dans worlds/shorthike/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 116753                   # vérifié : hub.raftup-games.com/v1/art/steam/1055540 → igdb_id 116753
 
 [game.detect]
 steam_appid = 1055540              # vérifié : store.steampowered.com/app/1055540 → « A Short Hike »

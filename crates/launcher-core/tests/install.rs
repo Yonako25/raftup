@@ -445,3 +445,57 @@ fn archive_interieure_absente_refusee() {
     assert!(run(&env, &p, &dl, false).is_err());
     assert_eq!(fs::read_dir(&env.game_dir).unwrap().count(), 0);
 }
+
+/// Images du créateur (ADR 0051) : rangées à l'installation, hash vérifié ; une image
+/// qui ne vient pas ne fait pas échouer l'installation.
+#[test]
+fn images_du_createur_installees_avec_le_jeu() {
+    let env = env();
+    let (zip, sha) = make_zip(&env, "mod.zip", &[("BepInEx/core.dll", b"dll")]);
+    let jpeg: &[u8] = &[0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+    let cover = env.tmp.path().join("cover.jpg");
+    fs::write(&cover, jpeg).unwrap();
+    let cover_url = "https://raw.githubusercontent.com/x/y/main/cover.jpg";
+    // L'image large est déclarée mais absente du serveur : le jeu s'installe quand même.
+    let text = format!(
+        "format_version = 1\n[game]\nid = \"{GAME}\"\nname = \"Jeu\"\nap_game = \"Jeu AP\"\n\
+         status = \"available\"\n[credits]\nauthors = [\"x\"]\nlicense = \"MIT\"\n\
+         [[steps]]\nid = \"loader\"\nkind = \"mod\"\nname = \"M\"\nversion = \"1\"\n\
+         source = {{ url = \"{URL}\" }}\nsha256 = \"{sha}\"\n\
+         install = {{ extract = \"zip\", into = \"{{game_dir}}\" }}\n\
+         [launch]\nexe = \"{{game_dir}}/Jeu.exe\"\n\
+         connect = {{ method = \"manual\", instructions = \"x\" }}\n\
+         [art]\ncover = {{ url = \"{cover_url}\", sha256 = \"{}\" }}\n",
+        Sha256::of_bytes(jpeg)
+    );
+    let profile = Profile::parse(&format!("{GAME}.toml"), &text).unwrap();
+    let dl = downloader(&env, &[(URL, &zip), (cover_url, &cover)]);
+    let report = run(&env, &profile, &dl, false).unwrap();
+    assert_eq!(report.art_installed, 1);
+    let installed = env.paths.art_dir(GAME).join("cover.jpg");
+    assert_eq!(fs::read(installed).unwrap(), jpeg);
+
+    // Une image de mauvaise empreinte n'est pas rangée, et l'installation réussit.
+    let env2_text = text.replace(&Sha256::of_bytes(jpeg).to_string(), &sha.to_string());
+    let bad = Profile::parse(&format!("{GAME}.toml"), &env2_text).unwrap();
+    fs::remove_dir_all(env.paths.art_dir(GAME)).unwrap();
+    let report = run(&env, &bad, &dl, false).unwrap();
+    assert!(report.already_up_to_date);
+    assert_eq!(report.art_installed, 0);
+    assert!(!env.paths.art_dir(GAME).join("cover.jpg").exists());
+}
+
+/// Une image hors des domaines permis est refusée à la lecture du profil.
+#[test]
+fn image_hors_liste_blanche_refusee() {
+    let text = format!(
+        "format_version = 1\nsteps = []\n[game]\nid = \"{GAME}\"\nname = \"Jeu\"\nap_game = \"Jeu AP\"\n\
+         status = \"available\"\n[credits]\nauthors = [\"x\"]\nlicense = \"MIT\"\n\
+         [launch]\nexe = \"{{game_dir}}/Jeu.exe\"\n\
+         connect = {{ method = \"manual\", instructions = \"x\" }}\n\
+         [art]\nhero = {{ url = \"https://exemple.com/hero.jpg\", sha256 = \"{}\" }}\n",
+        Sha256::of_bytes(b"x")
+    );
+    let error = Profile::parse(&format!("{GAME}.toml"), &text).unwrap_err();
+    assert!(error.to_string().contains("art.hero"), "{error}");
+}

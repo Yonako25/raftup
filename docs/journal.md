@@ -744,3 +744,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : étape E (clic droit, raccourcis) si l'utilisatrice le veut ; relire la proposition d'ADR du salon par le Rafthub.
 
+
+### 2026-11-22 · Images du créateur à la place d'IGDB
+- **Fait** : ADR 0051 (remplace 0047) : section `[art]` des profils (jaquette et image large du créateur, url + sha256), téléchargées et vérifiées à l'installation dans `art/<jeu>/` ; affichage sans réseau : image installée, sinon cache local de Steam, sinon jaquette dessinée ; préchargement au démarrage ; client IGDB, attribution et `igdb_id` des profils retirés du launcher (tests `launcher-core/tests/art.rs` et `hub/tests/launcher_art.rs` supprimés). fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : rendu réel avec les images Steam du PC (Slime Rancher, Planet Crafter) dans la fenêtre ; aucun profil n'a encore de section `[art]` ; registre : un jeu ajouté par le registre n'a pas d'appid Steam pour les images.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : regarder le launcher à l'œil avec les images Steam, puis retirer les routes `/v1/art` et la clé IGDB du hub.

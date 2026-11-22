@@ -14,7 +14,6 @@ id = "stardew-valley"
 name = "Stardew Valley"
 ap_game = "Stardew Valley"         # vérifié : STARDEW_VALLEY = "Stardew Valley" dans worlds/stardew_valley/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 17000                    # vérifié : hub.raftup-games.com/v1/art/steam/413150 → igdb_id 17000
 
 [game.detect]
 steam_appid = 413150               # vérifié : API du Steam Store, appid 413150 = « Stardew Valley »

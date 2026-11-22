@@ -107,4 +107,10 @@ impl Paths {
     pub fn native_worlds_dir(&self) -> PathBuf {
         self.data_dir.join("mondes-natifs")
     }
+
+    /// Images d'un jeu choisies par le créateur du world (ADR 0051), rangées à
+    /// l'installation. `game_id` est déjà validé par le profil (a-z, 0-9, « - »).
+    pub fn art_dir(&self, game_id: &str) -> PathBuf {
+        self.data_dir.join("art").join(game_id)
+    }
 }

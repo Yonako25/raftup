@@ -107,7 +107,7 @@ pub fn dev_open_salon(state: &mut RunningState) {
     state.tab = TAB_SALON;
 }
 
-/// Jaquettes des jeux de la partie, par nom de jeu chez Archipelago (ADR 0047).
+/// Jaquettes des jeux de la partie, par nom de jeu chez Archipelago (ADR 0051).
 type Covers = BTreeMap<String, TextureHandle>;
 
 /// `library` : la Bibliothèque, qui connaît les jeux du catalogue et leurs
@@ -228,7 +228,7 @@ fn hero(
     confirm_stop: &mut bool,
     banner: Option<&TextureHandle>,
 ) -> bool {
-    // Image large du jeu en fond du bandeau (ADR 0047). Sa place est réservée AVANT le
+    // Image large du jeu en fond du bandeau (ADR 0051). Sa place est réservée AVANT le
     // cadre : elle sera dessinée sous lui, une fois la taille du cadre connue.
     let background = ui.painter().add(egui::Shape::Noop);
     // Avec une image, le cadre devient un voile sombre : le texte reste lisible.
@@ -356,7 +356,7 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
 }
 
 /// Petite jaquette (40 px) du jeu d'un slot : l'illustration du hub si elle est
-/// arrivée (ADR 0047), sinon l'aplat avec les initiales du jeu.
+/// arrivée (ADR 0051), sinon l'aplat avec les initiales du jeu.
 fn game_cover(ui: &mut Ui, slot: &SlotStatus, covers: &Covers) {
     super::library::small_cover_with(ui, 40.0, &slot.game, &slot.game, covers.get(&slot.game));
 }

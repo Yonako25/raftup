@@ -26,7 +26,7 @@ use std::time::{Duration, Instant};
 
 use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
-use launcher_core::art::{ArtImage, ArtKind};
+use launcher_core::art::ArtKind;
 use launcher_core::{GameEvent, HostStatus, NumberedEvent, SeedSummary, ServerStatus, SlotStatus};
 
 use super::bibliotheque::{bibliotheque, bibliotheque_with};
@@ -116,21 +116,16 @@ fn demo_jpeg(width: u32, height: u32, color: [u8; 3]) -> Vec<u8> {
     bytes
 }
 
-/// Faux hub : une jaquette (528 × 748) et une image large (1280 × 720) de démonstration,
-/// pour tout jeu demandé.
+/// Fausse source : une jaquette (528 × 748) et une image large (1280 × 720) de
+/// démonstration, pour tout jeu demandé.
 fn demo_art() -> Artwork {
     let cover = demo_jpeg(528, 748, [76, 154, 255]);
     let hero = demo_jpeg(1280, 720, [167, 139, 250]);
-    let loader: Loader = Arc::new(move |_reference, kind| {
-        let bytes = match kind {
+    let loader: Loader = Arc::new(move |_game_id: &str, kind: ArtKind| {
+        Some(match kind {
             ArtKind::Cover => cover.clone(),
             ArtKind::Hero => hero.clone(),
-        };
-        Ok(Some(ArtImage {
-            bytes,
-            attribution: "IGDB.com (démonstration)".to_string(),
-            attribution_url: String::new(),
-        }))
+        })
     });
     Artwork::with_loader(loader)
 }

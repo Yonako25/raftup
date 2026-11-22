@@ -29,7 +29,6 @@ id = "hollow-knight"
 name = "Hollow Knight"
 ap_game = "Hollow Knight"          # vérifié : game: str = "Hollow Knight" dans worlds/hk/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 14593                    # vérifié : hub.raftup-games.com/v1/art/steam/367520 → igdb_id 14593
 # seconds_per_location : non renseigné (120 s par défaut), à mesurer en vraie partie.
 
 [game.detect]

@@ -28,7 +28,6 @@ id = "blasphemous"
 name = "Blasphemous"
 ap_game = "Blasphemous"            # vérifié : game = "Blasphemous" dans worlds/blasphemous/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 26820                    # vérifié : hub.raftup-games.com/v1/art/steam/774361 → igdb_id 26820
 
 [game.detect]
 steam_appid = 774361               # vérifié : API du Steam Store, appid 774361 = « Blasphemous » (type game)

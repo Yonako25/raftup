@@ -22,7 +22,6 @@ id = "bomb-rush-cyberfunk"
 name = "Bomb Rush Cyberfunk"
 ap_game = "Bomb Rush Cyberfunk"    # vérifié : game = "Bomb Rush Cyberfunk" dans worlds/bomb_rush_cyberfunk/__init__.py (0.6.8)
 status = "untested"
-igdb_id = 135940                   # vérifié : hub.raftup-games.com/v1/art/steam/1353230 → igdb_id 135940 ; l'appid suffit déjà, champ facultatif
 
 [game.detect]
 steam_appid = 1353230              # vérifié : API du Steam Store, appid 1353230 = « Bomb Rush Cyberfunk » (type game)

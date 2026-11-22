@@ -19,10 +19,9 @@ use launcher_core::{
     Downloader, GameState, HttpFetcher, InstallOptions, InstallStatus, Paths, Profile, Store,
 };
 
-use launcher_core::art::{ArtKind, ArtRef};
+use launcher_core::art::{ArtKind, ArtSources};
 
 use crate::toasts::ToastKind;
-use launcher_core::hub_client::HubUrl;
 
 use super::native_panel::{self, NativeState};
 use super::registry_panel::{self, RegistryPanel, Targets};
@@ -122,17 +121,22 @@ pub struct LibraryState {
     running: RunningGames,
     /// Mondes natifs de `mondes-natifs/` (ADR 0046).
     native: NativeState,
-    /// Illustrations des jeux venues du hub (ADR 0047).
+    /// Illustrations des jeux, lues sur le disque (ADR 0051).
     pub(crate) art: Artwork,
+    /// Vrai une fois toutes les images du catalogue demandées (au démarrage).
+    art_preloaded: bool,
 }
 
 impl LibraryState {
     /// Charge le catalogue embarqué et les dossiers de Raftup. Une erreur est gardée
     /// en texte pour être affichée : l'écran s'ouvre quand même.
     pub fn new() -> LibraryState {
+        let catalog = load_catalog();
+        let paths = load_paths();
+        let art = local_artwork(&catalog, &paths);
         LibraryState {
-            catalog: load_catalog(),
-            paths: load_paths(),
+            catalog,
+            paths,
             scan: None,
             scanning: None,
             selected: None,
@@ -147,7 +151,8 @@ impl LibraryState {
             rescan_pending: false,
             running: RunningGames::new(),
             native: NativeState::new(),
-            art: Artwork::new(),
+            art,
+            art_preloaded: false,
             detail_since: (None, std::time::Instant::now()),
             fade: true,
             toasts_out: Vec::new(),
@@ -176,18 +181,12 @@ impl LibraryState {
             running: RunningGames::new(),
             native: NativeState::new(),
             art: Artwork::new(),
+            art_preloaded: false,
             detail_since: (None, std::time::Instant::now()),
             // Pas de fondu dans les tests : les images de référence doivent être nettes.
             fade: false,
             toasts_out: Vec::new(),
         }
-    }
-
-    /// Hub d'où viennent les illustrations (celui de « Amis »). `None` : aplats seuls.
-    /// Le cache disque va dans le dossier de cache de Raftup.
-    pub fn set_hub(&mut self, hub: Option<&HubUrl>) {
-        let cache = self.paths.as_ref().ok().map(|p| p.cache_dir.clone());
-        self.art.set_hub(hub, cache.as_deref());
     }
 
     /// Dossier des mondes natifs, si les dossiers de Raftup sont connus.
@@ -258,28 +257,32 @@ impl LibraryState {
             self.start_scan(ctx);
         }
         self.poll(ctx);
-        // Illustrations arrivées du hub : rangées quel que soit l'écran affiché.
+        // Au démarrage, toutes les images du catalogue sont demandées d'un coup : elles
+        // sont prêtes avant qu'on ouvre la Bibliothèque ou le Catalogue.
+        if !std::mem::replace(&mut self.art_preloaded, true) {
+            let ids: Vec<String> = self.summaries().into_iter().map(|g| g.id).collect();
+            for id in ids {
+                for kind in ArtKind::ALL {
+                    let _ = self.art.texture(ctx, &id, kind);
+                }
+            }
+        }
+        // Images lues : rangées quel que soit l'écran affiché.
         self.art.poll(ctx);
         // Le registre aussi : ses mondes sont montrés dans le Catalogue.
         poll_registry(self, ctx);
     }
 
-    /// Illustration d'un jeu du catalogue (ADR 0047), par son identifiant : la
-    /// jaquette (`Cover`) ou l'image large (`Hero`). `None` tant qu'elle n'est pas
-    /// arrivée, ou sans hub : l'écran garde alors son aplat coloré.
+    /// Illustration d'un jeu (ADR 0051), par son identifiant : la jaquette (`Cover`)
+    /// ou l'image large (`Hero`). `None` tant qu'elle n'est pas lue, ou s'il n'y en a
+    /// pas : l'écran dessine alors sa propre jaquette.
     pub fn art_for(
         &mut self,
         ctx: &egui::Context,
         game_id: &str,
         kind: ArtKind,
     ) -> Option<egui::TextureHandle> {
-        let reference = self
-            .catalog
-            .as_ref()
-            .ok()
-            .and_then(|c| c.get(game_id))
-            .and_then(ArtRef::of);
-        self.art.texture(ctx, reference, kind)
+        self.art.texture(ctx, game_id, kind)
     }
 
     /// Comme [`LibraryState::art_for`], par le nom du jeu chez Archipelago (le `game`
@@ -300,13 +303,6 @@ impl LibraryState {
             .id
             .clone();
         self.art_for(ctx, &id, kind)
-    }
-
-    /// Attribution des illustrations à montrer (IGDB), dès qu'une image est arrivée.
-    pub fn art_attribution(&self) -> Option<(String, String)> {
-        self.art
-            .attribution()
-            .map(|(text, url)| (text.to_string(), url.to_string()))
     }
 
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
@@ -477,6 +473,24 @@ pub(crate) fn dev_catalog(dir: &Path) -> Result<Catalog, String> {
         .map(|(n, t)| (n.as_str(), t.as_str()))
         .collect();
     Catalog::from_texts(&borrowed).map_err(|e| e.to_string())
+}
+
+/// Illustrations lues sur ce PC (ADR 0051) : images du créateur installées dans les
+/// dossiers de Raftup, sinon celles que Steam garde pour chaque jeu du catalogue.
+fn local_artwork(catalog: &Result<Catalog, String>, paths: &Result<Paths, String>) -> Artwork {
+    let appids = catalog
+        .as_ref()
+        .map(|c| {
+            c.games()
+                .filter_map(|p| Some((p.game.id.clone(), p.game.detect.steam_appid?)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let sources = ArtSources {
+        paths: paths.as_ref().ok().cloned(),
+        steam_dir: DetectionRoots::from_system().steam_dir,
+    };
+    Artwork::local(sources, appids)
 }
 
 /// Les vrais dossiers de Raftup ou, en debug, ceux sous `RAFTUP_DEV_RACINE`.
@@ -798,7 +812,10 @@ impl LibraryState {
             }
         }
         if finished {
-            self.task = None;
+            // Les images du créateur viennent peut-être d'être installées : relues.
+            if let Some(task) = self.task.take() {
+                self.art.forget(&task.game_id);
+            }
             // Le reçu a pu changer : on relit l'état des jeux.
             self.start_scan(ctx);
         }
@@ -1304,10 +1321,8 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
         let selected = state.selected.as_deref() == Some(id.as_str());
         let busy = state.task.as_ref().filter(|t| &t.game_id == id);
         let from_registry = state.registry.is_from_registry(id);
-        // Jaquette du hub si elle est prête, sinon l'aplat (ADR 0047).
-        let cover = state
-            .art
-            .texture(ui.ctx(), ArtRef::of(profile), ArtKind::Cover);
+        // Jaquette du créateur ou de Steam si elle est prête, sinon la jaquette dessinée.
+        let cover = state.art.texture(ui.ctx(), id, ArtKind::Cover);
         let look = card_look(profile, &view, busy, from_registry, cover);
         cards.push((look, selected, CardTarget::Game(id.clone())));
     }
@@ -1322,7 +1337,7 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
             // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
             fraction: 1.0,
             marker: Some((native_panel::MARKER, theme::ACCENT)),
-            // Un monde natif n'a pas d'identifiant IGDB : il garde son aplat.
+            // Un monde natif n'a pas encore d'images : il garde sa jaquette dessinée.
             cover: None,
         };
         cards.push((look, selected, CardTarget::Native(world.key.clone())));
@@ -1347,11 +1362,6 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
             });
         }
     });
-    // Attribution demandée par IGDB, dès qu'une illustration est à l'écran.
-    if let Some((text, url)) = state.art.attribution() {
-        ui.add_space(6.0);
-        attribution_line(ui, text, url);
-    }
     match clicked {
         Some(CardTarget::Game(id)) => {
             if state.selected.as_ref() != Some(&id) {
@@ -1385,7 +1395,7 @@ pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
     small_cover_with(ui, size, game_id, name, None);
 }
 
-/// Comme [`small_cover`], avec la jaquette du hub (ADR 0047) quand elle est prête :
+/// Comme [`small_cover`], avec la jaquette du jeu (ADR 0051) quand elle est prête :
 /// découpée au centre pour tenir dans le carré.
 pub(super) fn small_cover_with(
     ui: &mut Ui,
@@ -1429,8 +1439,8 @@ fn hero_height(width: f32, has_image: bool) -> f32 {
 }
 
 /// Bandeau en haut de la fiche du jeu, sur toute la largeur du panneau :
-/// l'image large venue du hub (ADR 0047) si elle est prête ; sinon (pas de hub,
-/// jeu inconnu d'IGDB, image pas encore arrivée) un aplat de la teinte du jeu,
+/// l'image large du jeu (ADR 0051) si elle est prête ; sinon (aucune image
+/// installée ni chez Steam, image pas encore lue) un aplat de la teinte du jeu,
 /// avec son titre, comme les jaquettes de la grille.
 pub(super) fn hero_banner(
     ui: &mut Ui,
@@ -1505,19 +1515,6 @@ fn card_look<'a>(
     }
 }
 
-/// « Illustrations : IGDB.com », avec le lien vers la page du jeu chez IGDB.
-pub(super) fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        ui.label(widgets::dim("Illustrations :").size(12.0));
-        if url.is_empty() {
-            ui.label(widgets::dim(text).size(12.0));
-        } else {
-            ui.hyperlink_to(RichText::new(text).size(12.0), url);
-        }
-    });
-}
-
 /// Ce qu'une carte de la grille affiche (jeu du catalogue ou monde natif).
 pub(super) struct CardLook<'a> {
     /// Identifiant qui choisit la teinte de la jaquette.
@@ -1529,7 +1526,7 @@ pub(super) struct CardLook<'a> {
     pub(super) fraction: f32,
     /// Marqueur en petites capitales sous l'état (« Registre », « Monde natif »).
     pub(super) marker: Option<(&'a str, Color32)>,
-    /// Jaquette venue du hub (ADR 0047) ; `None` : l'aplat coloré avec le titre.
+    /// Jaquette du jeu (ADR 0051) ; `None` : l'aplat coloré avec le titre.
     pub(super) cover: Option<egui::TextureHandle>,
 }
 
@@ -1547,7 +1544,7 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
         .vertical(|ui| {
             ui.set_width(WIDTH);
             ui.spacing_mut().item_spacing.y = 6.0;
-            // La jaquette : l'illustration venue du hub (IGDB, ADR 0047) si elle est
+            // La jaquette : l'illustration du jeu (ADR 0051) si elle est
             // prête ; sinon un aplat coloré avec le titre du jeu, dont la teinte dépend
             // de l'identifiant du jeu.
             let (slot, cover_response) = ui.allocate_exact_size(COVER, Sense::hover());
@@ -1710,11 +1707,10 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
     let status = state.scan.as_ref().and_then(|s| s.status.get(&id)).cloned();
     let view = view(&profile, found.as_ref(), status.as_ref());
     let busy = state.task.is_some();
-    // Illustrations du hub (ADR 0047) : image large en haut de la fiche, jaquette à
-    // côté du titre. Absentes : un aplat en haut, et l'aplat avec les initiales.
-    let reference = ArtRef::of(&profile);
-    let cover = state.art.texture(ctx, reference, ArtKind::Cover);
-    let hero = state.art.texture(ctx, reference, ArtKind::Hero);
+    // Illustrations (ADR 0051) : image large en haut de la fiche, jaquette à côté du
+    // titre. Absentes : un aplat en haut, et l'aplat avec les initiales.
+    let cover = state.art.texture(ctx, &id, ArtKind::Cover);
+    let hero = state.art.texture(ctx, &id, ArtKind::Hero);
 
     widgets::panel(ui, "", |ui| {
         hero_banner(ui, hero.as_ref(), &profile.game.id, &profile.game.name);

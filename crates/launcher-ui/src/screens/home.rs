@@ -204,11 +204,6 @@ pub fn show(
             });
             ui.add_space(12.0);
         }
-
-        if let Some((text, url)) = library.art_attribution() {
-            ui.add_space(6.0);
-            super::library::attribution_line(ui, &text, &url);
-        }
     });
     goto
 }
