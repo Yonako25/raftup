@@ -118,7 +118,7 @@ pub fn pill(ui: &mut Ui, text: &str, fg: Color32, bg: Color32) {
     let size = galley.size() + egui::vec2(20.0, 8.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
     // Texte peint à la main : on donne son nom pour un lecteur d'écran (et les tests).
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text));
     let painter = ui.painter();
     painter.rect_filled(rect, CornerRadius::same(theme::RADIUS), bg);
     let text_pos = rect.center() - galley.size() / 2.0;
