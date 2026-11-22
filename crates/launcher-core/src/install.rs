@@ -22,7 +22,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use crate::archive::{extract_zip, plan_zip, safe_relative_path, ArchiveLimits};
+use crate::archive::{extract_entry, extract_zip, plan_zip, safe_relative_path, ArchiveLimits};
 use crate::download::{DownloadError, Downloader};
 use crate::hash::Sha256;
 use crate::paths::Paths;
@@ -378,19 +378,35 @@ pub fn install(
     let limits = ArchiveLimits::default();
     let mut planned = Vec::new();
     for (step, archive) in profile.steps.iter().zip(archives) {
-        let (base, into_rel, files) = match &step.install {
-            InstallAction::Extract { into, strip_prefix } => {
+        let (base, into_rel, files, archive) = match &step.install {
+            InstallAction::Extract {
+                into,
+                strip_prefix,
+                inner,
+            } => {
                 let (base, into_rel) = resolve_target(into, game_dir, &worlds_dir)?;
+                // Archive dans l'archive (ADR 0050) : on sort l'archive intérieure à côté
+                // du fichier téléchargé, puis on la traite comme l'archive de l'étape.
+                let archive = match inner {
+                    Some(name) => {
+                        let mut inner_name = archive.as_os_str().to_os_string();
+                        inner_name.push(".inner.zip");
+                        let inner_path = PathBuf::from(inner_name);
+                        extract_entry(&archive, name, &inner_path, &limits)?;
+                        inner_path
+                    }
+                    None => archive,
+                };
                 let files = plan_zip(&archive, strip_prefix, &limits)?
                     .into_iter()
                     .map(|f| into_rel.join(f))
                     .collect();
-                (base, into_rel, files)
+                (base, into_rel, files, archive)
             }
             InstallAction::CopyTo(target) => {
                 let (base, rel) = resolve_target(target, game_dir, &worlds_dir)?;
                 let parent = rel.parent().map(Path::to_path_buf).unwrap_or_default();
-                (base, parent, vec![rel])
+                (base, parent, vec![rel], archive)
             }
         };
         planned.push(PlannedStep {

@@ -1,0 +1,87 @@
+# Bomb Rush Cyberfunk (mod BRC-Archipelago de TRPG), écrit le 2026-11-22, jamais essayé en vrai
+# (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/bomb_rush_cyberfunk). Le guide officiel
+# (docs/setup_en.md, tag 0.6.8) propose r2modman (paquet Thunderstore TRPG/BRC_Archipelago) ou
+# une installation à la main : BepInEx 5.4.22 x64, ModLocalizer.dll et le mod dans BepInEx\plugins.
+# Choix du profil : les paquets Thunderstore, avec les dépendances que déclare
+# TRPG-BRC_Archipelago 1.0.6 sur l'API Thunderstore (BepInExPack 5.4.2100, ModLocalizer 1.0.1),
+# comme le ferait r2modman. À vérifier : le guide manuel demande BepInEx 5.4.22, alors que la
+# dépendance déclarée est BepInExPack 5.4.2100 (BepInEx 5.4.21) ; si elle pose problème,
+# BepInEx 5.4.22 se prend sur github.com/BepInEx/BepInEx (tag v5.4.22, nom du fichier à
+# confirmer par un téléchargement).
+# Mods facultatifs conseillés par le guide (MoreMap, FasterLoadTimes, CutsceneSkip…) : non installés.
+# À vérifier : le mod annonce la version 0.6.6 du protocole (Multiworld.cs) ; marche avec un
+# serveur 0.6.8 a priori, mais pas essayé.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-22 (thunderstore.io redirige vers
+# ccdn.thunderstore.io, en HTTPS).
+
+format_version = 1
+
+[game]
+id = "bomb-rush-cyberfunk"
+name = "Bomb Rush Cyberfunk"
+ap_game = "Bomb Rush Cyberfunk"    # vérifié : game = "Bomb Rush Cyberfunk" dans worlds/bomb_rush_cyberfunk/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 135940                   # vérifié : hub.raftup-games.com/v1/art/steam/1353230 → igdb_id 135940 ; l'appid suffit déjà, champ facultatif
+
+[game.detect]
+steam_appid = 1353230              # vérifié : API du Steam Store, appid 1353230 = « Bomb Rush Cyberfunk » (type game)
+expected_exe = "Bomb Rush Cyberfunk.exe" # vérifié : exeNames du schéma d'écosystème Thunderstore (utilisé par r2modman)
+
+[credits]
+authors = [
+  "TRPG / Trevor L (BRC-Archipelago, MIT)",
+  "TRPG / Trevor L (ModLocalizer, MIT)",
+  "bbepis et l'équipe BepInEx (BepInExPack, LGPL-2.1)",
+]
+# Vérifié : LICENSE (MIT) de github.com/TRPG0/BRC-Archipelago et de github.com/TRPG0/BRC-ModLocalizer ;
+# BepInEx : LGPL-2.1 (même paquet générique que pour Risk of Rain 2, licence de BepInEx/BepInEx).
+# Le zip du mod embarque aussi Archipelago.MultiClient.Net.dll (MIT, non relu ici).
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "bepinexpack"
+kind = "mod_loader"
+name = "BepInExPack"
+version = "5.4.2100"               # vérifié : dépendance déclarée par TRPG-BRC_Archipelago 1.0.6 et TRPG-ModLocalizer 1.0.1
+source = { thunderstore = "BepInEx-BepInExPack" }
+sha256 = "0792b04ac18a70948acfaa2fa9005724809c14538a5a17b765fde2b626f6c710"
+max_bytes = 5000000                # fichier : 649 108 octets
+# Le zip contient BepInExPack/winhttp.dll (PE32+ x86-64, vérifié par file),
+# BepInExPack/doorstop_config.ini et BepInExPack/BepInEx/{config,core}/… (vérifié par unzip -l) ;
+# icon.png, manifest.json, README.md hors préfixe sont ignorés.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "BepInExPack/" }
+
+[[steps]]
+id = "modlocalizer"
+kind = "mod"
+name = "ModLocalizer"
+version = "1.0.1"                  # vérifié : dernière version sur l'API Thunderstore (2024-02-28), demandée par le mod
+source = { thunderstore = "TRPG-ModLocalizer" }
+sha256 = "0c27b72940e8a9a57549f92db5be51622436bdb5c155f3b27d65c1ea40260c2c"
+max_bytes = 1000000                # fichier : 15 023 octets
+# Le zip a ses fichiers à la racine (ModLocalizer.dll, manifest.json, README.md, CHANGELOG.md,
+# icon.png, vérifié) → un dossier à lui, comme r2modman.
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins/TRPG-ModLocalizer", strip_prefix = "" }
+
+[[steps]]
+id = "brc-archipelago"
+kind = "mod"
+name = "Archipelago (Bomb Rush Cyberfunk)"
+version = "1.0.6"                  # vérifié : dernière version sur l'API Thunderstore (2026-03-23) et dernier tag de TRPG0/BRC-Archipelago ; compatibilité avec 0.6.8 à vérifier
+source = { thunderstore = "TRPG-BRC_Archipelago" }
+sha256 = "88854ccf6961fd606aa91eaca5b2b09a0a9d45014ce062e317da7e2282447a07"
+max_bytes = 2000000                # fichier : 280 283 octets
+# Le zip contient plugins/Archipelago.dll, plugins/Archipelago.MultiClient.Net.dll et
+# plugins/Languages/{English,French}.fods (vérifié) → un dossier à lui, comme r2modman.
+# Le mod cherche Languages/ à côté de sa dll (Core.cs : Path.Combine(assemblyPath, "Languages")).
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins/TRPG-BRC_Archipelago", strip_prefix = "plugins/" }
+
+# Pas de [preserve] : le mod garde ses données (archipelago<n>.json) dans le dossier des
+# sauvegardes du jeu (SaveManager.cs), pas dans le dossier du jeu.
+# Pas de [cleanup] : les fichiers créés par BepInEx en tournant restent à observer en vrai.
+
+[launch]
+exe = "{game_dir}/Bomb Rush Cyberfunk.exe"
+# Vérifié : setup_en.md (0.6.8) : boutons Archipelago à côté des sauvegardes, puis un menu.
+connect = { method = "manual", instructions = "Sur l'écran des sauvegardes, clique sur un bouton Archipelago à côté d'une sauvegarde vide : entre l'adresse ({host}) et le port ({port}), ton nom ({slot}) et le mot de passe si besoin, puis clique sur la coche." }

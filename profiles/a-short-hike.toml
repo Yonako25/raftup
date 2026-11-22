@@ -1,0 +1,75 @@
+# A Short Hike (Randomizer de BrandenEK et Chandler), écrit le 2026-11-22, jamais essayé en
+# vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/shorthike). Le guide officiel (docs/setup_en.md,
+# tag 0.6.8) renvoie aux README de BrandenEK/AShortHike.Randomizer et
+# BrandenEK/AShortHike.Modding.Installer. Installation manuelle sous Windows
+# (docs/install/ash_windows.md de l'installateur) : outils de modding à la racine du jeu,
+# puis chaque mod extrait dans le dossier « Modding ». Dépendances : ShortHikeMods.json de
+# l'installateur (Randomizer → Modding API).
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-22.
+
+format_version = 1
+
+[game]
+id = "a-short-hike"
+name = "A Short Hike"
+ap_game = "A Short Hike"           # vérifié : game = "A Short Hike" dans worlds/shorthike/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 116753                   # vérifié : hub.raftup-games.com/v1/art/steam/1055540 → igdb_id 116753
+
+[game.detect]
+steam_appid = 1055540              # vérifié : store.steampowered.com/app/1055540 → « A Short Hike »
+expected_exe = "AShortHike.exe"    # vérifié : Core.cs de l'installateur de BrandenEK cherche « AShortHike.exe »
+
+[credits]
+authors = [
+  "BrandenEK (Damocles) et Chandler (Randomizer, MIT)",
+  "BrandenEK (Modding API, MIT ; outils de modding)",
+  "équipe BepInEx (BepInEx et Doorstop, LGPL-2.1)",
+]
+# Vérifié : LICENSE.md (MIT) du Randomizer et de la Modding API. Le dépôt des outils de modding
+# n'a pas de fichier de licence (ADR 0050) ; il regroupe BepInEx et Doorstop (LGPL-2.1) et
+# Newtonsoft.Json (MIT).
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "modding-tools"
+kind = "mod_loader"
+name = "Outils de modding (BepInEx)"
+version = "2.0.0"                  # vérifié : modding-tools-windows.version au commit 940bcde
+# Fichier versionné dans le dépôt (pas de release) : URL épinglée sur le commit, pour que le
+# sha256 ne change jamais. github.com redirige vers raw.githubusercontent.com.
+source = { url = "https://github.com/BrandenEK/AShortHike.ModdingTools/raw/940bcde3ae10245f76d58f13783e0fd07355ea69/modding-tools-windows.zip" }
+sha256 = "695673a5a6c4532c3a724ea428adb8b41d24d809b12d2e24d0b90b96277501c4"
+max_bytes = 5000000                # fichier : 880 285 octets
+# Le zip contient winhttp.dll, doorstop_config.ini, BepInEx/…, Modding/ et
+# AShortHike_Data/Managed/Newtonsoft.Json.dll à la racine (vérifié par unzip -l) ; un fichier du
+# jeu remplacé est sauvegardé puis restauré à la désinstallation.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "modding-api"
+kind = "mod"
+name = "Modding API"
+version = "1.0.1"                  # vérifié : dernier tag de BrandenEK/AShortHike.ModdingAPI
+source = { url = "https://github.com/BrandenEK/AShortHike.ModdingAPI/releases/download/1.0.1/ModdingAPI.zip" }
+sha256 = "ed633cbc4c3a62d58aae3bb8455372486d17941d80827992863271d9158dec22"
+max_bytes = 1000000                # fichier : 9 536 octets
+# Le zip contient plugins/ModdingAPI.dll (vérifié) → Modding/plugins/.
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "randomizer"
+kind = "mod"
+name = "Randomizer (Archipelago)"
+version = "1.5.1"                  # vérifié : dernier tag de BrandenEK/AShortHike.Randomizer ; compatibilité avec 0.6.8 à vérifier
+source = { url = "https://github.com/BrandenEK/AShortHike.Randomizer/releases/download/1.5.1/Randomizer.zip" }
+sha256 = "d562b0db50747dfd54da5b1aa36a7245d8d439da0a30004d67538b34c117892c"
+max_bytes = 2000000                # fichier : 88 865 octets
+# Le zip contient plugins/Randomizer.dll et data/… (vérifié) → Modding/.
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[launch]
+exe = "{game_dir}/AShortHike.exe"
+# Vérifié : setup_en.md (0.6.8) : une fenêtre demande la connexion au début de chaque partie.
+connect = { method = "manual", instructions = "Lance une partie : une fenêtre demande l'adresse ({host}, port {port}), le nom ({slot}) et le mot de passe si besoin, puis valide." }

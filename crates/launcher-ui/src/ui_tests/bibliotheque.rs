@@ -214,3 +214,45 @@ fn hub_sans_image_ou_en_panne_aplat_garde() {
         assert_eq!(asked.load(Ordering::SeqCst), 2);
     }
 }
+
+/// Bug vu sur les captures (22 novembre 2026) : avec plusieurs jeux, les cartes
+/// restaient sur une seule rangée qui débordait à droite et poussait la fiche hors de
+/// l'écran. Avec tout le catalogue embarqué, chaque carte et la fiche tiennent dans la
+/// largeur de l'écran.
+#[test]
+fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = launcher_core::Catalog::embedded().unwrap();
+    let names: Vec<String> = catalog.games().map(|p| p.game.name.clone()).collect();
+    assert!(names.len() >= 4, "le test a besoin de plusieurs jeux");
+    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), scan_ready());
+    let state = Bibliotheque {
+        library,
+        shared: Shared::default(),
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Bibliotheque| {
+            library::show(ui, &mut s.library, &s.shared, None);
+        },
+        state,
+    );
+    harness.run();
+    let right_edge = super::CENTRAL.x;
+    for name in &names {
+        for node in harness.query_all_by_label(name) {
+            assert!(
+                node.rect().right() <= right_edge,
+                "« {name} » dépasse le bord droit : {:?}",
+                node.rect()
+            );
+        }
+    }
+    // La fiche du jeu choisi est à l'écran.
+    assert!(shows(&harness, "PROFIL D'INSTALLATION"));
+    let profile = harness.get_by_label("PROFIL D'INSTALLATION").rect();
+    assert!(
+        profile.right() <= right_edge,
+        "fiche hors de l'écran : {profile:?}"
+    );
+}

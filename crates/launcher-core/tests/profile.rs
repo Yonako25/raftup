@@ -57,7 +57,7 @@ fn profil_valide_complet() {
     assert_eq!(p.steps[0].max_bytes_or_default(), 50_000_000);
     assert!(matches!(
         &p.steps[0].install,
-        InstallAction::Extract { into, strip_prefix } if into == "{game_dir}" && strip_prefix.is_empty()
+        InstallAction::Extract { into, strip_prefix, inner: None } if into == "{game_dir}" && strip_prefix.is_empty()
     ));
     assert!(matches!(&p.steps[1].install, InstallAction::CopyTo(c) if c.ends_with("LeMod.dll")));
     assert_eq!(p.preserve.paths.len(), 1);
@@ -297,4 +297,30 @@ fn refuse_install_ambigu() {
         "install = { copy_to = \"{game_dir}/x\", into = \"{game_dir}\" }",
     ));
     assert_toml_error(&edit("extract = \"zip\"", "extract = \"rar\""));
+}
+
+/// `inner` (ADR 0050) : chemin d'une archive dans l'archive ; un chemin dangereux est refusé.
+#[test]
+fn archive_interieure_et_chemin_refuse() {
+    let with_inner = VALID.replacen(
+        "install = { extract = \"zip\", into = \"{game_dir}\", strip_prefix = \"\" }",
+        "install = { extract = \"zip\", inner = \"x/install.dat\", into = \"{game_dir}\", strip_prefix = \"\" }",
+        1,
+    );
+    assert_ne!(
+        with_inner, VALID,
+        "le profil de test a changé : adapter ce test"
+    );
+    let p = parse(&with_inner).unwrap();
+    assert!(matches!(
+        &p.steps[0].install,
+        InstallAction::Extract { inner: Some(i), .. } if i == "x/install.dat"
+    ));
+    for bad in ["../install.dat", "/abs.dat", "C:/x.dat", ""] {
+        let text = with_inner.replace("x/install.dat", bad);
+        assert!(
+            parse(&text).is_err(),
+            "inner « {bad} » aurait dû être refusé"
+        );
+    }
 }

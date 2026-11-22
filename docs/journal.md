@@ -670,3 +670,15 @@ untime2`.
 - **Pas vérifié** : capture de référence `bibliotheque.png` (Windows seulement) : le bandeau en aplat la change, elle est à refaire sous Windows ; rendu jamais regardé à l'œil.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : refaire la capture de la Bibliothèque sous Windows (`UPDATE_SNAPSHOTS`), puis fusionner.
+
+### 2026-11-22 · Profils des jeux PC d'Archipelago, lot MVP (cloud/profils-mvp)
+- **Fait** : statut `untested` (ADR 0049) ; ADR 0050 (mods sans licence acceptés pour tous, fichiers du jeu patchés par un outil de modding acceptés, champ `inner` pour une archive dans une archive) ; profils Risk of Rain 2, Hollow Knight, Stardew Valley (SMAPI par `inner`) et A Short Hike au catalogue, en `untested`, sha256 calculés sur les vrais fichiers ; catalogue des tests d'interface fixé à Slime Rancher. Tests launcher-core et launcher-ui, clippy et fmt passent.
+- **Pas vérifié** : aucun essai réel (Windows, jeux) ; versions des mods compatibles avec Archipelago 0.6.8 supposées (dernières publiées) ; dépendances de 2022 du mod RoR2.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : essayer les 4 profils sous Windows (installation, connexion, désinstallation), puis lot suivant des jeux PC.
+
+### 2026-11-22 · Profils des jeux PC, lot 2 (cloud/profils-lot-2)
+- **Fait** : 10 jeux étudiés ; profils Aquaria, Blasphemous, Bomb Rush Cyberfunk et Choo-Choo Charles ajoutés en `untested` (sha256 des vrais fichiers, validés par `Profile::parse`) ; 6 jeux bloqués, raisons dans `docs/jeux-pc-catalogue.md` (suivi des 46 jeux PC). Tests launcher-core et launcher-ui passent.
+- **Pas vérifié** : aucun essai réel ; appid Steam d'Aquaria (216250, l'API Steam ne répond pas) ; compatibilité des mods avec 0.6.8.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : décider des jeux gratuits faits pour Archipelago (ChecksFinder, Bumper Stickers, Celeste 64) et des prérequis à installer soi-même (Everest) ; puis lot 3.
