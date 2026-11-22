@@ -380,3 +380,68 @@ fn une_seule_installation_a_la_fois_par_jeu() {
     // Le verrou est libéré : une autre installation est possible.
     assert!(run(&env, &p, &dl, false).unwrap().already_up_to_date);
 }
+
+/// Archive dans une archive (ADR 0050), comme l'installateur de SMAPI : seule l'archive
+/// intérieure est extraite, puis la désinstallation remet le jeu dans son état d'origine.
+#[test]
+fn archive_interieure_installee_puis_retiree() {
+    let env = env();
+    // L'archive intérieure, puis l'extérieure qui la contient sous un nom en `.dat`.
+    let (inner, _) = make_zip(
+        &env,
+        "install.dat",
+        &[
+            ("StardewModdingAPI.exe", b"SMAPI"),
+            ("smapi-internal/a.dll", b"A"),
+        ],
+    );
+    let inner_bytes = fs::read(&inner).unwrap();
+    let (outer, sha) = make_zip(
+        &env,
+        "installer.zip",
+        &[
+            ("SMAPI installer/install on Windows.bat", b"bat"),
+            ("SMAPI installer/internal/windows/install.dat", &inner_bytes),
+        ],
+    );
+    let step = StepSpec {
+        id: "smapi",
+        version: "4.5.2",
+        url: URL.to_string(),
+        sha,
+        install: "{ extract = \"zip\", inner = \"SMAPI installer/internal/windows/install.dat\", into = \"{game_dir}\" }",
+    };
+    let p = profile(&[step], &[], "untested");
+    let dl = downloader(&env, &[(URL, &outer)]);
+    let report = run(&env, &p, &dl, false).unwrap();
+    assert_eq!(report.files_written, 2);
+    assert_eq!(
+        fs::read(env.game_dir.join("StardewModdingAPI.exe")).unwrap(),
+        b"SMAPI"
+    );
+    assert!(env.game_dir.join("smapi-internal").join("a.dll").exists());
+    // Rien de l'installateur lui-même n'arrive dans le jeu.
+    assert!(!env.game_dir.join("SMAPI installer").exists());
+
+    uninstall(&env.paths, GAME, false).unwrap();
+    assert!(!env.game_dir.join("StardewModdingAPI.exe").exists());
+    assert!(!env.game_dir.join("smapi-internal").exists());
+}
+
+/// Une archive intérieure absente fait échouer l'installation sans toucher au jeu.
+#[test]
+fn archive_interieure_absente_refusee() {
+    let env = env();
+    let (outer, sha) = make_zip(&env, "installer.zip", &[("autre.txt", b"x")]);
+    let step = StepSpec {
+        id: "smapi",
+        version: "1",
+        url: URL.to_string(),
+        sha,
+        install: "{ extract = \"zip\", inner = \"internal/install.dat\", into = \"{game_dir}\" }",
+    };
+    let p = profile(&[step], &[], "untested");
+    let dl = downloader(&env, &[(URL, &outer)]);
+    assert!(run(&env, &p, &dl, false).is_err());
+    assert_eq!(fs::read_dir(&env.game_dir).unwrap().count(), 0);
+}

@@ -11,4 +11,5 @@ Exemple commenté : `docs/SPEC.md`, section 5 ; format détaillé : `docs/adr/00
 - Jamais de jeu, de ROM ni d'asset : seulement des mods, des chargeurs de mods et des apworlds.
 - `game.seconds_per_location` (facultatif, 1 à 3600) : temps moyen d'un lieu, pour la durée estimée d'une partie (ADR 0030) ; 120 s sans lui.
 - `game.igdb_id` (facultatif) : identifiant du jeu chez IGDB. Les illustrations du hub (ADR 0047) le cherchent par là, sinon par `game.detect.steam_appid` ; à mettre seulement si l'appid donne le mauvais jeu ou si le jeu n'est pas sur Steam. Aucune image dans le dépôt.
-- Un mod sans licence demande l'autorisation écrite de son auteur (`license = "permission"` et `permission_url`).
+- Un mod sans licence est accepté (ADR 0021, étendu par l'ADR 0050) : `license = "unlicensed"`, téléchargé chez son auteur sur le PC du joueur, jamais redistribué ; retiré si l'auteur le demande. Une autorisation écrite reste possible (`license = "permission"` et `permission_url`).
+- `game.status = "untested"` : profil jamais essayé avec le vrai jeu (ADR 0049) ; il passe en `available` après un essai réel réussi.

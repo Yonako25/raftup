@@ -629,7 +629,7 @@ untime2`.
 
 
 ### 2026-11-22 · Profils des jeux PC d'Archipelago, lot MVP (cloud/profils-mvp)
-- **Fait** : statut `untested` des profils (ADR 0049, choix de l'utilisatrice) : installable, marqué « Non testé » dans la Bibliothèque et la fiche. Recherches des 4 jeux du MVP : aucun profil propre à ce jour. Tests launcher-core et launcher-ui, clippy et fmt passent.
-- **Pas vérifié** : aucun profil ajouté au catalogue (voir blocages dans la PR) ; brouillons Risk of Rain 2 et Hollow Knight gardés hors du dépôt.
+- **Fait** : statut `untested` (ADR 0049) ; ADR 0050 (mods sans licence acceptés pour tous, fichiers du jeu patchés par un outil de modding acceptés, champ `inner` pour une archive dans une archive) ; profils Risk of Rain 2, Hollow Knight, Stardew Valley (SMAPI par `inner`) et A Short Hike au catalogue, en `untested`, sha256 calculés sur les vrais fichiers ; catalogue des tests d'interface fixé à Slime Rancher. Tests launcher-core et launcher-ui, clippy et fmt passent.
+- **Pas vérifié** : aucun essai réel (Windows, jeux) ; versions des mods compatibles avec Archipelago 0.6.8 supposées (dernières publiées) ; dépendances de 2022 du mod RoR2.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
-- **Suite** : à l'utilisatrice : trancher les blocages (licence du mod RoR2, Assembly-CSharp.dll de l'API Hollow Knight, installateur de SMAPI, accès aux dépôts de A Short Hike).
+- **Suite** : à l'utilisatrice : essayer les 4 profils sous Windows (installation, connexion, désinstallation), puis lot suivant des jeux PC.

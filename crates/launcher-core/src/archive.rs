@@ -245,6 +245,45 @@ fn read_plan(
     Ok((archive, planned))
 }
 
+/// Copie l'entrée `name` de l'archive zip `file` dans le fichier `out` (ADR 0050 : archive
+/// dans une archive, comme l'installateur de SMAPI). `name` est cherché tel quel : pas de
+/// motif, pas de préfixe retiré. La taille réellement lue est bornée par
+/// `limits.max_total_bytes`, quelle que soit la taille annoncée par le zip.
+pub fn extract_entry(
+    file: &Path,
+    name: &str,
+    out: &Path,
+    limits: &ArchiveLimits,
+) -> Result<(), ArchiveError> {
+    let reader = BufReader::new(File::open(file).map_err(|source| io_error(file, source))?);
+    let mut archive = zip::ZipArchive::new(reader).map_err(|e| ArchiveError::Zip(e.to_string()))?;
+    if archive.len() > limits.max_entries {
+        return Err(ArchiveError::TooManyEntries);
+    }
+    let entry = archive
+        .by_name(name)
+        .map_err(|_| ArchiveError::Zip(format!("entrée « {name} » introuvable")))?;
+    if entry.is_dir() || entry.is_symlink() {
+        return Err(ArchiveError::Zip(format!(
+            "« {name} » n'est pas un fichier"
+        )));
+    }
+    if entry.size() > limits.max_total_bytes {
+        return Err(ArchiveError::TooLarge);
+    }
+    let output = File::create(out).map_err(|source| io_error(out, source))?;
+    let mut writer = BufWriter::new(output);
+    // `take` : on ne lit jamais plus que la limite + 1 octet, même si le zip ment.
+    let copied = io::copy(&mut entry.take(limits.max_total_bytes + 1), &mut writer)
+        .map_err(|source| io_error(out, source))?;
+    writer.flush().map_err(|source| io_error(out, source))?;
+    if copied > limits.max_total_bytes {
+        let _ = fs::remove_file(out);
+        return Err(ArchiveError::TooLarge);
+    }
+    Ok(())
+}
+
 /// Liste les fichiers qui seraient écrits (chemins relatifs, préfixe retiré), sans rien extraire.
 ///
 /// Fait les mêmes contrôles que [`extract_zip`], y compris sur la taille annoncée.
