@@ -1637,6 +1637,8 @@ fn discord_link_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<A
                 if widgets::ghost_button(ui, "Non") {
                     state.confirm_unlink = false;
                 }
+                // De droite à gauche : la question s'affiche à gauche des deux boutons.
+                ui.label(RichText::new("Délier Discord ?").color(theme::TEXT));
             } else if widgets::ghost_button(ui, "Délier Discord") {
                 state.confirm_unlink = true;
             }
@@ -1814,8 +1816,7 @@ pub fn switch_dialog(ctx: &egui::Context, state: &mut FriendsState) {
     let busy = state.busy();
     let mut confirm = false;
     let mut cancel = false;
-    // `Modal` grise le reste de la fenêtre et bloque les clics derrière la boîte.
-    let modal = egui::Modal::new(egui::Id::unique("rafthub_switch")).show(ctx, |ui| {
+    let modal = widgets::modal("rafthub_switch").show(ctx, |ui| {
         ui.set_width(440.0);
         ui.label(widgets::dim("RAFTHUB").size(12.0));
         ui.label(

@@ -316,12 +316,17 @@ impl RegistryPanel {
             }
             Phase::Ready => {
                 let total = self.index.as_ref().map_or(0, |i| i.packages.len());
-                let mut text = format!("Registre signé : {total} paquet(s) vérifié(s)");
+                let mut text = format!(
+                    "Registre signé : {}",
+                    widgets::plural(total, "paquet vérifié", "paquets vérifiés")
+                );
                 if !self.added.is_empty() {
-                    text.push_str(&format!(", {} jeu(x) ajouté(s)", self.added.len()));
+                    let added = widgets::plural(self.added.len(), "jeu ajouté", "jeux ajoutés");
+                    text.push_str(&format!(", {added}"));
                 }
                 if !self.rejected.is_empty() {
-                    text.push_str(&format!(", {} écarté(s)", self.rejected.len()));
+                    let rejected = widgets::plural(self.rejected.len(), "écarté", "écartés");
+                    text.push_str(&format!(", {rejected}"));
                 }
                 Some(text)
             }
@@ -465,25 +470,28 @@ fn confirm_modal(ctx: &egui::Context, panel: &mut RegistryPanel, targets: Target
     let Some((kind, name)) = panel.confirm.clone() else {
         return;
     };
-    let trust = panel
-        .index
-        .as_ref()
-        .and_then(|i| i.get(kind, &name))
-        .map(|p| p.trust.clone())
-        .unwrap_or_default();
+    let package = panel.index.as_ref().and_then(|i| i.get(kind, &name));
+    let trust = package.map(|p| p.trust.clone()).unwrap_or_default();
+    // Le nom du jeu (« Slime Rancher ») parle plus au joueur que celui du paquet
+    // (`slime_rancher`), qui reste affiché en petit dessous.
+    let title = package
+        .and_then(|p| p.game.clone())
+        .unwrap_or_else(|| name.clone());
     let (heading, warning) = confirm_texts(kind);
     let mut install = false;
     let mut cancel = false;
-    // `Modal` grise le reste de la fenêtre et bloque les clics derrière la boîte.
-    let modal = egui::Modal::new(egui::Id::unique("registre_confirmer")).show(ctx, |ui| {
+    let modal = widgets::modal("registre_confirmer").show(ctx, |ui| {
         ui.set_width(440.0);
         ui.label(widgets::dim(heading).size(12.0));
         ui.label(
-            RichText::new(format!("Installer « {name} » ?"))
+            RichText::new(format!("Installer « {title} » ?"))
                 .size(20.0)
                 .family(theme::bold_family())
                 .color(theme::TEXT),
         );
+        if title != name {
+            ui.label(widgets::dim(format!("Paquet {name}")).size(12.0));
+        }
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.label(widgets::dim("Niveau de confiance :"));
@@ -883,7 +891,7 @@ mod tests {
         assert_eq!(panel.installed, BTreeSet::from(["deja".to_string()]));
         assert_eq!(
             panel.status_text().unwrap(),
-            "Registre signé : 3 paquet(s) vérifié(s), 1 écarté(s)"
+            "Registre signé : 3 paquets vérifiés, 1 écarté"
         );
         assert!(!panel.is_from_registry("jeu-casse"));
         assert_eq!(panel.hover_text().as_deref(), Some("jeu-casse : 404"));

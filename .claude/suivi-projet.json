@@ -110,7 +110,8 @@
         {"id": "M4.7", "title": "Salon, webhook, presets", "status": "done"},
         {"id": "M4.8", "title": "Mise à jour signée", "status": "done"},
         {"id": "M4.9", "title": "Tests d'interface sans fenêtre", "status": "done"},
-        {"id": "M4.10", "title": "Contrôle visuel du launcher", "status": "doing", "progress": 50, "notes": "plusieurs écrans jamais regardés"},
+        {"id": "M4.10", "title": "Contrôle visuel du launcher", "status": "done"},
+        {"id": "M4.14", "title": "Réparer 8 tests d'interface", "status": "todo", "notes": "cassés par le profil Planet Crafter"},
         {"id": "M4.11", "title": "Plan d'interface, étapes suivantes", "status": "doing", "progress": 25, "notes": "étape 1 faite"},
         {"id": "M4.12", "title": "Chiffrement sans PEM (ADR 0043)", "status": "todo"},
         {"id": "M4.13", "title": "Test sur VM Windows propre", "status": "todo", "notes": "reporté à la fin de la V3"}
@@ -177,6 +178,7 @@
     }
   ],
   "next_steps": [
+    "Réparer les 8 tests d'interface cassés",
     "Continuer The Planet Crafter, étape 2",
     "Relire les ADR 0029 à 0035",
     "Regarder à l'œil les écrans non contrôlés",
@@ -188,6 +190,9 @@
     {"date": "2026-11-22", "title": "Suivi visuel calqué sur docs/etat-du-projet.md", "why": "Le détail reste dans etat-du-projet.md et les ADR ; ce fichier donne la vue d'ensemble."}
   ],
   "log": [
-    {"date": "2026-11-22", "summary": "Création du suivi : plan, 8 jalons et schéma déduits de l'état du projet.", "tasks": []}
+    {"date": "2026-11-22", "summary": "Création du suivi : plan, 8 jalons et schéma déduits de l'état du projet.", "tasks": []},
+    {"date": "2026-11-22", "summary": "Fenêtre, boîte de fichiers et presse-papiers vérifiés à la main : tout marche.", "tasks": ["M4.10"]},
+    {"date": "2026-11-22", "summary": "Captures de Partie en cours, Bibliothèque, registre et Profil : rendu correct, 3 petits défauts notés.", "tasks": ["M4.10"]},
+    {"date": "2026-11-22", "summary": "3 défauts corrigés (boîte modale, accords, Délier Discord) ; 8 tests déjà cassés repérés.", "tasks": ["M4.10", "M4.14"]}
   ]
 }
