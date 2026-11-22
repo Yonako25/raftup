@@ -14,6 +14,7 @@
 
 mod bibliotheque;
 mod captures;
+mod captures_interface;
 mod ecrans;
 mod menu;
 mod salon;
