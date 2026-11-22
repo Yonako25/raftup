@@ -648,6 +648,7 @@ untime2`.
 
 ### 2026-11-22 · Contrôle visuel du launcher
 - **Fait** : suivi de projet créé (0b63943) ; fenêtre sans bordure, boîte de fichiers et presse-papiers vérifiés à la main par l'utilisatrice ; captures de « Partie en cours », Bibliothèque, registre et panneau « Profil » regardées ; corrigé : boîte modale commune `widgets::modal` (fond assombri, bordure ; registre et changement de hub), nom du jeu dans « Installer « … » ? », accords « 1 paquet vérifié », question « Délier Discord ? » ; clippy passe, corrections revues sur captures.
-- **Pas vérifié** : durée estimée et suivi async dans « Partie en cours » (seed non générée par Raftup, aucun joueur) ; vraies illustrations IGDB ; 8 tests d'interface déjà en échec avant cette session (catalogue de démo passé à 2 jeux avec The Planet Crafter, a832adb).
+- **Pas vérifié** : durée estimée et suivi async dans « Partie en cours » (seed non générée par Raftup, aucun joueur) ; vraies illustrations IGDB.
+- **Tests réparés** : 8 tests d'interface cassés par le profil The Planet Crafter (a832adb) : le catalogue de démo des tests ne garde que Slime Rancher ; `cargo test --workspace`, clippy et fmt passent, captures de référence inchangées.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
-- **Suite** : remettre au vert les 8 tests d'interface cassés par le profil The Planet Crafter.
+- **Suite** : The Planet Crafter, étape 3 devant le jeu (T3 à T5 du plan).

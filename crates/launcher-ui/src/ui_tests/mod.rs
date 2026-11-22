@@ -49,9 +49,20 @@ pub fn builder<State>() -> HarnessBuilder<State> {
 /// Le catalogue de démonstration : les profils du dossier `profiles/` du dépôt, lus
 /// par la même fonction que `RAFTUP_DEV_PROFILS` (sans toucher aux variables
 /// d'environnement, partagées par tous les tests qui tournent en parallèle).
+///
+/// Seul Slime Rancher est gardé : les tests (et les captures de référence) sont écrits
+/// pour un catalogue d'un jeu, et un nouveau profil ajouté au dépôt ne doit pas les
+/// casser (cas de The Planet Crafter, 22 novembre 2026).
 pub fn demo_catalog() -> Catalog {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../profiles");
-    crate::screens::library::dev_catalog(&dir).unwrap()
+    let mut catalog = crate::screens::library::dev_catalog(&dir).unwrap();
+    catalog.profiles.retain(|id, _| id == "slime-rancher");
+    assert_eq!(
+        catalog.profiles.len(),
+        1,
+        "profil slime-rancher introuvable"
+    );
+    catalog
 }
 
 /// Un champ de texte, reconnu par son texte d'aide (le texte gris du champ vide).
