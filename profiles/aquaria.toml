@@ -1,0 +1,67 @@
+# Aquaria (Aquaria Randomizer de tioui / Louis Marchand), écrit le 2026-11-22,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/aquaria). Le guide officiel (docs/setup_en.md,
+# tag 0.6.8) renvoie aux releases de github.com/tioui/Aquaria_Randomizer : sous Windows, il
+# suffit de dézipper la release dans le dossier du jeu, en écrasant les fichiers en conflit.
+# Le randomizer est un moteur Aquaria recompilé (aquaria_randomizer.exe, à côté de
+# Aquaria.exe) qui lit les données du jeu du joueur ; il ne remplace pas Aquaria.exe.
+# Le guide conseille de copier le dossier du jeu avant (sauvegardes dans le dossier du jeu
+# sous Windows) : Raftup sauvegarde et restaure les fichiers écrasés, mais pas les sauvegardes
+# de partie créées en jouant (à vérifier en vrai).
+# Hash : sha256sum du fichier téléchargé le 2026-11-22.
+
+format_version = 1
+
+[game]
+id = "aquaria"
+name = "Aquaria"
+ap_game = "Aquaria"                # vérifié : game: str = "Aquaria" dans worlds/aquaria/__init__.py (0.6.8)
+status = "untested"
+# Pas d'igdb_id : hub.raftup-games.com/v1/art/steam/216250 répond « art_not_found ».
+
+[game.detect]
+steam_appid = 216250               # à vérifier : l'API du Steam Store répond success=false pour 216250 (jeu retiré de la vente ou réservé à certaines régions ?)
+expected_exe = "Aquaria.exe"       # à vérifier : nom tiré de Aquaria/aquaria.rc du randomizer (OriginalFilename « Aquaria.exe »), pas d'une vraie installation Steam ou GOG
+
+[credits]
+authors = [
+  "tioui / Louis Marchand (Aquaria Randomizer, MIT pour le code du randomizer)",
+  "Bit-Blot (moteur et scripts d'Aquaria, GPL-2.0-or-later)",
+]
+# Vérifié : COPYING.txt (GPL v2) et en-têtes « either version 2 … or any later version »
+# (Aquaria/Main.cpp, scripts Lua) ; en-têtes « @license : MIT » dans Randomizer/*.cpp.
+# À vérifier : la release contient aussi SDL2.dll (zlib), OpenAL32.dll et wrap_oal.dll
+# (redistribuable de Creative), et des cartes modifiées (randomizer_files/data/maps/*.xml)
+# tirées des données du jeu, que CONTENT-LICENSE.txt interdit de redistribuer : c'est
+# l'auteur qui les publie, Raftup ne fait que les télécharger chez lui (comme l'ADR 0050, point 2).
+license = "GPL-2.0-or-later AND MIT"
+
+[[steps]]
+id = "aquaria-randomizer"
+kind = "mod"
+name = "Aquaria Randomizer"
+version = "1.5.2"                  # vérifié : tag v1.5.2-Release (2025-04-02), le plus récent (v1.5.2b date du 2025-01-11) ; compatibilité exacte avec 0.6.8 à vérifier
+# Nom exact du fichier vérifié : content-disposition « Aquaria_Randomizer-1.5.2-Windows.zip »
+# (code 200 ; github.com redirige vers release-assets.githubusercontent.com).
+source = { url = "https://github.com/tioui/Aquaria_Randomizer/releases/download/v1.5.2-Release/Aquaria_Randomizer-1.5.2-Windows.zip" }
+sha256 = "e6ee360d26645930971b8be711ed7cfcfbb114f4d4cd7de7fa1b14930b5ae4a1"
+max_bytes = 30000000               # fichier : 15 114 456 octets (39 768 809 octets décompressés, 1 104 entrées)
+# Le zip contient à la racine aquaria_randomizer.exe, cacert.pem, OpenAL32.dll, SDL2.dll,
+# usersettings.xml, wrap_oal.dll et randomizer_files/… (vérifié par unzip -l), la liste du
+# guide. Les fichiers du jeu écrasés (OpenAL32.dll, SDL2.dll, usersettings.xml…) sont
+# sauvegardés puis restaurés à la désinstallation.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+# Pas de [preserve] : usersettings.xml (réglages vidéo/son) est livré par le mod ; à revoir
+# si une mise à jour du mod écrase les réglages du joueur.
+
+# Pas de [cleanup] : fichiers créés en jouant (sauvegardes, journaux) à observer en vrai.
+
+[launch]
+exe = "{game_dir}/aquaria_randomizer.exe"
+# Méthode vérifiée : setup_en.md (0.6.8) donne « aquaria_randomizer.exe --name YourName
+# --server theServer:thePort [--password thePassword] », et Aquaria/Main.cpp lit les arguments
+# dans cet ordre exact (argv[1] --name, argv[3] --server, argv[5] --password facultatif ; un
+# mot de passe vide est accepté). « {host}:{port} » plutôt que {address}, qui peut porter un
+# schéma ws://. Le dossier de travail est celui de l'exe : randomizer_files y est cherché.
+connect = { method = "cli_args", args = ["--name", "{slot}", "--server", "{host}:{port}", "--password", "{password}"] }

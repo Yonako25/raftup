@@ -18,6 +18,22 @@ pub const EMBEDDED: &[(&str, &str)] = &[
         include_str!("../../../profiles/a-short-hike.toml"),
     ),
     (
+        "aquaria.toml",
+        include_str!("../../../profiles/aquaria.toml"),
+    ),
+    (
+        "blasphemous.toml",
+        include_str!("../../../profiles/blasphemous.toml"),
+    ),
+    (
+        "bomb-rush-cyberfunk.toml",
+        include_str!("../../../profiles/bomb-rush-cyberfunk.toml"),
+    ),
+    (
+        "choo-choo-charles.toml",
+        include_str!("../../../profiles/choo-choo-charles.toml"),
+    ),
+    (
         "hollow-knight.toml",
         include_str!("../../../profiles/hollow-knight.toml"),
     ),
