@@ -652,3 +652,9 @@ untime2`.
 - **Tests réparés** : 8 tests d'interface cassés par le profil The Planet Crafter (a832adb) : le catalogue de démo des tests ne garde que Slime Rancher ; `cargo test --workspace`, clippy et fmt passent, captures de référence inchangées.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : The Planet Crafter, étape 3 devant le jeu (T3 à T5 du plan).
+
+### 2026-11-22 · Captures de l'interface sans fenêtre (cloud/captures-interface)
+- **Fait** : `cargo captures` (alias) écrit un PNG de chaque écran dans `target/captures/` (menu, Bibliothèque sans hub et avec faux hub, fiche, Salon, Rejoindre, Héberger, Partie en cours et son onglet Salon, Amis, Paramètres), données de démonstration seulement ; rendu wgpu avec Mesa lavapipe sous Linux ; job CI `captures-interface` (Linux) qui range les images dans l'artefact du même nom. Les 11 captures regardées dans le conteneur.
+- **Pas vérifié** : le job de CI lui-même (pas encore lancé) ; rendu sous Windows de ces captures (non comparées).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : regarder l'artefact `captures-interface` de chaque PR et décrire ce qui change à l'écran ; ajouter Accueil, Catalogue et Profil quand la PR 2 sera fusionnée.
