@@ -5,9 +5,10 @@
 //! registre, ADR 0045), son état sur ce PC, et ouvre sa fiche dans la Bibliothèque,
 //! où se font l'installation et le lancement.
 
-use egui::{RichText, Ui};
+use egui::Ui;
+use launcher_core::art::ArtKind;
 
-use super::library::{GameSummary, LibraryState, Tone};
+use super::library::{cover_card, CardLook, GameSummary, LibraryState, Tone};
 use super::registry_panel;
 use crate::app::Page;
 use crate::theme;
@@ -47,8 +48,13 @@ fn tone_color(tone: Tone) -> egui::Color32 {
 pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -> Option<Page> {
     let mut goto = None;
     let games = library.summaries();
+    let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
-        super::header(ui, "Catalogue", "Parcourir", |_| {});
+        ui.horizontal(|ui| {
+            ui.label(widgets::title("Catalogue", 28.0));
+            ui.label(widgets::dim("Les jeux compatibles avec Raftup").size(14.0));
+        });
+        ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut state.filter)
@@ -69,45 +75,67 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -
         let count = shown.len();
         let plural = if count > 1 { "x" } else { "" };
         ui.label(widgets::dim(format!("{count} jeu{plural}")).size(13.0));
-        ui.add_space(6.0);
+        ui.add_space(10.0);
         if shown.is_empty() {
             widgets::panel(ui, "", |ui| {
                 ui.label(widgets::dim("Aucun jeu ne correspond à ce filtre."));
             });
         }
-        for game in shown {
-            widgets::panel(ui, "", |ui| {
-                ui.horizontal(|ui| {
-                    super::library::small_cover(ui, 48.0, &game.id, &game.name);
-                    ui.vertical(|ui| {
-                        ui.label(widgets::title(&game.name, 18.0));
-                        let origin = if game.from_registry {
-                            "Registre signé"
-                        } else {
-                            "Catalogue de Raftup"
-                        };
-                        ui.horizontal(|ui| {
-                            ui.label(widgets::dim(origin).size(12.0));
-                            if let Some(trust) = &game.trust {
-                                registry_panel::trust_badge(ui, trust);
-                            }
-                        });
-                        if !game.authors.is_empty() {
-                            ui.label(widgets::dim(game.authors.join(", ")).size(12.0));
-                        }
-                    });
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let button = if game.ready { "Ouvrir" } else { "Ajouter" };
-                        if widgets::ghost_button(ui, &format!("{button} {}", game.name)) {
-                            library.select(&game.id);
-                            goto = Some(Page::Library);
-                        }
-                        ui.label(RichText::new(&game.label).color(tone_color(game.tone)));
-                    });
+
+        // Grille de jaquettes, comme la maquette « Catalogue » : l'illustration du hub
+        // (IGDB, ADR 0047) si elle est arrivée, sinon l'aplat coloré avec le titre.
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(22.0, 22.0);
+            for game in shown {
+                let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
+                ui.vertical(|ui| {
+                    let marker = game.from_registry.then_some(("Registre", theme::ITEM));
+                    let look = CardLook {
+                        cover_id: &game.id,
+                        name: &game.name,
+                        status: game.label.clone(),
+                        status_color: tone_color(game.tone),
+                        fraction: if game.ready { 1.0 } else { 0.0 },
+                        marker,
+                        cover,
+                    };
+                    let mut open = cover_card(ui, &look, false);
+                    if let Some(trust) = &game.trust {
+                        registry_panel::trust_badge(ui, trust);
+                    }
+                    // Même largeur que la jaquette.
+                    // « Ajouter » en bleu (action principale), « Dans la bibliothèque » discret.
+                    let button = if game.ready {
+                        egui::Button::new("Dans la bibliothèque")
+                    } else {
+                        egui::Button::new(
+                            egui::RichText::new("Ajouter")
+                                .color(egui::Color32::from_rgb(0x08, 0x12, 0x22))
+                                .strong()
+                                .family(theme::bold_family()),
+                        )
+                        .fill(theme::ACCENT)
+                    }
+                    .min_size(egui::vec2(150.0, 30.0));
+                    open |= ui.add(button).clicked();
+                    if open {
+                        library.select(&game.id);
+                        goto = Some(Page::Library);
+                    }
                 });
-            });
-            ui.add_space(8.0);
+            }
+        });
+
+        ui.add_space(14.0);
+        if let Some((text, url)) = library.art_attribution() {
+            super::library::attribution_line(ui, &text, &url);
         }
+        ui.label(
+            widgets::dim(
+                "Raftup ne fournit aucun jeu : il installe le mod sur ta copie, après vérification de son empreinte.",
+            )
+            .size(12.0),
+        );
     });
     goto
 }

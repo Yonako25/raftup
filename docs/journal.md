@@ -633,3 +633,4 @@ untime2`.
 - **Pas vérifié** : rendu à l'œil ; vrai lancement d'un jeu par « Lancer et connecter » (Windows) ; écriture réelle de `welcome_done` (coupée dans les tests).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : trancher les questions notées dans `docs/plan-interface-launcher.md` (parties rejointes, « qui te bloque », historique, file de téléchargements, thèmes, langue).
+- **Complément (22 novembre)** : illustrations du hub (ADR 0047) branchées sur les nouveaux écrans, comme sur la maquette : grille de jaquettes dans le Catalogue, jaquettes des jeux prêts dans l'Accueil, image large en fond du bandeau et jaquettes de l'équipage dans « Partie en cours » ; images chargées depuis tous les écrans. Regardé sur captures faites dans le conteneur (rendu logiciel Mesa) avec les vraies images du hub officiel.

@@ -211,6 +211,53 @@ impl LibraryState {
             self.start_scan(ctx);
         }
         self.poll(ctx);
+        // Illustrations arrivées du hub : rangées quel que soit l'écran affiché.
+        self.art.poll(ctx);
+    }
+
+    /// Illustration d'un jeu du catalogue (ADR 0047), par son identifiant : la
+    /// jaquette (`Cover`) ou l'image large (`Hero`). `None` tant qu'elle n'est pas
+    /// arrivée, ou sans hub : l'écran garde alors son aplat coloré.
+    pub fn art_for(
+        &mut self,
+        ctx: &egui::Context,
+        game_id: &str,
+        kind: ArtKind,
+    ) -> Option<egui::TextureHandle> {
+        let reference = self
+            .catalog
+            .as_ref()
+            .ok()
+            .and_then(|c| c.get(game_id))
+            .and_then(ArtRef::of);
+        self.art.texture(ctx, reference, kind)
+    }
+
+    /// Comme [`LibraryState::art_for`], par le nom du jeu chez Archipelago (le `game`
+    /// d'un slot de la partie hébergée). `None` pour un jeu hors catalogue.
+    pub fn art_for_ap_game(
+        &mut self,
+        ctx: &egui::Context,
+        ap_game: &str,
+        kind: ArtKind,
+    ) -> Option<egui::TextureHandle> {
+        let id = self
+            .catalog
+            .as_ref()
+            .ok()?
+            .games()
+            .find(|p| p.game.ap_game == ap_game)?
+            .game
+            .id
+            .clone();
+        self.art_for(ctx, &id, kind)
+    }
+
+    /// Attribution des illustrations à montrer (IGDB), dès qu'une image est arrivée.
+    pub fn art_attribution(&self) -> Option<(String, String)> {
+        self.art
+            .attribution()
+            .map(|(text, url)| (text.to_string(), url.to_string()))
     }
 
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
@@ -1264,7 +1311,7 @@ pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
 
 /// Comme [`small_cover`], avec la jaquette du hub (ADR 0047) quand elle est prête :
 /// découpée au centre pour tenir dans le carré.
-fn small_cover_with(
+pub(super) fn small_cover_with(
     ui: &mut Ui,
     size: f32,
     game_id: &str,
@@ -1336,7 +1383,7 @@ fn card(
 }
 
 /// « Illustrations : IGDB.com », avec le lien vers la page du jeu chez IGDB.
-fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
+pub(super) fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         ui.label(widgets::dim("Illustrations :").size(12.0));
@@ -1349,22 +1396,22 @@ fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
 }
 
 /// Ce qu'une carte de la grille affiche (jeu du catalogue ou monde natif).
-struct CardLook<'a> {
+pub(super) struct CardLook<'a> {
     /// Identifiant qui choisit la teinte de la jaquette.
-    cover_id: &'a str,
-    name: &'a str,
-    status: String,
-    status_color: Color32,
+    pub(super) cover_id: &'a str,
+    pub(super) name: &'a str,
+    pub(super) status: String,
+    pub(super) status_color: Color32,
     /// Remplissage de la barre sous la jaquette, de 0 à 1.
-    fraction: f32,
+    pub(super) fraction: f32,
     /// Marqueur en petites capitales sous l'état (« Registre », « Monde natif »).
-    marker: Option<(&'a str, Color32)>,
+    pub(super) marker: Option<(&'a str, Color32)>,
     /// Jaquette venue du hub (ADR 0047) ; `None` : l'aplat coloré avec le titre.
-    cover: Option<egui::TextureHandle>,
+    pub(super) cover: Option<egui::TextureHandle>,
 }
 
 /// Dessine une carte. Renvoie vrai au clic.
-fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
+pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
     const WIDTH: f32 = 150.0;
     // Jaquette en portrait (2:3), comme les couvertures de la maquette.
     const COVER: egui::Vec2 = egui::vec2(WIDTH, 210.0);
@@ -1428,6 +1475,9 @@ fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
         .response
         // `interact` rend toute la carte cliquable, pas seulement son texte.
         .interact(Sense::click());
+    // Nom de la carte entière pour un lecteur d'écran (et pour les tests sans fenêtre).
+    let label = format!("Fiche de {}", look.name);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }

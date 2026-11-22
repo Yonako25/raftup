@@ -217,6 +217,9 @@ impl eframe::App for App {
         }
 
         // Détection des jeux dès l'ouverture : l'Accueil et l'assistant en ont besoin.
+        // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047), pour tous
+        // les écrans (Accueil, Catalogue, Partie en cours, Bibliothèque).
+        self.library.set_hub(self.friends.hub_url());
         self.library.background(&ctx);
 
         // Session du hub, présence et liste d'amis, quel que soit l'écran affiché.
@@ -289,8 +292,6 @@ impl eframe::App for App {
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
                 Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
                 Page::Library => {
-                    // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047).
-                    self.library.set_hub(self.friends.hub_url());
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
                 }
                 Page::Hosted if hosting => running::show(
@@ -299,6 +300,7 @@ impl eframe::App for App {
                     &mut self.error,
                     &self.worker,
                     &shared,
+                    &mut self.library,
                 ),
                 Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)

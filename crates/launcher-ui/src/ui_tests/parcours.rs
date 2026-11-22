@@ -146,13 +146,13 @@ fn accueil_jeu_pret_propose_un_salon() {
     click(&mut harness, "Créer un salon");
     assert_eq!(harness.state().asked, Some(Page::Create));
 
-    // « Ouvrir Slime Rancher » sélectionne le jeu et ouvre la Bibliothèque.
+    // La carte de Slime Rancher sélectionne le jeu et ouvre la Bibliothèque.
     let mut harness = accueil(
         scan(true),
         Shared::default(),
         JoinState::without_clipboard(),
     );
-    click(&mut harness, "Ouvrir Slime Rancher");
+    click(&mut harness, "Fiche de Slime Rancher");
     assert_eq!(harness.state().asked, Some(Page::Library));
     let ready: Vec<_> = harness.state().library.summaries();
     assert!(ready[0].ready);
@@ -225,17 +225,19 @@ fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
 #[test]
 fn catalogue_liste_filtre_et_ouvre_la_fiche() {
     let mut harness = catalogue(scan(false));
-    assert!(shows(&harness, "Parcourir"));
+    assert!(shows(&harness, "Les jeux compatibles avec Raftup"));
     assert!(shows(&harness, "1 jeu"));
     assert!(shows(&harness, "Slime Rancher"));
-    assert!(shows(&harness, "Catalogue de Raftup"));
+    assert!(shows(&harness, "Catalogue"));
+    // Sans hub, la jaquette est l'aplat avec le titre : pas d'image.
+    assert!(!shows(&harness, "Jaquette de Slime Rancher"));
     type_into(&mut harness, "Chercher un jeu ou un auteur", "hollow");
     assert!(shows(&harness, "0 jeu"));
     assert!(shows(&harness, "Aucun jeu ne correspond à ce filtre."));
 
     let mut harness = catalogue(scan(false));
     // Mods pas installés : « Ajouter » ouvre la fiche, où se fait l'installation.
-    click(&mut harness, "Ajouter Slime Rancher");
+    click(&mut harness, "Ajouter");
     assert_eq!(harness.state().asked, Some(Page::Library));
 }
 
@@ -336,10 +338,15 @@ struct Partie {
     error: Option<String>,
     worker: Worker,
     shared: Shared,
+    library: LibraryState,
+    _root: tempfile::TempDir,
 }
 
 fn partie(status: HostStatus) -> Harness<'static, Partie> {
+    let (library, root) = library(scan(true));
     let state = Partie {
+        library,
+        _root: root,
         running: RunningState::default(),
         error: None,
         worker: Worker::detached(),
@@ -350,7 +357,14 @@ fn partie(status: HostStatus) -> Harness<'static, Partie> {
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Partie| {
-            running::show(ui, &mut s.running, &mut s.error, &s.worker, &s.shared);
+            running::show(
+                ui,
+                &mut s.running,
+                &mut s.error,
+                &s.worker,
+                &s.shared,
+                &mut s.library,
+            );
         },
         state,
     );

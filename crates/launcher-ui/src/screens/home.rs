@@ -13,7 +13,9 @@
 use egui::{RichText, Ui};
 
 use super::join::JoinState;
-use super::library::{GameSummary, LibraryState};
+use launcher_core::art::ArtKind;
+
+use super::library::{cover_card, CardLook, GameSummary, LibraryState};
 use super::matches;
 use crate::app::Page;
 use crate::format;
@@ -151,7 +153,8 @@ pub fn show(
             ui.add_space(12.0);
         }
 
-        // Jeux prêts.
+        // Jeux prêts : leurs jaquettes, comme dans la Bibliothèque (ADR 0047).
+        let ctx = ui.ctx().clone();
         widgets::panel(ui, "Jeux prêts", |ui| {
             let ready: Vec<&GameSummary> = games.iter().filter(|g| g.ready).collect();
             if ready.is_empty() {
@@ -159,18 +162,30 @@ pub fn show(
                     "Aucun jeu prêt pour l'instant : la Bibliothèque montre ce qu'il manque.",
                 ));
             }
-            for game in ready {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&game.name).color(theme::TEXT));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if widgets::ghost_button(ui, &format!("Ouvrir {}", game.name)) {
-                            library.select(&game.id);
-                            goto = Some(Page::Library);
-                        }
-                    });
-                });
-            }
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = egui::vec2(22.0, 16.0);
+                for game in ready {
+                    let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
+                    let look = CardLook {
+                        cover_id: &game.id,
+                        name: &game.name,
+                        status: game.label.clone(),
+                        status_color: theme::TEXT_DIM,
+                        fraction: 1.0,
+                        marker: None,
+                        cover,
+                    };
+                    if cover_card(ui, &look, false) {
+                        library.select(&game.id);
+                        goto = Some(Page::Library);
+                    }
+                }
+            });
         });
+        if let Some((text, url)) = library.art_attribution() {
+            ui.add_space(6.0);
+            super::library::attribution_line(ui, &text, &url);
+        }
     });
     goto
 }
