@@ -16,6 +16,7 @@ mod bibliotheque;
 mod captures;
 mod ecrans;
 mod menu;
+mod partie;
 mod salon;
 
 use std::path::Path;

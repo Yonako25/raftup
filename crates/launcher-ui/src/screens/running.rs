@@ -15,6 +15,10 @@ use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, ReadyCheck, ReadyState, Shared, Worker};
 
+/// Largeur gardée à droite du bandeau pour « En ligne », « Copier l'invitation » et
+/// « Arrêter » (mesurée sur les captures : environ 350 px).
+const HERO_BUTTONS_WIDTH: f32 = 370.0;
+
 /// Largeur de la colonne de droite (progression, fil d'activité).
 const SIDE_WIDTH: f32 = 340.0;
 
@@ -165,7 +169,7 @@ fn hero(
     let players = status.server.slots.iter().filter(|s| !s.is_group).count();
     let plural = if players > 1 { "s" } else { "" };
     let mode = match (status.encrypted, status.fingerprint.is_some()) {
-        (true, true) => "chiffrée par Raftup (wss et ws)",
+        (true, true) => "chiffrée par Raftup",
         (true, false) => "chiffrée (wss)",
         (false, _) => "en clair (ws)",
     };
@@ -186,6 +190,9 @@ fn hero(
                 ui.add_space(6.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
+                    // Place gardée à droite pour la pastille et les deux boutons : un
+                    // sous-titre long passe à la ligne au lieu de glisser sous eux.
+                    ui.set_max_width((ui.available_width() - HERO_BUTTONS_WIDTH).max(200.0));
                     ui.label(widgets::title(
                         &format!("seed {}", status.seed.seed_name),
                         28.0,
