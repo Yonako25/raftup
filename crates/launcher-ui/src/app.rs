@@ -389,6 +389,8 @@ impl eframe::App for App {
         self.toasts.show(&ctx);
         // Poignées invisibles sur les bords de la fenêtre sans bordure.
         crate::resize::handle(&ctx);
+        // Main au survol de ce qui se clique (après les poignées : elles passent avant).
+        widgets::pointer_on_clickable(&ctx);
         #[cfg(debug_assertions)]
         if let Some(dev) = &mut self.dev {
             dev.step(

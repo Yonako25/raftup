@@ -299,6 +299,27 @@ pub fn mono(text: impl Into<String>, size: f32) -> RichText {
     RichText::new(text.into()).font(FontId::monospace(size))
 }
 
+/// Curseur en main au survol de tout ce qui se clique (boutons, cartes, liens, cases,
+/// menu), comme dans un navigateur. egui ne le fait que pour ses boutons : on regarde
+/// donc, à la fin de chaque image, si un élément cliquable est sous la souris. Un
+/// curseur déjà choisi (texte dans un champ, bords de la fenêtre) est laissé tel quel.
+pub fn pointer_on_clickable(ctx: &egui::Context) {
+    if ctx.output(|o| o.cursor_icon) != egui::CursorIcon::Default {
+        return;
+    }
+    // `viewport` donne les éléments survolés ; on copie leurs identifiants pour ne pas
+    // garder le contexte verrouillé pendant `read_response`.
+    let hovered: Vec<egui::Id> =
+        ctx.viewport(|v| v.interact_widgets.hovered.iter().copied().collect());
+    let clickable = hovered
+        .into_iter()
+        .filter_map(|id| ctx.read_response(id))
+        .any(|r| r.sense.senses_click() && r.enabled());
+    if clickable {
+        ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::plural;
@@ -349,5 +370,39 @@ mod fade_tests {
         assert_eq!(fade_in(-1.0), 0.0);
         // À mi-chemin, déjà aux trois quarts : le début est rapide.
         assert!((fade_in(FADE_SECONDS / 2.0) - 0.75).abs() < 1e-6);
+    }
+}
+
+#[cfg(test)]
+mod curseur_tests {
+    use egui_kittest::kittest::Queryable;
+    use egui_kittest::Harness;
+
+    /// Un élément cliquable qui n'est pas un bouton d'egui (une carte, une ligne du
+    /// menu) passe aussi le curseur en main ; un simple texte, non.
+    #[test]
+    fn main_au_survol_de_ce_qui_se_clique() {
+        let mut harness = Harness::new_ui(|ui| {
+            // `selectable(false)` : sinon egui met le curseur de texte (sélection).
+            ui.add(
+                egui::Label::new("Carte")
+                    .selectable(false)
+                    .sense(egui::Sense::click()),
+            );
+            ui.add(egui::Label::new("Texte").selectable(false));
+            super::pointer_on_clickable(ui.ctx());
+        });
+        harness.get_by_label("Carte").hover();
+        harness.run();
+        assert_eq!(
+            harness.output().platform_output.cursor_icon,
+            egui::CursorIcon::PointingHand
+        );
+        harness.get_by_label("Texte").hover();
+        harness.run();
+        assert_eq!(
+            harness.output().platform_output.cursor_icon,
+            egui::CursorIcon::Default
+        );
     }
 }
