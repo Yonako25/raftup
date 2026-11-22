@@ -38,6 +38,32 @@ jobs:
       - name: Empreinte de la seed APQuest (NF12)
         run: cargo test -p generate --test empreinte
 
+  captures-interface:
+    # Une image PNG de chaque écran du launcher, rendue sans fenêtre (egui_kittest + wgpu
+    # avec le pilote Vulkan logiciel de Mesa, lavapipe). Rangées dans l'artefact
+    # `captures-interface` de chaque pull request : on voit l'interface sans lancer Raftup.
+    # Ces images servent à regarder : les références comparées pixel par pixel restent
+    # celles du test `captures` sous Windows (job `verifier`).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dépendances système (fenêtrage et Vulkan logiciel)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev libxkbcommon-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libx11-dev \
+            mesa-vulkan-drivers
+      # Alias de .cargo/config.toml : écrit target/captures/*.png.
+      - run: cargo captures
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captures-interface
+          path: target/captures/
+          if-no-files-found: warn
+
   hub-officiel:
     # ADR 0038 : le Rafthub officiel se compile avec `--features officiel` (Discord possible).
     # Le job `verifier` ne compile que la version publique : ce job vérifie l'autre.
