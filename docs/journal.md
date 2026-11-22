@@ -658,3 +658,9 @@ untime2`.
 - **Pas vérifié** : le job de CI lui-même (pas encore lancé) ; rendu sous Windows de ces captures (non comparées).
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : regarder l'artefact `captures-interface` de chaque PR et décrire ce qui change à l'écran ; ajouter Accueil, Catalogue et Profil quand la PR 2 sera fusionnée.
+
+### 2026-11-22 · Hub officiel par défaut dans toutes les compilations (cloud/hub-officiel-par-defaut)
+- **Fait** : vrai launcher lancé dans le conteneur (Xvfb, Mesa) et piloté à la souris ; aucune illustration car `DEFAULT_HUB_URL` valait `http://127.0.0.1:8787` hors release ; `RAFTUP_OFFICIAL_HUB_URL` posée dans `.cargo/config.toml` (ADR 0040 complété) ; relancé : jaquette, image large et attribution IGDB s'affichent. Tests launcher-core et launcher-ui passent.
+- **Pas vérifié** : un vrai build Windows ; la variable GitHub du workflow de release (elle garde la priorité si elle est définie).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : relancer le launcher sur la branche de la PR 2 pour voir Accueil et Catalogue en vrai.
