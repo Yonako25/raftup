@@ -249,6 +249,8 @@ impl LibraryState {
         self.poll(ctx);
         // Illustrations arrivées du hub : rangées quel que soit l'écran affiché.
         self.art.poll(ctx);
+        // Le registre aussi : ses mondes sont montrés dans le Catalogue.
+        poll_registry(self, ctx);
     }
 
     /// Illustration d'un jeu du catalogue (ADR 0047), par son identifiant : la
@@ -1014,7 +1016,6 @@ pub fn show(
 
         if state.game_count() == 0 && state.native.count() == 0 {
             empty_state(ui, state.scanning.is_some() || state.scan.is_none());
-            bottom_panels(ui, state);
             return;
         }
         // Premier jeu sélectionné par défaut (ou le premier monde natif s'il n'y a pas de
@@ -1035,8 +1036,6 @@ pub fn show(
                 ui.vertical(|ui| {
                     ui.set_width(list_width);
                     grid(ui, state);
-                    missing_game_note(ui);
-                    bottom_panels(ui, state);
                 });
                 ui.vertical(|ui| detail(ui, state, shared, &ctx));
             });
@@ -1044,15 +1043,15 @@ pub fn show(
             grid(ui, state);
             ui.add_space(12.0);
             detail(ui, state, shared, &ctx);
-            missing_game_note(ui);
-            bottom_panels(ui, state);
         }
     });
     None
 }
 
 /// Bas de la colonne : paquets du registre, puis la conversion d'un apworld (repliée).
-fn bottom_panels(ui: &mut Ui, state: &mut LibraryState) {
+/// Mondes du registre et conversion d'un apworld : affichés dans l'écran « Catalogue »
+/// (la Bibliothèque ne montre que les jeux de ce PC).
+pub(crate) fn registry_and_conversion(ui: &mut Ui, state: &mut LibraryState) {
     let Ok(paths) = state.paths.clone() else {
         return;
     };
@@ -1246,42 +1245,6 @@ fn empty_state(ui: &mut Ui, scanning: bool) {
             "Ouvre « Parcourir » dans le Catalogue pour voir les jeux pris en charge et en ajouter un.",
         ));
     });
-}
-
-/// Encadré en pointillés « Un jeu manque ? », comme sur la maquette.
-fn missing_game_note(ui: &mut Ui) {
-    ui.add_space(14.0);
-    let response = Frame::new()
-        .inner_margin(Margin::same(16))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(
-                RichText::new("Un jeu manque ?")
-                    .strong()
-                    .family(theme::bold_family())
-                    .color(theme::TEXT),
-            );
-            ui.label(widgets::dim(
-                "Raftup détecte les jeux installés via Steam et Epic. Pour une autre \
-                 installation, ajoutez son dossier : Raftup vérifie que l'exécutable attendu \
-                 s'y trouve avant de proposer le profil.",
-            ));
-        })
-        .response;
-    let r = response.rect;
-    let points = [
-        r.left_top(),
-        r.right_top(),
-        r.right_bottom(),
-        r.left_bottom(),
-        r.left_top(),
-    ];
-    ui.painter().add(egui::Shape::dashed_line(
-        &points,
-        Stroke::new(1.0, theme::BORDER),
-        4.0,
-        3.0,
-    ));
 }
 
 /// Les cartes des jeux, en grille qui passe à la ligne.

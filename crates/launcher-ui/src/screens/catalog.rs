@@ -126,6 +126,9 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -
             }
         });
 
+        // Les apworlds du registre signé et la conversion en monde natif (ADR 0045,
+        // 0046), déplacés ici depuis la Bibliothèque.
+        super::library::registry_and_conversion(ui, library);
         ui.add_space(14.0);
         if let Some((text, url)) = library.art_attribution() {
             super::library::attribution_line(ui, &text, &url);

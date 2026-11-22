@@ -708,3 +708,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : relire la proposition d'ADR du salon par le Rafthub.
 
+### 2026-11-22 · Bibliothèque allégée, registre et conversion dans le Catalogue
+- **Fait** : à la demande de l'utilisatrice, la Bibliothèque ne montre plus « Un jeu manque ? », « Mondes du registre », la ligne du registre signé ni « Convertir un apworld en monde natif » ; « Un jeu manque ? » est supprimé, les trois autres passent en bas de l'écran « Catalogue » (`library::registry_and_conversion`) ; le registre est lu depuis `LibraryState::background`, donc sur tous les écrans. Image `bibliotheque.png` régénérée (vue) ; fmt, clippy et `cargo test --workspace` passent ; `cargo captures` vu.
+- **Pas vérifié** : bloc « Mondes du registre » dans le Catalogue avec le vrai registre (coupé dans les captures).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub.
+
