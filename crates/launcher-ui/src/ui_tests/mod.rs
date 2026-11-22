@@ -88,6 +88,10 @@ pub fn type_into<State>(harness: &mut Harness<'_, State>, hint: &str, text: &str
 
 /// Clique sur le seul nœud qui porte ce libellé, puis laisse l'écran se redessiner.
 pub fn click<State>(harness: &mut Harness<'_, State>, label: &str) {
+    // Comme un joueur : on fait défiler jusqu'au bouton s'il est sous le bas de
+    // l'écran, puis on clique (un clic hors de la fenêtre ne touche rien).
+    harness.get_by_label(label).scroll_to_me();
+    harness.run();
     harness.get_by_label(label).click();
     harness.run();
 }

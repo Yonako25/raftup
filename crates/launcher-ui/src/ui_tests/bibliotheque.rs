@@ -117,6 +117,8 @@ fn se_connecter_a_la_main_est_replie() {
 
 const COVER_LABEL: &str = "Jaquette de Slime Rancher";
 const HERO_LABEL: &str = "Illustration de Slime Rancher";
+/// Bandeau en aplat en haut de la fiche, quand il n'y a pas d'image large.
+const FLAT_HERO_LABEL: &str = "Aplat de Slime Rancher";
 
 /// Un vrai petit JPEG (4 × 6 pixels), pour passer par le décodage de l'interface.
 fn tiny_jpeg() -> Vec<u8> {
@@ -152,6 +154,8 @@ fn sans_hub_la_jaquette_reste_un_aplat() {
     let harness = bibliotheque();
     assert!(!shows(&harness, COVER_LABEL));
     assert!(!shows(&harness, HERO_LABEL));
+    // La fiche garde son bandeau, en aplat coloré.
+    assert!(shows(&harness, FLAT_HERO_LABEL));
     assert!(!shows(&harness, "IGDB.com"));
     // Le titre reste écrit dans l'aplat et sous la carte.
     assert!(count(&harness, "Slime Rancher") >= 2);
@@ -162,10 +166,10 @@ fn jaquette_et_illustration_venues_du_hub() {
     let asked = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&asked);
     let jpeg = tiny_jpeg();
-    // Faux hub : il connaît Slime Rancher par son appid Steam (profil du dépôt).
+    // Faux hub : il connaît Slime Rancher par son identifiant IGDB (profil du dépôt).
     let loader: Loader = Arc::new(move |reference, _kind| {
         counter.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(reference, ArtRef::Steam(433340));
+        assert_eq!(reference, ArtRef::Igdb(16287));
         Ok(Some(ArtImage {
             bytes: jpeg.clone(),
             attribution: "IGDB.com".to_string(),
@@ -176,6 +180,8 @@ fn jaquette_et_illustration_venues_du_hub() {
     assert!(run_until(&mut harness, |h| shows(h, COVER_LABEL)
         && shows(h, HERO_LABEL)));
     assert!(shows(&harness, "IGDB.com"));
+    // L'image large a pris la place de l'aplat.
+    assert!(!shows(&harness, FLAT_HERO_LABEL));
     // Une demande par image (jaquette, image large), pas une par image de l'écran.
     harness.run();
     assert_eq!(asked.load(Ordering::SeqCst), 2);
@@ -200,6 +206,8 @@ fn hub_sans_image_ou_en_panne_aplat_garde() {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!shows(&harness, COVER_LABEL));
+        assert!(!shows(&harness, HERO_LABEL));
+        assert!(shows(&harness, FLAT_HERO_LABEL));
         assert!(!shows(&harness, "IGDB.com"));
         assert!(count(&harness, "Slime Rancher") >= 2);
         // Pas redemandé à chaque image.
