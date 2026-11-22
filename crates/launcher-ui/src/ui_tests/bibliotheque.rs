@@ -30,7 +30,7 @@ pub struct Bibliotheque {
 }
 
 /// Une détection « faite » : le jeu trouvé via Steam, ses mods installés.
-fn scan_ready() -> Scan {
+pub(super) fn scan_ready() -> Scan {
     let mut found = BTreeMap::new();
     found.insert(
         GAME.to_string(),
@@ -54,7 +54,7 @@ pub fn bibliotheque() -> Harness<'static, Bibliotheque> {
 }
 
 /// Comme [`bibliotheque`], avec des illustrations données par `art` (faux hub).
-fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Bibliotheque> {
+pub(super) fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Bibliotheque> {
     let root = tempfile::tempdir().unwrap();
     let mut library =
         LibraryState::for_tests(demo_catalog(), Paths::under(root.path()), scan_ready());

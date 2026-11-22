@@ -14,3 +14,9 @@ rustflags = ["-C", "target-feature=+crt-static"]
 # Une variable déjà définie dans le terminal garde la priorité (pas de `force`).
 [env]
 RAFTUP_LISTEN_HOST = "127.0.0.1"
+
+# `cargo captures` : un PNG de chaque écran du launcher dans `target/captures/`, sans
+# ouvrir de fenêtre (rendu wgpu ; sous Linux sans carte graphique, Mesa lavapipe).
+# Voir crates/launcher-ui/src/ui_tests/captures_interface.rs.
+[alias]
+captures = "test -p launcher-ui --bin raftup ui_tests::captures_interface -- --ignored --nocapture"
