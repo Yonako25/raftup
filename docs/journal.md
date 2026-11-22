@@ -702,3 +702,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (proposition d'ADR, à valider, non fusionnée).
 - **Suite** : relire la proposition d'ADR du salon par le Rafthub (branche `cloud/adr-salon-rafthub`).
 
+### 2026-11-22 · Bibliothèque : le filtre des jeux du PC corrigé
+- **Fait** : la Bibliothèque montrait encore tout le catalogue : la détection range un état des mods pour chaque jeu, « non installé » compris, et le filtre le prenait pour « sur ce PC ». Seul un état autre que `NotInstalled` compte maintenant ; le test `seuls_les_jeux_du_pc_sont_dans_la_bibliotheque` remplit ces états comme la vraie détection. fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : l'écran avec les vrais jeux de l'utilisatrice.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub.
+

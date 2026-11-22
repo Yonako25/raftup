@@ -197,9 +197,16 @@ impl LibraryState {
     /// Vrai si le jeu est dans la Bibliothèque : trouvé sur ce PC, avec des mods posés
     /// par Raftup (reçu d'installation), ou ouvert depuis le Catalogue (« Ajouter »).
     /// Les autres jeux du catalogue ne sont montrés que dans l'écran « Catalogue ».
+    ///
+    /// Attention : la détection range un état des mods pour **chaque** jeu du catalogue,
+    /// « non installé » compris ; seul un autre état compte comme « sur ce PC ».
     pub fn in_library(&self, game_id: &str) -> bool {
         let on_pc = self.scan.as_ref().is_some_and(|scan| {
-            scan.found.contains_key(game_id) || scan.status.contains_key(game_id)
+            let has_mods = !matches!(
+                scan.status.get(game_id),
+                None | Some(Ok(InstallStatus::NotInstalled))
+            );
+            scan.found.contains_key(game_id) || has_mods
         });
         on_pc || self.added.contains(game_id)
     }
@@ -1961,6 +1968,12 @@ mod tests {
                 state: launcher_core::GameState::Ready,
             },
         );
+        // Comme la vraie détection : un état des mods pour chaque jeu du catalogue, même
+        // « non installé » (c'est ce qui faisait encore tout afficher).
+        scan.status
+            .insert("slime-rancher".to_string(), Ok(InstallStatus::Installed));
+        scan.status
+            .insert("hollow-knight".to_string(), Ok(InstallStatus::NotInstalled));
         let root = tempfile::tempdir().unwrap();
         let mut state = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
 
