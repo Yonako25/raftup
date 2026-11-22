@@ -24,6 +24,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 use launcher_core::art::{ArtImage, ArtKind};
 use launcher_core::{GameEvent, HostStatus, NumberedEvent, SeedSummary, ServerStatus, SlotStatus};
@@ -66,6 +67,18 @@ fn save<State>(harness: &mut Harness<'_, State>, name: &str) {
     // La souris sort de la fenêtre : ni pointeur ni survol sur l'image.
     harness.event(egui::Event::PointerGone);
     harness.run();
+    let dir = output_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let image = harness
+        .render()
+        .unwrap_or_else(|e| panic!("rendu wgpu impossible ({e}) : installer mesa-vulkan-drivers"));
+    let path = dir.join(format!("{name}.png"));
+    image.save(&path).unwrap();
+    println!("capture : {}", path.display());
+}
+
+/// Comme [`save`], mais la souris reste où elle est (capture d'un survol).
+fn save_keep_pointer<State>(harness: &mut Harness<'_, State>, name: &str) {
     let dir = output_dir();
     std::fs::create_dir_all(&dir).unwrap();
     let image = harness
@@ -258,6 +271,39 @@ fn captures_interface() {
             shows(h, "Jaquette de Slime Rancher") && shows(h, "Illustration de Slime Rancher")
         });
         save(&mut harness, "03-bibliotheque-illustrations");
+    }
+    // Bibliothèque : jaquette survolée (soulevée, liseré bleu), et un message éphémère.
+    {
+        let mut harness = bibliotheque_with(Some(demo_art()));
+        settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
+        harness.get_by_label("Fiche de Slime Rancher").hover();
+        // L'animation dure 0,15 s : quelques images pour qu'elle aille au bout.
+        for _ in 0..30 {
+            harness.step();
+        }
+        save_keep_pointer(&mut harness, "03b-survol-jaquette");
+    }
+    {
+        let mut toasts = crate::toasts::Toasts::default();
+        toasts.push_aged(
+            "Slime Rancher installé.",
+            crate::toasts::ToastKind::Success,
+            1.0,
+        );
+        toasts.push_aged(
+            "Téléchargement impossible : le serveur de l'auteur ne répond pas.",
+            crate::toasts::ToastKind::Error,
+            1.0,
+        );
+        let mut harness = builder().build_ui_state(
+            |ui, toasts: &mut crate::toasts::Toasts| {
+                toasts.show(ui.ctx());
+            },
+            toasts,
+        );
+        // Les messages redessinent sans arrêt (fondus) : quelques images, sans `run`.
+        harness.run_steps(3);
+        save_keep_pointer(&mut harness, "03c-messages-ephemeres");
     }
     // Fiche d'un jeu, avec « Se connecter à la main » ouvert.
     {

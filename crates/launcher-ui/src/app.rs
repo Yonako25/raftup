@@ -60,6 +60,10 @@ pub struct App {
     instance_dir: Option<std::path::PathBuf>,
     /// Dernière lecture de la boîte aux lettres (relue deux fois par seconde au plus).
     inbox_checked: std::time::Instant,
+    /// Moment du dernier changement d'écran : le nouvel écran apparaît en fondu.
+    page_since: std::time::Instant,
+    /// Messages éphémères en bas à droite (« Slime Rancher installé. »).
+    toasts: crate::toasts::Toasts,
     /// Macro de développement (`RAFTUP_DEV_CAPTURE`), seulement en debug.
     #[cfg(debug_assertions)]
     dev: Option<crate::devscript::DevScript>,
@@ -90,6 +94,8 @@ impl App {
             error: None,
             instance_dir,
             inbox_checked: std::time::Instant::now(),
+            page_since: std::time::Instant::now(),
+            toasts: crate::toasts::Toasts::default(),
             #[cfg(debug_assertions)]
             dev: crate::devscript::DevScript::from_env(),
         };
@@ -286,6 +292,8 @@ impl eframe::App for App {
             });
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
+            // Le nouvel écran apparaît en fondu (0,18 s) au lieu de surgir d'un coup.
+            widgets::apply_fade(ui, self.page_since);
             let next = match &self.page {
                 Page::Home => home::show(ui, &shared, &mut self.library, &self.join),
                 Page::Catalog => {
@@ -367,6 +375,7 @@ impl eframe::App for App {
             // Changement d'écran : l'erreur de l'écran quitté ne le suit pas (« Ajoutez
             // au moins un fichier YAML. » n'a pas de sens sur « Héberger une partie »).
             if self.page != page {
+                self.page_since = std::time::Instant::now();
                 self.error = None;
                 // Au retour sur « Rejoindre », le presse-papiers sera relu.
                 if self.page == Page::Join {
@@ -375,6 +384,11 @@ impl eframe::App for App {
             }
             self.page = page;
         }
+        // Messages éphémères : ceux de la Bibliothèque, puis l'affichage de la pile.
+        for (text, kind) in self.library.take_toasts() {
+            self.toasts.push(text, kind);
+        }
+        self.toasts.show(&ctx);
         // Poignées invisibles sur les bords de la fenêtre sans bordure.
         crate::resize::handle(&ctx);
         #[cfg(debug_assertions)]

@@ -19,6 +19,7 @@ mod screens;
 mod startup;
 mod theme;
 mod titlebar;
+mod toasts;
 // Tests de l'interface sans fenêtre (egui_kittest), voir `tests/README.md`.
 #[cfg(test)]
 mod ui_tests;

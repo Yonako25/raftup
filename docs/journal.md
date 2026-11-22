@@ -732,3 +732,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : relire la proposition d'ADR du salon par le Rafthub.
 
+### 2026-11-22 · Launcher plus vivant : survol, fondus, messages éphémères
+- **Fait** : l'utilisatrice trouvait le launcher rigide (aucune animation dans le code). Jaquettes au survol : soulevées de 4 px, ombre, voile clair, liseré qui bleuit en 0,15 s (`hover_rect`, `card_stroke`) ; fondu de 0,18 s à chaque changement d'écran (`App::page_since`) et à chaque changement de jeu dans la fiche (`widgets::fade_in`, coupé dans les tests pour des images nettes) ; messages éphémères en bas à droite après une installation, une désinstallation ou un lancement (`toasts.rs`, 4 s, 3 au plus). « ✔ » absent des polices : il faisait planter le rendu, remplacé par « ● ». Captures `03b-survol-jaquette` et `03c-messages-ephemeres` vues. fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : la sensation à l'écran réel (vitesse des fondus, survol) ; messages éphémères avec une vraie installation.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : selon l'avis de l'utilisatrice, étapes C (fiche d'info dans le Catalogue), D (Accueil vitrine), E (clic droit, raccourcis).
+

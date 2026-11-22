@@ -20,6 +20,8 @@ use launcher_core::{
 };
 
 use launcher_core::art::{ArtKind, ArtRef};
+
+use crate::toasts::ToastKind;
 use launcher_core::hub_client::HubUrl;
 
 use super::native_panel::{self, NativeState};
@@ -99,6 +101,14 @@ pub struct LibraryState {
     notice: Option<Notice>,
     /// Le joueur a cliqué une première fois sur « Désinstaller » : on attend la confirmation.
     confirm_uninstall: bool,
+    /// Jeu dont la fiche est affichée, et depuis quand : la fiche d'un autre jeu
+    /// apparaît en fondu.
+    detail_since: (Option<String>, std::time::Instant),
+    /// Fondus actifs (faux dans les tests, pour des captures nettes).
+    fade: bool,
+    /// Messages éphémères à montrer (fin d'une installation, d'un lancement…) ; l'app
+    /// les reprend à chaque image avec [`LibraryState::take_toasts`].
+    toasts_out: Vec<(String, ToastKind)>,
     /// Choix d'un dossier demandé pour ce jeu (la boîte de dialogue s'ouvre hors du dessin).
     pending_pick: Option<String>,
     /// Debug seulement (`RAFTUP_DEV_INSTALLER=1`) : lancer l'installation du jeu
@@ -138,6 +148,9 @@ impl LibraryState {
             running: RunningGames::new(),
             native: NativeState::new(),
             art: Artwork::new(),
+            detail_since: (None, std::time::Instant::now()),
+            fade: true,
+            toasts_out: Vec::new(),
         }
     }
 
@@ -163,6 +176,10 @@ impl LibraryState {
             running: RunningGames::new(),
             native: NativeState::new(),
             art: Artwork::new(),
+            detail_since: (None, std::time::Instant::now()),
+            // Pas de fondu dans les tests : les images de référence doivent être nettes.
+            fade: false,
+            toasts_out: Vec::new(),
         }
     }
 
@@ -744,6 +761,7 @@ impl LibraryState {
                         task.progress = Some((step, bytes));
                     }
                     Ok(TaskMessage::Done(result)) => {
+                        self.toasts_out.push(toast_of(&result));
                         self.notice = Some(match result {
                             Ok(text) => Notice::Info(text),
                             Err(text) => Notice::Error(text),
@@ -752,6 +770,10 @@ impl LibraryState {
                         break;
                     }
                     Ok(TaskMessage::Launched(result)) => {
+                        self.toasts_out.push(match &result {
+                            Ok(_) => ("Jeu lancé.".to_string(), ToastKind::Success),
+                            Err(text) => (text.clone(), ToastKind::Error),
+                        });
                         self.notice = Some(match result {
                             Ok(Some(instructions)) => {
                                 // Connexion à la main : on copie l'adresse et le slot.
@@ -780,6 +802,12 @@ impl LibraryState {
             // Le reçu a pu changer : on relit l'état des jeux.
             self.start_scan(ctx);
         }
+    }
+
+    /// Les messages éphémères arrivés depuis la dernière image (la liste est vidée).
+    pub fn take_toasts(&mut self) -> Vec<(String, ToastKind)> {
+        // `mem::take` rend la liste et laisse une liste vide à sa place.
+        std::mem::take(&mut self.toasts_out)
     }
 
     /// `force` : défaire d'abord une installation interrompue (« Réparer »).
@@ -1517,8 +1545,27 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
             // La jaquette : l'illustration venue du hub (IGDB, ADR 0047) si elle est
             // prête ; sinon un aplat coloré avec le titre du jeu, dont la teinte dépend
             // de l'identifiant du jeu.
-            let (rect, cover_response) = ui.allocate_exact_size(COVER, Sense::hover());
+            let (slot, cover_response) = ui.allocate_exact_size(COVER, Sense::hover());
+            // Survol animé : `animate_bool_with_time` fait glisser `lift` de 0 à 1 en
+            // 0,15 s quand la souris arrive (et de 1 à 0 quand elle part) ; egui redessine
+            // tout seul pendant l'animation.
+            let lift = ui.ctx().animate_bool_with_time(
+                egui::Id::unique(("survol-jaquette", look.cover_id)),
+                cover_response.hovered(),
+                HOVER_SECONDS,
+            );
+            let rect = hover_rect(slot, lift);
             let radius = CornerRadius::same(theme::RADIUS);
+            if lift > 0.0 {
+                // Ombre douce sous la jaquette soulevée.
+                let shadow = egui::epaint::Shadow {
+                    offset: [0, 6],
+                    blur: 18,
+                    spread: 0,
+                    color: Color32::from_black_alpha((110.0 * lift) as u8),
+                };
+                ui.painter().add(shadow.as_shape(rect, radius));
+            }
             match &look.cover {
                 Some(texture) => {
                     art_ui::paint_cover(ui, texture, rect);
@@ -1543,13 +1590,18 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
                 }
             }
             let painter = ui.painter();
-            // Jeu sélectionné : liseré bleu de 2 px autour de la jaquette seulement.
-            let stroke = if selected {
-                Stroke::new(2.0, theme::ACCENT)
-            } else {
-                Stroke::new(1.0, theme::BORDER)
-            };
-            painter.rect_stroke(rect, radius, stroke, egui::StrokeKind::Outside);
+            if lift > 0.0 {
+                // Voile clair : la jaquette « s'allume » sous la souris.
+                let glow = Color32::from_white_alpha((14.0 * lift) as u8);
+                painter.rect_filled(rect, radius, glow);
+            }
+            // Jeu sélectionné : liseré bleu de 2 px ; survol : le liseré bleuit peu à peu.
+            painter.rect_stroke(
+                rect,
+                radius,
+                card_stroke(selected, lift),
+                egui::StrokeKind::Outside,
+            );
             widgets::bar(ui, WIDTH, look.fraction, theme::ACCENT);
             ui.label(
                 RichText::new(look.name)
@@ -1579,6 +1631,41 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
     response.clicked()
 }
 
+/// Message éphémère tiré du résultat d'une tâche : sa première phrase seulement (le
+/// bandeau de l'écran garde le texte entier).
+fn toast_of(result: &Result<String, String>) -> (String, ToastKind) {
+    let (text, kind) = match result {
+        Ok(text) => (text, ToastKind::Success),
+        Err(text) => (text, ToastKind::Error),
+    };
+    let first = match text.find(". ") {
+        Some(end) => &text[..=end],
+        None => text.as_str(),
+    };
+    (first.trim().to_string(), kind)
+}
+
+/// Durée de l'animation de survol d'une jaquette, en secondes.
+const HOVER_SECONDS: f32 = 0.15;
+
+/// Rectangle de la jaquette survolée : `lift` va de 0 (repos) à 1 (souris dessus) ; elle
+/// grossit alors de 4 px de chaque côté, autour du même centre.
+fn hover_rect(slot: egui::Rect, lift: f32) -> egui::Rect {
+    slot.expand(4.0 * lift.clamp(0.0, 1.0))
+}
+
+/// Liseré de la jaquette : bleu de 2 px si le jeu est sélectionné ; sinon gris, qui
+/// tourne au bleu pendant le survol (`lift` de 0 à 1).
+fn card_stroke(selected: bool, lift: f32) -> Stroke {
+    if selected {
+        return Stroke::new(2.0, theme::ACCENT);
+    }
+    let lift = lift.clamp(0.0, 1.0);
+    // `lerp_to_gamma` : mélange des deux couleurs, `lift` étant la part de la seconde.
+    let color = theme::BORDER.lerp_to_gamma(theme::ACCENT, lift);
+    Stroke::new(1.0 + lift, color)
+}
+
 /// Panneau de droite : le jeu sélectionné.
 fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Context) {
     // Un monde natif sélectionné : sa fiche à lui (ADR 0046).
@@ -1603,6 +1690,13 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
     let Some(profile) = state.selected.as_ref().and_then(|id| catalog.get(id)) else {
         return;
     };
+    // Un autre jeu choisi : sa fiche apparaît en fondu.
+    if state.detail_since.0 != state.selected {
+        state.detail_since = (state.selected.clone(), std::time::Instant::now());
+    }
+    if state.fade {
+        widgets::apply_fade(ui, state.detail_since.1);
+    }
     // Copie du profil : les boutons modifient `state` plus bas, on ne peut pas garder
     // en même temps un emprunt sur `state.catalog`.
     let profile = profile.clone();
@@ -1946,6 +2040,35 @@ mod tests {
         assert_eq!(state.library_ids(), vec!["slime-rancher".to_string()]);
         assert_eq!(state.game_count(), 1);
         assert!(!state.in_library("hollow-knight"));
+    }
+
+    #[test]
+    fn message_ephemere_premiere_phrase() {
+        assert_eq!(
+            toast_of(&Ok("Slime Rancher installé. Les mods sont prêts.".into())),
+            ("Slime Rancher installé.".to_string(), ToastKind::Success)
+        );
+        assert_eq!(
+            toast_of(&Err("Téléchargement impossible".into())),
+            ("Téléchargement impossible".to_string(), ToastKind::Error)
+        );
+    }
+
+    #[test]
+    fn jaquette_soulevee_au_survol() {
+        let slot = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(150.0, 210.0));
+        // Au repos : rien ne bouge, liseré gris d'1 px.
+        assert_eq!(hover_rect(slot, 0.0), slot);
+        assert_eq!(card_stroke(false, 0.0), Stroke::new(1.0, theme::BORDER));
+        // Souris dessus : 4 px de plus de chaque côté, même centre, liseré bleu de 2 px.
+        let up = hover_rect(slot, 1.0);
+        assert_eq!(up.width(), 158.0);
+        assert_eq!(up.center(), slot.center());
+        assert_eq!(card_stroke(false, 1.0), Stroke::new(2.0, theme::ACCENT));
+        // Hors bornes : ramené entre 0 et 1.
+        assert_eq!(hover_rect(slot, 3.0), up);
+        // Sélectionné : toujours le liseré bleu.
+        assert_eq!(card_stroke(true, 0.0), Stroke::new(2.0, theme::ACCENT));
     }
 
     #[test]

@@ -316,3 +316,38 @@ mod tests {
         assert_eq!(plural(3, "jeu ajouté", "jeux ajoutés"), "3 jeux ajoutés");
     }
 }
+
+/// Durée du fondu d'apparition d'un écran ou d'une fiche, en secondes.
+pub const FADE_SECONDS: f32 = 0.18;
+
+/// Opacité d'un fondu d'apparition, `elapsed` secondes après le changement : de 0 à 1
+/// en [`FADE_SECONDS`], rapide au début puis plus doux (« ease-out »).
+pub fn fade_in(elapsed: f32) -> f32 {
+    let x = (elapsed / FADE_SECONDS).clamp(0.0, 1.0);
+    1.0 - (1.0 - x) * (1.0 - x)
+}
+
+/// Applique le fondu d'apparition à `ui` (tout ce qui est dessiné ensuite) ; demande
+/// une nouvelle image tant qu'il n'est pas fini.
+pub fn apply_fade(ui: &mut Ui, since: std::time::Instant) {
+    let opacity = fade_in(since.elapsed().as_secs_f32());
+    if opacity < 1.0 {
+        ui.multiply_opacity(opacity);
+        ui.ctx().request_repaint();
+    }
+}
+
+#[cfg(test)]
+mod fade_tests {
+    use super::*;
+
+    #[test]
+    fn fondu_de_0_a_1() {
+        assert_eq!(fade_in(0.0), 0.0);
+        assert_eq!(fade_in(FADE_SECONDS), 1.0);
+        assert_eq!(fade_in(10.0), 1.0);
+        assert_eq!(fade_in(-1.0), 0.0);
+        // À mi-chemin, déjà aux trois quarts : le début est rapide.
+        assert!((fade_in(FADE_SECONDS / 2.0) - 0.75).abs() < 1e-6);
+    }
+}
