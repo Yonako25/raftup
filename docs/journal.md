@@ -714,3 +714,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : relire la proposition d'ADR du salon par le Rafthub.
 
+### 2026-11-22 · Registre et conversion masqués dans le Catalogue aussi
+- **Fait** : à la demande de l'utilisatrice, le Catalogue n'affiche plus « Mondes du registre » ni « Convertir un apworld en monde natif » ; choix « masquer, garder le code » : `library::registry_and_conversion` n'est plus appelée (`#[allow(dead_code)]` expliqué), le code et ses tests restent ; le registre est toujours lu (jeux qu'il ajoute au catalogue). fmt, clippy, `cargo test --workspace` et `cargo captures` passent (Catalogue vu).
+- **Pas vérifié** : rien de plus à l'écran réel.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : remettre ces deux blocs ailleurs (Paramètres > avancé ?) si l'utilisatrice le demande ; relire la proposition d'ADR du salon par le Rafthub.
+

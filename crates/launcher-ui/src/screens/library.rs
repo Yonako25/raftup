@@ -1049,8 +1049,13 @@ pub fn show(
 }
 
 /// Bas de la colonne : paquets du registre, puis la conversion d'un apworld (repliée).
-/// Mondes du registre et conversion d'un apworld : affichés dans l'écran « Catalogue »
-/// (la Bibliothèque ne montre que les jeux de ce PC).
+/// Mondes du registre et conversion d'un apworld (ADR 0045, 0046).
+///
+/// **Masqués** depuis le 22 novembre 2026, à la demande de l'utilisatrice : ni la
+/// Bibliothèque ni le Catalogue ne les affichent. Le code et ses tests sont gardés pour
+/// les remettre plus tard (par exemple dans Paramètres) ; il suffira d'appeler cette
+/// fonction depuis un écran et de retirer l'`allow` ci-dessous.
+#[allow(dead_code)]
 pub(crate) fn registry_and_conversion(ui: &mut Ui, state: &mut LibraryState) {
     let Ok(paths) = state.paths.clone() else {
         return;
