@@ -4,14 +4,21 @@ use egui_kittest::kittest::Queryable;
 use launcher_core::{HostStatus, SeedSummary, ServerStatus, SlotStatus};
 
 use super::builder;
+use super::demo_catalog;
+use crate::screens::library::{LibraryState, Scan};
 use crate::screens::running::{self, RunningState};
 use crate::worker::{Shared, Worker};
+use launcher_core::Paths;
 
 struct Partie {
     running: RunningState,
     error: Option<String>,
     worker: Worker,
     shared: Shared,
+    /// La Bibliothèque, dont l'écran a besoin pour « Lancer et connecter » ; vide ici.
+    library: LibraryState,
+    /// Dossier temporaire des chemins de la Bibliothèque, gardé tant que le test vit.
+    _root: tempfile::TempDir,
 }
 
 /// Une partie avec le sous-titre le plus long : chiffrée par Raftup, reprise d'une
@@ -64,7 +71,14 @@ fn longest_subtitle() -> Shared {
 /// pastille « En ligne » et les boutons. Il doit maintenant passer à la ligne.
 #[test]
 fn le_sous_titre_ne_passe_pas_sous_les_boutons() {
+    let root = tempfile::tempdir().unwrap();
     let state = Partie {
+        library: LibraryState::for_tests(
+            demo_catalog(),
+            Paths::under(root.path()),
+            Scan::default(),
+        ),
+        _root: root,
         running: RunningState::default(),
         error: None,
         worker: Worker::detached(),
@@ -72,7 +86,14 @@ fn le_sous_titre_ne_passe_pas_sous_les_boutons() {
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Partie| {
-            running::show(ui, &mut s.running, &mut s.error, &s.worker, &s.shared);
+            running::show(
+                ui,
+                &mut s.running,
+                &mut s.error,
+                &s.worker,
+                &s.shared,
+                &mut s.library,
+            );
         },
         state,
     );

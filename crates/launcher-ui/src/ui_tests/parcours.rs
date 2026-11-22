@@ -84,6 +84,7 @@ fn hosted(has_password: bool) -> HostStatus {
         },
         address: "wss://exemple.fr:38281".to_string(),
         encrypted: true,
+        fingerprint: None,
         has_password,
         started_at: crate::format::now() - 60.0,
         save: None,
