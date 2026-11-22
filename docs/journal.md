@@ -633,3 +633,9 @@ untime2`.
 - **Pas vérifié** : aucun essai réel (Windows, jeux) ; versions des mods compatibles avec Archipelago 0.6.8 supposées (dernières publiées) ; dépendances de 2022 du mod RoR2.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : essayer les 4 profils sous Windows (installation, connexion, désinstallation), puis lot suivant des jeux PC.
+
+### 2026-11-22 · Profils des jeux PC, lot 2 (cloud/profils-lot-2)
+- **Fait** : 10 jeux étudiés ; profils Aquaria, Blasphemous, Bomb Rush Cyberfunk et Choo-Choo Charles ajoutés en `untested` (sha256 des vrais fichiers, validés par `Profile::parse`) ; 6 jeux bloqués, raisons dans `docs/jeux-pc-catalogue.md` (suivi des 46 jeux PC). Tests launcher-core et launcher-ui passent.
+- **Pas vérifié** : aucun essai réel ; appid Steam d'Aquaria (216250, l'API Steam ne répond pas) ; compatibilité des mods avec 0.6.8.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : décider des jeux gratuits faits pour Archipelago (ChecksFinder, Bumper Stickers, Celeste 64) et des prérequis à installer soi-même (Everest) ; puis lot 3.
