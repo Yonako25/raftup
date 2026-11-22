@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-22 · The Planet Crafter en monde natif, étape 1 (ADR 0048)
+- **Fait** : monde existant trouvé (mod TPCA et apworld 0.0.1-poc de Hawkrex, sans logique) ; ADR 0048 accepté (TPCA sans modification, dépôt à part `D:\planet-crafter`, paliers nommés, seuils du wiki) ; `D:\planet-crafter\monde\world.toml` importé (214 objets, 235 lieux ; doublon 157 de Hawkrex, `BootsSpeed3` passé à 215) ; exporté en apworld et généré par le moteur Rust (test ignoré `generate --test monde_externe`, 5 graines, 1 et 2 joueurs). fmt et clippy de `generate` passent.
+- **Pas vérifié** : apworld exporté dans le vrai Archipelago ; datapackage comparé à celui de Hawkrex ; TPCA jamais lancé (BepInEx pas installé) ; licence du dossier de Hawkrex à confirmer.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : logique par paliers de terraformation (étape 2 de l'ADR 0048) ; à l'utilisatrice : écrire à Hawkrex (doublon 157, licence, projet).
