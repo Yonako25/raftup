@@ -84,43 +84,59 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -
 
         // Grille de jaquettes, comme la maquette « Catalogue » : l'illustration du hub
         // (IGDB, ADR 0047) si elle est arrivée, sinon l'aplat coloré avec le titre.
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(22.0, 22.0);
-            for game in shown {
-                let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
-                ui.vertical(|ui| {
-                    let marker = game.from_registry.then_some(("Registre", theme::ITEM));
-                    let look = CardLook {
-                        cover_id: &game.id,
-                        name: &game.name,
-                        status: game.label.clone(),
-                        status_color: tone_color(game.tone),
-                        fraction: if game.ready { 1.0 } else { 0.0 },
-                        marker,
-                        cover,
-                    };
-                    let mut open = cover_card(ui, &look, false);
-                    if let Some(trust) = &game.trust {
-                        registry_panel::trust_badge(ui, trust);
-                    }
-                    // Même largeur que la jaquette.
-                    // « Ajouter » en bleu (action principale), « Dans la bibliothèque » discret.
-                    let button = if game.ready {
-                        egui::Button::new("Dans la bibliothèque")
-                    } else {
-                        egui::Button::new(
-                            egui::RichText::new("Ajouter")
-                                .color(egui::Color32::from_rgb(0x08, 0x12, 0x22))
-                                .strong()
-                                .family(theme::bold_family()),
-                        )
-                        .fill(theme::ACCENT)
-                    }
-                    .min_size(egui::vec2(150.0, 30.0));
-                    open |= ui.add(button).clicked();
-                    if open {
-                        library.select(&game.id);
-                        goto = Some(Page::Library);
+        // Rangées de `per_row` cartes, comme la grille de la Bibliothèque :
+        // `horizontal_wrapped` ne sait pas passer à la ligne des blocs verticaux, et les
+        // jeux en trop sortaient de l'écran (bug du 22 novembre 2026 : leurs boutons
+        // « Ajouter » étaient hors d'atteinte).
+        let per_row = super::library::cards_per_row(ui.available_width());
+        // `scope` : cet espacement ne vaut que pour la grille, pas pour les lignes du bas.
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing =
+                egui::vec2(super::library::CARD_GAP, super::library::CARD_GAP);
+            // `chunks` découpe la liste en rangées (la dernière peut être plus courte).
+            for row in shown.chunks(per_row) {
+                ui.horizontal_top(|ui| {
+                    for game in row {
+                        let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
+                        ui.vertical(|ui| {
+                            let marker = game.from_registry.then_some(("Registre", theme::ITEM));
+                            let look = CardLook {
+                                cover_id: &game.id,
+                                name: &game.name,
+                                status: game.label.clone(),
+                                status_color: tone_color(game.tone),
+                                fraction: if game.ready { 1.0 } else { 0.0 },
+                                marker,
+                                cover,
+                            };
+                            let mut open = cover_card(ui, &look, false);
+                            if let Some(trust) = &game.trust {
+                                registry_panel::trust_badge(ui, trust);
+                            }
+                            // Même largeur que la jaquette.
+                            // « Ajouter » en bleu (action principale), « Dans la bibliothèque » discret.
+                            let button = if game.ready {
+                                egui::Button::new(
+                                    egui::RichText::new("Dans la bibliothèque").size(13.0),
+                                )
+                            } else {
+                                egui::Button::new(
+                                    egui::RichText::new("Ajouter")
+                                        .color(egui::Color32::from_rgb(0x08, 0x12, 0x22))
+                                        .strong()
+                                        .family(theme::bold_family()),
+                                )
+                                .fill(theme::ACCENT)
+                            };
+                            // Taille fixe, celle de la jaquette : toutes les colonnes ont la
+                            // même largeur, et la grille reste alignée.
+                            let size = egui::vec2(super::library::CARD_WIDTH, 30.0);
+                            open |= ui.add_sized(size, button).clicked();
+                            if open {
+                                library.select(&game.id);
+                                goto = Some(Page::Library);
+                            }
+                        });
                     }
                 });
             }

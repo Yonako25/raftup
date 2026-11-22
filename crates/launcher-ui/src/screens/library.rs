@@ -1260,7 +1260,7 @@ enum CardTarget {
 }
 
 /// Nombre de cartes par rangée dans une largeur donnée (au moins une).
-fn cards_per_row(width: f32) -> usize {
+pub(super) fn cards_per_row(width: f32) -> usize {
     let per_row = ((width + CARD_GAP) / (CARD_WIDTH + CARD_GAP)).floor();
     // `as usize` sur un nombre négatif ou NaN donne 0 : `max(1)` garde une carte.
     (per_row as usize).max(1)
@@ -1511,9 +1511,9 @@ pub(super) struct CardLook<'a> {
 
 /// Dessine une carte. Renvoie vrai au clic.
 /// Largeur d'une carte de la grille (jaquette comprise).
-const CARD_WIDTH: f32 = 150.0;
+pub(super) const CARD_WIDTH: f32 = 150.0;
 /// Espace entre deux cartes, en largeur comme en hauteur.
-const CARD_GAP: f32 = 22.0;
+pub(super) const CARD_GAP: f32 = 22.0;
 
 pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
     const WIDTH: f32 = CARD_WIDTH;
@@ -1718,7 +1718,14 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 code_box(ui, &game.install_dir.display().to_string());
             }
             None => {
-                ui.label(widgets::dim("Jeu non trouvé sur ce PC."));
+                ui.label(widgets::dim(
+                    "Jeu non trouvé sur ce PC. S'il est installé ailleurs que dans Steam ou Epic, indique son dossier.",
+                ));
+                ui.add_space(4.0);
+                // Même action que « Ajouter un dossier de jeu » de l'en-tête, pour ce jeu.
+                if widgets::primary_button(ui, "Indiquer le dossier du jeu", true) {
+                    state.pending_pick = state.selected.clone();
+                }
             }
         }
 

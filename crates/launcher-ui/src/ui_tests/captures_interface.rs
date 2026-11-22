@@ -36,7 +36,7 @@ use crate::art_ui::{Artwork, Loader};
 use crate::screens::friends::{self, FriendsState};
 use crate::screens::join::{self, JoinState};
 use crate::screens::library::LibraryState;
-use crate::screens::{catalog, home, running, settings, setup, welcome};
+use crate::screens::{catalog, home, library, running, settings, setup, welcome};
 use crate::worker::{Shared, Worker};
 
 /// Dossier des images : `RAFTUP_CAPTURES_DIR`, sinon `target/captures/` du workspace
@@ -259,6 +259,28 @@ fn captures_interface() {
         });
         save(&mut harness, "03-bibliotheque-illustrations");
     }
+    // Fiche d'un jeu absent du PC, juste après « Ajouter » dans le Catalogue.
+    {
+        let root = tempfile::tempdir().unwrap();
+        let mut library = LibraryState::for_tests(
+            launcher_core::Catalog::embedded().unwrap(),
+            launcher_core::Paths::under(root.path()),
+            super::bibliotheque::scan_ready(),
+        );
+        library.art = demo_art();
+        library.select("hollow-knight");
+        let mut harness = builder().build_ui_state(
+            |ui, library: &mut LibraryState| {
+                library::show(ui, library, &Shared::default(), None);
+            },
+            library,
+        );
+        harness.run();
+        tall(&mut harness);
+        save(&mut harness, "04b-fiche-jeu-ajoute");
+        drop(harness);
+        drop(root);
+    }
     // Fiche d'un jeu, avec « Se connecter à la main » ouvert.
     {
         let mut harness = bibliotheque_with(Some(demo_art()));
@@ -432,8 +454,10 @@ fn captures_interface() {
             _root: tempfile::TempDir,
         }
         let root = tempfile::tempdir().unwrap();
+        // Le vrai catalogue embarqué : une dizaine de jeux, pour voir la grille entière
+        // (avec un seul jeu, le bug de la grille du 22 novembre 2026 ne se voyait pas).
         let mut library = LibraryState::for_tests(
-            demo_catalog(),
+            launcher_core::Catalog::embedded().unwrap(),
             launcher_core::Paths::under(root.path()),
             super::bibliotheque::scan_ready(),
         );

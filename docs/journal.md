@@ -720,3 +720,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : remettre ces deux blocs ailleurs (Paramètres > avancé ?) si l'utilisatrice le demande ; relire la proposition d'ADR du salon par le Rafthub.
 
+### 2026-11-22 · Catalogue : grille qui passe à la ligne, « Ajouter » joignable
+- **Fait** : bug signalé par l'utilisatrice (« ne permet pas d'ajouter des jeux ») : avec le vrai catalogue (10 jeux), `horizontal_wrapped` mettait toutes les cartes sur une rangée qui sortait de l'écran, les derniers jeux étaient hors d'atteinte. Grille en rangées comme la Bibliothèque (`cards_per_row`), boutons de la largeur de la jaquette ; test `catalogue_complet_le_dernier_jeu_s_ajoute` (dernier bouton dans l'écran, « Ajouter » met le jeu dans la Bibliothèque) ; fiche d'un jeu non trouvé : bouton « Indiquer le dossier du jeu ». Captures : Catalogue sur le vrai catalogue, nouvelle `04b-fiche-jeu-ajoute` (vues). fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : la boîte de choix du dossier à l'écran réel ; un jeu ajouté sans dossier n'est gardé que pour la session.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub.
+
