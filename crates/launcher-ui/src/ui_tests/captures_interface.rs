@@ -184,6 +184,8 @@ fn demo_party() -> Shared {
             },
             address: "wss://partie.exemple.fr:38281".to_string(),
             encrypted: true,
+            // Certificat généré par Raftup (ADR 0043) : port mixte, empreinte dans les liens.
+            fingerprint: Some(launcher_core::Fingerprint::of_der(b"demonstration").to_hex()),
             has_password: true,
             started_at: now - 3600.0,
             save: None,
@@ -320,6 +322,9 @@ fn captures_interface() {
         );
         tall(&mut harness);
         save(&mut harness, "07-heberger");
+        // Les mêmes, avec « Options avancées » ouvert : le choix du chiffrement.
+        click(&mut harness, "Options avancées");
+        save(&mut harness, "07b-heberger-options");
     }
     // Partie en cours : onglet Équipage, puis onglet Salon.
     for (tab, name) in [

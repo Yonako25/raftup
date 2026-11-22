@@ -653,6 +653,12 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : The Planet Crafter, étape 3 devant le jeu (T3 à T5 du plan).
 
+### 2026-11-21 · Chiffrement par défaut sans PEM (cloud/chiffrement-sans-pem)
+- **Fait** : ADR 0043 mis en œuvre : port mixte wss + ws (`server`, premier octet par `peek`), épinglage par empreinte (`client-core::Fingerprint`), certificat généré et réutilisé (`launcher-core::certificate`), `Encryption::Generated`, `fp` dans les liens, test « prêt ? » épinglé ; « Chiffré par Raftup » par défaut dans Créer et Héberger, adresse sans schéma pour les mods. Tests server, client-core, launcher-core, launcher-ui, clippy et fmt passent sous Linux.
+- **Pas vérifié** : un mod non modifié (Slimipelago) face au port mixte avec l'adresse sans schéma (Windows) ; capture de référence du Salon (son résumé du serveur change), à refaire sous Windows.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : essai réel avec Slimipelago sous Windows, puis refaire la capture du Salon.
+
 ### 2026-11-22 · Captures de l'interface sans fenêtre (cloud/captures-interface)
 - **Fait** : `cargo captures` (alias) écrit un PNG de chaque écran dans `target/captures/` (menu, Bibliothèque sans hub et avec faux hub, fiche, Salon, Rejoindre, Héberger, Partie en cours et son onglet Salon, Amis, Paramètres), données de démonstration seulement ; rendu wgpu avec Mesa lavapipe sous Linux ; job CI `captures-interface` (Linux) qui range les images dans l'artefact du même nom. Les 11 captures regardées dans le conteneur.
 - **Pas vérifié** : le job de CI lui-même (pas encore lancé) ; rendu sous Windows de ces captures (non comparées).

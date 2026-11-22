@@ -3,9 +3,10 @@
 use std::path::PathBuf;
 
 use egui::{RichText, Ui};
-use launcher_core::{Encryption, HostOptions, SeedSummary};
+use launcher_core::{HostOptions, SeedSummary};
 
 use super::prefs;
+use super::security::{self, PemFile, Security};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -34,7 +35,8 @@ pub struct SetupForm {
     public_host: String,
     /// Adresse du webhook Discord (secrète : champ masqué, jamais écrite dans un journal).
     webhook: String,
-    encrypted: bool,
+    /// Chiffrement choisi (ADR 0043) : par Raftup sans fichier, par défaut.
+    security: Security,
     cert: Option<PathBuf>,
     key: Option<PathBuf>,
     /// Ouvre de force « Options avancées » à la prochaine image : le formulaire a été
@@ -53,7 +55,7 @@ impl Default for SetupForm {
             password: String::new(),
             public_host: "localhost".to_string(),
             webhook: String::new(),
-            encrypted: true,
+            security: Security::default(),
             cert: None,
             key: None,
             open_advanced: false,
@@ -181,7 +183,7 @@ fn config_panel(
             widgets::dim(format::server_summary(
                 &form.port,
                 &form.public_host,
-                form.encrypted,
+                form.security.summary(),
             ))
             .size(12.0),
         );
@@ -214,7 +216,7 @@ fn config_panel(
                     }
                 }
             }
-            let scheme = if form.encrypted { "wss" } else { "ws" };
+            let scheme = form.security.scheme();
             ui.label(
                 widgets::dim(format!(
                     "Les joueurs se connecteront à {scheme}://hôte:port"
@@ -245,38 +247,12 @@ fn advanced_server(ui: &mut Ui, form: &mut SetupForm) {
     );
 
     labelled(ui, "Chiffrement");
-    let wss = widgets::choice_card(
-        ui,
-        form.encrypted,
-        "Chiffré (wss) — recommandé",
-        widgets::dim("Demande un certificat pour votre nom de domaine.").size(13.0),
-        |ui| {
-            ui.add_space(4.0);
-            ui.label(widgets::dim("Certificat (PEM)").size(13.0));
-            if file_row(ui, &form.cert) {
-                form.pending_pick = Some(Pick::Cert);
-            }
-            ui.label(widgets::dim("Clé privée (PEM)").size(13.0));
-            if file_row(ui, &form.key) {
-                form.pending_pick = Some(Pick::Key);
-            }
-        },
-    );
-    if wss {
-        form.encrypted = true;
-    }
-    ui.add_space(4.0);
-    let plain = widgets::choice_card(
-        ui,
-        !form.encrypted,
-        "En clair (ws)",
-        RichText::new("Le mot de passe de la salle passe en clair sur le réseau.")
-            .color(theme::AMBER)
-            .size(13.0),
-        |_| {},
-    );
-    if plain {
-        form.encrypted = false;
+    // Copies des chemins : `form.security` est modifié pendant le dessin des cartes.
+    let (cert, key) = (form.cert.clone(), form.key.clone());
+    match security::choice(ui, &mut form.security, &cert, &key, file_row) {
+        Some(PemFile::Cert) => form.pending_pick = Some(Pick::Cert),
+        Some(PemFile::Key) => form.pending_pick = Some(Pick::Key),
+        None => {}
     }
 }
 
@@ -286,7 +262,7 @@ pub fn dev_prefill(form: &mut SetupForm, worker: &Worker, seed: PathBuf, port: u
     form.seed = None;
     form.seed_loading = true;
     form.seed_path = Some(seed.clone());
-    form.encrypted = false;
+    form.security = Security::Plain;
     form.port = port.to_string();
     worker.send(Command::LoadSeed(seed));
 }
@@ -368,22 +344,7 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
             "Indiquez l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into(),
         );
     }
-    let encryption =
-        if form.encrypted {
-            match (&form.cert, &form.key) {
-                (Some(cert), Some(key)) => Encryption::Wss {
-                    cert: cert.clone(),
-                    key: key.clone(),
-                },
-                _ => return Err(
-                    "Le chiffrement wss demande un certificat et une clé privée (fichiers PEM). \
-                     Sans certificat, choisissez « En clair (ws) »."
-                        .into(),
-                ),
-            }
-        } else {
-            Encryption::Plain
-        };
+    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
     let webhook = format::parse_webhook(&form.webhook)?;
     Ok(HostOptions {

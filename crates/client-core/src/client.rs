@@ -11,6 +11,7 @@
 //! boucle. tungstenite répond tout seul aux « ping » du serveur pendant la lecture.
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 use ap_protocol::client::Connect;
@@ -27,6 +28,7 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::address::candidate_urls;
 use crate::error::ClientError;
+use crate::pin::Fingerprint;
 
 /// Version d'Archipelago annoncée au serveur dans `Connect`.
 ///
@@ -68,6 +70,10 @@ pub struct ConnectOptions {
     /// Vrai pour recevoir les données propres au jeu (`slot_data`).
     pub want_slot_data: bool,
     pub max_message_size: usize,
+    /// Empreinte du certificat du serveur, prise dans le lien d'invitation (ADR 0043).
+    /// Avec elle, un `wss://` accepte ce seul certificat (auto-signé) ; sans elle, la
+    /// vérification habituelle des certificats s'applique.
+    pub pinned: Option<Fingerprint>,
 }
 
 impl ConnectOptions {
@@ -83,6 +89,7 @@ impl ConnectOptions {
             uuid: "raftup".to_string(),
             want_slot_data: true,
             max_message_size: DEFAULT_MAX_MESSAGE_SIZE,
+            pinned: None,
         }
     }
 }
@@ -214,9 +221,21 @@ async fn open_socket(options: &ConnectOptions) -> Result<(Socket, String), Clien
 
     let mut last_error = None;
     for url in urls {
+        // Empreinte épinglée et `wss` : ce seul certificat est accepté (ADR 0043).
+        let connector = match options.pinned {
+            Some(pin) if url.starts_with("wss://") => Some(tokio_tungstenite::Connector::Rustls(
+                Arc::new(crate::pin::pinned_config(pin)),
+            )),
+            _ => None,
+        };
         let attempt = tokio::time::timeout(
             HANDSHAKE_TIMEOUT,
-            tokio_tungstenite::connect_async_with_config(url.as_str(), Some(config), false),
+            tokio_tungstenite::connect_async_tls_with_config(
+                url.as_str(),
+                Some(config),
+                false,
+                connector,
+            ),
         )
         .await;
         match attempt {

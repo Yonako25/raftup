@@ -24,6 +24,7 @@ pub mod activity;
 pub mod archive;
 pub mod art;
 pub mod catalog;
+pub mod certificate;
 pub mod config;
 pub mod crew;
 pub mod detect;
@@ -57,6 +58,8 @@ pub mod url_scheme;
 pub mod webhook;
 
 pub use catalog::Catalog;
+/// Empreinte d'un certificat (ADR 0043), réexportée de `client-core`.
+pub use client_core::Fingerprint;
 pub use config::{GameSettings, LoadedConfig, UserConfig};
 pub use detect::{
     detect_games, validate_manual_dir, DetectRule, DetectedGame, DetectionRoots, GameState, Store,

@@ -65,18 +65,23 @@ pub(crate) async fn handle(
     id: ClientId,
     events: Sender<Event>,
     limits: Limits,
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsMode>,
 ) {
     info!(%peer, id, "connexion entrante");
     let result = match tls {
         None => serve_client(stream, id, &events, &limits).await,
-        Some(acceptor) => {
-            // Poignée de main TLS, bornée dans le temps : un client qui ouvre
-            // le port sans rien dire ne doit pas garder la connexion.
-            match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
-                Ok(Ok(stream)) => serve_client(stream, id, &events, &limits).await,
-                Ok(Err(error)) => Err(ConnectionError::Tls(error)),
-                Err(_) => Err(ConnectionError::HandshakeTimeout),
+        Some(mode) => {
+            // Port mixte (ADR 0043) : un client qui ne commence pas par une poignée de
+            // main TLS est servi en clair.
+            let encrypted = if mode.plain_fallback {
+                starts_with_tls(&stream).await
+            } else {
+                Ok(true)
+            };
+            match encrypted {
+                Ok(true) => serve_tls(stream, id, &events, &limits, &mode.acceptor).await,
+                Ok(false) => serve_client(stream, id, &events, &limits).await,
+                Err(error) => Err(error),
             }
         }
     };
@@ -86,6 +91,50 @@ pub(crate) async fn handle(
     match result {
         Ok(()) => info!(%peer, id, "déconnecté"),
         Err(error) => info!(%peer, id, "connexion fermée : {error}"),
+    }
+}
+
+/// Le chiffrement d'un port : le TLS de l'hôte, et le clair en plus ou non.
+pub(crate) struct TlsMode {
+    pub(crate) acceptor: TlsAcceptor,
+    /// Port mixte : le clair est aussi accepté (ADR 0043).
+    pub(crate) plain_fallback: bool,
+}
+
+/// Premier octet d'une poignée de main TLS (type d'enregistrement « handshake »).
+const TLS_HANDSHAKE_BYTE: u8 = 0x16;
+
+/// Regarde le premier octet de la connexion SANS le consommer (`peek`) : il reste
+/// dans le tampon pour la suite (TLS ou WebSocket en clair). Vrai pour une poignée de
+/// main TLS. Borné dans le temps : un client qui ouvre le port sans rien dire ne
+/// garde pas la connexion ; un client qui ferme tout de suite est une erreur.
+async fn starts_with_tls(stream: &TcpStream) -> Result<bool, ConnectionError> {
+    let mut first = [0u8; 1];
+    match tokio::time::timeout(HANDSHAKE_TIMEOUT, stream.peek(&mut first)).await {
+        Ok(Ok(0)) => Err(ConnectionError::Tls(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "connexion fermée avant le premier octet",
+        ))),
+        Ok(Ok(_)) => Ok(first[0] == TLS_HANDSHAKE_BYTE),
+        Ok(Err(error)) => Err(ConnectionError::Tls(error)),
+        Err(_) => Err(ConnectionError::HandshakeTimeout),
+    }
+}
+
+/// Poignée de main TLS, bornée dans le temps, puis le client chiffré.
+async fn serve_tls(
+    stream: TcpStream,
+    id: ClientId,
+    events: &Sender<Event>,
+    limits: &Limits,
+    acceptor: &TlsAcceptor,
+) -> Result<(), ConnectionError> {
+    // Un client qui ouvre le port sans finir la poignée de main ne doit pas garder
+    // la connexion.
+    match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(stream)).await {
+        Ok(Ok(stream)) => serve_client(stream, id, events, limits).await,
+        Ok(Err(error)) => Err(ConnectionError::Tls(error)),
+        Err(_) => Err(ConnectionError::HandshakeTimeout),
     }
 }
 

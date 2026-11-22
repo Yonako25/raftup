@@ -15,6 +15,7 @@ pub mod prefs;
 pub mod presets;
 pub mod registry_panel;
 pub mod running;
+pub mod security;
 pub mod settings;
 pub mod setup;
 pub mod soon;

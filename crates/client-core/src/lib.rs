@@ -19,7 +19,9 @@
 mod address;
 mod client;
 mod error;
+mod pin;
 
 pub use address::{candidate_urls, DEFAULT_PORT};
 pub use client::{Client, ConnectOptions, Session, CLIENT_VERSION, DEFAULT_MAX_MESSAGE_SIZE};
 pub use error::ClientError;
+pub use pin::Fingerprint;

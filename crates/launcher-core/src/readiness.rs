@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use crate::diagnose::{check_connection_with_timeout, ConnectionProblem};
+use crate::diagnose::{check_connection_pinned, check_connection_with_timeout, ConnectionProblem};
 
 /// Délai accordé à un test de slot.
 const READY_TIMEOUT: Duration = Duration::from_secs(8);
@@ -128,6 +128,21 @@ pub async fn check_slot(
     password: Option<&str>,
 ) -> Readiness {
     check_slot_with_timeout(address, slot, game, password, READY_TIMEOUT).await
+}
+
+/// Comme [`check_slot`], avec l'empreinte du certificat généré par Raftup (ADR 0043) :
+/// le test « prêt ? » d'une partie chiffrée par Raftup passe en `wss` épinglé.
+pub async fn check_slot_pinned(
+    address: &str,
+    slot: &str,
+    game: &str,
+    password: Option<&str>,
+    pinned: Option<client_core::Fingerprint>,
+) -> Readiness {
+    match check_connection_pinned(address, slot, password, game, pinned, READY_TIMEOUT).await {
+        Ok(()) => Readiness::Ready,
+        Err(problem) => Readiness::from_problem(problem),
+    }
 }
 
 /// Comme [`check_slot`], avec un délai au choix (utile aux tests).

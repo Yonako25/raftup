@@ -17,6 +17,7 @@ mod captures;
 mod captures_interface;
 mod ecrans;
 mod menu;
+mod partie;
 mod salon;
 
 use egui_kittest::kittest::Queryable;

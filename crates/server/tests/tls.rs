@@ -191,3 +191,93 @@ fn fichiers_pem_valides() {
     std::fs::write(&key_path, key).unwrap();
     assert!(TlsConfig::from_pem_files(&cert_path, &key_path).is_ok());
 }
+
+// ---------------------------------------------------------------------------
+// Port mixte (ADR 0043) : wss et ws sur le même port
+// ---------------------------------------------------------------------------
+
+/// Lance un serveur en port mixte ; renvoie son port et le certificat (DER).
+async fn start_mixed() -> (u16, Vec<u8>) {
+    let (cert, key, der) = self_signed();
+    let tls = TlsConfig::from_pem(cert.as_bytes(), key.as_bytes())
+        .unwrap()
+        .with_plain_fallback();
+    assert!(tls.accepts_plain());
+    let server = Server::bind("127.0.0.1:0", seed_mit())
+        .await
+        .unwrap()
+        .with_tls(tls);
+    let port = server.local_addr().unwrap().port();
+    tokio::spawn(server.run());
+    (port, der)
+}
+
+/// Le même port sert un client `wss` et un client `ws`, en même temps.
+#[tokio::test]
+async fn port_mixte_wss_et_ws() {
+    let (port, der) = start_mixed().await;
+    let mut secure = connect_wss(port, &der).await.unwrap();
+    let (mut plain, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .unwrap();
+    assert!(next_text(&mut secure).await.unwrap().contains("RoomInfo"));
+    assert!(next_text(&mut plain).await.unwrap().contains("RoomInfo"));
+}
+
+/// Un mod de jeu qui ne connaît pas le certificat : son `wss` échoue, puis il retombe
+/// sur `ws` au même port, comme les clients officiels (ADR 0043).
+#[tokio::test]
+async fn port_mixte_repli_en_clair() {
+    let (port, _) = start_mixed().await;
+    let secure = tokio_tungstenite::connect_async(format!("wss://127.0.0.1:{port}")).await;
+    assert!(
+        secure.is_err(),
+        "certificat auto-signé : le wss doit échouer"
+    );
+    let (mut plain, _) = tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{port}"))
+        .await
+        .unwrap();
+    assert!(next_text(&mut plain).await.unwrap().contains("RoomInfo"));
+}
+
+/// Un client lent qui n'envoie d'abord qu'un octet : le serveur attend la suite sans
+/// rien consommer, puis répond à la poignée de main WebSocket en clair.
+#[tokio::test]
+async fn port_mixte_premier_octet_seul() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (port, _) = start_mixed().await;
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let request = format!(
+        "GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    );
+    let (first, rest) = request.as_bytes().split_at(1);
+    stream.write_all(first).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    stream.write_all(rest).await.unwrap();
+    let mut reply = vec![0u8; 512];
+    let read = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut reply))
+        .await
+        .unwrap()
+        .unwrap();
+    let reply = String::from_utf8_lossy(&reply[..read]);
+    assert!(reply.starts_with("HTTP/1.1 101"), "{reply}");
+}
+
+/// Un client qui ouvre le port sans jamais parler est fermé après le délai de la
+/// poignée de main (10 s), sans gêner les autres clients.
+#[tokio::test]
+async fn port_mixte_client_muet_ferme() {
+    use tokio::io::AsyncReadExt;
+    let (port, der) = start_mixed().await;
+    let mut silent = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    // Pendant ce temps, un autre client est servi.
+    let mut other = connect_wss(port, &der).await.unwrap();
+    assert!(next_text(&mut other).await.unwrap().contains("RoomInfo"));
+    let mut buffer = [0u8; 16];
+    let read = tokio::time::timeout(Duration::from_secs(15), silent.read(&mut buffer))
+        .await
+        .expect("le serveur aurait dû fermer la connexion muette");
+    // Fermeture vue comme une fin de flux (0 octet) ou une remise à zéro.
+    assert!(matches!(read, Ok(0) | Err(_)), "{read:?}");
+}
