@@ -99,6 +99,10 @@ pub struct LibraryState {
     notice: Option<Notice>,
     /// Le joueur a cliqué une première fois sur « Désinstaller » : on attend la confirmation.
     confirm_uninstall: bool,
+    /// Jeux ouverts depuis le Catalogue pendant cette session : ils restent dans la
+    /// Bibliothèque même s'ils ne sont pas (encore) trouvés sur ce PC.
+    /// `BTreeSet` : ordre stable, sans doublon.
+    added: std::collections::BTreeSet<String>,
     /// Choix d'un dossier demandé pour ce jeu (la boîte de dialogue s'ouvre hors du dessin).
     pending_pick: Option<String>,
     /// Debug seulement (`RAFTUP_DEV_INSTALLER=1`) : lancer l'installation du jeu
@@ -130,6 +134,7 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
+            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: cfg!(debug_assertions)
                 && std::env::var_os("RAFTUP_DEV_INSTALLER").is_some(),
@@ -156,6 +161,7 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
+            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: false,
             registry: RegistryPanel::disabled(),
@@ -183,9 +189,32 @@ impl LibraryState {
         self.running.names()
     }
 
-    /// Nombre de jeux du catalogue (compteur de la barre latérale).
+    /// Nombre de jeux dans la Bibliothèque (compteur de la barre latérale).
     pub fn game_count(&self) -> usize {
-        self.catalog.as_ref().map_or(0, |c| c.profiles.len())
+        self.library_ids().len()
+    }
+
+    /// Vrai si le jeu est dans la Bibliothèque : trouvé sur ce PC, avec des mods posés
+    /// par Raftup (reçu d'installation), ou ouvert depuis le Catalogue (« Ajouter »).
+    /// Les autres jeux du catalogue ne sont montrés que dans l'écran « Catalogue ».
+    pub fn in_library(&self, game_id: &str) -> bool {
+        let on_pc = self.scan.as_ref().is_some_and(|scan| {
+            scan.found.contains_key(game_id) || scan.status.contains_key(game_id)
+        });
+        on_pc || self.added.contains(game_id)
+    }
+
+    /// Les jeux de la Bibliothèque, dans l'ordre du catalogue.
+    pub fn library_ids(&self) -> Vec<String> {
+        let Ok(catalog) = &self.catalog else {
+            return Vec::new();
+        };
+        catalog
+            .profiles
+            .keys()
+            .filter(|id| self.in_library(id))
+            .cloned()
+            .collect()
     }
 
     /// Le catalogue, s'il s'est chargé (l'écran « Rejoindre » y cherche le jeu du lien).
@@ -297,6 +326,9 @@ impl LibraryState {
         }
         self.selected = Some(game_id.to_string());
         self.native.selected = None;
+        // Un jeu ouvert depuis le Catalogue reste dans la Bibliothèque pour cette
+        // session, le temps de l'installer ou d'indiquer son dossier.
+        self.added.insert(game_id.to_string());
     }
 }
 
@@ -974,18 +1006,14 @@ pub fn show(
         }
 
         if state.game_count() == 0 && state.native.count() == 0 {
-            empty_state(ui);
+            empty_state(ui, state.scanning.is_some() || state.scan.is_none());
             bottom_panels(ui, state);
             return;
         }
         // Premier jeu sélectionné par défaut (ou le premier monde natif s'il n'y a pas de
         // jeu au catalogue), sauf si un monde natif est déjà sélectionné.
         if state.selected.is_none() && state.native.selected.is_none() {
-            state.selected = state
-                .catalog
-                .as_ref()
-                .ok()
-                .and_then(|c| c.profiles.keys().next().cloned());
+            state.selected = state.library_ids().into_iter().next();
             if state.selected.is_none() {
                 let first = state.native.worlds().first().map(|w| w.key.clone());
                 if let Some(key) = first {
@@ -1193,15 +1221,22 @@ fn big_button(ui: &mut Ui, text: &str, primary: bool, enabled: bool, width: f32)
 }
 
 /// Catalogue vide : aucun profil n'est encore publié.
-fn empty_state(ui: &mut Ui) {
-    widgets::panel(ui, "Aucun jeu dans le catalogue", |ui| {
+fn empty_state(ui: &mut Ui, scanning: bool) {
+    if scanning {
+        widgets::panel(ui, "Recherche de tes jeux…", |ui| {
+            ui.label(widgets::dim(
+                "Raftup cherche les jeux installés via Steam et Epic.",
+            ));
+        });
+        return;
+    }
+    widgets::panel(ui, "Aucun jeu trouvé sur ce PC", |ui| {
         ui.label(widgets::dim(
-            "Les profils d'installation arrivent avec les prochaines versions de Raftup : \
-             chaque jeu attend l'accord de l'auteur de son mod.",
+            "Raftup n'a trouvé aucun jeu du catalogue installé via Steam ou Epic.",
         ));
         ui.add_space(4.0);
         ui.label(widgets::dim(
-            "Vous pouvez déjà héberger une partie depuis « En cours » : chaque joueur installe son mod à la main.",
+            "Ouvre « Parcourir » dans le Catalogue pour voir les jeux pris en charge et en ajouter un.",
         ));
     });
 }
@@ -1265,6 +1300,10 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
     let mut cards: Vec<(CardLook<'_>, bool, CardTarget)> = Vec::new();
     for profile in catalog.games() {
         let id = &profile.game.id;
+        // Seuls les jeux de ce PC (ou ajoutés depuis le Catalogue) ont leur carte.
+        if !state.in_library(id) {
+            continue;
+        }
         let found = state.scan.as_ref().and_then(|s| s.found.get(id));
         let status = state.scan.as_ref().and_then(|s| s.status.get(id));
         let view = view(profile, found, status);
@@ -1895,6 +1934,46 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
+    /// Bug signalé le 22 novembre 2026 : la Bibliothèque montrait tous les jeux du
+    /// catalogue, même ceux absents du PC. Elle ne garde que les jeux trouvés (ou
+    /// ouverts depuis le Catalogue) ; les autres restent dans l'écran « Catalogue ».
+    #[test]
+    fn seuls_les_jeux_du_pc_sont_dans_la_bibliotheque() {
+        let catalog = Catalog::from_texts(&[
+            (
+                "slime-rancher.toml",
+                include_str!("../../../../profiles/slime-rancher.toml"),
+            ),
+            (
+                "hollow-knight.toml",
+                include_str!("../../../../profiles/hollow-knight.toml"),
+            ),
+        ])
+        .unwrap();
+        let mut scan = Scan::default();
+        scan.found.insert(
+            "slime-rancher".to_string(),
+            DetectedGame {
+                game_id: "slime-rancher".to_string(),
+                store: launcher_core::Store::Steam,
+                install_dir: std::path::PathBuf::from("C:/Jeux/Slime Rancher"),
+                build_id: None,
+                state: launcher_core::GameState::Ready,
+            },
+        );
+        let root = tempfile::tempdir().unwrap();
+        let mut state = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
+
+        assert_eq!(state.library_ids(), vec!["slime-rancher".to_string()]);
+        assert_eq!(state.game_count(), 1);
+        assert!(!state.in_library("hollow-knight"));
+
+        // « Ajouter » dans le Catalogue ouvre sa fiche : le jeu entre dans la Bibliothèque.
+        state.select("hollow-knight");
+        assert!(state.in_library("hollow-knight"));
+        assert_eq!(state.game_count(), 2);
+    }
+
     #[test]
     fn bandeau_de_la_fiche_plus_bas_en_aplat() {
         // Avec une image : 16:9, plafonné à 180 px.
@@ -2249,8 +2328,10 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
 
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 1);
-        // Le jeu du catalogue reste sélectionné par défaut ; la carte du monde natif est là.
-        assert_eq!(state.selected.as_deref(), Some("demo"));
+        // Le jeu du catalogue n'est pas sur ce PC : il n'est pas dans la Bibliothèque,
+        // et c'est le monde natif qui est sélectionné par défaut.
+        assert_eq!(state.selected, None);
+        assert_eq!(state.native.selected.as_deref(), Some("apquest"));
         assert!(shown.iter().any(|t| t == "MONDE NATIF"), "{shown:?}");
         assert!(
             shown.iter().any(|t| t.contains("1 monde natif")),
@@ -2296,10 +2377,11 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         );
         assert!(message.is_ok());
         state.native.refresh(&native_dir);
-        // L'image suivante revient au jeu du catalogue, sans monde natif.
+        // L'image suivante n'a plus de monde natif ; le jeu du catalogue, absent de ce
+        // PC, ne revient pas dans la Bibliothèque.
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 0);
-        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert_eq!(state.selected, None);
         assert!(!shown.iter().any(|t| t == "MONDE NATIF"));
         assert!(!native_dir.join("apquest").exists());
     }

@@ -695,3 +695,10 @@ untime2`.
 - **Pas vérifié** : aucun essai réel ; appid Steam d'Aquaria (216250, l'API Steam ne répond pas) ; compatibilité des mods avec 0.6.8.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : décider des jeux gratuits faits pour Archipelago (ChecksFinder, Bumper Stickers, Celeste 64) et des prérequis à installer soi-même (Everest) ; puis lot 3.
+
+### 2026-11-22 · Branches cloud fusionnées ; Bibliothèque limitée aux jeux du PC
+- **Fait** : fusion dans `main` de `cloud/hub-officiel-par-defaut`, `images-fiches`, `profils-lot-2` (avec `profils-mvp`), `chiffrement-sans-pem` et `plan-interface-3-5` (Accueil, Catalogue, Profil, assistant, « Lancer et connecter ») ; conflits du journal, de `catalog.rs` (The Planet Crafter gardé), de `profiles/README.md` et des tests réglés ; deux tests d'interface réparés (`fingerprint`, Bibliothèque passée à l'écran de partie) ; bug signalé par l'utilisatrice : la Bibliothèque montrait tout le catalogue. Elle ne garde plus que les jeux trouvés sur le PC, ceux qui ont un reçu d'installation et ceux ouverts depuis le Catalogue (test `seuls_les_jeux_du_pc_sont_dans_la_bibliotheque`) ; message « Aucun jeu trouvé sur ce PC » qui renvoie au Catalogue. Images de référence `salon.png` et `bibliotheque.png` régénérées (changements des branches cloud, vus). fmt, clippy et `cargo test --workspace` passent ; `cargo captures` vu (menu, Bibliothèque, Catalogue).
+- **Pas vérifié** : l'écran réel avec les vrais jeux de l'utilisatrice ; un jeu ajouté depuis le Catalogue n'est gardé que pour la session (pas enregistré).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (proposition d'ADR, à valider, non fusionnée).
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub (branche `cloud/adr-salon-rafthub`).
+
