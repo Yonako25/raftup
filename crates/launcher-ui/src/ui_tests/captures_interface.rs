@@ -36,7 +36,7 @@ use crate::art_ui::{Artwork, Loader};
 use crate::screens::friends::{self, FriendsState};
 use crate::screens::join::{self, JoinState};
 use crate::screens::library::LibraryState;
-use crate::screens::{running, settings, setup};
+use crate::screens::{catalog, home, running, settings, setup, welcome};
 use crate::worker::{Shared, Worker};
 
 /// Dossier des images : `RAFTUP_CAPTURES_DIR`, sinon `target/captures/` du workspace
@@ -217,6 +217,8 @@ struct Partie {
     error: Option<String>,
     worker: Worker,
     shared: Shared,
+    library: LibraryState,
+    _root: tempfile::TempDir,
 }
 
 /// État de l'écran « Héberger » (sans partie en cours).
@@ -331,7 +333,17 @@ fn captures_interface() {
         (None, "08-partie-en-cours"),
         (Some("Salon"), "09-partie-salon"),
     ] {
+        // La Bibliothèque donne les jaquettes et l'image du bandeau (faux hub).
+        let root = tempfile::tempdir().unwrap();
+        let mut library = LibraryState::for_tests(
+            demo_catalog(),
+            launcher_core::Paths::under(root.path()),
+            super::bibliotheque::scan_ready(),
+        );
+        library.art = demo_art();
         let state = Partie {
+            library,
+            _root: root,
             running: running::RunningState::default(),
             error: None,
             worker: Worker::detached(),
@@ -339,11 +351,20 @@ fn captures_interface() {
         };
         let mut harness = builder().build_ui_state(
             |ui, s: &mut Partie| {
-                running::show(ui, &mut s.running, &mut s.error, &s.worker, &s.shared);
+                // Comme `App` : la Bibliothèque range les images arrivées.
+                s.library.background(ui.ctx());
+                running::show(
+                    ui,
+                    &mut s.running,
+                    &mut s.error,
+                    &s.worker,
+                    &s.shared,
+                    &mut s.library,
+                );
             },
             state,
         );
-        harness.run();
+        settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
         if let Some(tab) = tab {
             click(&mut harness, tab);
         }
@@ -364,12 +385,111 @@ fn captures_interface() {
     {
         let mut harness = builder().build_ui_state(
             |ui, s: &mut FriendsState| {
-                settings::show(ui, s);
+                settings::show(ui, s, None);
             },
             FriendsState::for_tests(),
         );
         harness.run();
         save(&mut harness, "11-parametres");
+    }
+    // Accueil, avec la fausse partie en cours et le faux hub.
+    {
+        struct Accueil {
+            shared: Shared,
+            library: LibraryState,
+            join: JoinState,
+            _root: tempfile::TempDir,
+        }
+        let root = tempfile::tempdir().unwrap();
+        let mut library = LibraryState::for_tests(
+            demo_catalog(),
+            launcher_core::Paths::under(root.path()),
+            super::bibliotheque::scan_ready(),
+        );
+        library.art = demo_art();
+        let state = Accueil {
+            shared: demo_party(),
+            library,
+            join: JoinState::without_clipboard(),
+            _root: root,
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut Accueil| {
+                s.library.background(ui.ctx());
+                home::show(ui, &s.shared, &mut s.library, &s.join);
+            },
+            state,
+        );
+        settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
+        tall(&mut harness);
+        save(&mut harness, "12-accueil");
+    }
+    // Catalogue (« Parcourir »), avec le faux hub.
+    {
+        struct Catalogue {
+            state: catalog::CatalogState,
+            library: LibraryState,
+            _root: tempfile::TempDir,
+        }
+        let root = tempfile::tempdir().unwrap();
+        let mut library = LibraryState::for_tests(
+            demo_catalog(),
+            launcher_core::Paths::under(root.path()),
+            super::bibliotheque::scan_ready(),
+        );
+        library.art = demo_art();
+        let state = Catalogue {
+            state: catalog::CatalogState::default(),
+            library,
+            _root: root,
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut Catalogue| {
+                s.library.background(ui.ctx());
+                catalog::show(ui, &mut s.state, &mut s.library);
+            },
+            state,
+        );
+        settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
+        save(&mut harness, "13-catalogue");
+    }
+    // Mon profil (sans compte).
+    {
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut FriendsState| {
+                friends::show_profile(ui, s);
+            },
+            FriendsState::for_tests(),
+        );
+        harness.run();
+        save(&mut harness, "14-profil");
+    }
+    // Assistant du premier lancement, premier pas.
+    {
+        struct Bienvenue {
+            welcome: welcome::WelcomeState,
+            library: LibraryState,
+            _root: tempfile::TempDir,
+        }
+        let root = tempfile::tempdir().unwrap();
+        let state = Bienvenue {
+            welcome: welcome::WelcomeState::opened(),
+            library: LibraryState::for_tests(
+                demo_catalog(),
+                launcher_core::Paths::under(root.path()),
+                super::bibliotheque::scan_ready(),
+            ),
+            _root: root,
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut Bienvenue| {
+                let games = s.library.summaries();
+                welcome::show(ui.ctx(), &mut s.welcome, None, &games);
+            },
+            state,
+        );
+        harness.run();
+        save(&mut harness, "15-assistant");
     }
     // Le dossier contient bien une image par écran.
     let count = std::fs::read_dir(output_dir())
@@ -379,5 +499,5 @@ fn captures_interface() {
                 .is_ok_and(|e| e.path().extension().is_some_and(|x| x == "png"))
         })
         .count();
-    assert!(count >= 11, "{count} captures seulement");
+    assert!(count >= 15, "{count} captures seulement");
 }

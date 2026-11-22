@@ -44,23 +44,37 @@ pub fn menu() -> Harness<'static, Menu> {
 #[test]
 fn le_menu_ne_montre_aucune_entree_bientot() {
     let harness = menu();
-    // Les écrans qui existent.
-    for label in ["Bibliothèque", "En cours", "Invitations", "Paramètres"] {
+    // Les écrans qui existent (l'Accueil et « Parcourir » depuis l'étape 4 du plan).
+    for label in [
+        "Accueil",
+        "Bibliothèque",
+        "En cours",
+        "Invitations",
+        "Paramètres",
+        "Parcourir",
+        "CATALOGUE",
+    ] {
         assert!(shows(&harness, label), "lien manquant : {label}");
     }
     // Les écrans à venir (`Page::Soon`) sont cachés, pas annoncés.
-    for label in [
-        "Accueil",
-        "Téléchargements",
-        "Salons",
-        "Parcourir",
-        "Mises à jour",
-    ] {
+    for label in ["Téléchargements", "Salons", "Mises à jour"] {
         assert!(!shows(&harness, label), "lien à cacher : {label}");
     }
     assert!(!shows_part(&harness, "Bientôt"));
-    // La section « CATALOGUE », vidée, disparaît avec son titre.
-    assert!(!shows(&harness, "CATALOGUE"));
+}
+
+#[test]
+fn accueil_parcourir_et_profil_ouvrent_leur_ecran() {
+    for (label, page) in [
+        ("Accueil", Page::Home),
+        ("Parcourir", Page::Catalog),
+        // La carte du profil, en bas de la barre (« Joueur » sans compte).
+        ("Joueur", Page::Profile),
+    ] {
+        let mut harness = menu();
+        click(&mut harness, label);
+        assert_eq!(harness.state().asked, Some(page), "clic sur {label}");
+    }
 }
 
 #[test]

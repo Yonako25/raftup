@@ -36,6 +36,20 @@ pub struct JoinState {
 }
 
 impl JoinState {
+    /// Une invitation lue et pas encore suivie ? Rend le jeu du lien (`None` dedans :
+    /// le lien ne dit pas le jeu). L'Accueil la rappelle au joueur.
+    pub fn pending_invite(&self) -> Option<Option<&str>> {
+        self.invite.as_ref().map(|invite| invite.game.as_deref())
+    }
+
+    /// Tests : une invitation déjà lue, comme après un clic sur un lien.
+    #[cfg(test)]
+    pub(crate) fn with_invite(link: &str) -> JoinState {
+        let mut state = JoinState::without_clipboard();
+        receive(&mut state, link);
+        state
+    }
+
     /// Tests de l'interface : le presse-papiers du système est déjà « regardé »,
     /// donc jamais lu (le résultat ne dépend pas de ce que le PC a copié).
     #[cfg(test)]

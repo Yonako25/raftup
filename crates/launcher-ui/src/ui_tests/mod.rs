@@ -17,6 +17,7 @@ mod captures;
 mod captures_interface;
 mod ecrans;
 mod menu;
+mod parcours;
 mod partie;
 mod salon;
 

@@ -300,6 +300,18 @@ impl RegistryPanel {
             .collect();
     }
 
+    /// Niveau de confiance du profil d'un jeu venu du registre (ADR 0045) ; `None` pour
+    /// un jeu du catalogue embarqué.
+    pub fn profile_trust(&self, game_id: &str) -> Option<Trust> {
+        if !self.is_from_registry(game_id) {
+            return None;
+        }
+        self.index
+            .as_ref()
+            .and_then(|i| i.get(PackageKind::Profile, game_id))
+            .map(|p| p.trust.clone())
+    }
+
     /// Le jeu vient-il du registre (et non du catalogue embarqué) ?
     pub fn is_from_registry(&self, game_id: &str) -> bool {
         self.added.contains(game_id)

@@ -659,6 +659,13 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : à l'utilisatrice : essai réel avec Slimipelago sous Windows, puis refaire la capture du Salon.
 
+### 2026-11-21 · Plan d'interface, étapes 3 à 5 (cloud/plan-interface-3-5)
+- **Fait** : « En cours » avec la progression de chaque joueur ; « Partie en cours » : « Je joue : » et « Lancer et connecter » ; écrans Accueil (prochain pas, partie, invitation, jeux prêts), Catalogue (filtre, origine, badge de confiance) et Mon profil ; panneau « Dossiers » des Paramètres ; assistant du premier lancement (`welcome_done` dans `config.toml`) ; l'Accueil devient la page d'ouverture. Tests launcher-ui (181) et launcher-core, clippy et fmt passent sous Linux.
+- **Pas vérifié** : rendu à l'œil ; vrai lancement d'un jeu par « Lancer et connecter » (Windows) ; écriture réelle de `welcome_done` (coupée dans les tests).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : trancher les questions notées dans `docs/plan-interface-launcher.md` (parties rejointes, « qui te bloque », historique, file de téléchargements, thèmes, langue).
+- **Complément (22 novembre)** : illustrations du hub (ADR 0047) branchées sur les nouveaux écrans, comme sur la maquette : grille de jaquettes dans le Catalogue, jaquettes des jeux prêts dans l'Accueil, image large en fond du bandeau et jaquettes de l'équipage dans « Partie en cours » ; images chargées depuis tous les écrans. Regardé sur captures faites dans le conteneur (rendu logiciel Mesa) avec les vraies images du hub officiel.
+
 ### 2026-11-22 · Captures de l'interface sans fenêtre (cloud/captures-interface)
 - **Fait** : `cargo captures` (alias) écrit un PNG de chaque écran dans `target/captures/` (menu, Bibliothèque sans hub et avec faux hub, fiche, Salon, Rejoindre, Héberger, Partie en cours et son onglet Salon, Amis, Paramètres), données de démonstration seulement ; rendu wgpu avec Mesa lavapipe sous Linux ; job CI `captures-interface` (Linux) qui range les images dans l'artefact du même nom. Les 11 captures regardées dans le conteneur.
 - **Pas vérifié** : le job de CI lui-même (pas encore lancé) ; rendu sous Windows de ces captures (non comparées).

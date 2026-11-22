@@ -51,15 +51,24 @@ Les problèmes principaux :
 - À décider (ADR) : le salon passe par le Rafthub (nouvelles routes `/v1/lobbies`) pour que les invités le voient sans serveur de jeu lancé.
 
 ### Étape 3 : Parties en cours et Partie en cours
+
+> Faite en partie le 21 novembre 2026 (branche `cloud/plan-interface-3-5`) : « En cours » montre la progression de chaque joueur de la partie hébergée ; « Partie en cours » a le panneau « Je joue : » et un seul bouton « Lancer et connecter » (le jeu de la Bibliothèque, avec l'adresse et le slot ; le mot de passe reste à taper). Questions ouvertes : suivre une partie **rejointe** (un client de suivi connecté au serveur de l'ami, et où garder la liste des parties) ; cartes « Rien ne te bloque / Qui tu bloques » (calcul à partir des objets de progression de la seed, côté serveur ou launcher).
+
 - « En cours » liste les parties (hébergées ou rejointes), avec la progression de chacun.
 - L'écran « Partie en cours » de la maquette : un seul bouton « Lancer et connecter », les cartes « Rien ne te bloque / Qui tu bloques », la progression, les onglets Équipage / Objets / Indices / Chat, le fil d'activité, « Joueur absent » (vote de release, déjà fait côté serveur).
 
 ### Étape 4 : Accueil, Catalogue, Mises à jour, Téléchargements
+
+> Faite en partie le 21 novembre 2026 : Accueil (prochain pas, parties en cours, invitation reçue, jeux prêts) et Catalogue (filtre, origine du profil, badge de confiance d'un profil du registre, « Ajouter » ou « Ouvrir » vers la fiche). Questions ouvertes : « Joués récemment » demande un historique des parties (format et emplacement à décider) ; la file de téléchargements avec pause et reprise demande de changer l'installation de `launcher-core` (une seule tâche à la fois aujourd'hui) ; « Mises à jour » et « Téléchargements » restent cachés.
+
 - Accueil : joués récemment, parties en cours, mises à jour disponibles, invitations reçues.
 - Catalogue : les jeux pris en charge (profils et registre), filtres, « Ajouter », badge du niveau de confiance (ADR 0045).
 - Mises à jour et Téléchargements : file d'installation avec progression, pause et reprise.
 
 ### Étape 5 : premier lancement, Paramètres, Profil
+
+> Faite en partie le 21 novembre 2026 : assistant au premier lancement en trois pas (`welcome_done` dans `config.toml`, champ facultatif sans changer `format_version`) ; Paramètres : panneau « Dossiers » ; écran « Mon profil » (le panneau Profil de « Amis », ou une invitation à se connecter). Questions ouvertes : thèmes Océan, Braise, Uni (couleurs absentes de la SPEC, et les couleurs sont des constantes aujourd'hui) ; langue (aucune décision sur la traduction) ; statistiques de parties (même historique que « Joués récemment »).
+
 - Assistant au premier lancement : compte Rafthub (ou continuer sans), détection des jeux, premier jeu prêt.
 - Paramètres : hub, dossiers, langue, thème (Acier, Océan, Braise, Uni).
 - Profil : pseudo, Discord lié, présence, statistiques de parties.

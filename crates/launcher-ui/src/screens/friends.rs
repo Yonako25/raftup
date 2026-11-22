@@ -1265,6 +1265,40 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
     None
 }
 
+/// Écran « Mon profil » (plan de l'interface, étape 5) : pseudo, présence et compte
+/// Discord du compte connecté, le même panneau que dans « Amis ». Sans compte : une
+/// invitation à se connecter. Les statistiques de parties attendent un historique
+/// des parties (question notée dans la PR de l'étape 5).
+pub fn show_profile(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
+    let ctx = ui.ctx().clone();
+    let mut goto = None;
+    super::page(ui, |ui| {
+        super::header(ui, "Communauté", "Mon profil", |ui| {
+            if state.busy() {
+                ui.spinner();
+            }
+        });
+        if let Some(Notice::Error(message)) = &state.notice {
+            widgets::error_banner(ui, message);
+            ui.add_space(10.0);
+        }
+        if state.username.is_some() {
+            profile_panel(ui, state, &ctx);
+        } else {
+            widgets::panel(ui, "Sans compte", |ui| {
+                ui.label(widgets::dim(
+                    "Ton profil vit sur le Rafthub : connecte-toi pour choisir ton pseudo, voir tes amis et lier Discord.",
+                ));
+                ui.add_space(8.0);
+                if widgets::primary_button(ui, "Se connecter ou créer un compte", true) {
+                    goto = Some(Page::Friends);
+                }
+            });
+        }
+    });
+    goto
+}
+
 /// Bandeau bleu discret pour un message d'information.
 fn info_banner(ui: &mut Ui, message: &str) {
     egui::Frame::new()

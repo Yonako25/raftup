@@ -14,6 +14,7 @@ Les tests d'interface sont donc dans `src/ui_tests/`, compilés seulement pour `
 | `bibliotheque.rs` | Bibliothèque avec le catalogue de `profiles/` : carte et fiche du jeu, « Se connecter à la main » replié |
 | `ecrans.rs` | Paramètres, Rejoindre (et un lien illisible), Amis sans compte |
 | `menu.rs` | Barre latérale : aucune entrée « Bientôt », un clic ouvre l'écran |
+| `parcours.rs` | Accueil, Catalogue, Mon profil, assistant du premier lancement, « Lancer et connecter » de la partie hébergée |
 | `captures.rs` | Captures de référence du Salon et de la Bibliothèque (images) |
 | `captures_interface.rs` | Une image PNG de chaque écran, pour regarder l'interface (pas de comparaison) |
 
@@ -63,7 +64,7 @@ cargo captures
 ```
 
 Cet alias (`.cargo/config.toml`) dessine chaque écran du launcher avec des données de démonstration et écrit un PNG par écran dans `target/captures/` :
-menu, Bibliothèque (sans hub et avec un faux hub), fiche d'un jeu, Salon, Rejoindre, Héberger, Partie en cours (Équipage et Salon), Amis, Paramètres.
+menu, Bibliothèque (sans hub et avec un faux hub), fiche d'un jeu, Salon, Rejoindre, Héberger, Partie en cours (Équipage et Salon), Amis, Paramètres, Accueil, Catalogue, Mon profil, assistant du premier lancement.
 Aucun réseau, aucun port, aucun fichier du joueur ; les illustrations sont fabriquées par le test.
 
 - Sous Linux sans carte graphique, il faut le pilote Vulkan logiciel de Mesa : `sudo apt-get install mesa-vulkan-drivers`.

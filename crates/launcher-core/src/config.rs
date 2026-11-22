@@ -74,6 +74,11 @@ pub struct UserConfig {
     /// facultatif, sans changer `format_version` ; écrit seulement quand il vaut vrai.
     #[serde(default, skip_serializing_if = "is_false")]
     pub rafthub_file_adopted: bool,
+    /// Vrai une fois l'assistant du premier lancement terminé ou passé (plan de
+    /// l'interface, étape 5) : il ne s'ouvre plus tout seul. Champ facultatif, sans
+    /// changer `format_version` ; écrit seulement quand il vaut vrai.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub welcome_done: bool,
 }
 
 /// Pour `skip_serializing_if` : serde passe le champ par référence, d'où `&bool`.
@@ -96,6 +101,7 @@ impl Default for UserConfig {
             preset: None,
             hub_url: None,
             rafthub_file_adopted: false,
+            welcome_done: false,
         }
     }
 }
@@ -245,6 +251,7 @@ impl std::fmt::Debug for UserConfig {
             .field("preset", &self.preset)
             .field("hub_url", &self.hub_url)
             .field("rafthub_file_adopted", &self.rafthub_file_adopted)
+            .field("welcome_done", &self.welcome_done)
             .finish()
     }
 }
