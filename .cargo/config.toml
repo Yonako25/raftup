@@ -14,3 +14,15 @@ rustflags = ["-C", "target-feature=+crt-static"]
 # Une variable déjà définie dans le terminal garde la priorité (pas de `force`).
 [env]
 RAFTUP_LISTEN_HOST = "127.0.0.1"
+# Adresse du Rafthub officiel, lue À LA COMPILATION par `hub_client::DEFAULT_HUB_URL`
+# (ADR 0040) : toutes les compilations (cargo run, tests, release) ont le hub officiel
+# par défaut, donc ses illustrations (ADR 0047). Sans elle, le launcher visait
+# http://127.0.0.1:8787, un hub local, et n'affichait aucune image. Le workflow de
+# release peut toujours la remplacer par la variable GitHub du même nom.
+RAFTUP_OFFICIAL_HUB_URL = "https://hub.raftup-games.com"
+
+# `cargo captures` : un PNG de chaque écran du launcher dans `target/captures/`, sans
+# ouvrir de fenêtre (rendu wgpu ; sous Linux sans carte graphique, Mesa lavapipe).
+# Voir crates/launcher-ui/src/ui_tests/captures_interface.rs.
+[alias]
+captures = "test -p launcher-ui --bin raftup ui_tests::captures_interface -- --ignored --nocapture"

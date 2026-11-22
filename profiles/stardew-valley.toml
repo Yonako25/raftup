@@ -1,0 +1,60 @@
+# Stardew Valley (mod StardewArchipelago de agilbert1412 / KaitoKid, sur SMAPI), écrit le
+# 2026-11-22, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/stardew_valley). Le guide officiel
+# (docs/setup_en.md, tag 0.6.8) demande Stardew Valley 1.6, SMAPI et une release 7.x.x du mod.
+# SMAPI est livré en installateur : ses fichiers Windows sont dans un zip intérieur
+# (internal/windows/install.dat), extrait grâce au champ `inner` (ADR 0050). L'installateur
+# officiel ne fait rien d'autre que copier ces fichiers dans le dossier du jeu.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-22.
+
+format_version = 1
+
+[game]
+id = "stardew-valley"
+name = "Stardew Valley"
+ap_game = "Stardew Valley"         # vérifié : STARDEW_VALLEY = "Stardew Valley" dans worlds/stardew_valley/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 17000                    # vérifié : hub.raftup-games.com/v1/art/steam/413150 → igdb_id 17000
+
+[game.detect]
+steam_appid = 413150               # vérifié : API du Steam Store, appid 413150 = « Stardew Valley »
+expected_exe = "Stardew Valley.exe" # vérifié : GameScanner.cs de SMAPI cherche « Stardew Valley.dll » et « Stardew Valley.exe »
+
+[credits]
+authors = [
+  "agilbert1412 / KaitoKid (StardewArchipelago, BSD-3-Clause)",
+  "Pathoschild (SMAPI, LGPL-3.0)",
+]
+license = "BSD-3-Clause AND LGPL-3.0-only" # vérifié : LICENSE.md de StardewArchipelago (branche 7.x.x) et LICENSE.txt de SMAPI (texte LGPL v3, sans mention « or later » lue : -only par prudence)
+
+[[steps]]
+id = "smapi"
+kind = "mod_loader"
+name = "SMAPI"
+version = "4.5.2"                  # vérifié : dernier tag de github.com/Pathoschild/SMAPI le 2026-11-22
+source = { url = "https://github.com/Pathoschild/SMAPI/releases/download/4.5.2/SMAPI-4.5.2-installer.zip" }
+sha256 = "dd01ddca7b566bfe0d3b3d2d03833496abc56c53da976241f2ab443f5484acc4"
+max_bytes = 60000000               # fichier : 41 889 142 octets
+# Le zip intérieur contient StardewModdingAPI.exe/.dll, smapi-internal/…, Mods/ConsoleCommands,
+# Mods/SaveBackup et steam_appid.txt, à la racine (vérifié par unzip -l).
+install = { extract = "zip", inner = "SMAPI 4.5.2 installer/internal/windows/install.dat", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "stardew-archipelago"
+kind = "mod"
+name = "StardewArchipelago"
+version = "7.4.28"                 # vérifié : dernier tag 7.x.x (le guide 0.6.8 demande une release 7.x.x) ; compatibilité exacte avec 0.6.8 à vérifier
+source = { url = "https://github.com/agilbert1412/StardewArchipelago/releases/download/7.4.28/StardewArchipelago.7.4.28.zip" }
+sha256 = "93eec68e844714ce453c1f8e1acebbf5222765b43cf8a074d085d149ec39c75d"
+max_bytes = 40000000               # fichier : 24 336 838 octets
+# Le zip contient StardewArchipelago/… (manifest.json, StardewArchipelago.dll…) → Mods/StardewArchipelago.
+install = { extract = "zip", into = "{game_dir}/Mods", strip_prefix = "" }
+
+# Pas de [preserve] : le mod garde l'adresse dans la sauvegarde de la ferme, pas dans un fichier du jeu.
+
+# Pas de [cleanup] : les fichiers créés par SMAPI en tournant restent à observer en vrai.
+
+[launch]
+# Le jeu se lance par SMAPI (guide officiel : « launch StardewModdingAPI.exe »).
+exe = "{game_dir}/StardewModdingAPI.exe"
+connect = { method = "manual", instructions = "Crée une nouvelle ferme : sur l'écran du personnage, remplis les champs Archipelago (serveur {host}:{port}, slot {slot}, mot de passe si besoin). Le jeu se reconnecte seul ensuite." }

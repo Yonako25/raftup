@@ -9,11 +9,22 @@ use launcher_core::{
     slots_due, GameEvent, HostStatus, SlotStatus, SlotTiming, AUTO_REFRESH_INTERVAL,
 };
 
+use std::collections::BTreeMap;
+
+use egui::TextureHandle;
+use launcher_core::art::ArtKind;
+
+use super::library::LibraryState;
 use crate::app::Page;
+use crate::art_ui;
 use crate::format::{self, Piece, StatusKind};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, ReadyCheck, ReadyState, Shared, Worker};
+
+/// Largeur gardée à droite du bandeau pour « En ligne », « Copier l'invitation » et
+/// « Arrêter » (mesurée sur les captures : environ 350 px).
+const HERO_BUTTONS_WIDTH: f32 = 370.0;
 
 /// Largeur de la colonne de droite (progression, fil d'activité).
 const SIDE_WIDTH: f32 = 340.0;
@@ -48,6 +59,26 @@ pub struct RunningState {
     salon_auto_refresh: bool,
     /// Moment de la dernière copie : la bulle « Copié » s'affiche pendant `COPIED_FOR`.
     copied_at: Option<std::time::Instant>,
+    /// Le slot que l'hôte joue lui-même (choisi dans « Ta place »), par son nom.
+    my_slot: Option<String>,
+    /// Clic sur « Lancer et connecter », pas encore traité par l'application.
+    launch_request: Option<LaunchRequest>,
+}
+
+/// « Lancer et connecter » : le jeu à lancer et où le connecter. L'application la
+/// transmet à la Bibliothèque, qui connaît les jeux installés.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchRequest {
+    /// Nom du jeu dans Archipelago (`game` du slot).
+    pub ap_game: String,
+    pub address: String,
+    pub slot: String,
+    pub needs_password: bool,
+}
+
+/// Prend la demande « Lancer et connecter » en attente, s'il y en a une.
+pub fn take_launch_request(state: &mut RunningState) -> Option<LaunchRequest> {
+    state.launch_request.take()
 }
 
 /// Durée d'affichage de la bulle « Copié dans le presse-papiers ».
@@ -64,6 +95,8 @@ impl Default for RunningState {
             salon_password: String::new(),
             salon_auto_refresh: true,
             copied_at: None,
+            my_slot: None,
+            launch_request: None,
         }
     }
 }
@@ -74,12 +107,18 @@ pub fn dev_open_salon(state: &mut RunningState) {
     state.tab = TAB_SALON;
 }
 
+/// Jaquettes des jeux de la partie, par nom de jeu chez Archipelago (ADR 0047).
+type Covers = BTreeMap<String, TextureHandle>;
+
+/// `library` : la Bibliothèque, qui connaît les jeux du catalogue et leurs
+/// illustrations venues du hub (jaquettes de l'équipage, image du bandeau).
 pub fn show(
     ui: &mut Ui,
     state: &mut RunningState,
     error: &mut Option<String>,
     worker: &Worker,
     shared: &Shared,
+    library: &mut LibraryState,
 ) -> Option<Page> {
     // `show` n'est appelé que si la partie tourne, mais on reste prudent : pas de `unwrap`.
     let status = shared.status.as_ref()?;
@@ -87,12 +126,39 @@ pub fn show(
     let mut copy: Option<String> = None;
     let mut goto = None;
 
+    // Illustrations : une jaquette par jeu de la partie, et l'image large du jeu de
+    // l'hôte (sinon du premier joueur) pour le bandeau, comme sur la maquette.
+    let ctx = ui.ctx().clone();
+    let mut covers = Covers::new();
+    for slot in playable(status) {
+        if !covers.contains_key(&slot.game) {
+            if let Some(texture) = library.art_for_ap_game(&ctx, &slot.game, ArtKind::Cover) {
+                covers.insert(slot.game.clone(), texture);
+            }
+        }
+    }
+    let banner_game = chosen_slot(status, state.my_slot.as_deref())
+        .or_else(|| playable(status).next())
+        .map(|slot| slot.game.clone());
+    let banner = banner_game.and_then(|game| library.art_for_ap_game(&ctx, &game, ArtKind::Hero));
+
     super::page(ui, |ui| {
-        if hero(ui, status, now, &mut copy, &mut state.confirm_stop) {
+        if hero(
+            ui,
+            status,
+            now,
+            &mut copy,
+            &mut state.confirm_stop,
+            banner.as_ref(),
+        ) {
             goto = Some(Page::InProgress);
         }
         ui.add_space(12.0);
         address_bar(ui, status, &mut copy);
+        ui.add_space(12.0);
+        if let Some(request) = my_place(ui, &mut state.my_slot, status) {
+            state.launch_request = Some(request);
+        }
         ui.add_space(14.0);
         if let Some(message) = error.as_deref() {
             widgets::error_banner(ui, message);
@@ -105,12 +171,12 @@ pub fn show(
                 ui.spacing_mut().item_spacing.x = 20.0;
                 let main_width = ui.available_width() - SIDE_WIDTH - 20.0;
                 column(ui, main_width, |ui| {
-                    main_area(ui, state, worker, shared, now, &mut copy)
+                    main_area(ui, state, worker, shared, now, &mut copy, &covers)
                 });
                 column(ui, SIDE_WIDTH, |ui| side_area(ui, shared, status, now));
             });
         } else {
-            main_area(ui, state, worker, shared, now, &mut copy);
+            main_area(ui, state, worker, shared, now, &mut copy, &covers);
             ui.add_space(14.0);
             side_area(ui, shared, status, now);
         }
@@ -160,32 +226,49 @@ fn hero(
     now: f64,
     copy: &mut Option<String>,
     confirm_stop: &mut bool,
+    banner: Option<&TextureHandle>,
 ) -> bool {
+    // Image large du jeu en fond du bandeau (ADR 0047). Sa place est réservée AVANT le
+    // cadre : elle sera dessinée sous lui, une fois la taille du cadre connue.
+    let background = ui.painter().add(egui::Shape::Noop);
+    // Avec une image, le cadre devient un voile sombre : le texte reste lisible.
+    let fill = if banner.is_some() {
+        Color32::from_rgba_unmultiplied(0x11, 0x13, 0x16, 170)
+    } else {
+        theme::panel_fill()
+    };
     let mut back = false;
     let players = status.server.slots.iter().filter(|s| !s.is_group).count();
     let plural = if players > 1 { "s" } else { "" };
-    let mode = if status.encrypted {
-        "chiffrée (wss)"
-    } else {
-        "en clair (ws)"
+    let mode = match (status.encrypted, status.fingerprint.is_some()) {
+        (true, true) => "chiffrée par Raftup",
+        (true, false) => "chiffrée (wss)",
+        (false, _) => "en clair (ws)",
     };
     let resumed = if status.resumed {
         " · reprise de la sauvegarde"
     } else {
         ""
     };
-    Frame::new()
-        .fill(theme::panel_fill())
+    let frame_rect = Frame::new()
+        .fill(fill)
         .stroke(Stroke::new(1.0, theme::BORDER))
         .corner_radius(CornerRadius::same(theme::RADIUS))
         .inner_margin(Margin::symmetric(18, 14))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
+            // Avec une image, le bandeau est plus haut pour la laisser voir.
+            if banner.is_some() {
+                ui.set_min_height(120.0);
+            }
             ui.horizontal(|ui| {
                 back = widgets::ghost_button(ui, "‹");
                 ui.add_space(6.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
+                    // Place gardée à droite pour la pastille et les deux boutons : un
+                    // sous-titre long passe à la ligne au lieu de glisser sous eux.
+                    ui.set_max_width((ui.available_width() - HERO_BUTTONS_WIDTH).max(200.0));
                     ui.label(widgets::title(
                         &format!("seed {}", status.seed.seed_name),
                         28.0,
@@ -202,6 +285,7 @@ fn hero(
                     if widgets::primary_button(ui, "Copier l'invitation", true) {
                         *copy = Some(format::invitation(
                             &status.address,
+                            status.fingerprint.as_deref(),
                             status.has_password,
                             &status.server.slots,
                         ));
@@ -209,7 +293,15 @@ fn hero(
                     widgets::pill(ui, "● En ligne", theme::GREEN, theme::GREEN_BG);
                 });
             });
-        });
+        })
+        .response
+        .rect;
+    if let Some(texture) = banner {
+        // L'image remplit le bandeau sans être déformée (coupée au centre).
+        let uv = art_ui::cover_uv(texture.size_vec2(), frame_rect.size());
+        let image = egui::Shape::image(texture.id(), frame_rect, uv, Color32::WHITE);
+        ui.painter().set(background, image);
+    }
     back
 }
 
@@ -222,9 +314,12 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
         .inner_margin(Margin::symmetric(18, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
+            // Certificat généré par Raftup (ADR 0043) : l'adresse sans schéma, pour qu'un
+            // mod de jeu essaie wss puis retombe sur ws ; les liens portent l'empreinte.
+            let shown = format::game_address(&status.address, status.fingerprint.as_deref());
             ui.horizontal_wrapped(|ui| {
                 ui.label("Adresse à donner aux joueurs :");
-                ui.label(widgets::mono(&status.address, 15.0).color(theme::ITEM));
+                ui.label(widgets::mono(&shown, 15.0).color(theme::ITEM));
                 let password = if status.has_password {
                     "avec mot de passe"
                 } else {
@@ -233,10 +328,20 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                 ui.label(widgets::dim(format!("· {password}")));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if widgets::ghost_button(ui, "Copier l'adresse") {
-                        *copy = Some(status.address.clone());
+                        *copy = Some(shown.clone());
                     }
                 });
             });
+            if status.fingerprint.is_some() {
+                ui.add_space(4.0);
+                ui.label(
+                    widgets::dim(
+                        "Chiffré pour les joueurs qui passent par Raftup (liens d'invitation) ; \
+                         un mod de jeu qui se connecte avec cette adresse passe en clair.",
+                    )
+                    .size(13.0),
+                );
+            }
             if format::is_local_host(&status.address) {
                 ui.add_space(4.0);
                 ui.label(
@@ -248,6 +353,102 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                 );
             }
         });
+}
+
+/// Petite jaquette (40 px) du jeu d'un slot : l'illustration du hub si elle est
+/// arrivée (ADR 0047), sinon l'aplat avec les initiales du jeu.
+fn game_cover(ui: &mut Ui, slot: &SlotStatus, covers: &Covers) {
+    super::library::small_cover_with(ui, 40.0, &slot.game, &slot.game, covers.get(&slot.game));
+}
+
+/// Les slots que l'hôte peut jouer lui-même (pas les groupes), dans l'ordre de la seed.
+fn playable(status: &HostStatus) -> impl Iterator<Item = &SlotStatus> {
+    status.server.slots.iter().filter(|slot| !slot.is_group)
+}
+
+/// Le slot choisi s'il existe toujours ; sinon le seul slot de la partie s'il n'y en
+/// a qu'un (partie solo) ; sinon aucun.
+fn chosen_slot<'a>(status: &'a HostStatus, my_slot: Option<&str>) -> Option<&'a SlotStatus> {
+    if let Some(name) = my_slot {
+        if let Some(slot) = playable(status).find(|slot| slot.name == name) {
+            return Some(slot);
+        }
+    }
+    let mut slots = playable(status);
+    match (slots.next(), slots.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
+}
+
+/// Progression d'un slot en texte : « 12 / 40 lieux · objectif atteint ».
+fn progress_text(slot: &SlotStatus) -> String {
+    let mut text = format!("{} / {} lieux", slot.checked, slot.total);
+    if slot.status >= 30 {
+        text.push_str(" · objectif atteint");
+    }
+    text
+}
+
+/// Panneau « Ta place dans la partie » : l'hôte dit quel slot il joue, puis un seul
+/// bouton lance son jeu connecté à la partie (plan de l'interface, étape 3).
+/// Renvoie la demande de lancement au clic.
+fn my_place(
+    ui: &mut Ui,
+    my_slot: &mut Option<String>,
+    status: &HostStatus,
+) -> Option<LaunchRequest> {
+    let mut request = None;
+    // `chosen` emprunte `status`, pas `my_slot` : on peut changer `my_slot` plus bas
+    // (le nouveau choix s'affiche à l'image suivante).
+    let chosen = chosen_slot(status, my_slot.as_deref());
+    Frame::new()
+        .fill(theme::panel_fill())
+        .stroke(Stroke::new(1.0, theme::BORDER))
+        .corner_radius(CornerRadius::same(theme::RADIUS))
+        .inner_margin(Margin::symmetric(18, 12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Je joue :");
+                let shown = chosen.map_or("choisir mon slot".to_string(), |slot| {
+                    format!("{} · {}", slot.name, slot.game)
+                });
+                egui::ComboBox::from_id_salt("mon_slot")
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for slot in playable(status) {
+                            let selected = chosen.map(|c| &c.name) == Some(&slot.name);
+                            let text = format!("{} · {}", slot.name, slot.game);
+                            if ui.selectable_label(selected, text).clicked() {
+                                *my_slot = Some(slot.name.clone());
+                            }
+                        }
+                    });
+                if let Some(slot) = chosen {
+                    ui.label(widgets::dim(progress_text(slot)));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::primary_button(ui, "Lancer et connecter", chosen.is_some()) {
+                        request = chosen.map(|slot| LaunchRequest {
+                            ap_game: slot.game.clone(),
+                            address: status.address.clone(),
+                            slot: slot.name.clone(),
+                            needs_password: status.has_password,
+                        });
+                    }
+                });
+            });
+            if chosen.is_none() {
+                ui.label(
+                    widgets::dim(
+                        "Choisis ton slot : Raftup lance ton jeu et le connecte à la partie.",
+                    )
+                    .size(13.0),
+                );
+            }
+        });
+    request
 }
 
 /// Fenêtre de confirmation avant d'arrêter le serveur.
@@ -279,6 +480,7 @@ fn main_area(
     shared: &Shared,
     now: f64,
     copy: &mut Option<String>,
+    covers: &Covers,
 ) {
     let Some(status) = &shared.status else {
         return;
@@ -299,14 +501,20 @@ fn main_area(
     match state.tab {
         TAB_CHAT => chat_tab(ui, state, worker, shared),
         TAB_JOURNAL => journal_tab(ui, state, shared),
-        TAB_SALON => salon_tab(ui, state, status, worker, shared, copy),
+        TAB_SALON => salon_tab(ui, state, status, worker, shared, copy, covers),
         // L'onglet 0 (« Équipage ») et toute valeur inattendue montrent l'équipage.
-        _ => crew_tab(ui, status, now, copy),
+        _ => crew_tab(ui, status, now, copy, covers),
     }
 }
 
 /// Onglet « Équipage » : une ligne par joueur, avec sa progression et son statut.
-fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String>) {
+fn crew_tab(
+    ui: &mut Ui,
+    status: &HostStatus,
+    now: f64,
+    copy: &mut Option<String>,
+    covers: &Covers,
+) {
     list_frame(ui, |ui| {
         // Les groupes (« item links ») ne jouent pas eux-mêmes : on ne les montre pas.
         let players = status.server.slots.iter().filter(|s| !s.is_group);
@@ -317,10 +525,11 @@ fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String
             crew_row(
                 ui,
                 slot,
-                &status.address,
+                status,
                 now,
                 PLAYER_COLORS[index % PLAYER_COLORS.len()],
                 copy,
+                covers,
             );
         }
     });
@@ -329,13 +538,14 @@ fn crew_tab(ui: &mut Ui, status: &HostStatus, now: f64, copy: &mut Option<String
 fn crew_row(
     ui: &mut Ui,
     slot: &SlotStatus,
-    address: &str,
+    status: &HostStatus,
     now: f64,
     color: Color32,
     copy: &mut Option<String>,
+    covers: &Covers,
 ) {
     ui.horizontal(|ui| {
-        widgets::badge(ui, 40.0, &format::initials(&slot.game), false);
+        game_cover(ui, slot, covers);
         ui.add_space(4.0);
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
@@ -360,7 +570,9 @@ fn crew_row(
                 ui.label(RichText::new(note).size(12.0).color(theme::AMBER));
             }
             // Lien personnel du joueur (absent si l'adresse ne permet pas d'en fabriquer un).
-            if let Some(link) = format::player_link(address, slot) {
+            if let Some(link) =
+                format::player_link(&status.address, status.fingerprint.as_deref(), slot)
+            {
                 let button =
                     egui::Button::new(widgets::dim("Copier le lien").size(12.0)).frame(false);
                 if ui.add(button).clicked() {
@@ -643,6 +855,7 @@ fn salon_tab(
     worker: &Worker,
     shared: &Shared,
     copy: &mut Option<String>,
+    covers: &Covers,
 ) {
     let check = |slot: &SlotStatus, password: &str| {
         worker.send(Command::CheckReady(ReadyCheck {
@@ -650,6 +863,7 @@ fn salon_tab(
             slot: slot.name.clone(),
             game: slot.game.clone(),
             password: Some(password.to_string()).filter(|p| !p.is_empty()),
+            fingerprint: status.fingerprint.clone(),
         }));
     };
     let players: Vec<&SlotStatus> = status.server.slots.iter().filter(|s| !s.is_group).collect();
@@ -716,7 +930,7 @@ fn salon_tab(
         for slot in &players {
             ui.separator();
             ui.horizontal(|ui| {
-                widgets::badge(ui, 40.0, &format::initials(&slot.game), false);
+                game_cover(ui, slot, covers);
                 ui.add_space(4.0);
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
@@ -728,7 +942,9 @@ fn salon_tab(
                             .color(theme::TEXT),
                     );
                     ui.label(widgets::dim(format::game_with_tags(slot)).size(12.0));
-                    if let Some(link) = format::player_link(&status.address, slot) {
+                    if let Some(link) =
+                        format::player_link(&status.address, status.fingerprint.as_deref(), slot)
+                    {
                         let button = egui::Button::new(widgets::dim("Copier le lien").size(12.0))
                             .frame(false);
                         if ui.add(button).clicked() {

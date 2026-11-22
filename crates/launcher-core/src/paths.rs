@@ -93,6 +93,11 @@ impl Paths {
         self.data_dir.join("generator").join(ap_version)
     }
 
+    /// Certificat de partie généré par Raftup et sa clé (ADR 0043).
+    pub fn tls_dir(&self) -> PathBuf {
+        self.data_dir.join("tls")
+    }
+
     /// Apworlds pour une version d'Archipelago.
     pub fn worlds_dir(&self, ap_version: &str) -> PathBuf {
         self.data_dir.join("worlds").join(ap_version)

@@ -99,6 +99,10 @@ pub struct LibraryState {
     notice: Option<Notice>,
     /// Le joueur a cliqué une première fois sur « Désinstaller » : on attend la confirmation.
     confirm_uninstall: bool,
+    /// Jeux ouverts depuis le Catalogue pendant cette session : ils restent dans la
+    /// Bibliothèque même s'ils ne sont pas (encore) trouvés sur ce PC.
+    /// `BTreeSet` : ordre stable, sans doublon.
+    added: std::collections::BTreeSet<String>,
     /// Choix d'un dossier demandé pour ce jeu (la boîte de dialogue s'ouvre hors du dessin).
     pending_pick: Option<String>,
     /// Debug seulement (`RAFTUP_DEV_INSTALLER=1`) : lancer l'installation du jeu
@@ -130,6 +134,7 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
+            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: cfg!(debug_assertions)
                 && std::env::var_os("RAFTUP_DEV_INSTALLER").is_some(),
@@ -156,6 +161,7 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
+            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: false,
             registry: RegistryPanel::disabled(),
@@ -183,9 +189,32 @@ impl LibraryState {
         self.running.names()
     }
 
-    /// Nombre de jeux du catalogue (compteur de la barre latérale).
+    /// Nombre de jeux dans la Bibliothèque (compteur de la barre latérale).
     pub fn game_count(&self) -> usize {
-        self.catalog.as_ref().map_or(0, |c| c.profiles.len())
+        self.library_ids().len()
+    }
+
+    /// Vrai si le jeu est dans la Bibliothèque : trouvé sur ce PC, avec des mods posés
+    /// par Raftup (reçu d'installation), ou ouvert depuis le Catalogue (« Ajouter »).
+    /// Les autres jeux du catalogue ne sont montrés que dans l'écran « Catalogue ».
+    pub fn in_library(&self, game_id: &str) -> bool {
+        let on_pc = self.scan.as_ref().is_some_and(|scan| {
+            scan.found.contains_key(game_id) || scan.status.contains_key(game_id)
+        });
+        on_pc || self.added.contains(game_id)
+    }
+
+    /// Les jeux de la Bibliothèque, dans l'ordre du catalogue.
+    pub fn library_ids(&self) -> Vec<String> {
+        let Ok(catalog) = &self.catalog else {
+            return Vec::new();
+        };
+        catalog
+            .profiles
+            .keys()
+            .filter(|id| self.in_library(id))
+            .cloned()
+            .collect()
     }
 
     /// Le catalogue, s'il s'est chargé (l'écran « Rejoindre » y cherche le jeu du lien).
@@ -197,6 +226,130 @@ impl LibraryState {
     pub fn scan_result(&self) -> Option<&Scan> {
         self.scan.as_ref()
     }
+
+    /// Les dossiers de Raftup, s'ils sont connus (écran « Paramètres »).
+    pub fn paths(&self) -> Option<&Paths> {
+        self.paths.as_ref().ok()
+    }
+
+    /// Hors de la Bibliothèque (Accueil, assistant, « Lancer et connecter ») : lance la
+    /// détection des jeux si elle n'a jamais été faite, et range les messages des
+    /// tâches en cours. Sans danger si la Bibliothèque le fait aussi dans la même image.
+    pub fn background(&mut self, ctx: &egui::Context) {
+        if self.scan.is_none() && self.scanning.is_none() {
+            self.start_scan(ctx);
+        }
+        self.poll(ctx);
+        // Illustrations arrivées du hub : rangées quel que soit l'écran affiché.
+        self.art.poll(ctx);
+    }
+
+    /// Illustration d'un jeu du catalogue (ADR 0047), par son identifiant : la
+    /// jaquette (`Cover`) ou l'image large (`Hero`). `None` tant qu'elle n'est pas
+    /// arrivée, ou sans hub : l'écran garde alors son aplat coloré.
+    pub fn art_for(
+        &mut self,
+        ctx: &egui::Context,
+        game_id: &str,
+        kind: ArtKind,
+    ) -> Option<egui::TextureHandle> {
+        let reference = self
+            .catalog
+            .as_ref()
+            .ok()
+            .and_then(|c| c.get(game_id))
+            .and_then(ArtRef::of);
+        self.art.texture(ctx, reference, kind)
+    }
+
+    /// Comme [`LibraryState::art_for`], par le nom du jeu chez Archipelago (le `game`
+    /// d'un slot de la partie hébergée). `None` pour un jeu hors catalogue.
+    pub fn art_for_ap_game(
+        &mut self,
+        ctx: &egui::Context,
+        ap_game: &str,
+        kind: ArtKind,
+    ) -> Option<egui::TextureHandle> {
+        let id = self
+            .catalog
+            .as_ref()
+            .ok()?
+            .games()
+            .find(|p| p.game.ap_game == ap_game)?
+            .game
+            .id
+            .clone();
+        self.art_for(ctx, &id, kind)
+    }
+
+    /// Attribution des illustrations à montrer (IGDB), dès qu'une image est arrivée.
+    pub fn art_attribution(&self) -> Option<(String, String)> {
+        self.art
+            .attribution()
+            .map(|(text, url)| (text.to_string(), url.to_string()))
+    }
+
+    /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
+    /// l'écran « Catalogue » montrent, sans redessiner la Bibliothèque.
+    pub fn summaries(&self) -> Vec<GameSummary> {
+        let Ok(catalog) = &self.catalog else {
+            return Vec::new();
+        };
+        catalog
+            .games()
+            .map(|profile| {
+                let id = &profile.game.id;
+                let found = self.scan.as_ref().and_then(|s| s.found.get(id));
+                let status = self.scan.as_ref().and_then(|s| s.status.get(id));
+                let view = view(profile, found, status);
+                GameSummary {
+                    id: id.clone(),
+                    name: profile.game.name.clone(),
+                    ap_game: profile.game.ap_game.clone(),
+                    authors: profile.credits.authors.clone(),
+                    label: view.label,
+                    tone: view.tone,
+                    ready: view.can_launch,
+                    detected: found.is_some(),
+                    from_registry: self.registry.is_from_registry(id),
+                    trust: self.registry.profile_trust(id),
+                }
+            })
+            .collect()
+    }
+
+    /// Sélectionne un jeu : la Bibliothèque s'ouvrira sur sa fiche.
+    pub fn select(&mut self, game_id: &str) {
+        if self.selected.as_deref() != Some(game_id) {
+            self.confirm_uninstall = false;
+            self.notice = None;
+        }
+        self.selected = Some(game_id.to_string());
+        self.native.selected = None;
+        // Un jeu ouvert depuis le Catalogue reste dans la Bibliothèque pour cette
+        // session, le temps de l'installer ou d'indiquer son dossier.
+        self.added.insert(game_id.to_string());
+    }
+}
+
+/// Ce que les autres écrans savent d'un jeu du catalogue (voir [`LibraryState::summaries`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameSummary {
+    pub id: String,
+    pub name: String,
+    /// Nom du jeu dans Archipelago (celui des seeds et des liens d'invitation).
+    pub ap_game: String,
+    pub authors: Vec<String>,
+    /// État affiché (« Prêt à jouer », « Non détecté »…).
+    pub label: String,
+    pub tone: Tone,
+    /// Jeu détecté et mods installés : « Lancer » est possible.
+    pub ready: bool,
+    pub detected: bool,
+    /// Profil venu du registre signé (ADR 0032), pas du catalogue embarqué.
+    pub from_registry: bool,
+    /// Niveau de confiance du profil (ADR 0045), pour un profil du registre seulement.
+    pub trust: Option<launcher_core::registry::Trust>,
 }
 
 /// Ouvre la fiche d'un jeu avec le formulaire de connexion pré-rempli (écran « Rejoindre »).
@@ -211,6 +364,62 @@ pub fn open_with_invite(state: &mut LibraryState, game_id: &str, address: &str, 
     state.form.password.clear();
     // Le joueur doit voir ce que l'invitation a rempli (et taper le mot de passe).
     state.form.open_now = true;
+}
+
+/// Ce qu'a donné « Lancer et connecter » ([`launch_into`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LaunchInto {
+    /// Le jeu démarre, connecté à la partie.
+    Launched,
+    /// La partie a un mot de passe : la fiche est ouverte, le joueur le tape.
+    NeedsPassword,
+    /// Le jeu n'est pas prêt (pas détecté, mods absents) : la fiche est ouverte.
+    NotReady,
+    /// Le jeu n'est pas dans le catalogue de Raftup : rien à lancer d'ici.
+    OutsideCatalog,
+}
+
+/// « Lancer et connecter » (écran « Partie en cours ») : lance le jeu `ap_game` avec
+/// l'adresse et le slot donnés. Quand ce n'est pas possible tout de suite, la fiche du
+/// jeu est préparée (adresse et slot remplis) pour que le joueur finisse à la main.
+/// Le mot de passe n'est jamais gardé par Raftup : s'il en faut un, le joueur le tape.
+pub fn launch_into(
+    state: &mut LibraryState,
+    ctx: &egui::Context,
+    ap_game: &str,
+    address: &str,
+    slot: &str,
+    needs_password: bool,
+) -> LaunchInto {
+    let Some(game) = state.summaries().into_iter().find(|g| g.ap_game == ap_game) else {
+        return LaunchInto::OutsideCatalog;
+    };
+    open_with_invite(state, &game.id, address, slot);
+    if !game.ready {
+        return LaunchInto::NotReady;
+    }
+    if needs_password {
+        return LaunchInto::NeedsPassword;
+    }
+    let dir = state
+        .scan
+        .as_ref()
+        .and_then(|s| s.found.get(&game.id))
+        .map(|found| found.install_dir.clone());
+    // `cloned` : copie du profil, pour pouvoir ensuite modifier `state`.
+    let profile = state
+        .catalog
+        .as_ref()
+        .ok()
+        .and_then(|c| c.get(&game.id))
+        .cloned();
+    let (Some(dir), Some(profile)) = (dir, profile) else {
+        return LaunchInto::NotReady;
+    };
+    // Tout est rempli : inutile d'ouvrir « Se connecter à la main ».
+    state.form.open_now = false;
+    state.start_launch(ctx, &profile, &dir);
+    LaunchInto::Launched
 }
 
 /// Variable d'environnement (builds de debug seulement) : dossier de profils `.toml`
@@ -337,6 +546,16 @@ pub enum Tone {
     Warning,
     Dim,
 }
+
+/// Vrai pour un profil jamais essayé avec le vrai jeu (ADR 0049).
+pub fn is_untested(profile: &Profile) -> bool {
+    profile.game.status == launcher_core::profile::GameStatus::Untested
+}
+
+/// Message de la fiche d'un profil « non testé » (ADR 0049).
+pub const UNTESTED_NOTE: &str =
+    "Profil non testé : personne ne l'a encore essayé avec le vrai jeu. \
+     L'installation se défait avec « Désinstaller le mod ».";
 
 /// Calcule l'état affiché d'un jeu d'après sa détection et son reçu d'installation.
 pub fn view(
@@ -787,18 +1006,14 @@ pub fn show(
         }
 
         if state.game_count() == 0 && state.native.count() == 0 {
-            empty_state(ui);
+            empty_state(ui, state.scanning.is_some() || state.scan.is_none());
             bottom_panels(ui, state);
             return;
         }
         // Premier jeu sélectionné par défaut (ou le premier monde natif s'il n'y a pas de
         // jeu au catalogue), sauf si un monde natif est déjà sélectionné.
         if state.selected.is_none() && state.native.selected.is_none() {
-            state.selected = state
-                .catalog
-                .as_ref()
-                .ok()
-                .and_then(|c| c.profiles.keys().next().cloned());
+            state.selected = state.library_ids().into_iter().next();
             if state.selected.is_none() {
                 let first = state.native.worlds().first().map(|w| w.key.clone());
                 if let Some(key) = first {
@@ -1006,15 +1221,22 @@ fn big_button(ui: &mut Ui, text: &str, primary: bool, enabled: bool, width: f32)
 }
 
 /// Catalogue vide : aucun profil n'est encore publié.
-fn empty_state(ui: &mut Ui) {
-    widgets::panel(ui, "Aucun jeu dans le catalogue", |ui| {
+fn empty_state(ui: &mut Ui, scanning: bool) {
+    if scanning {
+        widgets::panel(ui, "Recherche de tes jeux…", |ui| {
+            ui.label(widgets::dim(
+                "Raftup cherche les jeux installés via Steam et Epic.",
+            ));
+        });
+        return;
+    }
+    widgets::panel(ui, "Aucun jeu trouvé sur ce PC", |ui| {
         ui.label(widgets::dim(
-            "Les profils d'installation arrivent avec les prochaines versions de Raftup : \
-             chaque jeu attend l'accord de l'auteur de son mod.",
+            "Raftup n'a trouvé aucun jeu du catalogue installé via Steam ou Epic.",
         ));
         ui.add_space(4.0);
         ui.label(widgets::dim(
-            "Vous pouvez déjà héberger une partie depuis « En cours » : chaque joueur installe son mod à la main.",
+            "Ouvre « Parcourir » dans le Catalogue pour voir les jeux pris en charge et en ajouter un.",
         ));
     });
 }
@@ -1056,45 +1278,79 @@ fn missing_game_note(ui: &mut Ui) {
 }
 
 /// Les cartes des jeux, en grille qui passe à la ligne.
+/// Ce qu'un clic sur une carte de la grille sélectionne.
+enum CardTarget {
+    Game(String),
+    Native(String),
+}
+
+/// Nombre de cartes par rangée dans une largeur donnée (au moins une).
+fn cards_per_row(width: f32) -> usize {
+    let per_row = ((width + CARD_GAP) / (CARD_WIDTH + CARD_GAP)).floor();
+    // `as usize` sur un nombre négatif ou NaN donne 0 : `max(1)` garde une carte.
+    (per_row as usize).max(1)
+}
+
 fn grid(ui: &mut Ui, state: &mut LibraryState) {
     let Ok(catalog) = &state.catalog else { return };
     let mut clicked = None;
-    let mut clicked_native = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = egui::vec2(22.0, 22.0);
-        for profile in catalog.games() {
-            let id = &profile.game.id;
-            let found = state.scan.as_ref().and_then(|s| s.found.get(id));
-            let status = state.scan.as_ref().and_then(|s| s.status.get(id));
-            let view = view(profile, found, status);
-            let selected = state.selected.as_deref() == Some(id.as_str());
-            let busy = state.task.as_ref().filter(|t| &t.game_id == id);
-            let from_registry = state.registry.is_from_registry(id);
-            // Jaquette du hub si elle est prête, sinon l'aplat (ADR 0047).
-            let cover = state
-                .art
-                .texture(ui.ctx(), ArtRef::of(profile), ArtKind::Cover);
-            if card(ui, profile, &view, selected, busy, from_registry, cover) {
-                clicked = Some(id.clone());
-            }
+    // D'abord la liste des cartes, ensuite le dessin rangée par rangée : egui ne sait
+    // pas faire passer à la ligne un bloc (`ui.vertical`) dont il ne connaît pas encore
+    // la taille, et une seule rangée débordait à droite (vu sur les captures, 9 jeux).
+    let mut cards: Vec<(CardLook<'_>, bool, CardTarget)> = Vec::new();
+    for profile in catalog.games() {
+        let id = &profile.game.id;
+        // Seuls les jeux de ce PC (ou ajoutés depuis le Catalogue) ont leur carte.
+        if !state.in_library(id) {
+            continue;
         }
-        // Les mondes natifs, après les jeux du catalogue (ADR 0046).
-        for world in state.native.worlds() {
-            let selected = state.native.selected.as_deref() == Some(world.key.as_str());
-            let look = CardLook {
-                cover_id: &world.key,
-                name: &world.game,
-                status: native_panel::card_status(world),
-                status_color: theme::TEXT_DIM,
-                // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
-                fraction: 1.0,
-                marker: Some((native_panel::MARKER, theme::ACCENT)),
-                // Un monde natif n'a pas d'identifiant IGDB : il garde son aplat.
-                cover: None,
-            };
-            if cover_card(ui, &look, selected) {
-                clicked_native = Some(world.key.clone());
-            }
+        let found = state.scan.as_ref().and_then(|s| s.found.get(id));
+        let status = state.scan.as_ref().and_then(|s| s.status.get(id));
+        let view = view(profile, found, status);
+        let selected = state.selected.as_deref() == Some(id.as_str());
+        let busy = state.task.as_ref().filter(|t| &t.game_id == id);
+        let from_registry = state.registry.is_from_registry(id);
+        // Jaquette du hub si elle est prête, sinon l'aplat (ADR 0047).
+        let cover = state
+            .art
+            .texture(ui.ctx(), ArtRef::of(profile), ArtKind::Cover);
+        let look = card_look(profile, &view, busy, from_registry, cover);
+        cards.push((look, selected, CardTarget::Game(id.clone())));
+    }
+    // Les mondes natifs, après les jeux du catalogue (ADR 0046).
+    for world in state.native.worlds() {
+        let selected = state.native.selected.as_deref() == Some(world.key.as_str());
+        let look = CardLook {
+            cover_id: &world.key,
+            name: &world.game,
+            status: native_panel::card_status(world),
+            status_color: theme::TEXT_DIM,
+            // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
+            fraction: 1.0,
+            marker: Some((native_panel::MARKER, theme::ACCENT)),
+            // Un monde natif n'a pas d'identifiant IGDB : il garde son aplat.
+            cover: None,
+        };
+        cards.push((look, selected, CardTarget::Native(world.key.clone())));
+    }
+    let per_row = cards_per_row(ui.available_width());
+    // `scope` : l'espacement des cartes ne vaut que pour la grille, pas pour les
+    // panneaux dessinés ensuite sous elle.
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(CARD_GAP, CARD_GAP);
+        // `chunks` découpe la liste en rangées de `per_row` cartes (la dernière peut
+        // être plus courte).
+        for row in cards.chunks(per_row) {
+            ui.horizontal_top(|ui| {
+                for (look, selected, target) in row {
+                    if cover_card(ui, look, *selected) {
+                        clicked = Some(match target {
+                            CardTarget::Game(id) => CardTarget::Game(id.clone()),
+                            CardTarget::Native(key) => CardTarget::Native(key.clone()),
+                        });
+                    }
+                }
+            });
         }
     });
     // Attribution demandée par IGDB, dès qu'une illustration est à l'écran.
@@ -1102,17 +1358,20 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
         ui.add_space(6.0);
         attribution_line(ui, text, url);
     }
-    if let Some(id) = clicked {
-        if state.selected.as_ref() != Some(&id) {
+    match clicked {
+        Some(CardTarget::Game(id)) => {
+            if state.selected.as_ref() != Some(&id) {
+                state.confirm_uninstall = false;
+            }
+            state.selected = Some(id);
+            state.native.selected = None;
+        }
+        Some(CardTarget::Native(key)) => {
+            state.native.select(&key);
+            state.selected = None;
             state.confirm_uninstall = false;
         }
-        state.selected = Some(id);
-        state.native.selected = None;
-    }
-    if let Some(key) = clicked_native {
-        state.native.select(&key);
-        state.selected = None;
-        state.confirm_uninstall = false;
+        None => {}
     }
 }
 
@@ -1134,7 +1393,7 @@ pub(super) fn small_cover(ui: &mut Ui, size: f32, game_id: &str, name: &str) {
 
 /// Comme [`small_cover`], avec la jaquette du hub (ADR 0047) quand elle est prête :
 /// découpée au centre pour tenir dans le carré.
-fn small_cover_with(
+pub(super) fn small_cover_with(
     ui: &mut Ui,
     size: f32,
     game_id: &str,
@@ -1161,27 +1420,63 @@ fn small_cover_with(
     );
 }
 
-/// Image large du jeu en haut de sa fiche : toute la largeur du panneau, en 16:9,
-/// 180 px de haut au plus.
-fn hero_banner(ui: &mut Ui, texture: &egui::TextureHandle, name: &str) {
-    let width = ui.available_width();
-    let height = (width * 9.0 / 16.0).min(180.0);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
-    art_ui::paint_cover(ui, texture, rect);
-    let label = format!("Illustration de {name}");
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+/// Hauteur du bandeau en haut de la fiche quand il n'y a pas d'illustration.
+const FLAT_BANNER_HEIGHT: f32 = 96.0;
+
+/// Hauteur du bandeau en haut de la fiche : en 16:9 sur toute la largeur, 180 px
+/// au plus avec une illustration ; plus bas pour l'aplat, qui ne montre que le titre.
+fn hero_height(width: f32, has_image: bool) -> f32 {
+    let wide = (width * 9.0 / 16.0).min(180.0);
+    if has_image {
+        wide
+    } else {
+        wide.min(FLAT_BANNER_HEIGHT)
+    }
 }
 
-/// Une carte de jeu. Renvoie vrai au clic.
-fn card(
-    ui: &mut Ui,
-    profile: &Profile,
+/// Bandeau en haut de la fiche du jeu, sur toute la largeur du panneau :
+/// l'image large venue du hub (ADR 0047) si elle est prête ; sinon (pas de hub,
+/// jeu inconnu d'IGDB, image pas encore arrivée) un aplat de la teinte du jeu,
+/// avec son titre, comme les jaquettes de la grille.
+fn hero_banner(ui: &mut Ui, texture: Option<&egui::TextureHandle>, game_id: &str, name: &str) {
+    let width = ui.available_width();
+    let height = hero_height(width, texture.is_some());
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());
+    match texture {
+        Some(texture) => {
+            art_ui::paint_cover(ui, texture, rect);
+            // Nom lu par un lecteur d'écran (et par les tests sans fenêtre).
+            let label = format!("Illustration de {name}");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+        }
+        None => {
+            let painter = ui.painter();
+            painter.rect_filled(
+                rect,
+                CornerRadius::same(theme::RADIUS),
+                theme::cover_color(game_id),
+            );
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                name,
+                theme::title_font(28.0),
+                theme::TEXT,
+            );
+            let label = format!("Aplat de {name}");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+        }
+    }
+}
+
+/// Ce qu'affiche la carte d'un jeu du catalogue.
+fn card_look<'a>(
+    profile: &'a Profile,
     view: &GameView,
-    selected: bool,
     busy: Option<&Task>,
     from_registry: bool,
     cover: Option<egui::TextureHandle>,
-) -> bool {
+) -> CardLook<'a> {
     // Barre sous la jaquette : pleine si le jeu est prêt, à moitié pendant une tâche.
     let fraction = match (busy, view.can_launch) {
         (Some(_), _) => 0.5,
@@ -1192,21 +1487,27 @@ fn card(
         Some(task) => (format!("{}…", task.label), theme::ACCENT),
         None => (view.label.clone(), tone_color(view.tone)),
     };
-    let look = CardLook {
+    CardLook {
         cover_id: &profile.game.id,
         name: &profile.game.name,
         status,
         status_color,
         fraction,
-        // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
-        marker: from_registry.then_some(("Registre", theme::ITEM)),
+        // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non) ;
+        // sinon, un profil jamais essayé avec le vrai jeu est marqué (ADR 0049).
+        marker: if from_registry {
+            Some(("Registre", theme::ITEM))
+        } else if is_untested(profile) {
+            Some(("Non testé", theme::AMBER))
+        } else {
+            None
+        },
         cover,
-    };
-    cover_card(ui, &look, selected)
+    }
 }
 
 /// « Illustrations : IGDB.com », avec le lien vers la page du jeu chez IGDB.
-fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
+pub(super) fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         ui.label(widgets::dim("Illustrations :").size(12.0));
@@ -1219,23 +1520,28 @@ fn attribution_line(ui: &mut Ui, text: &str, url: &str) {
 }
 
 /// Ce qu'une carte de la grille affiche (jeu du catalogue ou monde natif).
-struct CardLook<'a> {
+pub(super) struct CardLook<'a> {
     /// Identifiant qui choisit la teinte de la jaquette.
-    cover_id: &'a str,
-    name: &'a str,
-    status: String,
-    status_color: Color32,
+    pub(super) cover_id: &'a str,
+    pub(super) name: &'a str,
+    pub(super) status: String,
+    pub(super) status_color: Color32,
     /// Remplissage de la barre sous la jaquette, de 0 à 1.
-    fraction: f32,
+    pub(super) fraction: f32,
     /// Marqueur en petites capitales sous l'état (« Registre », « Monde natif »).
-    marker: Option<(&'a str, Color32)>,
+    pub(super) marker: Option<(&'a str, Color32)>,
     /// Jaquette venue du hub (ADR 0047) ; `None` : l'aplat coloré avec le titre.
-    cover: Option<egui::TextureHandle>,
+    pub(super) cover: Option<egui::TextureHandle>,
 }
 
 /// Dessine une carte. Renvoie vrai au clic.
-fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
-    const WIDTH: f32 = 150.0;
+/// Largeur d'une carte de la grille (jaquette comprise).
+const CARD_WIDTH: f32 = 150.0;
+/// Espace entre deux cartes, en largeur comme en hauteur.
+const CARD_GAP: f32 = 22.0;
+
+pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
+    const WIDTH: f32 = CARD_WIDTH;
     // Jaquette en portrait (2:3), comme les couvertures de la maquette.
     const COVER: egui::Vec2 = egui::vec2(WIDTH, 210.0);
     let response = ui
@@ -1298,6 +1604,9 @@ fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bool {
         .response
         // `interact` rend toute la carte cliquable, pas seulement son texte.
         .interact(Sense::click());
+    // Nom de la carte entière pour un lecteur d'écran (et pour les tests sans fenêtre).
+    let label = format!("Fiche de {}", look.name);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
@@ -1337,16 +1646,14 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
     let view = view(&profile, found.as_ref(), status.as_ref());
     let busy = state.task.is_some();
     // Illustrations du hub (ADR 0047) : image large en haut de la fiche, jaquette à
-    // côté du titre. Absentes : rien en haut, et l'aplat avec les initiales.
+    // côté du titre. Absentes : un aplat en haut, et l'aplat avec les initiales.
     let reference = ArtRef::of(&profile);
     let cover = state.art.texture(ctx, reference, ArtKind::Cover);
     let hero = state.art.texture(ctx, reference, ArtKind::Hero);
 
     widgets::panel(ui, "", |ui| {
-        if let Some(hero) = &hero {
-            hero_banner(ui, hero, &profile.game.name);
-            ui.add_space(10.0);
-        }
+        hero_banner(ui, hero.as_ref(), &profile.game.id, &profile.game.name);
+        ui.add_space(10.0);
         ui.horizontal(|ui| {
             small_cover_with(
                 ui,
@@ -1366,6 +1673,10 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 ui.label(widgets::dim(origin).size(12.0));
             });
         });
+        if is_untested(&profile) {
+            ui.add_space(6.0);
+            ui.label(RichText::new(UNTESTED_NOTE).size(13.0).color(theme::AMBER));
+        }
         ui.add_space(10.0);
 
         // Boutons d'action : « Lancer » en bleu quand le jeu est prêt ; sinon c'est
@@ -1623,6 +1934,56 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
+    /// Bug signalé le 22 novembre 2026 : la Bibliothèque montrait tous les jeux du
+    /// catalogue, même ceux absents du PC. Elle ne garde que les jeux trouvés (ou
+    /// ouverts depuis le Catalogue) ; les autres restent dans l'écran « Catalogue ».
+    #[test]
+    fn seuls_les_jeux_du_pc_sont_dans_la_bibliotheque() {
+        let catalog = Catalog::from_texts(&[
+            (
+                "slime-rancher.toml",
+                include_str!("../../../../profiles/slime-rancher.toml"),
+            ),
+            (
+                "hollow-knight.toml",
+                include_str!("../../../../profiles/hollow-knight.toml"),
+            ),
+        ])
+        .unwrap();
+        let mut scan = Scan::default();
+        scan.found.insert(
+            "slime-rancher".to_string(),
+            DetectedGame {
+                game_id: "slime-rancher".to_string(),
+                store: launcher_core::Store::Steam,
+                install_dir: std::path::PathBuf::from("C:/Jeux/Slime Rancher"),
+                build_id: None,
+                state: launcher_core::GameState::Ready,
+            },
+        );
+        let root = tempfile::tempdir().unwrap();
+        let mut state = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
+
+        assert_eq!(state.library_ids(), vec!["slime-rancher".to_string()]);
+        assert_eq!(state.game_count(), 1);
+        assert!(!state.in_library("hollow-knight"));
+
+        // « Ajouter » dans le Catalogue ouvre sa fiche : le jeu entre dans la Bibliothèque.
+        state.select("hollow-knight");
+        assert!(state.in_library("hollow-knight"));
+        assert_eq!(state.game_count(), 2);
+    }
+
+    #[test]
+    fn bandeau_de_la_fiche_plus_bas_en_aplat() {
+        // Avec une image : 16:9, plafonné à 180 px.
+        assert_eq!(hero_height(160.0, true), 90.0);
+        assert_eq!(hero_height(640.0, true), 180.0);
+        // En aplat : jamais plus de 96 px, et pas plus que le 16:9 d'un panneau étroit.
+        assert_eq!(hero_height(640.0, false), FLAT_BANNER_HEIGHT);
+        assert_eq!(hero_height(160.0, false), 90.0);
+    }
+
     #[test]
     fn tache_interrompue_accordee() {
         assert_eq!(
@@ -1704,6 +2065,34 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         assert_eq!(v.label, "Mod non installé");
         assert!(v.can_install && !v.can_launch && !v.can_uninstall);
         assert_eq!(v.install_label, "Installer");
+    }
+
+    #[test]
+    fn cartes_par_rangee() {
+        // 150 px par carte et 22 px d'espace : 600 px → 3 cartes, 150 px → 1.
+        assert_eq!(cards_per_row(600.0), 3);
+        assert_eq!(cards_per_row(150.0), 1);
+        assert_eq!(cards_per_row(322.0), 2);
+        // Trop étroit, ou largeur absurde : une carte quand même.
+        assert_eq!(cards_per_row(10.0), 1);
+        assert_eq!(cards_per_row(f32::NAN), 1);
+    }
+
+    #[test]
+    fn profil_non_teste_s_installe_et_se_signale() {
+        // ADR 0049 : même comportement qu'un profil « available », mais annoncé.
+        let text = DEMO.replace("status = \"available\"", "status = \"untested\"");
+        let untested = Catalog::from_texts(&[("demo.toml", &text)]).unwrap();
+        let p = untested.get("demo").unwrap();
+        assert!(is_untested(p));
+        let g = found(GameState::Ready);
+        let v = view(p, Some(&g), Some(&Ok(InstallStatus::NotInstalled)));
+        assert!(v.can_install);
+        let v = view(p, Some(&g), Some(&Ok(InstallStatus::Installed)));
+        assert!(v.can_launch);
+        // Le profil de démonstration tel quel (« available ») n'est pas marqué.
+        let available = catalog();
+        assert!(!is_untested(available.get("demo").unwrap()));
     }
 
     #[test]
@@ -1939,8 +2328,10 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
 
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 1);
-        // Le jeu du catalogue reste sélectionné par défaut ; la carte du monde natif est là.
-        assert_eq!(state.selected.as_deref(), Some("demo"));
+        // Le jeu du catalogue n'est pas sur ce PC : il n'est pas dans la Bibliothèque,
+        // et c'est le monde natif qui est sélectionné par défaut.
+        assert_eq!(state.selected, None);
+        assert_eq!(state.native.selected.as_deref(), Some("apquest"));
         assert!(shown.iter().any(|t| t == "MONDE NATIF"), "{shown:?}");
         assert!(
             shown.iter().any(|t| t.contains("1 monde natif")),
@@ -1986,10 +2377,11 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         );
         assert!(message.is_ok());
         state.native.refresh(&native_dir);
-        // L'image suivante revient au jeu du catalogue, sans monde natif.
+        // L'image suivante n'a plus de monde natif ; le jeu du catalogue, absent de ce
+        // PC, ne revient pas dans la Bibliothèque.
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 0);
-        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert_eq!(state.selected, None);
         assert!(!shown.iter().any(|t| t == "MONDE NATIF"));
         assert!(!native_dir.join("apquest").exists());
     }

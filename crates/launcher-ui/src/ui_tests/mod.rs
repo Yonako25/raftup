@@ -14,11 +14,12 @@
 
 mod bibliotheque;
 mod captures;
+mod captures_interface;
 mod ecrans;
 mod menu;
+mod parcours;
+mod partie;
 mod salon;
-
-use std::path::Path;
 
 use egui_kittest::kittest::Queryable;
 use egui_kittest::{Harness, HarnessBuilder, Node};
@@ -46,12 +47,12 @@ pub fn builder<State>() -> HarnessBuilder<State> {
         .with_context_setup(crate::theme::install)
 }
 
-/// Le catalogue de démonstration : les profils du dossier `profiles/` du dépôt, lus
-/// par la même fonction que `RAFTUP_DEV_PROFILS` (sans toucher aux variables
-/// d'environnement, partagées par tous les tests qui tournent en parallèle).
+/// Le catalogue des tests : Slime Rancher seul, lu dans `profiles/`. Il reste fixe
+/// quand le catalogue grandit : les textes attendus et les captures de référence
+/// (Windows) ne changent pas à chaque nouveau profil.
 pub fn demo_catalog() -> Catalog {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../profiles");
-    crate::screens::library::dev_catalog(&dir).unwrap()
+    let text = include_str!("../../../../profiles/slime-rancher.toml");
+    Catalog::from_texts(&[("slime-rancher.toml", text)]).unwrap()
 }
 
 /// Un champ de texte, reconnu par son texte d'aide (le texte gris du champ vide).
@@ -76,6 +77,10 @@ pub fn type_into<State>(harness: &mut Harness<'_, State>, hint: &str, text: &str
 
 /// Clique sur le seul nœud qui porte ce libellé, puis laisse l'écran se redessiner.
 pub fn click<State>(harness: &mut Harness<'_, State>, label: &str) {
+    // Comme un joueur : on fait défiler jusqu'au bouton s'il est sous le bas de
+    // l'écran, puis on clique (un clic hors de la fenêtre ne touche rien).
+    harness.get_by_label(label).scroll_to_me();
+    harness.run();
     harness.get_by_label(label).click();
     harness.run();
 }

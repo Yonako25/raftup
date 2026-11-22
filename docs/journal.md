@@ -633,3 +633,78 @@ untime2`.
 - **Pas vérifié** : rien à tester (document seul).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; pas de code du salon en ligne avant la validation de l'ADR 0048.
 - **Suite** : à l'utilisatrice : trancher les choix 1, 3, 4 et 6 de l'ADR 0048, puis le passer en « accepté ».
+
+### 2026-11-22 · The Planet Crafter en monde natif, étape 1 (ADR 0048)
+- **Fait** : monde existant trouvé (mod TPCA et apworld 0.0.1-poc de Hawkrex, sans logique) ; ADR 0048 accepté (TPCA sans modification, dépôt à part `D:\planet-crafter`, paliers nommés, seuils du wiki) ; `D:\planet-crafter\monde\world.toml` importé (214 objets, 235 lieux ; doublon 157 de Hawkrex, `BootsSpeed3` passé à 215) ; exporté en apworld et généré par le moteur Rust (test ignoré `generate --test monde_externe`, 5 graines, 1 et 2 joueurs). fmt et clippy de `generate` passent.
+- **Pas vérifié** : apworld exporté dans le vrai Archipelago ; datapackage comparé à celui de Hawkrex ; TPCA jamais lancé (BepInEx pas installé) ; licence du dossier de Hawkrex à confirmer.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : logique par paliers de terraformation (étape 2 de l'ADR 0048) ; à l'utilisatrice : écrire à Hawkrex (doublon 157, licence, projet).
+
+### 2026-11-22 · The Planet Crafter, étape 2 : logique par paliers (ADR 0048)
+- **Fait** : seuils relevés sur le wiki (navigateur intégré, chiffres seulement) dans `D:\planet-crafter\outils\paliers.toml` ; l'outil d'import range les 153 plans de progression dans 15 paliers de Prime (13 plans SysTi exclus), sans 3e argument il redonne l'étape 1 octet pour octet ; moteur Rust : 5 graines à 1 et 2 joueurs, 17 sphères, lieux exclus en remplissage ; nouveau test ignoré `conversion_real monde_externe` : vrai Archipelago 0.6.8, même datapackage, contrôle croisé passé ; spoiler écrit par `monde_externe`. fmt et clippy passent. Pas encore commité.
+- **Pas vérifié** : machines exigées par palier et facteur 1 (choix de Raftup, jamais joués) ; TPCA jamais lancé ; datapackage comparé à l'apworld de Hawkrex ; `D:\planet-crafter` n'est pas un dépôt git.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : vraie partie avec TPCA sur le serveur Raftup (BepInEx à installer), puis ajuster `paliers.toml`.
+
+### 2026-11-22 · The Planet Crafter, étape 3 : préparation de la vraie partie (ADR 0048)
+- **Fait** : plan `D:\planet-crafter\docs\plan-etape-3.md` et décisions D1 à D4 validés, consignés dans l'ADR 0048 ; profil `the-planet-crafter.toml` (BepInEx 5.4.23.5, TPCA 0.0.3-poc, sha256 = digest GitHub, zips lus avec accord) au catalogue ; test ignoré `launcher-core --test profil_planet_crafter` : installation sur un faux jeu (27 fichiers), « à jour », désinstallation propre ; seed d'essai à deux joueurs et spoiler dans `D:\planet-crafter\essais`. fmt, clippy (`launcher-core`, `generate`) et tests de `launcher-core` passent.
+- **Pas vérifié** : installation dans le vrai jeu, `[preserve]` et `[cleanup]` du profil (dossiers de BepInEx jamais vus), connexion de TPCA (ws ou wss), version du jeu face à la 2.104 ; profil en `available` faute de statut « expérimental » dans le format.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : T3 à T5 du plan devant le jeu : sauvegarde de `LocalLow\MijuGames\Planet Crafter`, installation, `raftup-server` sur `D:\planet-crafter\essais\AP_monde_externe.archipelago`, scénario A à G.
+
+### 2026-11-22 · Contrôle visuel du launcher
+- **Fait** : suivi de projet créé (0b63943) ; fenêtre sans bordure, boîte de fichiers et presse-papiers vérifiés à la main par l'utilisatrice ; captures de « Partie en cours », Bibliothèque, registre et panneau « Profil » regardées ; corrigé : boîte modale commune `widgets::modal` (fond assombri, bordure ; registre et changement de hub), nom du jeu dans « Installer « … » ? », accords « 1 paquet vérifié », question « Délier Discord ? » ; clippy passe, corrections revues sur captures.
+- **Pas vérifié** : durée estimée et suivi async dans « Partie en cours » (seed non générée par Raftup, aucun joueur) ; vraies illustrations IGDB.
+- **Tests réparés** : 8 tests d'interface cassés par le profil The Planet Crafter (a832adb) : le catalogue de démo des tests ne garde que Slime Rancher ; `cargo test --workspace`, clippy et fmt passent, captures de référence inchangées.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : The Planet Crafter, étape 3 devant le jeu (T3 à T5 du plan).
+
+### 2026-11-21 · Chiffrement par défaut sans PEM (cloud/chiffrement-sans-pem)
+- **Fait** : ADR 0043 mis en œuvre : port mixte wss + ws (`server`, premier octet par `peek`), épinglage par empreinte (`client-core::Fingerprint`), certificat généré et réutilisé (`launcher-core::certificate`), `Encryption::Generated`, `fp` dans les liens, test « prêt ? » épinglé ; « Chiffré par Raftup » par défaut dans Créer et Héberger, adresse sans schéma pour les mods. Tests server, client-core, launcher-core, launcher-ui, clippy et fmt passent sous Linux.
+- **Pas vérifié** : un mod non modifié (Slimipelago) face au port mixte avec l'adresse sans schéma (Windows) ; capture de référence du Salon (son résumé du serveur change), à refaire sous Windows.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : essai réel avec Slimipelago sous Windows, puis refaire la capture du Salon.
+
+### 2026-11-21 · Plan d'interface, étapes 3 à 5 (cloud/plan-interface-3-5)
+- **Fait** : « En cours » avec la progression de chaque joueur ; « Partie en cours » : « Je joue : » et « Lancer et connecter » ; écrans Accueil (prochain pas, partie, invitation, jeux prêts), Catalogue (filtre, origine, badge de confiance) et Mon profil ; panneau « Dossiers » des Paramètres ; assistant du premier lancement (`welcome_done` dans `config.toml`) ; l'Accueil devient la page d'ouverture. Tests launcher-ui (181) et launcher-core, clippy et fmt passent sous Linux.
+- **Pas vérifié** : rendu à l'œil ; vrai lancement d'un jeu par « Lancer et connecter » (Windows) ; écriture réelle de `welcome_done` (coupée dans les tests).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : trancher les questions notées dans `docs/plan-interface-launcher.md` (parties rejointes, « qui te bloque », historique, file de téléchargements, thèmes, langue).
+- **Complément (22 novembre)** : illustrations du hub (ADR 0047) branchées sur les nouveaux écrans, comme sur la maquette : grille de jaquettes dans le Catalogue, jaquettes des jeux prêts dans l'Accueil, image large en fond du bandeau et jaquettes de l'équipage dans « Partie en cours » ; images chargées depuis tous les écrans. Regardé sur captures faites dans le conteneur (rendu logiciel Mesa) avec les vraies images du hub officiel.
+
+### 2026-11-22 · Captures de l'interface sans fenêtre (cloud/captures-interface)
+- **Fait** : `cargo captures` (alias) écrit un PNG de chaque écran dans `target/captures/` (menu, Bibliothèque sans hub et avec faux hub, fiche, Salon, Rejoindre, Héberger, Partie en cours et son onglet Salon, Amis, Paramètres), données de démonstration seulement ; rendu wgpu avec Mesa lavapipe sous Linux ; job CI `captures-interface` (Linux) qui range les images dans l'artefact du même nom. Les 11 captures regardées dans le conteneur.
+- **Pas vérifié** : le job de CI lui-même (pas encore lancé) ; rendu sous Windows de ces captures (non comparées).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : regarder l'artefact `captures-interface` de chaque PR et décrire ce qui change à l'écran ; ajouter Accueil, Catalogue et Profil quand la PR 2 sera fusionnée.
+
+### 2026-11-22 · Hub officiel par défaut dans toutes les compilations (cloud/hub-officiel-par-defaut)
+- **Fait** : vrai launcher lancé dans le conteneur (Xvfb, Mesa) et piloté à la souris ; aucune illustration car `DEFAULT_HUB_URL` valait `http://127.0.0.1:8787` hors release ; `RAFTUP_OFFICIAL_HUB_URL` posée dans `.cargo/config.toml` (ADR 0040 complété) ; relancé : jaquette, image large et attribution IGDB s'affichent. Tests launcher-core et launcher-ui passent.
+- **Pas vérifié** : un vrai build Windows ; la variable GitHub du workflow de release (elle garde la priorité si elle est définie).
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : relancer le launcher sur la branche de la PR 2 pour voir Accueil et Catalogue en vrai.
+
+### 2026-11-21 · Images dans les fiches de jeu (cloud/images-fiches)
+- **Fait** : `igdb_id = 16287` dans `profiles/slime-rancher.toml` (seul profil du dépôt), vérifié par `/v1/art/steam/433340` et `/v1/art/igdb/16287` du hub officiel ; fiche de la Bibliothèque : bandeau toujours présent, image large du hub sinon aplat de la teinte du jeu avec son titre ; attribution IGDB au pied de la Bibliothèque (déjà là, ADR 0047). Tests launcher-ui (167) et launcher-core, clippy et fmt passent sous Linux.
+- **Pas vérifié** : capture de référence `bibliotheque.png` (Windows seulement) : le bandeau en aplat la change, elle est à refaire sous Windows ; rendu jamais regardé à l'œil.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : refaire la capture de la Bibliothèque sous Windows (`UPDATE_SNAPSHOTS`), puis fusionner.
+
+### 2026-11-22 · Profils des jeux PC d'Archipelago, lot MVP (cloud/profils-mvp)
+- **Fait** : statut `untested` (ADR 0049) ; ADR 0050 (mods sans licence acceptés pour tous, fichiers du jeu patchés par un outil de modding acceptés, champ `inner` pour une archive dans une archive) ; profils Risk of Rain 2, Hollow Knight, Stardew Valley (SMAPI par `inner`) et A Short Hike au catalogue, en `untested`, sha256 calculés sur les vrais fichiers ; catalogue des tests d'interface fixé à Slime Rancher. Tests launcher-core et launcher-ui, clippy et fmt passent.
+- **Pas vérifié** : aucun essai réel (Windows, jeux) ; versions des mods compatibles avec Archipelago 0.6.8 supposées (dernières publiées) ; dépendances de 2022 du mod RoR2.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : essayer les 4 profils sous Windows (installation, connexion, désinstallation), puis lot suivant des jeux PC.
+
+### 2026-11-22 · Profils des jeux PC, lot 2 (cloud/profils-lot-2)
+- **Fait** : 10 jeux étudiés ; profils Aquaria, Blasphemous, Bomb Rush Cyberfunk et Choo-Choo Charles ajoutés en `untested` (sha256 des vrais fichiers, validés par `Profile::parse`) ; 6 jeux bloqués, raisons dans `docs/jeux-pc-catalogue.md` (suivi des 46 jeux PC). Tests launcher-core et launcher-ui passent.
+- **Pas vérifié** : aucun essai réel ; appid Steam d'Aquaria (216250, l'API Steam ne répond pas) ; compatibilité des mods avec 0.6.8.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : décider des jeux gratuits faits pour Archipelago (ChecksFinder, Bumper Stickers, Celeste 64) et des prérequis à installer soi-même (Everest) ; puis lot 3.
+
+### 2026-11-22 · Branches cloud fusionnées ; Bibliothèque limitée aux jeux du PC
+- **Fait** : fusion dans `main` de `cloud/hub-officiel-par-defaut`, `images-fiches`, `profils-lot-2` (avec `profils-mvp`), `chiffrement-sans-pem` et `plan-interface-3-5` (Accueil, Catalogue, Profil, assistant, « Lancer et connecter ») ; conflits du journal, de `catalog.rs` (The Planet Crafter gardé), de `profiles/README.md` et des tests réglés ; deux tests d'interface réparés (`fingerprint`, Bibliothèque passée à l'écran de partie) ; bug signalé par l'utilisatrice : la Bibliothèque montrait tout le catalogue. Elle ne garde plus que les jeux trouvés sur le PC, ceux qui ont un reçu d'installation et ceux ouverts depuis le Catalogue (test `seuls_les_jeux_du_pc_sont_dans_la_bibliotheque`) ; message « Aucun jeu trouvé sur ce PC » qui renvoie au Catalogue. Images de référence `salon.png` et `bibliotheque.png` régénérées (changements des branches cloud, vus). fmt, clippy et `cargo test --workspace` passent ; `cargo captures` vu (menu, Bibliothèque, Catalogue).
+- **Pas vérifié** : l'écran réel avec les vrais jeux de l'utilisatrice ; un jeu ajouté depuis le Catalogue n'est gardé que pour la session (pas enregistré).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (proposition d'ADR, à valider, non fusionnée).
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub (branche `cloud/adr-salon-rafthub`).
+

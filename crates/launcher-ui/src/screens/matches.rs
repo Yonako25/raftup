@@ -1,7 +1,9 @@
 //! Écran « En cours » : la liste des parties lancées.
 //!
-//! Pour l'instant, la seule partie connue est celle que ce PC héberge. Les parties
-//! rejointes chez un ami arriveront avec « Rejoindre par lien ».
+//! Pour l'instant, la seule partie connue est celle que ce PC héberge, avec la
+//! progression de chaque joueur (plan de l'interface, étape 3). Une partie rejointe
+//! chez un ami n'est pas encore suivie : il faudrait un client de suivi connecté à
+//! son serveur (question laissée ouverte, voir la PR de l'étape 3).
 
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 
@@ -107,7 +109,39 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
             open = widgets::primary_button(ui, "   Ouvrir   ", true);
         });
     });
+    // La progression de chacun, sous la ligne de la partie.
+    ui.add_space(8.0);
+    for slot in &players {
+        ui.horizontal(|ui| {
+            ui.add_space(58.0);
+            ui.label(RichText::new(&slot.name).color(theme::TEXT));
+            ui.label(widgets::dim(&slot.game).size(12.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(widgets::dim(progress(slot.checked, slot.total)).size(12.0));
+                let color = if slot.status >= 30 {
+                    theme::GREEN
+                } else {
+                    theme::ACCENT
+                };
+                widgets::bar(ui, 160.0, fraction(slot.checked, slot.total), color);
+            });
+        });
+    }
     open
+}
+
+/// Part des lieux visités, de 0 à 1 (0 pour un slot sans lieu).
+pub fn fraction(checked: usize, total: usize) -> f32 {
+    if total == 0 {
+        0.0
+    } else {
+        (checked as f32 / total as f32).clamp(0.0, 1.0)
+    }
+}
+
+/// « 12 / 40 lieux ».
+pub fn progress(checked: usize, total: usize) -> String {
+    format!("{checked} / {total} lieux")
 }
 
 /// Aucune partie : un panneau qui propose d'en héberger une. Renvoie vrai au clic.
@@ -126,4 +160,18 @@ fn empty_state(ui: &mut Ui, starting: bool) -> bool {
         clicked = widgets::primary_button(ui, text, true);
     });
     clicked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn part_des_lieux_visites() {
+        assert_eq!(fraction(0, 0), 0.0);
+        assert_eq!(fraction(10, 40), 0.25);
+        // Jamais plus que plein, même si le serveur compte plus de lieux visités.
+        assert_eq!(fraction(50, 40), 1.0);
+        assert_eq!(progress(12, 40), "12 / 40 lieux");
+    }
 }

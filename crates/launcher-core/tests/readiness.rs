@@ -115,3 +115,61 @@ async fn delai_depasse_et_port_ferme() {
     assert!(matches!(r, Readiness::Unreachable(_)), "{r:?}");
     assert!(r.message().contains("port"));
 }
+
+/// Chiffrement par défaut sans PEM (ADR 0043) : certificat généré, port mixte.
+#[tokio::test]
+async fn certificat_genere_epingle_et_repli_en_clair() {
+    use launcher_core::readiness::check_slot_pinned;
+    use launcher_core::Fingerprint;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("tls");
+    let mut host = Host::new();
+    let status = host
+        .start(HostOptions {
+            seed: seed_path(),
+            port: 0,
+            password: None,
+            encryption: Encryption::Generated { dir: dir.clone() },
+            public_host: "127.0.0.1".to_string(),
+            disable_save: true,
+            webhook: None,
+        })
+        .await
+        .unwrap();
+    assert!(status.encrypted);
+    assert!(status.address.starts_with("wss://"), "{}", status.address);
+    let fp = Fingerprint::parse(status.fingerprint.as_deref().unwrap()).unwrap();
+    let port = status.address.rsplit(':').next().unwrap().to_string();
+
+    // Un client Raftup avec l'empreinte du lien : prêt, en wss.
+    let ready = check_slot_pinned(&status.address, "Alice", "ChecksFinder", None, Some(fp)).await;
+    assert_eq!(ready, Readiness::Ready);
+    // Une autre empreinte : refusé (certificat différent).
+    let other = Fingerprint::of_der(b"autre certificat");
+    let refused =
+        check_slot_pinned(&status.address, "Alice", "ChecksFinder", None, Some(other)).await;
+    assert!(!refused.is_ready(), "{refused:?}");
+    // Sans empreinte, le certificat auto-signé est refusé en wss.
+    let unknown = check_slot(&status.address, "Alice", "ChecksFinder", None).await;
+    assert!(!unknown.is_ready(), "{unknown:?}");
+    // Un mod non modifié : adresse sans schéma, wss refusé puis repli en ws, au même port.
+    let fallback = check_slot(&format!("127.0.0.1:{port}"), "Alice", "ChecksFinder", None).await;
+    assert_eq!(fallback, Readiness::Ready);
+    host.stop().await.unwrap();
+
+    // Le même certificat est repris au lancement suivant : les liens restent bons.
+    let again = host
+        .start(HostOptions {
+            seed: seed_path(),
+            port: 0,
+            password: None,
+            encryption: Encryption::Generated { dir },
+            public_host: "127.0.0.1".to_string(),
+            disable_save: true,
+            webhook: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(again.fingerprint.as_deref(), Some(fp.to_hex().as_str()));
+}

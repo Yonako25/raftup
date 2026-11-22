@@ -1,0 +1,59 @@
+# The Planet Crafter (mod TPCA de Hawkrex, chargeur BepInEx 5).
+# Décision : ADR 0048 (étape 3, D1 et D2). Le monde natif ne passe pas par ce profil :
+# il vient du registre, ou se pose dans `mondes-natifs/`.
+# TPCA se dit lui-même « DO NOT USE FOR REAL GAMES » (0.0.3-poc) : profil expérimental.
+# Le format n'a que `available` et `broken` ; un statut « expérimental » demanderait un ADR.
+# Raftup ne redistribue rien : les fichiers sont téléchargés chez leurs auteurs, sur le PC du
+# joueur, après vérification du sha256.
+# Hashes : calculés le 2026-11-22 sur les fichiers téléchargés, identiques aux digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "the-planet-crafter"
+name = "The Planet Crafter"
+ap_game = "The Planet Crafter"     # vérifié : game = "The Planet Crafter" dans worlds/the_planet_crafter/__init__.py (Hawkrex)
+status = "available"
+
+[game.detect]
+steam_appid = 1284190              # vérifié : appmanifest_1284190.acf local, installdir « The Planet Crafter »
+expected_exe = "Planet Crafter.exe" # vérifié : présent dans l'installation locale
+
+[credits]
+authors = ["Hawkrex (TPCA, MIT)", "BepInEx (LGPL-2.1)"]
+license = "MIT"
+
+[[steps]]
+id = "bepinex"
+kind = "mod_loader"
+name = "BepInEx"
+version = "5.4.23.5"               # version testée par TPCA 0.0.3-poc (note de version)
+source = { url = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip" }
+sha256 = "82f9878551030f54657792c0740d9d51a09500eeae1fba21106b0c441e6732c4"
+max_bytes = 5000000
+# Le zip contient BepInEx/core/…, winhttp.dll et doorstop_config.ini à la racine (vérifié).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "tpca"
+kind = "mod"
+name = "TPCA"
+version = "0.0.3-poc"
+source = { url = "https://github.com/Hawkrex/TPCA/releases/download/v0.0.3-poc/TPCA.zip" }
+sha256 = "91f66e33ac2e9b99308dd295467b1753af717faf8e42cf8444eca7b21e2b1cb6"
+max_bytes = 5000000
+# Le zip est à plat (TPCA.dll, Archipelago.MultiClient.Net.dll, Newtonsoft.Json.dll, deux PNG) :
+# le README de TPCA le place dans BepInEx/plugins/TPCA (vérifié).
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins/TPCA", strip_prefix = "" }
+
+[preserve]
+# Réglages de BepInEx (niveau des journaux), créés au premier lancement : non vu en vrai.
+paths = ["{game_dir}/BepInEx/config"]
+
+[cleanup]
+# Créés par BepInEx au premier lancement (d'après sa documentation ; à vérifier en vrai).
+paths = ["{game_dir}/BepInEx/cache", "{game_dir}/BepInEx/patchers", "{game_dir}/BepInEx/LogOutput.log"]
+
+[launch]
+exe = "{game_dir}/Planet Crafter.exe"
+connect = { method = "manual", instructions = "Dans le jeu : Nouvelle partie, cocher « Archipelago Mode », puis « Archipelago Settings ». Hôte {address}, joueur {slot}, puis « First Connection » et « Create »." }

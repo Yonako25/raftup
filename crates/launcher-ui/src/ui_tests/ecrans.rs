@@ -20,7 +20,7 @@ fn with_friends(show: fn(&mut egui::Ui, &mut FriendsState)) -> Harness<'static, 
 #[test]
 fn parametres_montre_l_adresse_du_rafthub() {
     let harness = with_friends(|ui, state| {
-        settings::show(ui, state);
+        settings::show(ui, state, None);
     });
     assert!(shows(&harness, "Paramètres"));
     assert!(shows(&harness, "Rafthub"));

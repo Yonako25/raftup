@@ -33,6 +33,10 @@ pub enum Encryption {
     Wss { cert: PathBuf, key: PathBuf },
     /// `ws` en clair : le mot de passe passe en clair (NF06, choix explicite).
     Plain,
+    /// Chiffrement par défaut, sans fichier (ADR 0043) : certificat auto-signé généré
+    /// par Raftup et rangé dans `dir`, `wss` et `ws` sur le même port. Les clients
+    /// Raftup l'épinglent par l'empreinte du lien ; un mod non modifié passe en clair.
+    Generated { dir: PathBuf },
 }
 
 /// Réglages de l'écran « Héberger une partie ».
@@ -106,6 +110,10 @@ pub struct HostStatus {
     /// Adresse à donner aux joueurs : `wss://exemple.fr:38281`.
     pub address: String,
     pub encrypted: bool,
+    /// Empreinte SHA-256 du certificat généré par Raftup (ADR 0043), en hexadécimal ;
+    /// `None` en clair ou avec les PEM de l'hôte. Avec elle, le port accepte aussi le
+    /// clair, et les liens d'invitation la portent (`fp`).
+    pub fingerprint: Option<String>,
     pub has_password: bool,
     /// Heure du démarrage, en secondes depuis 1970.
     pub started_at: f64,
@@ -140,6 +148,7 @@ struct Hosted {
     seed: SeedSummary,
     address: String,
     encrypted: bool,
+    fingerprint: Option<String>,
     has_password: bool,
     started_at: f64,
     save: Option<PathBuf>,
@@ -220,9 +229,18 @@ impl Host {
             return Err(LauncherError::AlreadyRunning);
         }
         // Le certificat d'abord : une erreur de configuration se voit tout de suite.
-        let tls = match &options.encryption {
-            Encryption::Wss { cert, key } => Some(TlsConfig::from_pem_files(cert, key)?),
-            Encryption::Plain => None,
+        let (tls, fingerprint) = match &options.encryption {
+            Encryption::Wss { cert, key } => (Some(TlsConfig::from_pem_files(cert, key)?), None),
+            Encryption::Plain => (None, None),
+            Encryption::Generated { dir } => {
+                let generated = crate::certificate::ensure(dir)?;
+                let tls = TlsConfig::from_pem(
+                    generated.cert_pem.as_bytes(),
+                    generated.key_pem.as_bytes(),
+                )?
+                .with_plain_fallback();
+                (Some(tls), Some(generated.fingerprint.to_hex()))
+            }
         };
         // Les octets de la seed servent deux fois : la lecture, et l'empreinte
         // qui lie la sauvegarde à cette seed.
@@ -314,6 +332,7 @@ impl Host {
             seed,
             address,
             encrypted,
+            fingerprint,
             has_password,
             started_at: now(),
             save,
@@ -344,6 +363,7 @@ impl Host {
             seed: hosted.seed.clone(),
             address: hosted.address.clone(),
             encrypted: hosted.encrypted,
+            fingerprint: hosted.fingerprint.clone(),
             has_password: hosted.has_password,
             started_at: hosted.started_at,
             save: hosted.save.clone(),

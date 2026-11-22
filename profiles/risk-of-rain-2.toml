@@ -1,0 +1,106 @@
+# Risk of Rain 2 (mod Archipelago de Sneaki / kindasneaki), écrit le 2026-11-22, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/ror2) ; le guide officiel (docs/setup_en.md)
+# installe le mod Thunderstore Sneaki/Archipelago par r2modman, avec ses dépendances.
+# Dépendances : celles déclarées par Sneaki-Archipelago 1.5.5 sur l'API Thunderstore
+# (HookGenPatcher 1.2.3, R2API 4.4.1, BepInExPack 5.4.2101), résolues à la main. Quand deux
+# paquets demandent deux versions du même paquet, on prend la plus haute (comme r2modman).
+# À VÉRIFIER EN VRAIE PARTIE : ces dépendances datent de 2022, alors que le mod 1.5.5
+# (2026-10-09, « Update for Hallowed Concepts ») vise le jeu à jour. R2API 4.4.1 (monolithique)
+# et le MMHOOK fourni par HookGenPatcher 1.2.3 risquent de ne plus marcher avec le jeu actuel ;
+# les dernières versions sont BepInExPack 5.4.2122, HookGenPatcher 1.2.9, R2API 5.0.5.
+# À VÉRIFIER : le mod ne dit pas avec quelle version d'Archipelago il marche (ni le README,
+# ni le CHANGELOG) ; hypothèse : 1.5.5 marche avec 0.6.8, car c'est la dernière publiée.
+# Licence : le dépôt du mod (github.com/kindasneaki/Archipelago.RiskOfRain2) n'a pas de
+# fichier LICENSE à la racine (LICENSE, LICENSE.md, LICENSE.txt, LICENCE, COPYING : 404 sur
+# main et master, le 2026-11-22) et son README n'en parle pas. L'API GitHub n'était pas
+# joignable depuis la session : à confirmer avec `gh api` (champ license). Mod sans licence :
+# accepté par la mainteneuse (ADR 0021, étendu à tous les mods par l'ADR 0050) ; Raftup le
+# télécharge chez Thunderstore sur le PC du joueur, sans le redistribuer.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-22 (thunderstore.io redirige vers
+# ccdn.thunderstore.io, en HTTPS).
+
+format_version = 1
+
+[game]
+id = "risk-of-rain-2"
+name = "Risk of Rain 2"
+ap_game = "Risk of Rain 2"         # vérifié : game = "Risk of Rain 2" dans worlds/ror2/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 28512                    # vérifié : réponse de hub.raftup-games.com/v1/art/steam/632360 ; l'appid suffit déjà, champ facultatif
+
+[game.detect]
+steam_appid = 632360               # vérifié : API du Steam Store, appid 632360 = « Risk of Rain 2 » (type game)
+expected_exe = "Risk of Rain 2.exe" # vérifié : exeNames du schéma d'écosystème Thunderstore (utilisé par r2modman) ; le README de BepInExPack écrit « RiskOfRain2.exe », ce qui semble faux
+
+[credits]
+authors = [
+  "Sneaki / kindasneaki (Archipelago.RiskOfRain2, licence à vérifier)",
+  "bbepis et l'équipe BepInEx (BepInExPack, LGPL-2.1)",
+  "HarbingerOfMe / Risk of Thunder (HookGenPatcher, MIT)",
+  "Risk of Thunder (R2API, MIT)",
+]
+license = "unlicensed"            # le mod lui-même n'a pas de licence trouvée : voir ADR 0021 (dépendances : LGPL-2.1 et MIT)
+
+[[steps]]
+id = "bepinexpack"
+kind = "mod_loader"
+name = "BepInExPack (Risk of Rain 2)"
+version = "5.4.2101"               # plus haute version demandée dans l'arbre (par Sneaki-Archipelago)
+source = { thunderstore = "bbepis-BepInExPack" }
+sha256 = "e4f5f17e5156e1dd19a94f436a0f99733caa8d158e6e3e19399c7c55082b6fba"
+max_bytes = 10000000               # fichier : 4 909 098 octets
+# Licence : LGPL-2.1 (vérifié : LICENSE de github.com/BepInEx/BepInEx ; le paquet ajoute
+# RoR2BepInExPack, FixPluginTypesSerialization et BepInExGUI, licences non vérifiées une à une).
+# Le zip contient BepInExPack/winhttp.dll, BepInExPack/doorstop_config.ini et BepInExPack/BepInEx/…
+# (vérifié par unzip -l) ; icon.png, manifest.json, README.md hors préfixe sont ignorés.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "BepInExPack/" }
+
+[[steps]]
+id = "hookgenpatcher"
+kind = "mod_loader"
+name = "HookGenPatcher"
+version = "1.2.3"                  # plus haute version demandée (1.2.3 par le mod, 1.2.1 par R2API)
+source = { thunderstore = "RiskofThunder-HookGenPatcher" }
+sha256 = "b12dd89e9849a3ff6d45bb4b97fcbdcf8a9a33b47e41341771e0e6264d2c4db4"
+max_bytes = 5000000                # fichier : 2 123 339 octets
+# Licence : MIT (vérifié : LICENSE de github.com/harbingerofme/Bepinex.Monomod.HookGenPatcher).
+# Le zip contient BepInEx/config/, BepInEx/patchers/…, BepInEx/plugins/MMHOOK/… (vérifié).
+# À vérifier : le patcher régénère sans doute MMHOOK_Assembly-CSharp.dll au lancement ; le
+# fichier installé changerait alors de hash (signalé comme modifié à la désinstallation).
+install = { extract = "zip", into = "{game_dir}/BepInEx", strip_prefix = "BepInEx/" }
+
+[[steps]]
+id = "r2api"
+kind = "mod"
+name = "R2API"
+version = "4.4.1"                  # version demandée par Sneaki-Archipelago 1.5.5 ; à vérifier avec le jeu actuel
+source = { thunderstore = "tristanmcpherson-R2API" }
+sha256 = "fdab315d955a94f4718f389e3723f3e30e6d4f32f597d4dc98ccdba37b393a68"
+max_bytes = 1000000                # fichier : 157 716 octets
+# Licence : MIT (vérifié : LICENSE de github.com/risk-of-thunder/R2API).
+# Le zip contient plugins/R2API/R2API.dll et .xml (vérifié) → BepInEx/plugins/R2API/.
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins", strip_prefix = "plugins/" }
+
+[[steps]]
+id = "archipelago-ror2"
+kind = "mod"
+name = "Archipelago (Risk of Rain 2)"
+version = "1.5.5"                  # vérifié : dernière version sur l'API Thunderstore (2026-10-09)
+source = { thunderstore = "Sneaki-Archipelago" }
+sha256 = "3bf6ae9427f66b73c894d884d97deec0777ca9380512cbd2c9397389fb214568"
+max_bytes = 2000000                # fichier : 867 631 octets
+# Le zip a ses fichiers à la racine (Archipelago.RiskOfRain2.dll, Archipelago.MultiClient.Net.dll,
+# Newtonsoft.Json.dll, connectbundle…, vérifié) → un dossier à lui, comme r2modman.
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins/Sneaki-Archipelago", strip_prefix = "" }
+
+# Pas de [preserve] : on ne sait pas encore où le mod garde l'adresse et le slot (à vérifier).
+
+[cleanup]
+# Créés d'habitude par BepInEx au premier lancement (non observés ici : à vérifier).
+paths = ["{game_dir}/BepInEx/cache", "{game_dir}/BepInEx/LogOutput.log"]
+
+[launch]
+exe = "{game_dir}/Risk of Rain 2.exe"
+# Méthode vérifiée : setup_en.md (0.6.8) décrit les champs du lobby et la commande de console
+# archipelago_connect <url> <port> <slot> [password] ; aucun argument ni fichier de config documenté.
+connect = { method = "manual", instructions = "Dans le jeu, ouvre un lobby : remplis les champs Archipelago (Slot Name : {slot}, Server URL : {host}, Server Port : {port}, mot de passe si besoin), puis clique sur « Connect to AP ». Autre méthode : console (Ctrl + Alt + `) puis « archipelago_connect {host} {port} {slot} ». Adresse complète : {address}." }

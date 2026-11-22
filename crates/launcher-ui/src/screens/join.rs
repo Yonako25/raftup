@@ -36,6 +36,20 @@ pub struct JoinState {
 }
 
 impl JoinState {
+    /// Une invitation lue et pas encore suivie ? Rend le jeu du lien (`None` dedans :
+    /// le lien ne dit pas le jeu). L'Accueil la rappelle au joueur.
+    pub fn pending_invite(&self) -> Option<Option<&str>> {
+        self.invite.as_ref().map(|invite| invite.game.as_deref())
+    }
+
+    /// Tests : une invitation déjà lue, comme après un clic sur un lien.
+    #[cfg(test)]
+    pub(crate) fn with_invite(link: &str) -> JoinState {
+        let mut state = JoinState::without_clipboard();
+        receive(&mut state, link);
+        state
+    }
+
     /// Tests de l'interface : le presse-papiers du système est déjà « regardé »,
     /// donc jamais lu (le résultat ne dépend pas de ce que le PC a copié).
     #[cfg(test)]
@@ -203,7 +217,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .family(theme::bold_family())
                     .color(theme::TEXT),
             );
-            if !invite.address.secure {
+            if invite.fingerprint.is_some() {
+                ui.label(widgets::dim(
+                    "Partie chiffrée par Raftup : les outils de Raftup vérifient le certificat du lien ; le mod du jeu se connecte en clair.",
+                ).size(13.0));
+            } else if !invite.address.secure {
                 ui.label(
                     RichText::new(
                         "Connexion non chiffrée : le mot de passe de la salle passera en clair.",
@@ -266,7 +284,9 @@ fn continue_to(
         return;
     }
     state.error = None;
-    let url = invite.address.to_url();
+    // Adresse donnée au mod du jeu : sans schéma pour un certificat généré par Raftup
+    // (le mod essaie wss puis retombe sur ws, ADR 0043).
+    let url = invite.address_for_game();
     let dest = library
         .catalog()
         .map(|catalog| destination(catalog, library.scan_result(), invite))
@@ -338,6 +358,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
             },
             slot: Some("Alice".into()),
             game: game.map(str::to_string),
+            fingerprint: None,
         }
     }
 

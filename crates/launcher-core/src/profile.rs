@@ -119,6 +119,9 @@ pub struct GameInfo {
 #[serde(rename_all = "snake_case")]
 pub enum GameStatus {
     Available,
+    /// Profil jamais essayé avec le vrai jeu (ADR 0049) : installable comme
+    /// `available`, mais le launcher l'annonce « Non testé ».
+    Untested,
     Broken,
 }
 
@@ -204,7 +207,15 @@ impl Source {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallAction {
     /// Extraire une archive zip dans `into`, en retirant `strip_prefix`.
-    Extract { into: String, strip_prefix: String },
+    ///
+    /// `inner` (facultatif, ADR 0050) : chemin exact d'une autre archive zip **dans**
+    /// le fichier téléchargé ; c'est elle qu'on extrait (installateur de SMAPI, dont les
+    /// fichiers Windows sont dans `internal/windows/install.dat`).
+    Extract {
+        into: String,
+        strip_prefix: String,
+        inner: Option<String>,
+    },
     /// Copier le fichier tel quel vers ce chemin.
     CopyTo(String),
 }
@@ -217,6 +228,7 @@ struct RawInstall {
     extract: Option<String>,
     into: Option<String>,
     strip_prefix: Option<String>,
+    inner: Option<String>,
     copy_to: Option<String>,
 }
 
@@ -230,6 +242,7 @@ impl<'de> Deserialize<'de> for InstallAction {
                 extract: Some(format),
                 into: Some(into),
                 strip_prefix,
+                inner,
                 copy_to: None,
             } => {
                 if format != "zip" {
@@ -240,12 +253,14 @@ impl<'de> Deserialize<'de> for InstallAction {
                 Ok(InstallAction::Extract {
                     into,
                     strip_prefix: strip_prefix.unwrap_or_default(),
+                    inner,
                 })
             }
             RawInstall {
                 extract: None,
                 into: None,
                 strip_prefix: None,
+                inner: None,
                 copy_to: Some(path),
             } => Ok(InstallAction::CopyTo(path)),
             _ => Err(bad(
@@ -451,8 +466,24 @@ impl Profile {
                 .map_err(|reason| invalid(format!("étape {step_id} : {reason}")))?;
 
             match &step.install {
-                InstallAction::Extract { into, strip_prefix } => {
+                InstallAction::Extract {
+                    into,
+                    strip_prefix,
+                    inner,
+                } => {
                     check_target(file, into, STEP_VARS, STEP_VARS, true)?;
+                    // L'archive intérieure est cherchée par son nom exact dans le zip : un
+                    // chemin sûr (pas de `..`, pas de chemin absolu), comme une entrée.
+                    if let Some(inner) = inner {
+                        let unsafe_inner = inner.is_empty()
+                            || crate::archive::safe_relative_path(inner).is_err()
+                            || inner.contains(['{', '}']);
+                        if unsafe_inner {
+                            return Err(invalid(format!(
+                                "étape {step_id} : inner « {inner} » interdit"
+                            )));
+                        }
+                    }
                     let bad_prefix = strip_prefix.contains("..")
                         || strip_prefix.starts_with(['/', '\\'])
                         || strip_prefix.contains([':', '{', '}', '\0', '\n', '\r']);

@@ -194,6 +194,19 @@ pub async fn check_connection_with_timeout(
     game: &str,
     timeout: Duration,
 ) -> Result<(), ConnectionProblem> {
+    check_connection_pinned(address, slot, password, game, None, timeout).await
+}
+
+/// Comme [`check_connection_with_timeout`], avec l'empreinte du certificat du serveur
+/// prise dans le lien d'invitation (ADR 0043) : en `wss`, ce seul certificat est cru.
+pub async fn check_connection_pinned(
+    address: &str,
+    slot: &str,
+    password: Option<&str>,
+    game: &str,
+    pinned: Option<client_core::Fingerprint>,
+    timeout: Duration,
+) -> Result<(), ConnectionProblem> {
     // Un bloc `async` est une valeur : `tokio::time::timeout` peut ainsi le surveiller en entier.
     let attempt = async {
         let urls = candidate_urls(address).map_err(|e| explain(&e))?;
@@ -201,6 +214,7 @@ pub async fn check_connection_with_timeout(
         for url in urls {
             let mut options = ConnectOptions::new(&url, slot, game);
             options.password = password.map(str::to_string);
+            options.pinned = pinned;
             match Client::connect(&options).await {
                 Ok((client, _session)) => {
                     // Fermeture propre ; si elle échoue, la connexion a quand même réussi.

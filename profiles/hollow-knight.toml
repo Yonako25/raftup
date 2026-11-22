@@ -1,0 +1,151 @@
+# Hollow Knight (mod Archipelago.HollowKnight), écrit le 2026-11-22, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/hk) : pas d'apworld à installer.
+# Le guide officiel (worlds/hk/docs/setup_en.md, tag 0.6.8) installe par Lumafly, sans BepInEx.
+# Liste des paquets : dépôt hk-modding/modlinks (ApiLinks.xml et ModLinks.xml, branche main,
+# lus le 2026-11-22) ; dépendances de « Archipelago » résolues récursivement :
+#   Archipelago → ItemChanger, MenuChanger, Benchwarp, QoL ; QoL → Vasi.
+# Hashes : calculés (sha256sum) sur les fichiers téléchargés le 2026-11-22, identiques à ceux
+# annoncés par les modlinks.
+# Les téléchargements GitHub redirigent vers release-assets.githubusercontent.com (hôte hors de
+# ALLOWED_HOSTS, mais download.rs ne contrôle que le HTTPS des redirections) : à confirmer.
+#
+# Licences (fichier LICENSE de chaque dépôt, lu en brut le 2026-11-22) :
+#   - Modding API (hk-modding/api)                         : MIT
+#   - Archipelago (ArchipelagoMW-HollowKnight/Archipelago.HollowKnight) : MIT (LICENSE.txt)
+#   - ItemChanger, MenuChanger, Benchwarp (homothetyhk)    : LGPL 2.1 (texte seul, sans mention
+#     « or later » trouvée → LGPL-2.1-only par prudence, à vérifier)
+#   - Vasi (fifty-six)                                     : MPL-2.0
+#   - QoL (fifty-six)                                      : GPL 3 (texte seul → GPL-3.0-only par
+#     prudence, à vérifier)
+# Le zip de l'API contient un Assembly-CSharp.dll (code du jeu de Team Cherry, patché) et un
+# mscorlib.dll. Raftup ne le redistribue pas : il est téléchargé chez hk-modding sur le PC du
+# joueur, comme le fait Lumafly, et l'original est sauvegardé puis restauré à la
+# désinstallation. Accepté par la mainteneuse le 2026-11-22 (ADR 0050).
+
+format_version = 1
+
+[game]
+id = "hollow-knight"
+name = "Hollow Knight"
+ap_game = "Hollow Knight"          # vérifié : game: str = "Hollow Knight" dans worlds/hk/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 14593                    # vérifié : hub.raftup-games.com/v1/art/steam/367520 → igdb_id 14593
+# seconds_per_location : non renseigné (120 s par défaut), à mesurer en vraie partie.
+
+[game.detect]
+steam_appid = 367520               # vérifié : store.steampowered.com/app/367520 → « Hollow Knight »
+expected_exe = "hollow_knight.exe" # vérifié : Lumafly (Util/PathUtil.cs) attend « hollow_knight.exe » pour Steam ;
+                                   # la version GOG s'appelle « Hollow Knight.exe » (dossier « Hollow Knight_Data ») :
+                                   # ce profil ne gère que la disposition Steam, à vérifier pour GOG.
+
+[credits]
+authors = [
+  "seanpr96, iamwyza, firzen et contributeurs (Hollow Knight Modding API, MIT)",
+  "Hussein Farran, Daniel Grace (Archipelago.HollowKnight, MIT)",
+  "homothetyhk (ItemChanger, MenuChanger, Benchwarp, LGPL-2.1)",
+  "fifty-six (QoL, GPL-3.0 ; Vasi, MPL-2.0)",
+]
+# Expression SPDX de l'ensemble ; la plus restrictive est GPL-3.0-only (QoL).
+# À vérifier : que la validation accepte une expression SPDX composée (sinon « GPL-3.0-only »).
+license = "MIT AND LGPL-2.1-only AND MPL-2.0 AND GPL-3.0-only"
+
+# Ordre : l'API d'abord, puis les dépendances avant les mods qui en ont besoin.
+# Dossiers : comme Lumafly (Services/Installer.cs), l'API dans Managed, chaque mod dans
+# Managed/Mods/<Nom du mod dans ModLinks>/. Tous les zips sont « à plat » (vérifié par unzip -l).
+
+[[steps]]
+id = "modding-api"
+kind = "mod_loader"
+name = "Hollow Knight Modding API"
+version = "1.5.78.11833-77"        # vérifié : ApiLinks.xml, Manifest Version 77, lien Windows
+source = { url = "https://github.com/hk-modding/api/releases/download/1.5.78.11833-77/moddingapi.v77.windows.zip" }
+sha256 = "bc9f0db3d0916b05cd5a2420bb602fb1b239ce3ff6c289fd84bffb682fb8f1d6"  # vérifié : = ApiLinks.xml
+max_bytes = 10000000               # fichier : 7 024 251 octets
+# Zip à plat (vérifié) : Assembly-CSharp.dll/.xml, MMHOOK_*.dll, Mono.Cecil.dll, MonoMod.*.dll,
+# mscorlib.dll/.xml, Newtonsoft.Json.dll, unityscenerepacker.dll, README.md.
+# Assembly-CSharp.dll et mscorlib.dll remplacent ceux du jeu : sauvegardés et restaurés par le launcher.
+# À vérifier : l'API v77 vise le jeu 1.5.78.11833 (version Steam actuelle) ; une branche bêta
+# plus ancienne (1.4.3.2) serait cassée.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed", strip_prefix = "" }
+
+[[steps]]
+id = "itemchanger"
+kind = "mod"
+name = "ItemChanger"
+version = "2.1.6.0"                # vérifié : ModLinks.xml
+source = { url = "https://github.com/homothetyhk/HollowKnight.ItemChanger/releases/download/v2.1.6%2B927/ItemChanger.zip" }
+sha256 = "7d1c01eb5f5d5ba05713ec35ebf31d23096f8979578435b06f034abb3b337d82"  # vérifié : = ModLinks.xml
+max_bytes = 12000000               # fichier : 8 636 384 octets
+# Zip à plat (vérifié) : ItemChanger.dll/.pdb/.xml, README.md.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/ItemChanger", strip_prefix = "" }
+
+[[steps]]
+id = "menuchanger"
+kind = "mod"
+name = "MenuChanger"
+# vérifié : ModLinks.xml annonce 1.2.0.0, mais l'URL pointe sur le tag v1.1.0+132 (incohérence
+# des modlinks eux-mêmes ; le sha256 correspond bien à ce fichier). À vérifier.
+version = "1.2.0.0"
+source = { url = "https://github.com/homothetyhk/HollowKnight.MenuChanger/releases/download/v1.1.0%2B132/MenuChanger.zip" }
+sha256 = "3f298454bdb8ac036f0ec89ae14e187178ae24087a7b838dfcff2a363d436e31"  # vérifié : = ModLinks.xml
+max_bytes = 1000000                # fichier : 63 747 octets
+# Zip à plat (vérifié) : MenuChanger.dll/.pdb/.xml.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/MenuChanger", strip_prefix = "" }
+
+[[steps]]
+id = "benchwarp"
+kind = "mod"
+name = "Benchwarp"
+version = "3.2.6.1"                # vérifié : ModLinks.xml
+source = { url = "https://github.com/homothetyhk/HollowKnight.BenchwarpMod/releases/download/v3.2.6.1/Benchwarp.zip" }
+sha256 = "1610837e5cc077aec82b29a9e48e34125fb35b04cd9e4f03bc7bdf15208bb4ed"  # vérifié : = ModLinks.xml
+max_bytes = 2000000                # fichier : 745 026 octets
+# Zip à plat (vérifié) : Benchwarp.dll/.pdb, README.md.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/Benchwarp", strip_prefix = "" }
+
+[[steps]]
+id = "vasi"
+kind = "mod"
+name = "Vasi"
+version = "2.0.0.0"                # vérifié : ModLinks.xml
+source = { url = "https://github.com/fifty-six/HollowKnight.Vasi/releases/download/v2/Vasi.zip" }
+sha256 = "b93fa7ecdf40d5f91f942acfd31cd2a5243551720c96e18dde99fd64919162ec"  # vérifié : = ModLinks.xml
+max_bytes = 1000000                # fichier : 20 796 octets
+# Zip à plat (vérifié) : Vasi.dll/.pdb, README.md.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/Vasi", strip_prefix = "" }
+
+[[steps]]
+id = "qol"
+kind = "mod"
+name = "QoL"
+version = "4.10.0.0"               # vérifié : ModLinks.xml (dépend de Vasi)
+source = { url = "https://github.com/fifty-six/HollowKnight.QoL/releases/download/v4.10/QoL.zip" }
+sha256 = "b0145b8484a5a3fc462cd93e5d4dd36a3d975aa1f7814828de4387028225f908"  # vérifié : = ModLinks.xml
+max_bytes = 1000000                # fichier : 52 851 octets
+# Zip à plat (vérifié) : QoL.dll/.pdb, README.md.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/QoL", strip_prefix = "" }
+
+[[steps]]
+id = "archipelago-hk"
+kind = "mod"
+name = "Archipelago (Hollow Knight)"
+version = "0.12.0.0"               # vérifié : ModLinks.xml (tag v0.12.0)
+source = { url = "https://github.com/ArchipelagoMW-HollowKnight/Archipelago.HollowKnight/releases/download/v0.12.0/Archipelago.zip" }
+sha256 = "f54fb0972129028393a174daefa159d64a83c71789e2fd5f59583c856231d611"  # vérifié : = ModLinks.xml
+max_bytes = 2000000                # fichier : 472 765 octets
+# Zip à plat (vérifié) : Archipelago.HollowKnight.dll/.pdb, Archipelago.MultiClient.Net.dll,
+# Archipelago.Gifting.Net.dll, README.md.
+# À vérifier : compatibilité de la version 0.12.0 du mod avec le monde hk d'Archipelago 0.6.8.
+install = { extract = "zip", into = "{game_dir}/hollow_knight_Data/Managed/Mods/Archipelago", strip_prefix = "" }
+
+# [preserve] et [cleanup] : rien. Les réglages des mods (…GlobalSettings.json) et les sauvegardes
+# vivent dans le dossier utilisateur du jeu (AppData\LocalLow\Team Cherry\Hollow Knight, à
+# vérifier), hors de {game_dir} ; aucun fichier créé dans {game_dir} n'est documenté.
+
+[launch]
+exe = "{game_dir}/hollow_knight.exe"   # vérifié : même nom que expected_exe (Lumafly, Steam)
+# Méthode « manual » : le guide officiel ne documente que la saisie dans le menu du jeu.
+# vérifié : guide setup_en.md 0.6.8 et README du mod (nouvelle partie, mode Archipelago, Start).
+# vérifié : ConnectionDetails.cs du mod (branche master) a des champs séparés ServerUrl,
+# ServerPort, SlotName, ServerPassword → hôte et port séparés. Libellés exacts du menu : à vérifier.
+connect = { method = "manual", instructions = "Dans le jeu : nouvelle partie, choisir le mode Archipelago, puis saisir le serveur {host}, le port {port} (adresse complète : {address}), le slot {slot} et le mot de passe s'il y en a un. Appuyer sur Start : le jeu se fige quelques secondes pendant le placement des objets." }

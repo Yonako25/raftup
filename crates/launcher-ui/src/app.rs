@@ -2,7 +2,9 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
-use crate::screens::{create, friends, join, library, matches, running, settings, setup, soon};
+use crate::screens::{
+    catalog, create, friends, home, join, library, matches, running, settings, setup, soon, welcome,
+};
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -10,6 +12,12 @@ use crate::worker::{Command, Worker};
 /// L'écran affiché.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Page {
+    /// « Accueil » : le prochain pas, les parties en cours, les jeux prêts.
+    Home,
+    /// « Parcourir » : les jeux pris en charge (catalogue embarqué et registre).
+    Catalog,
+    /// « Mon profil » : pseudo, présence et Discord du compte Rafthub.
+    Profile,
     /// « En cours » : la liste des parties lancées.
     InProgress,
     /// « Bibliothèque » : les jeux du catalogue, leurs mods, le bouton « Lancer ».
@@ -22,7 +30,7 @@ pub enum Page {
     Join,
     /// « Amis » : compte sur le hub, amis et demandes (ADR 0035).
     Friends,
-    /// « Paramètres » : l'adresse du Rafthub, pour l'instant.
+    /// « Paramètres » : l'adresse du Rafthub et les dossiers de Raftup.
     Settings,
     /// Écran « Bientôt » (nom de la fonction à venir). Deux liens vers le même nom
     /// donnent la même page : la barre latérale s'en sert pour savoir lequel est actif.
@@ -39,6 +47,10 @@ pub struct App {
     join: join::JoinState,
     /// Compte sur le hub, amis, présence (ADR 0035).
     friends: friends::FriendsState,
+    /// Filtre de l'écran « Catalogue ».
+    catalog: catalog::CatalogState,
+    /// Assistant du premier lancement (plan de l'interface, étape 5).
+    welcome: welcome::WelcomeState,
     /// Vérification et installation de la mise à jour du launcher (F12).
     update: crate::update_ui::UpdateState,
     /// Erreur à montrer en rouge en haut de l'écran.
@@ -72,6 +84,8 @@ impl App {
             library: library::LibraryState::new(),
             join: join::JoinState::default(),
             friends: friends::FriendsState::new(),
+            catalog: catalog::CatalogState::default(),
+            welcome: welcome::load(),
             update: crate::update_ui::UpdateState::new(),
             error: None,
             instance_dir,
@@ -132,14 +146,17 @@ impl App {
 }
 
 /// Page d'ouverture. En debug, `RAFTUP_DEV_PAGE` choisit l'écran affiché au démarrage
-/// (captures d'écran pour les comparaisons avec la maquette) : `bibliotheque`,
-/// `partie`, `creer`, `rejoindre`, `amis`, `parametres`, `telechargements`, `salons`, `catalogue`, `mises-a-jour`, `profil`.
+/// (captures d'écran pour les comparaisons avec la maquette) : `accueil`, `bibliotheque`,
+/// `en-cours`, `partie`, `creer`, `rejoindre`, `amis`, `parametres`, `telechargements`, `salons`,
+/// `catalogue`, `mises-a-jour`, `profil`. Sans elle : l'Accueil.
 fn start_page() -> Page {
     // `cfg!(debug_assertions)` vaut faux en `--release` : le binaire livré ignore la variable.
     if !cfg!(debug_assertions) {
-        return Page::InProgress;
+        return Page::Home;
     }
     match std::env::var("RAFTUP_DEV_PAGE").ok().as_deref() {
+        Some("accueil") => Page::Home,
+        Some("en-cours") => Page::InProgress,
         Some("bibliotheque") => Page::Library,
         Some("partie") => Page::Hosted,
         Some("creer") => Page::Create,
@@ -148,10 +165,10 @@ fn start_page() -> Page {
         Some("parametres") => Page::Settings,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
-        Some("catalogue") => Page::Soon("Catalogue"),
+        Some("catalogue") => Page::Catalog,
         Some("mises-a-jour") => Page::Soon("Mises à jour"),
-        Some("profil") => Page::Soon("Mon profil"),
-        _ => Page::InProgress,
+        Some("profil") => Page::Profile,
+        _ => Page::Home,
     }
 }
 
@@ -198,6 +215,12 @@ impl eframe::App for App {
         if let Some(message) = self.worker.take_error() {
             self.error = Some(message);
         }
+
+        // Détection des jeux dès l'ouverture : l'Accueil et l'assistant en ont besoin.
+        // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047), pour tous
+        // les écrans (Accueil, Catalogue, Partie en cours, Bibliothèque).
+        self.library.set_hub(self.friends.hub_url());
+        self.library.background(&ctx);
 
         // Session du hub, présence et liste d'amis, quel que soit l'écran affiché.
         friends::background(&mut self.friends, &ctx);
@@ -264,10 +287,11 @@ impl eframe::App for App {
 
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let next = match &self.page {
+                Page::Home => home::show(ui, &shared, &mut self.library, &self.join),
+                Page::Catalog => catalog::show(ui, &mut self.catalog, &mut self.library),
+                Page::Profile => friends::show_profile(ui, &mut self.friends),
                 Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
                 Page::Library => {
-                    // Les illustrations viennent du hub choisi dans « Amis » (ADR 0047).
-                    self.library.set_hub(self.friends.hub_url());
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
                 }
                 Page::Hosted if hosting => running::show(
@@ -276,6 +300,7 @@ impl eframe::App for App {
                     &mut self.error,
                     &self.worker,
                     &shared,
+                    &mut self.library,
                 ),
                 Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)
@@ -285,13 +310,49 @@ impl eframe::App for App {
                 }
                 Page::Join => join::show(ui, &mut self.join, &mut self.library),
                 Page::Friends => friends::show(ui, &mut self.friends),
-                Page::Settings => settings::show(ui, &mut self.friends),
+                Page::Settings => settings::show(ui, &mut self.friends, self.library.paths()),
                 Page::Soon(name) => soon::show(ui, name),
             };
             if next.is_some() {
                 goto = next;
             }
         });
+
+        // « Lancer et connecter » de la partie hébergée : la Bibliothèque lance le jeu.
+        if let Some(request) = running::take_launch_request(&mut self.running) {
+            use library::LaunchInto;
+            match library::launch_into(
+                &mut self.library,
+                &ctx,
+                &request.ap_game,
+                &request.address,
+                &request.slot,
+                request.needs_password,
+            ) {
+                LaunchInto::Launched => {}
+                // La fiche du jeu est prête : il reste le mot de passe, ou l'installation.
+                LaunchInto::NeedsPassword | LaunchInto::NotReady => goto = Some(Page::Library),
+                LaunchInto::OutsideCatalog => {
+                    self.error = Some(format!(
+                        "{} n'est pas dans le catalogue de Raftup : lance le jeu toi-même et connecte-le à l'adresse de la partie.",
+                        request.ap_game
+                    ));
+                }
+            }
+        }
+
+        // Assistant du premier lancement, par-dessus l'écran.
+        if self.welcome.is_open() {
+            let games = self.library.summaries();
+            let username = self.friends.summary().username;
+            let outcome = welcome::show(&ctx, &mut self.welcome, username.as_deref(), &games);
+            if let Some(id) = &outcome.select {
+                self.library.select(id);
+            }
+            if outcome.page.is_some() {
+                goto = outcome.page;
+            }
+        }
 
         drop(shared);
         // Verrou relâché : on peut ouvrir une boîte de dialogue (elle bloque).
@@ -371,7 +432,7 @@ pub(crate) fn sidebar(
         (
             "JEUX",
             vec![
-                ("Accueil", 0, Page::Soon("Accueil")),
+                ("Accueil", 0, Page::Home),
                 ("Bibliothèque", games, Page::Library),
                 ("Téléchargements", 0, Page::Soon("Téléchargements")),
             ],
@@ -389,7 +450,7 @@ pub(crate) fn sidebar(
         (
             "CATALOGUE",
             vec![
-                ("Parcourir", 0, Page::Soon("Catalogue")),
+                ("Parcourir", 0, Page::Catalog),
                 ("Mises à jour", 0, Page::Soon("Mises à jour")),
             ],
         ),
@@ -423,7 +484,7 @@ pub(crate) fn sidebar(
         goto = Some(Page::Friends);
     }
     if side_card(ui, |ui| profile_card(ui, friends.username.as_deref())) {
-        goto = Some(Page::Friends);
+        goto = Some(Page::Profile);
     }
     if side_card(ui, |ui| server_card(ui, shared)) {
         goto = Some(Page::Hosted);

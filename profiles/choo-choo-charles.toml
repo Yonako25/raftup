@@ -1,0 +1,57 @@
+# Choo-Choo Charles (mod CCCharles-Random de lgbarrere, sur UE4SS), écrit le 2026-11-22,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/cccharles). Le guide officiel (docs/setup_en.md,
+# tag 0.6.8) renvoie au README de lgbarrere/CCCharles-Random : télécharger CCCharles_Random.zip
+# (releases), copier son dossier Obscure/ dans le dossier du jeu (à côté de Obscure.exe), puis
+# lancer le jeu ; « OFFLINE » en haut à droite indique que le mod marche. Windows seulement.
+# Le zip contient aussi CCCharles.yaml et cccharles.apworld : inutiles ici (le monde est
+# intégré depuis Archipelago 0.6.4, d'après le README), donc laissés hors de l'extraction.
+# Hashes : sha256sum du fichier téléchargé le 2026-11-22.
+
+format_version = 1
+
+[game]
+id = "choo-choo-charles"
+name = "Choo-Choo Charles"
+ap_game = "Choo-Choo Charles"      # vérifié : game = "Choo-Choo Charles" dans worlds/cccharles/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 173432                   # vérifié : hub.raftup-games.com/v1/art/steam/1766740 → igdb_id 173432
+
+[game.detect]
+steam_appid = 1766740              # vérifié : API du Steam Store, appid 1766740 = « Choo-Choo Charles » (type game)
+expected_exe = "Obscure.exe"       # vérifié : setup_en.md (0.6.8) et launchCCCmod.bat du mod (« %GameFolder%\Obscure.exe »)
+
+[credits]
+authors = [
+  "lgbarrere (CCCharles-Random, licence non trouvée)",
+  "équipe UE4SS-RE (RE-UE4SS, MIT)",
+  "N00byKing (APCpp, LGPL-2.1)",
+]
+# Vérifié le 2026-11-22 : le dépôt lgbarrere/CCCharles-Random n'a aucun fichier de licence
+# (clone complet, aucun LICENSE/COPYING) et le README n'en parle pas → mod sans licence (ADR 0050).
+# Le zip embarque RE-UE4SS (LICENSE : MIT, vérifié) et APCpp.dll (LICENSE : LGPL-2.1, vérifié).
+license = "unlicensed"
+
+[[steps]]
+id = "cccharles-random"
+kind = "mod"
+name = "CCCharles-Random (avec UE4SS)"
+version = "0.0.3-beta"             # vérifié : dernier tag (v0.0.3-beta) de lgbarrere/CCCharles-Random ; compatibilité avec 0.6.8 à vérifier
+source = { url = "https://github.com/lgbarrere/CCCharles-Random/releases/download/v0.0.3-beta/CCCharles_Random.zip" }
+sha256 = "71918b284dce39d048094bed7c91af9bf0e088c3f479fca62a9d30b4f67eebd6"
+max_bytes = 20000000               # fichier : 6 994 556 octets
+# Le zip contient Obscure/Binaries/Win64/{dwmapi.dll, APCpp.dll, ue4ss/…} et
+# Obscure/Content/Paks/LogicMods/MWRandomizerMod.pak (vérifié par unzip -l). On extrait
+# seulement ce qui est sous « Obscure/ » ; CCCharles.yaml et cccharles.apworld sont ignorés.
+# dwmapi.dll est le chargeur de UE4SS (ajouté, il ne remplace pas de fichier du jeu : à vérifier).
+install = { extract = "zip", into = "{game_dir}/Obscure", strip_prefix = "Obscure/" }
+
+# Pas de [preserve] : le mod ne garde pas l'adresse dans un fichier (connexion tapée en console).
+
+# Pas de [cleanup] : les fichiers créés par UE4SS en tournant (UE4SS.log…) restent à observer en vrai.
+
+[launch]
+exe = "{game_dir}/Obscure.exe"
+# Vérifié : setup_en.md (0.6.8) et README du mod : console (F10), commande
+# /connect <IP> <PlayerName> [Password] ; aucun argument ni fichier de config documenté.
+connect = { method = "manual", instructions = "Lance le jeu (« OFFLINE » s'affiche en haut à droite si le mod marche). Ouvre la console avec F10, puis tape « /connect {host}:{port} {slot} » (ajoute le mot de passe à la fin si besoin). Le nom du slot ne doit pas contenir d'espace." }

@@ -225,6 +225,50 @@ fn apworld_natif_aller_retour() {
     std::fs::remove_file(installed).unwrap();
 }
 
+// ---- Monde natif hors du dépôt (ADR 0048 : The Planet Crafter) ----
+
+/// Le monde désigné par `RAFTUP_MONDE_NATIF`, exporté en apworld, tourne dans le vrai
+/// Archipelago : même datapackage que le moteur Rust, tous les lieux remplis, puis
+/// l'export du worker passe le contrôle croisé des règles (vrai Archipelago).
+#[test]
+#[ignore = "demande RAFTUP_REAL_RUNTIME et RAFTUP_MONDE_NATIF"]
+fn monde_externe_par_archipelago() {
+    let Some(runtime) = runtime() else { return };
+    let Some(chemin) = std::env::var_os("RAFTUP_MONDE_NATIF") else {
+        eprintln!("RAFTUP_MONDE_NATIF absente : test sauté");
+        return;
+    };
+    let texte = std::fs::read_to_string(chemin).unwrap();
+    // `Arc` : les options du moteur Rust gardent une référence partagée au monde.
+    let world = std::sync::Arc::new(worlds_native::parse_world(&texte).unwrap());
+    let installed = install_apworld(&runtime, &world);
+    let game = world.game.clone();
+    let yamls = vec![
+        format!("name: Alice\ngame: {game}\n{game}: {{}}\n"),
+        format!("name: Bob\ngame: {game}\n{game}: {{}}\n"),
+    ];
+
+    let work = tempfile::tempdir().unwrap();
+    let params = params(&runtime, work.path(), &yamls, 7);
+    let mut bridge = bridge(&runtime);
+    let result = bridge.generate(&params, Duration::from_secs(600));
+    let _ = bridge.shutdown();
+    let result = result.unwrap();
+    let bytes = archipelago_in(&result.zip);
+    let md = multidata::load_archipelago(&bytes, &multidata::ArchiveLimits::default()).unwrap();
+    let native = generate::NativeOptions::new(world.clone()).package();
+    assert_eq!(md.datapackage[&game], native);
+    let alice = md.connect_names["Alice"].1;
+    assert_eq!(md.locations[&alice].len(), world.locations.len());
+
+    let work = tempfile::tempdir().unwrap();
+    let bytes = export_bytes(&runtime, work.path(), &yamls, 7);
+    let export = generate::imported::read_export(&bytes).unwrap();
+    let imported = generate::imported::build_world(&export).unwrap();
+    assert_eq!(imported.world.slots().len(), 2);
+    std::fs::remove_file(installed).unwrap();
+}
+
 // ---- Slime Rancher (ADR 0042, § 6) : converti sur le PC, jamais dans le dépôt ----
 
 /// L'apworld Slime Rancher installée sur le PC (`RAFTUP_SLIME_APWORLD`). Elle n'a pas de

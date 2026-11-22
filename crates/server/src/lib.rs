@@ -178,7 +178,10 @@ async fn accept_loop(
                     next_id,
                     events.clone(),
                     limits,
-                    tls.as_ref().map(TlsConfig::acceptor),
+                    tls.as_ref().map(|tls| connection::TlsMode {
+                        acceptor: tls.acceptor(),
+                        plain_fallback: tls.accepts_plain(),
+                    }),
                 ));
             }
             Err(error) => {

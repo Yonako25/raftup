@@ -36,3 +36,7 @@ On ne peut pas cacher aux launchers l'adresse d'un hub public : un client doit s
 - Quelqu'un qui scanne le domaine ne trouve aucune trace de la console.
 - Il faut tenir à jour la liste des plages Cloudflare (elles changent rarement).
 - À faire par l'utilisatrice : acheter le domaine, le confier à Cloudflare, puis créer la variable `RAFTUP_OFFICIAL_HUB_URL` (`https://hub.<domaine>`) dans GitHub.
+
+## Mise à jour du 22 novembre 2026
+
+Le domaine est choisi et le hub officiel est en service (`https://hub.raftup-games.com`). `RAFTUP_OFFICIAL_HUB_URL` est maintenant posée dans `.cargo/config.toml` (section `[env]`) : toutes les compilations ont le hub officiel par défaut, pas seulement la release. Raison : les versions compilées en local visaient `http://127.0.0.1:8787` et n'affichaient aucune illustration (vu en lançant le launcher dans un conteneur). Le workflow de release peut toujours la remplacer par la variable GitHub ; « Par défaut » dans Paramètres revient au hub officiel, et un hub local se choisit à la main.

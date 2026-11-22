@@ -14,7 +14,9 @@ Les tests d'interface sont donc dans `src/ui_tests/`, compilés seulement pour `
 | `bibliotheque.rs` | Bibliothèque avec le catalogue de `profiles/` : carte et fiche du jeu, « Se connecter à la main » replié |
 | `ecrans.rs` | Paramètres, Rejoindre (et un lien illisible), Amis sans compte |
 | `menu.rs` | Barre latérale : aucune entrée « Bientôt », un clic ouvre l'écran |
+| `parcours.rs` | Accueil, Catalogue, Mon profil, assistant du premier lancement, « Lancer et connecter » de la partie hébergée |
 | `captures.rs` | Captures de référence du Salon et de la Bibliothèque (images) |
+| `captures_interface.rs` | Une image PNG de chaque écran, pour regarder l'interface (pas de comparaison) |
 
 Ces tests n'ouvrent aucune fenêtre, n'écoutent sur aucun port, ne lisent ni le presse-papiers ni Steam et n'appellent pas le réseau.
 
@@ -54,3 +56,18 @@ Remove-Item Env:UPDATE_SNAPSHOTS
 ```
 
 Regarder les nouveaux `tests/snapshots/*.png` avant de les commiter : une capture de référence fausse rend le test inutile.
+
+## Regarder l'interface sans ouvrir de fenêtre
+
+```bash
+cargo captures
+```
+
+Cet alias (`.cargo/config.toml`) dessine chaque écran du launcher avec des données de démonstration et écrit un PNG par écran dans `target/captures/` :
+menu, Bibliothèque (sans hub et avec un faux hub), fiche d'un jeu, Salon, Rejoindre, Héberger, Partie en cours (Équipage et Salon), Amis, Paramètres, Accueil, Catalogue, Mon profil, assistant du premier lancement.
+Aucun réseau, aucun port, aucun fichier du joueur ; les illustrations sont fabriquées par le test.
+
+- Sous Linux sans carte graphique, il faut le pilote Vulkan logiciel de Mesa : `sudo apt-get install mesa-vulkan-drivers`.
+- La CI Linux fait la même chose à chaque pull request : les images sont dans l'artefact **captures-interface** du run.
+- Ces images servent à **regarder** : les polices sont rendues un peu autrement qu'à Windows. Les références comparées pixel par pixel restent celles de `captures.rs`, sous Windows.
+- Un nouvel écran : l'ajouter dans `captures_interface.rs` (un bloc par écran, rendus l'un après l'autre).

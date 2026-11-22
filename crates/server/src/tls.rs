@@ -2,6 +2,10 @@
 //!
 //! Mêmes fichiers que pour le serveur officiel (`--cert`, `--cert_key`) : par
 //! exemple `fullchain.pem` et `privkey.pem` de Let's Encrypt.
+//!
+//! Port mixte (ADR 0043) : avec [`TlsConfig::with_plain_fallback`], le même port
+//! accepte aussi les clients en clair. C'est le mode du certificat généré par le
+//! launcher, qu'un mod non modifié ne connaît pas : il retombe alors sur `ws`.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -18,6 +22,8 @@ use crate::error::TlsError;
 #[derive(Clone)]
 pub struct TlsConfig {
     acceptor: TlsAcceptor,
+    /// Accepter aussi le clair sur le même port (ADR 0043).
+    plain_fallback: bool,
 }
 
 impl TlsConfig {
@@ -70,7 +76,22 @@ impl TlsConfig {
             .with_single_cert(certs, key)?;
         Ok(TlsConfig {
             acceptor: TlsAcceptor::from(Arc::new(config)),
+            plain_fallback: false,
         })
+    }
+
+    /// Port mixte (ADR 0043) : le serveur regarde le premier octet de chaque
+    /// connexion ; `0x16` (début d'une poignée de main TLS) part en `wss`, le reste
+    /// en `ws`. À ne prendre qu'avec le certificat généré par Raftup : avec un vrai
+    /// certificat (PEM de l'hôte), le serveur reste en `wss` seul.
+    pub fn with_plain_fallback(mut self) -> TlsConfig {
+        self.plain_fallback = true;
+        self
+    }
+
+    /// Vrai si le clair est aussi accepté sur ce port.
+    pub fn accepts_plain(&self) -> bool {
+        self.plain_fallback
     }
 
     pub(crate) fn acceptor(&self) -> TlsAcceptor {

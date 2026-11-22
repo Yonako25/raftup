@@ -139,12 +139,10 @@ fn mode_text(mode: &str) -> &'static str {
 
 /// Résumé d'une ligne des options avancées du serveur, montré au-dessus du bloc replié :
 /// l'hôte voit ce qui sera utilisé sans l'ouvrir.
-pub fn server_summary(port: &str, public_host: &str, encrypted: bool) -> String {
-    let scheme = if encrypted {
-        "chiffré (wss, certificat PEM demandé)"
-    } else {
-        "en clair (ws)"
-    };
+/// `security` : la fin du résumé, donnée par le choix du chiffrement
+/// (`Security::summary`).
+pub fn server_summary(port: &str, public_host: &str, security: &str) -> String {
+    let scheme = security;
     format!(
         "Port {} · adresse {} · {scheme}",
         port.trim(),
@@ -244,8 +242,31 @@ pub fn totals(slots: &[SlotStatus]) -> Totals {
     t
 }
 
-/// Texte d'invitation copié dans le presse-papiers.
-pub fn invitation(address: &str, has_password: bool, slots: &[SlotStatus]) -> String {
+/// Empreinte du certificat généré par Raftup, lue dans l'état de la partie (ADR 0043).
+fn parse_fingerprint(fingerprint: Option<&str>) -> Option<launcher_core::Fingerprint> {
+    fingerprint.and_then(launcher_core::Fingerprint::parse)
+}
+
+/// Adresse à taper dans un mod de jeu : sans schéma pour un certificat généré par
+/// Raftup (le mod essaie `wss://`, puis retombe sur `ws://`, ADR 0043), sinon telle quelle.
+pub fn game_address(address: &str, fingerprint: Option<&str>) -> String {
+    match (
+        parse_fingerprint(fingerprint),
+        launcher_core::invite::ServerAddress::parse(address),
+    ) {
+        (Some(_), Ok(parsed)) => parsed.without_scheme(),
+        _ => address.to_string(),
+    }
+}
+
+/// Texte d'invitation copié dans le presse-papiers. `fingerprint` : empreinte du
+/// certificat généré par Raftup, mise dans le lien (`fp`).
+pub fn invitation(
+    address: &str,
+    fingerprint: Option<&str>,
+    has_password: bool,
+    slots: &[SlotStatus],
+) -> String {
     let password = if has_password {
         "Mot de passe : demandez-le à l'hôte"
     } else {
@@ -269,25 +290,28 @@ pub fn invitation(address: &str, has_password: bool, slots: &[SlotStatus]) -> St
                 address,
                 slot: None,
                 game,
+                fingerprint: parse_fingerprint(fingerprint),
             })
         })
         .ok()
         .map(|link| format!("\nLien : {link}"))
         .unwrap_or_default();
+    let shown = game_address(address, fingerprint);
     format!(
-        "Partie Raftup (compatible avec Archipelago)\nAdresse : {address}{link}\n{password}\nJoueurs : {}",
+        "Partie Raftup (compatible avec Archipelago)\nAdresse : {shown}{link}\n{password}\nJoueurs : {}",
         players.join(", ")
     )
 }
 
 /// Lien `raftup://join?…` d'un joueur précis (son slot et son jeu), sans mot de passe.
 /// `None` si l'adresse ou les noms ne permettent pas de fabriquer un lien valide.
-pub fn player_link(address: &str, slot: &SlotStatus) -> Option<String> {
+pub fn player_link(address: &str, fingerprint: Option<&str>, slot: &SlotStatus) -> Option<String> {
     let address = launcher_core::invite::ServerAddress::parse(address).ok()?;
     launcher_core::invite::make_invite(&launcher_core::invite::Invite {
         address,
         slot: Some(slot.name.clone()),
         game: Some(slot.game.clone()),
+        fingerprint: parse_fingerprint(fingerprint),
     })
     .ok()
 }
@@ -461,11 +485,15 @@ mod tests {
     #[test]
     fn resume_des_options_avancees() {
         assert_eq!(
-            server_summary(" 38281 ", "localhost", true),
-            "Port 38281 · adresse localhost · chiffré (wss, certificat PEM demandé)"
+            server_summary(
+                " 38281 ",
+                "localhost",
+                "chiffré par Raftup (wss, sans fichier)"
+            ),
+            "Port 38281 · adresse localhost · chiffré par Raftup (wss, sans fichier)"
         );
         assert_eq!(
-            server_summary("40000", "exemple.fr", false),
+            server_summary("40000", "exemple.fr", "en clair (ws)"),
             "Port 40000 · adresse exemple.fr · en clair (ws)"
         );
     }
@@ -650,7 +678,7 @@ mod tests {
     #[test]
     fn invitation_complete() {
         let slots = vec![slot("Alice", 0, 0)];
-        let text = invitation("wss://exemple.fr:38281", false, &slots);
+        let text = invitation("wss://exemple.fr:38281", None, false, &slots);
         assert!(text.contains("Adresse : wss://exemple.fr:38281"));
         assert!(text.contains("Pas de mot de passe"));
         assert!(text.ends_with("Joueurs : Alice (ChecksFinder)"));
@@ -670,7 +698,7 @@ mod tests {
         let mut other = slot("Bob", 0, 0);
         other.game = "Factorio".to_string();
         let slots = vec![slot("Alice", 0, 0), other];
-        let text = invitation("ws://exemple.fr:38281", true, &slots);
+        let text = invitation("ws://exemple.fr:38281", None, true, &slots);
         let link = text
             .lines()
             .find_map(|l| l.strip_prefix("Lien : "))
@@ -683,18 +711,39 @@ mod tests {
         );
         assert!(!link.contains("password") && !link.contains("mot"));
         // Adresse invalide : pas de ligne « Lien ».
-        assert!(!invitation("exemple.fr", false, &slots).contains("Lien :"));
+        assert!(!invitation("exemple.fr", None, false, &slots).contains("Lien :"));
+    }
+
+    #[test]
+    fn invitation_avec_certificat_genere() {
+        let fp = launcher_core::Fingerprint::of_der(b"certificat").to_hex();
+        let slots = vec![slot("Alice", 0, 0)];
+        let text = invitation("wss://exemple.fr:38281", Some(&fp), false, &slots);
+        // Adresse sans schéma pour les mods (wss puis repli en ws), empreinte dans le lien.
+        assert!(text.contains("Adresse : exemple.fr:38281\n"), "{text}");
+        assert!(text.contains(&format!("&fp={fp}")), "{text}");
+        assert_eq!(
+            game_address("wss://exemple.fr:38281", Some(&fp)),
+            "exemple.fr:38281"
+        );
+        assert_eq!(
+            game_address("wss://exemple.fr:38281", None),
+            "wss://exemple.fr:38281"
+        );
+        let link = player_link("wss://exemple.fr:38281", Some(&fp), &slots[0]).unwrap();
+        let invite = launcher_core::invite::parse_invite(&link).unwrap();
+        assert_eq!(invite.fingerprint.map(|f| f.to_hex()), Some(fp));
     }
 
     #[test]
     fn lien_de_joueur() {
-        let link = player_link("wss://exemple.fr:38281", &slot("Alice & Bob", 0, 0))
+        let link = player_link("wss://exemple.fr:38281", None, &slot("Alice & Bob", 0, 0))
             .expect("lien de joueur");
         let invite = launcher_core::invite::parse_invite(&link).expect("lien valide");
         assert_eq!(invite.slot.as_deref(), Some("Alice & Bob"));
         assert_eq!(invite.game.as_deref(), Some("ChecksFinder"));
         assert!(invite.address.secure);
-        assert_eq!(player_link("pas une adresse", &slot("A", 0, 0)), None);
+        assert_eq!(player_link("pas une adresse", None, &slot("A", 0, 0)), None);
     }
 
     #[test]

@@ -12,10 +12,48 @@ use crate::profile::{Profile, ProfileError};
 
 /// Profils embarqués : (nom de fichier, contenu).
 /// Vide pour l'instant : le profil de Slime Rancher attend l'autorisation de son auteur.
-pub const EMBEDDED: &[(&str, &str)] = &[(
-    "slime-rancher.toml",
-    include_str!("../../../profiles/slime-rancher.toml"),
-)];
+pub const EMBEDDED: &[(&str, &str)] = &[
+    (
+        "a-short-hike.toml",
+        include_str!("../../../profiles/a-short-hike.toml"),
+    ),
+    (
+        "aquaria.toml",
+        include_str!("../../../profiles/aquaria.toml"),
+    ),
+    (
+        "blasphemous.toml",
+        include_str!("../../../profiles/blasphemous.toml"),
+    ),
+    (
+        "bomb-rush-cyberfunk.toml",
+        include_str!("../../../profiles/bomb-rush-cyberfunk.toml"),
+    ),
+    (
+        "choo-choo-charles.toml",
+        include_str!("../../../profiles/choo-choo-charles.toml"),
+    ),
+    (
+        "hollow-knight.toml",
+        include_str!("../../../profiles/hollow-knight.toml"),
+    ),
+    (
+        "risk-of-rain-2.toml",
+        include_str!("../../../profiles/risk-of-rain-2.toml"),
+    ),
+    (
+        "slime-rancher.toml",
+        include_str!("../../../profiles/slime-rancher.toml"),
+    ),
+    (
+        "stardew-valley.toml",
+        include_str!("../../../profiles/stardew-valley.toml"),
+    ),
+    (
+        "the-planet-crafter.toml",
+        include_str!("../../../profiles/the-planet-crafter.toml"),
+    ),
+];
 
 /// L'ensemble des profils, rangés par `game.id` (`BTreeMap` : ordre stable).
 #[derive(Debug, Clone, Default)]

@@ -1,0 +1,168 @@
+# Blasphemous (Randomizer et Multiworld de BrandenEK / Damocles et TRPG), écrit le 2026-11-22,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/blasphemous). Le guide officiel (docs/setup_en.md,
+# tag 0.6.8) renvoie au Mod Installer de BrandenEK (BrandenEK/Blasphemous.Modding.Installer) et
+# demande le mod Multiworld. Installation manuelle sous Windows (docs/install/blas1_windows.md de
+# l'installateur) : outils de modding (win64.zip) à la racine du jeu, puis chaque mod extrait
+# dans le dossier « Modding », avec ses dépendances.
+# Dépendances : BlasphemousMods.json de l'installateur (branche main, 2026-11-22) :
+#   Multiworld → Modding API, Menu Framework, Randomizer, Cheat Console ;
+#   Randomizer → Modding API, Credits Framework, Level Framework, Menu Framework, UI Framework,
+#   Cheat Console ; Menu Framework → Modding API, UI Framework ; les autres → Modding API.
+# Ordre des étapes : dépendances d'abord.
+# Mods facultatifs non installés : Rando Map, Boots of Pleading (obligatoire si l'option
+# « Boots of Pleading » est activée) et Double Jump (obligatoire si l'option « Purified Hand of
+# the Nun » est activée, demande aussi Item Framework). À ajouter plus tard si besoin.
+# Fichier de release : l'installateur prend le premier asset de la dernière release
+# (ModLoader.cs, Assets[0]) ; le workflow build.yml de chaque mod publie « <TargetName>.zip »
+# (TargetName lu dans le .csproj). Versions : dernier tag de chaque dépôt (git ls-remote) ;
+# que ce tag soit aussi la dernière release publiée reste à vérifier (API GitHub injoignable).
+# À vérifier : le mod Multiworld annonce la version 0.5.0 du protocole (APManager.cs) ; marche
+# avec un serveur 0.6.8 a priori (rétrocompatible), mais pas essayé.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-22.
+
+format_version = 1
+
+[game]
+id = "blasphemous"
+name = "Blasphemous"
+ap_game = "Blasphemous"            # vérifié : game = "Blasphemous" dans worlds/blasphemous/__init__.py (0.6.8)
+status = "untested"
+igdb_id = 26820                    # vérifié : hub.raftup-games.com/v1/art/steam/774361 → igdb_id 26820
+
+[game.detect]
+steam_appid = 774361               # vérifié : API du Steam Store, appid 774361 = « Blasphemous » (type game)
+expected_exe = "Blasphemous.exe"   # vérifié : Core.cs de l'installateur de BrandenEK cherche « Blasphemous.exe »
+
+[credits]
+authors = [
+  "BrandenEK (Damocles) et TRPG (Multiworld, MIT)",
+  "BrandenEK (Damocles) (Randomizer, Modding API, UI/Menu/Credits/Level Framework, Cheat Console, MIT)",
+  "BrandenEK (outils de modding)",
+  "équipe BepInEx (BepInEx et Doorstop, LGPL-2.1)",
+]
+# Vérifié : docs/LICENSE.md (MIT) des huit dépôts de mods. Le dépôt des outils de modding
+# (BrandenEK/Blasphemous.ModdingTools) n'a pas de fichier de licence (ADR 0050) ; il regroupe
+# BepInEx et Doorstop (LGPL-2.1), BepInEx.MultiFolderLoader et Newtonsoft.Json (MIT, licences
+# non relues une à une). Le zip du Multiworld embarque aussi c-wspp (son LICENSE est fourni dans
+# le zip), websocket-sharp et Archipelago.MultiClient.Net (MIT, non relus).
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "modding-tools"
+kind = "mod_loader"
+name = "Outils de modding (BepInEx)"
+version = "2.1.0"                  # vérifié : win64/.modtools_version au commit 2f27f92 (le fichier modding-tools-windows.version dit encore 2.0.0)
+# Fichier versionné dans le dépôt (pas de release) : URL épinglée sur le commit, pour que le
+# sha256 ne change jamais. github.com redirige vers raw.githubusercontent.com, comme pour
+# A Short Hike. À vérifier : cette URL github.com/…/raw/… renvoyait 403 depuis la session
+# (proxy) ; le hash vient du même fichier pris sur raw.githubusercontent.com au même commit, et
+# du clone git (identiques).
+source = { url = "https://github.com/BrandenEK/Blasphemous.ModdingTools/raw/2f27f92a7f12860cd07261e23134fcff344405c3/win64.zip" }
+sha256 = "c5ae844735708395bd071149a1adaeed60050d1873e04162ef518162f0f5ff37"
+max_bytes = 5000000                # fichier : 828 881 octets
+# Le zip contient winhttp.dll, doorstop_config.ini, steam_appid.txt, .doorstop_version,
+# .modtools_version, BepInEx/{config,core,patchers}/…, Modding/plugins/ et
+# Blasphemous_Data/Managed/Newtonsoft.Json.dll à la racine (vérifié par unzip -l) ; un fichier du
+# jeu remplacé est sauvegardé puis restauré à la désinstallation.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "modding-api"
+kind = "mod"
+name = "Modding API"
+version = "3.0.1"                  # vérifié : dernier tag de BrandenEK/Blasphemous.ModdingAPI
+source = { url = "https://github.com/BrandenEK/Blasphemous.ModdingAPI/releases/download/3.0.1/ModdingAPI.zip" }
+sha256 = "b74fe3900b563483d090fd7f01939fe7d60ba5711e83d7996396a274e7156ff7"
+max_bytes = 1000000                # fichier : 18 271 octets
+# Le zip contient plugins/ModdingAPI.dll (vérifié) → Modding/plugins/.
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "ui-framework"
+kind = "mod"
+name = "UI Framework"
+version = "0.2.0"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Framework.UI
+source = { url = "https://github.com/BrandenEK/Blasphemous.Framework.UI/releases/download/0.2.0/UIFramework.zip" }
+sha256 = "80bf08e455c2d6402f3209836751c9414a1fd9a8f8ca88afae60c347797e5690"
+max_bytes = 1000000                # fichier : 5 945 octets
+# Le zip contient plugins/UIFramework.dll (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "menu-framework"
+kind = "mod"
+name = "Menu Framework"
+version = "0.6.0"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Framework.Menus
+source = { url = "https://github.com/BrandenEK/Blasphemous.Framework.Menus/releases/download/0.6.0/MenuFramework.zip" }
+sha256 = "acf3078b7d62cfcb9677c5432411cbd24ceb072460c5fea806fa4ea7491f6878"
+max_bytes = 1000000                # fichier : 18 441 octets
+# Le zip contient plugins/MenuFramework.dll, localization/… et data/Menu… (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "cheat-console"
+kind = "mod"
+name = "Cheat Console"
+version = "1.1.0"                  # vérifié : dernier tag de BrandenEK/Blasphemous.CheatConsole
+source = { url = "https://github.com/BrandenEK/Blasphemous.CheatConsole/releases/download/1.1.0/CheatConsole.zip" }
+sha256 = "2280e5b4fd82a88395aae5f841a4b64c47cf24a22c0603f02efb220662067db8"
+max_bytes = 1000000                # fichier : 5 077 octets
+# Le zip contient plugins/CheatConsole.dll (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "credits-framework"
+kind = "mod"
+name = "Credits Framework"
+version = "0.2.0"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Framework.Credits
+source = { url = "https://github.com/BrandenEK/Blasphemous.Framework.Credits/releases/download/0.2.0/CreditsFramework.zip" }
+sha256 = "84d02f307ad72d8654888accc63424fa0f1300ec29fed9364ee039f0d0210046"
+max_bytes = 1000000                # fichier : 4 262 octets
+# Le zip contient plugins/CreditsFramework.dll (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "level-framework"
+kind = "mod"
+name = "Level Framework"
+version = "0.2.0"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Framework.Levels
+source = { url = "https://github.com/BrandenEK/Blasphemous.Framework.Levels/releases/download/0.2.0/LevelFramework.zip" }
+sha256 = "18597aee540013d712e39295fdb30dad8b21fb167a369d731baaaae30eb3eb83"
+max_bytes = 1000000                # fichier : 11 939 octets
+# Le zip contient plugins/LevelFramework.dll (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "randomizer"
+kind = "mod"
+name = "Randomizer"
+version = "3.2.2"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Randomizer
+source = { url = "https://github.com/BrandenEK/Blasphemous.Randomizer/releases/download/3.2.2/BlasphemousRandomizer.zip" }
+sha256 = "d129e5a23315ac6af921d569bf46cee9e7db50b4ab5102adfa24feaf2e502003"
+max_bytes = 2000000                # fichier : 279 563 octets
+# Le zip contient plugins/BlasphemousRandomizer.dll, data/Basalt.LogicParser.dll,
+# data/Randomizer/…, levels/Randomizer/… et localization/Randomizer.txt (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+[[steps]]
+id = "multiworld"
+kind = "mod"
+name = "Multiworld (Archipelago)"
+version = "3.2.1"                  # vérifié : dernier tag de BrandenEK/Blasphemous.Randomizer.Multiworld ; compatibilité avec 0.6.8 à vérifier
+source = { url = "https://github.com/BrandenEK/Blasphemous.Randomizer.Multiworld/releases/download/3.2.1/BlasphemousMultiworld.zip" }
+sha256 = "8d41c376a21ac7bc3ced9c3b1a9acc86cb18793fd7de1a6f36bc69d655fade04"
+max_bytes = 10000000               # fichier : 2 453 735 octets
+# Le zip contient plugins/BlasphemousMultiworld.dll, data/Archipelago.MultiClient.Net.dll,
+# data/c-wspp.dll, data/websocket-sharp.dll, data/Multiworld/… et localization/Multiworld.txt
+# (vérifié).
+install = { extract = "zip", into = "{game_dir}/Modding", strip_prefix = "" }
+
+# Pas de [preserve] : on ne sait pas encore où le mod garde l'adresse et le slot (à vérifier).
+# Pas de [cleanup] : les fichiers créés par BepInEx et les mods en tournant restent à observer en vrai.
+
+[launch]
+exe = "{game_dir}/Blasphemous.exe"
+# Vérifié : setup_en.md (0.6.8) et README du Multiworld : un menu demande la connexion en
+# choisissant une sauvegarde (exemple du README : « Server ip: ap:55858 »).
+connect = { method = "manual", instructions = "Choisis une sauvegarde vide : un menu demande l'adresse du serveur ({address}), ton nom ({slot}) et le mot de passe si besoin, puis valide. La console (touche \\) donne « ap status » pour vérifier la connexion." }

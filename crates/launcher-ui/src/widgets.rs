@@ -16,6 +16,30 @@ pub fn dim(text: impl Into<String>) -> RichText {
     RichText::new(text.into()).color(theme::TEXT_DIM)
 }
 
+/// Boîte de dialogue modale de Raftup : fond opaque, bordure claire, et le reste de la
+/// fenêtre nettement assombri, pour que la boîte se détache de l'écran derrière elle.
+/// `egui::Modal` bloque aussi les clics derrière la boîte.
+pub fn modal(id: &str) -> egui::Modal {
+    egui::Modal::new(egui::Id::unique(id))
+        .backdrop_color(Color32::from_black_alpha(170))
+        .frame(
+            Frame::new()
+                .fill(theme::BG)
+                .stroke(Stroke::new(1.0, theme::TEXT_DIM.gamma_multiply(0.6)))
+                .corner_radius(CornerRadius::same(theme::RADIUS))
+                .inner_margin(Margin::same(20)),
+        )
+}
+
+/// Accorde un mot au nombre : `plural(1, "paquet", "paquets")` donne « 1 paquet ».
+pub fn plural(count: usize, singular: &str, plural: &str) -> String {
+    if count == 1 {
+        format!("{count} {singular}")
+    } else {
+        format!("{count} {plural}")
+    }
+}
+
 /// Panneau semi-transparent à bordure fine ; `heading` est son titre.
 pub fn panel<R>(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
     Frame::new()
@@ -116,7 +140,9 @@ pub fn pill(ui: &mut Ui, text: &str, fg: Color32, bg: Color32) {
         .painter()
         .layout_no_wrap(text.to_string(), FontId::proportional(13.0), fg);
     let size = galley.size() + egui::vec2(20.0, 8.0);
-    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    // Texte peint à la main : on donne son nom pour un lecteur d'écran (et les tests).
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, text));
     let painter = ui.painter();
     painter.rect_filled(rect, CornerRadius::same(theme::RADIUS), bg);
     let text_pos = rect.center() - galley.size() / 2.0;
@@ -271,4 +297,22 @@ pub fn tabs(ui: &mut Ui, tabs: &[(&str, Option<usize>)], current: &mut usize) {
 /// Texte en police monospace de la taille voulue.
 pub fn mono(text: impl Into<String>, size: f32) -> RichText {
     RichText::new(text.into()).font(FontId::monospace(size))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::plural;
+
+    #[test]
+    fn accord_au_nombre() {
+        assert_eq!(
+            plural(0, "paquet vérifié", "paquets vérifiés"),
+            "0 paquets vérifiés"
+        );
+        assert_eq!(
+            plural(1, "paquet vérifié", "paquets vérifiés"),
+            "1 paquet vérifié"
+        );
+        assert_eq!(plural(3, "jeu ajouté", "jeux ajoutés"), "3 jeux ajoutés");
+    }
 }

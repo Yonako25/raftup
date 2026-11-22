@@ -30,7 +30,7 @@ pub struct Bibliotheque {
 }
 
 /// Une détection « faite » : le jeu trouvé via Steam, ses mods installés.
-fn scan_ready() -> Scan {
+pub(super) fn scan_ready() -> Scan {
     let mut found = BTreeMap::new();
     found.insert(
         GAME.to_string(),
@@ -54,7 +54,7 @@ pub fn bibliotheque() -> Harness<'static, Bibliotheque> {
 }
 
 /// Comme [`bibliotheque`], avec des illustrations données par `art` (faux hub).
-fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Bibliotheque> {
+pub(super) fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Bibliotheque> {
     let root = tempfile::tempdir().unwrap();
     let mut library =
         LibraryState::for_tests(demo_catalog(), Paths::under(root.path()), scan_ready());
@@ -117,6 +117,8 @@ fn se_connecter_a_la_main_est_replie() {
 
 const COVER_LABEL: &str = "Jaquette de Slime Rancher";
 const HERO_LABEL: &str = "Illustration de Slime Rancher";
+/// Bandeau en aplat en haut de la fiche, quand il n'y a pas d'image large.
+const FLAT_HERO_LABEL: &str = "Aplat de Slime Rancher";
 
 /// Un vrai petit JPEG (4 × 6 pixels), pour passer par le décodage de l'interface.
 fn tiny_jpeg() -> Vec<u8> {
@@ -152,6 +154,8 @@ fn sans_hub_la_jaquette_reste_un_aplat() {
     let harness = bibliotheque();
     assert!(!shows(&harness, COVER_LABEL));
     assert!(!shows(&harness, HERO_LABEL));
+    // La fiche garde son bandeau, en aplat coloré.
+    assert!(shows(&harness, FLAT_HERO_LABEL));
     assert!(!shows(&harness, "IGDB.com"));
     // Le titre reste écrit dans l'aplat et sous la carte.
     assert!(count(&harness, "Slime Rancher") >= 2);
@@ -162,10 +166,10 @@ fn jaquette_et_illustration_venues_du_hub() {
     let asked = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&asked);
     let jpeg = tiny_jpeg();
-    // Faux hub : il connaît Slime Rancher par son appid Steam (profil du dépôt).
+    // Faux hub : il connaît Slime Rancher par son identifiant IGDB (profil du dépôt).
     let loader: Loader = Arc::new(move |reference, _kind| {
         counter.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(reference, ArtRef::Steam(433340));
+        assert_eq!(reference, ArtRef::Igdb(16287));
         Ok(Some(ArtImage {
             bytes: jpeg.clone(),
             attribution: "IGDB.com".to_string(),
@@ -176,6 +180,8 @@ fn jaquette_et_illustration_venues_du_hub() {
     assert!(run_until(&mut harness, |h| shows(h, COVER_LABEL)
         && shows(h, HERO_LABEL)));
     assert!(shows(&harness, "IGDB.com"));
+    // L'image large a pris la place de l'aplat.
+    assert!(!shows(&harness, FLAT_HERO_LABEL));
     // Une demande par image (jaquette, image large), pas une par image de l'écran.
     harness.run();
     assert_eq!(asked.load(Ordering::SeqCst), 2);
@@ -200,9 +206,53 @@ fn hub_sans_image_ou_en_panne_aplat_garde() {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!shows(&harness, COVER_LABEL));
+        assert!(!shows(&harness, HERO_LABEL));
+        assert!(shows(&harness, FLAT_HERO_LABEL));
         assert!(!shows(&harness, "IGDB.com"));
         assert!(count(&harness, "Slime Rancher") >= 2);
         // Pas redemandé à chaque image.
         assert_eq!(asked.load(Ordering::SeqCst), 2);
     }
+}
+
+/// Bug vu sur les captures (22 novembre 2026) : avec plusieurs jeux, les cartes
+/// restaient sur une seule rangée qui débordait à droite et poussait la fiche hors de
+/// l'écran. Avec tout le catalogue embarqué, chaque carte et la fiche tiennent dans la
+/// largeur de l'écran.
+#[test]
+fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = launcher_core::Catalog::embedded().unwrap();
+    let names: Vec<String> = catalog.games().map(|p| p.game.name.clone()).collect();
+    assert!(names.len() >= 4, "le test a besoin de plusieurs jeux");
+    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), scan_ready());
+    let state = Bibliotheque {
+        library,
+        shared: Shared::default(),
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Bibliotheque| {
+            library::show(ui, &mut s.library, &s.shared, None);
+        },
+        state,
+    );
+    harness.run();
+    let right_edge = super::CENTRAL.x;
+    for name in &names {
+        for node in harness.query_all_by_label(name) {
+            assert!(
+                node.rect().right() <= right_edge,
+                "« {name} » dépasse le bord droit : {:?}",
+                node.rect()
+            );
+        }
+    }
+    // La fiche du jeu choisi est à l'écran.
+    assert!(shows(&harness, "PROFIL D'INSTALLATION"));
+    let profile = harness.get_by_label("PROFIL D'INSTALLATION").rect();
+    assert!(
+        profile.right() <= right_edge,
+        "fiche hors de l'écran : {profile:?}"
+    );
 }
