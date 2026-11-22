@@ -633,3 +633,15 @@ untime2`.
 - **Pas vérifié** : apworld exporté dans le vrai Archipelago ; datapackage comparé à celui de Hawkrex ; TPCA jamais lancé (BepInEx pas installé) ; licence du dossier de Hawkrex à confirmer.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : logique par paliers de terraformation (étape 2 de l'ADR 0048) ; à l'utilisatrice : écrire à Hawkrex (doublon 157, licence, projet).
+
+### 2026-11-22 · The Planet Crafter, étape 2 : logique par paliers (ADR 0048)
+- **Fait** : seuils relevés sur le wiki (navigateur intégré, chiffres seulement) dans `D:\planet-crafter\outils\paliers.toml` ; l'outil d'import range les 153 plans de progression dans 15 paliers de Prime (13 plans SysTi exclus), sans 3e argument il redonne l'étape 1 octet pour octet ; moteur Rust : 5 graines à 1 et 2 joueurs, 17 sphères, lieux exclus en remplissage ; nouveau test ignoré `conversion_real monde_externe` : vrai Archipelago 0.6.8, même datapackage, contrôle croisé passé ; spoiler écrit par `monde_externe`. fmt et clippy passent. Pas encore commité.
+- **Pas vérifié** : machines exigées par palier et facteur 1 (choix de Raftup, jamais joués) ; TPCA jamais lancé ; datapackage comparé à l'apworld de Hawkrex ; `D:\planet-crafter` n'est pas un dépôt git.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : vraie partie avec TPCA sur le serveur Raftup (BepInEx à installer), puis ajuster `paliers.toml`.
+
+### 2026-11-22 · The Planet Crafter, étape 3 : préparation de la vraie partie (ADR 0048)
+- **Fait** : plan `D:\planet-crafter\docs\plan-etape-3.md` et décisions D1 à D4 validés, consignés dans l'ADR 0048 ; profil `the-planet-crafter.toml` (BepInEx 5.4.23.5, TPCA 0.0.3-poc, sha256 = digest GitHub, zips lus avec accord) au catalogue ; test ignoré `launcher-core --test profil_planet_crafter` : installation sur un faux jeu (27 fichiers), « à jour », désinstallation propre ; seed d'essai à deux joueurs et spoiler dans `D:\planet-crafter\essais`. fmt, clippy (`launcher-core`, `generate`) et tests de `launcher-core` passent.
+- **Pas vérifié** : installation dans le vrai jeu, `[preserve]` et `[cleanup]` du profil (dossiers de BepInEx jamais vus), connexion de TPCA (ws ou wss), version du jeu face à la 2.104 ; profil en `available` faute de statut « expérimental » dans le format.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : T3 à T5 du plan devant le jeu : sauvegarde de `LocalLow\MijuGames\Planet Crafter`, installation, `raftup-server` sur `D:\planet-crafter\essais\AP_monde_externe.archipelago`, scénario A à G.

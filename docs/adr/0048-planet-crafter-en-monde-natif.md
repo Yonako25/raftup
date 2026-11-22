@@ -27,6 +27,15 @@ Ce qui manque, c'est la logique. C'est exactement ce que le format natif sait d�
    1. `world.toml` qui reproduit l'apworld de Hawkrex à l'identique (même datapackage, même absence de logique), vérifié par la génération (moteur Rust) et par l'aller-retour `raftup-monde apworld` ;
    2. la logique par paliers, puis une vraie partie avec TPCA sur le serveur Raftup.
 
+### Étape 3 : vraie partie (validé le 22 novembre 2026)
+
+Plan détaillé : `docs/plan-etape-3.md` du dépôt `planet-crafter`.
+
+- **D1.** BepInEx (5.4.23.5, Windows x64, LGPL-2.1) et TPCA (0.0.3-poc, MIT) s'installent par un profil Raftup, `profiles/the-planet-crafter.toml`, téléchargés chez leurs auteurs après contrôle du sha256, comme Slime Rancher (ADR 0021). Le monde natif ne passe pas par le profil : il vient du registre, ou se pose dans `mondes-natifs/`.
+- **D2.** Le profil est marqué expérimental (ou le statut le plus prudent du format) tant que TPCA se dit « DO NOT USE FOR REAL GAMES ».
+- **D3.** Premier essai hébergé en ligne de commande (`raftup-server --no-tls` sur 127.0.0.1) avec une seed écrite par le test `monde_externe` ; le passage par « Créer une partie » vient au second essai.
+- **D4.** Seed à deux joueurs Planet Crafter, dont un slot vide : `/send_location` sur ce slot fait arriver en jeu un objet venu d'un autre monde, sans second PC.
+
 ## Conséquences
 
 - Aucune ligne de C# à écrire ; le travail porte sur les règles du jeu.

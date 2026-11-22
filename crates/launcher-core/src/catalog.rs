@@ -12,10 +12,16 @@ use crate::profile::{Profile, ProfileError};
 
 /// Profils embarqués : (nom de fichier, contenu).
 /// Vide pour l'instant : le profil de Slime Rancher attend l'autorisation de son auteur.
-pub const EMBEDDED: &[(&str, &str)] = &[(
-    "slime-rancher.toml",
-    include_str!("../../../profiles/slime-rancher.toml"),
-)];
+pub const EMBEDDED: &[(&str, &str)] = &[
+    (
+        "slime-rancher.toml",
+        include_str!("../../../profiles/slime-rancher.toml"),
+    ),
+    (
+        "the-planet-crafter.toml",
+        include_str!("../../../profiles/the-planet-crafter.toml"),
+    ),
+];
 
 /// L'ensemble des profils, rangés par `game.id` (`BTreeMap` : ordre stable).
 #[derive(Debug, Clone, Default)]
