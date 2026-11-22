@@ -1,0 +1,193 @@
+{
+  "name": "Raftup",
+  "description": "Jumeau d'Archipelago en Rust (serveur multiworld compatible) avec un launcher de bureau.",
+  "status": "en cours",
+  "created": "2026-11-11",
+  "updated": "2026-11-22T11:45",
+  "stack": ["Rust", "tokio", "serde", "egui / eframe", "Python (générateur officiel)", "SQLite / PostgreSQL"],
+  "plan": {
+    "vision": "Un randomizer multiworld compatible avec Archipelago, sans modifier les mods existants, avec un launcher façon GOG Galaxy qui installe, génère, héberge et rejoint une partie en un clic.",
+    "objectives": [
+      "Un mod Archipelago non modifié se connecte au serveur Raftup",
+      "Partie solo menée jusqu'à l'objectif (J1)",
+      "Partie à 4 joueurs sur 4 jeux, reprise sans perte (J2)",
+      "Lien d'invitation → jeu lancé sur une VM Windows propre (J3)",
+      "Générateur Rust reproductible, erreurs expliquées (V2)",
+      "Mondes natifs déclaratifs et paquets signés avec niveaux de confiance (V3)"
+    ],
+    "architecture": "ap-protocol : types des paquets (seule source de vérité).\nserver + client-core : serveur et client WebSocket maison (tokio).\nmultidata : lecture sûre du .archipelago, sauvegarde .raftup.\npy-bridge : pilote le générateur officiel dans un process Python isolé.\nlogic / fill / generate : générateur Rust (V2).\nworlds-native : mondes déclaratifs TOML (V3).\nlauncher-core + launcher-ui : launcher egui.\nregistry : paquets signés.\nhub (Rafthub, AGPL) : comptes, amis, présence, console d'admin.",
+    "scope_out": [
+      "Modifier les mods de jeux Archipelago existants",
+      "Distribuer des jeux, ROMs, assets ou clés",
+      "Jeux de consoles Nintendo actuelles",
+      "Rooms de plusieurs centaines de joueurs",
+      "Mode économie (V4, plus tard)"
+    ],
+    "diagram": {
+      "title": "Architecture générale",
+      "nodes": [
+        {"id": "joueur", "label": "Joueur", "type": "user"},
+        {"id": "ui", "label": "Launcher egui", "type": "ui", "milestone": "M4"},
+        {"id": "core", "label": "launcher-core", "type": "service", "milestone": "M4"},
+        {"id": "gen", "label": "Générateur Rust", "type": "service", "milestone": "M6"},
+        {"id": "py", "label": "Générateur Python officiel", "type": "external", "tasks": ["M4.3"]},
+        {"id": "server", "label": "Serveur Raftup", "type": "service", "milestone": "M2"},
+        {"id": "mod", "label": "Mod de jeu Archipelago", "type": "external"},
+        {"id": "save", "label": "Sauvegarde .raftup", "type": "file", "tasks": ["M3.3"]},
+        {"id": "natif", "label": "Mondes natifs TOML", "type": "file", "milestone": "M7"},
+        {"id": "registre", "label": "Registre signé", "type": "data", "tasks": ["M6.6", "M7.3"]},
+        {"id": "hub", "label": "Rafthub (AGPL)", "type": "service", "milestone": "M5"}
+      ],
+      "edges": [
+        {"from": "joueur", "to": "ui", "label": "utilise"},
+        {"from": "ui", "to": "core"},
+        {"from": "core", "to": "gen", "label": "génère"},
+        {"from": "core", "to": "py", "label": "JSON-RPC", "dashed": true},
+        {"from": "natif", "to": "gen", "label": "compile vers logic"},
+        {"from": "core", "to": "server", "label": "héberge"},
+        {"from": "server", "to": "save"},
+        {"from": "mod", "to": "server", "label": "protocole AP"},
+        {"from": "core", "to": "registre", "label": "lit, vérifie"},
+        {"from": "core", "to": "hub", "label": "amis, illustrations", "dashed": true}
+      ],
+      "notes": "Le serveur parle le protocole Archipelago à l'identique. Python reste en secours du moteur Rust."
+    }
+  },
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "J0 · Bases Rust",
+      "description": "Protocole et client qui se connectent à une vraie room.",
+      "target": null,
+      "completed": "2026-11-22",
+      "tasks": [
+        {"id": "M1.1", "title": "Types des paquets (ap-protocol)", "status": "done"},
+        {"id": "M1.2", "title": "Client ws / wss", "status": "done"},
+        {"id": "M1.3", "title": "Vérifier sur captures réelles", "status": "done"}
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "J1 · Je joue seul",
+      "description": "Serveur maison qui charge un .archipelago.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M2.1", "title": "Lecture sûre du .archipelago", "status": "done"},
+        {"id": "M2.2", "title": "Serveur WebSocket complet", "status": "done", "weight": 3},
+        {"id": "M2.3", "title": "Limites et chiffrement wss", "status": "done"},
+        {"id": "M2.4", "title": "Tests différentiels : 0 écart", "status": "done", "weight": 2},
+        {"id": "M2.5", "title": "Slime Rancher connecté en vrai", "status": "done"},
+        {"id": "M2.6", "title": "Partie solo jusqu'à l'objectif", "status": "todo", "notes": "reporté à la fin de la V3"}
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "J2 · On joue à 4",
+      "description": "Indices, commandes, sauvegarde et reprise.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M3.1", "title": "Indices (hints)", "status": "done"},
+        {"id": "M3.2", "title": "Commandes ! du chat", "status": "done"},
+        {"id": "M3.3", "title": "Sauvegarde .raftup et reprise", "status": "done"},
+        {"id": "M3.4", "title": "Partie réelle à 4 jeux", "status": "todo", "notes": "reporté à la fin de la V3"}
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "J3 · Launcher",
+      "description": "Installer, générer, héberger, rejoindre en un clic.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M4.1", "title": "Profils, installation, lancement", "status": "done", "weight": 2},
+        {"id": "M4.2", "title": "Pont Python (py-bridge)", "status": "done"},
+        {"id": "M4.3", "title": "Génération par l'officiel", "status": "done"},
+        {"id": "M4.4", "title": "Écran « Créer une partie »", "status": "done"},
+        {"id": "M4.5", "title": "Bibliothèque et Slime Rancher", "status": "done"},
+        {"id": "M4.6", "title": "Rejoindre par lien raftup://", "status": "done"},
+        {"id": "M4.7", "title": "Salon, webhook, presets", "status": "done"},
+        {"id": "M4.8", "title": "Mise à jour signée", "status": "done"},
+        {"id": "M4.9", "title": "Tests d'interface sans fenêtre", "status": "done"},
+        {"id": "M4.10", "title": "Contrôle visuel du launcher", "status": "doing", "progress": 50, "notes": "plusieurs écrans jamais regardés"},
+        {"id": "M4.11", "title": "Plan d'interface, étapes suivantes", "status": "doing", "progress": 25, "notes": "étape 1 faite"},
+        {"id": "M4.12", "title": "Chiffrement sans PEM (ADR 0043)", "status": "todo"},
+        {"id": "M4.13", "title": "Test sur VM Windows propre", "status": "todo", "notes": "reporté à la fin de la V3"}
+      ]
+    },
+    {
+      "id": "M5",
+      "title": "Rafthub",
+      "description": "Comptes, amis, présence, console d'admin.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M5.1", "title": "Comptes, amis, présence", "status": "done", "weight": 2},
+        {"id": "M5.2", "title": "Couche données SQLite / PostgreSQL", "status": "done"},
+        {"id": "M5.3", "title": "Écran « Amis » du launcher", "status": "done"},
+        {"id": "M5.4", "title": "Launcher relié à un Rafthub", "status": "done"},
+        {"id": "M5.5", "title": "Illustrations IGDB", "status": "done"},
+        {"id": "M5.6", "title": "Console d'admin /admin", "status": "doing", "progress": 70},
+        {"id": "M5.7", "title": "Essai réel e-mails et Discord", "status": "todo"}
+      ]
+    },
+    {
+      "id": "M6",
+      "title": "V2 · Générateur Rust",
+      "description": "Génération sans Python, reproductible, expliquée.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M6.1", "title": "logic, fill, generate", "status": "done", "weight": 3},
+        {"id": "M6.2", "title": "Export des mondes Python", "status": "done", "weight": 2},
+        {"id": "M6.3", "title": "Bac à sable du générateur", "status": "done"},
+        {"id": "M6.4", "title": "Suivi async", "status": "done"},
+        {"id": "M6.5", "title": "Durée estimée, équilibrage temps", "status": "doing", "progress": 80},
+        {"id": "M6.6", "title": "Registre de paquets signés", "status": "doing", "progress": 80, "notes": "release registre à créer"},
+        {"id": "M6.7", "title": "CI Windows, macOS, Linux", "status": "done"},
+        {"id": "M6.8", "title": "Vraie partie APQuest seed Rust", "status": "todo"}
+      ]
+    },
+    {
+      "id": "M7",
+      "title": "V3 · Mondes natifs",
+      "description": "Format TOML déclaratif et niveaux de confiance.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M7.1", "title": "Format de monde natif", "status": "done", "weight": 2},
+        {"id": "M7.2", "title": "Conversion apworld ↔ natif", "status": "done"},
+        {"id": "M7.3", "title": "Niveaux de confiance", "status": "done"},
+        {"id": "M7.4", "title": "Mondes natifs dans la Bibliothèque", "status": "done"},
+        {"id": "M7.5", "title": "The Planet Crafter natif", "status": "doing", "progress": 40, "weight": 2, "notes": "étapes 1 et 2 logique faites"}
+      ]
+    },
+    {
+      "id": "M8",
+      "title": "Validation et publication",
+      "description": "Relectures, premier release, essais des jalons.",
+      "target": null,
+      "completed": null,
+      "tasks": [
+        {"id": "M8.1", "title": "Relire les ADR acceptés seuls", "status": "todo"},
+        {"id": "M8.2", "title": "Lancer un premier release", "status": "todo"},
+        {"id": "M8.3", "title": "Sauvegarder les clés hors ligne", "status": "todo"}
+      ]
+    }
+  ],
+  "next_steps": [
+    "Continuer The Planet Crafter, étape 2",
+    "Relire les ADR 0029 à 0035",
+    "Regarder à l'œil les écrans non contrôlés",
+    "Jouer une partie APQuest sur seed Rust"
+  ],
+  "blockers": [],
+  "decisions": [
+    {"date": "2026-11-18", "title": "Essais de jalons reportés à la fin de la V3", "why": "Le développement continue sans attendre les parties réelles."},
+    {"date": "2026-11-22", "title": "Suivi visuel calqué sur docs/etat-du-projet.md", "why": "Le détail reste dans etat-du-projet.md et les ADR ; ce fichier donne la vue d'ensemble."}
+  ],
+  "log": [
+    {"date": "2026-11-22", "summary": "Création du suivi : plan, 8 jalons et schéma déduits de l'état du projet.", "tasks": []}
+  ]
+}
