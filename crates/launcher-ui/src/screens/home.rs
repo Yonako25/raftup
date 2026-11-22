@@ -1,16 +1,17 @@
 //! Écran « Accueil » (plan de l'interface, étape 4) : ce qui se passe et quoi faire
 //! ensuite, en un coup d'œil.
 //!
-//! - en haut, **le prochain pas** : une seule action proposée, choisie par
-//!   [`next_step`] (fonction pure, testée sans interface) ;
+//! - en haut, une **vitrine** : la grande image du jeu mis en avant ([`featured`]), avec
+//!   par-dessus **le prochain pas**, une seule action choisie par [`next_step`]
+//!   (fonctions pures, testées sans interface) ;
+//! - « Ta bibliothèque » : les jeux de ce PC en une rangée qui défile ;
 //! - les parties en cours (celle que ce PC héberge) ;
-//! - l'invitation reçue et pas encore suivie ;
-//! - les jeux prêts à jouer.
+//! - l'invitation reçue et pas encore suivie.
 //!
 //! « Joués récemment » de la maquette attend un historique des parties, qui n'existe
 //! pas encore (question notée dans la PR de l'étape 4).
 
-use egui::{RichText, Ui};
+use egui::{Color32, CornerRadius, RichText, Sense, Ui};
 
 use super::join::JoinState;
 use launcher_core::art::ArtKind;
@@ -18,6 +19,7 @@ use launcher_core::art::ArtKind;
 use super::library::{cover_card, CardLook, GameSummary, LibraryState};
 use super::matches;
 use crate::app::Page;
+use crate::art_ui;
 use crate::format;
 use crate::theme;
 use crate::widgets;
@@ -50,6 +52,20 @@ pub fn next_step(hosting: bool, invite: bool, games: &[GameSummary]) -> NextStep
         None => NextStep::InstallGame,
     }
 }
+
+/// Le jeu mis en avant dans la vitrine : le premier jeu prêt, sinon le premier jeu de
+/// la Bibliothèque, sinon aucun. `in_library` dit si un jeu est sur ce PC.
+// Le résultat emprunte un élément de `games` : Rust le déduit seul (une seule entrée
+// empruntée), sans écrire de durée de vie.
+pub fn featured(games: &[GameSummary], in_library: impl Fn(&str) -> bool) -> Option<&GameSummary> {
+    games
+        .iter()
+        .find(|g| g.ready)
+        .or_else(|| games.iter().find(|g| in_library(&g.id)))
+}
+
+/// Hauteur de la vitrine en haut de l'Accueil.
+const SHOWCASE_HEIGHT: f32 = 280.0;
 
 /// Textes et page du prochain pas : (titre, explication, bouton, page).
 fn step_texts(step: &NextStep) -> (String, &'static str, &'static str, Page) {
@@ -92,20 +108,56 @@ pub fn show(
     let invite = join.pending_invite();
     let step = next_step(shared.status.is_some(), invite.is_some(), &games);
 
-    super::page(ui, |ui| {
-        super::header(ui, "Raftup", "Accueil", |_| {});
+    let ctx = ui.ctx().clone();
+    let hero =
+        featured(&games, |id| library.in_library(id)).map(|g| (g.id.clone(), g.name.clone()));
+    let hero_art = hero
+        .as_ref()
+        .and_then(|(id, _)| library.art_for(&ctx, id, ArtKind::Hero));
 
+    super::page(ui, |ui| {
+        // Vitrine : grande image du jeu mis en avant, le prochain pas par-dessus.
         let (heading, text, button, page) = step_texts(&step);
-        widgets::panel(ui, "", |ui| {
-            ui.label(widgets::caps("PROCHAIN PAS"));
-            ui.label(widgets::title(&heading, 22.0));
-            ui.label(widgets::dim(text));
-            ui.add_space(8.0);
-            if widgets::primary_button(ui, button, true) {
-                goto = Some(page);
-            }
-        });
-        ui.add_space(12.0);
+        if showcase(ui, hero.as_ref(), hero_art.as_ref(), &heading, text, button) {
+            goto = Some(page);
+        }
+        ui.add_space(18.0);
+
+        // Ta bibliothèque : les jeux de ce PC, en une rangée qui défile.
+        let mine: Vec<&GameSummary> = games.iter().filter(|g| library.in_library(&g.id)).collect();
+        ui.label(widgets::title("Ta bibliothèque", 20.0));
+        ui.add_space(8.0);
+        if mine.is_empty() {
+            ui.label(widgets::dim(
+                "Aucun jeu du catalogue trouvé sur ce PC pour l'instant : le Catalogue montre ceux que Raftup sait installer.",
+            ));
+        } else {
+            // `id_salt` : la position du défilement est retenue d'une image à l'autre.
+            egui::ScrollArea::horizontal()
+                .id_salt("accueil_bibliotheque")
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing = egui::vec2(22.0, 16.0);
+                        for game in mine {
+                            let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
+                            let look = CardLook {
+                                cover_id: &game.id,
+                                name: &game.name,
+                                status: game.label.clone(),
+                                status_color: theme::TEXT_DIM,
+                                fraction: if game.ready { 1.0 } else { 0.0 },
+                                marker: None,
+                                cover,
+                            };
+                            if cover_card(ui, &look, false) {
+                                library.select(&game.id);
+                                goto = Some(Page::Library);
+                            }
+                        }
+                    });
+                });
+        }
+        ui.add_space(18.0);
 
         // Parties en cours.
         widgets::panel(ui, "Parties en cours", |ui| match &shared.status {
@@ -153,41 +205,76 @@ pub fn show(
             ui.add_space(12.0);
         }
 
-        // Jeux prêts : leurs jaquettes, comme dans la Bibliothèque (ADR 0047).
-        let ctx = ui.ctx().clone();
-        widgets::panel(ui, "Jeux prêts", |ui| {
-            let ready: Vec<&GameSummary> = games.iter().filter(|g| g.ready).collect();
-            if ready.is_empty() {
-                ui.label(widgets::dim(
-                    "Aucun jeu prêt pour l'instant : la Bibliothèque montre ce qu'il manque.",
-                ));
-            }
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(22.0, 16.0);
-                for game in ready {
-                    let cover = library.art_for(&ctx, &game.id, ArtKind::Cover);
-                    let look = CardLook {
-                        cover_id: &game.id,
-                        name: &game.name,
-                        status: game.label.clone(),
-                        status_color: theme::TEXT_DIM,
-                        fraction: 1.0,
-                        marker: None,
-                        cover,
-                    };
-                    if cover_card(ui, &look, false) {
-                        library.select(&game.id);
-                        goto = Some(Page::Library);
-                    }
-                }
-            });
-        });
         if let Some((text, url)) = library.art_attribution() {
             ui.add_space(6.0);
             super::library::attribution_line(ui, &text, &url);
         }
     });
     goto
+}
+
+/// La vitrine : l'image large du jeu mis en avant (ou un aplat coloré), assombrie vers
+/// le bas, avec le prochain pas écrit par-dessus. Renvoie vrai au clic sur le bouton.
+fn showcase(
+    ui: &mut Ui,
+    hero: Option<&(String, String)>,
+    texture: Option<&egui::TextureHandle>,
+    heading: &str,
+    text: &str,
+    button: &str,
+) -> bool {
+    let width = ui.available_width();
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width, SHOWCASE_HEIGHT), Sense::hover());
+    let radius = CornerRadius::same(theme::RADIUS);
+    let painter = ui.painter_at(rect);
+    match (texture, hero) {
+        (Some(texture), Some((_, name))) => {
+            art_ui::paint_cover(ui, texture, rect);
+            let label = format!("Illustration de {name}");
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, &label));
+        }
+        (None, Some((id, _))) => {
+            painter.rect_filled(rect, radius, theme::cover_color(id));
+        }
+        _ => {
+            painter.rect_filled(rect, radius, theme::panel_fill());
+        }
+    }
+    // Dégradé sombre vers le bas : le texte reste lisible sur n'importe quelle image.
+    // Un maillage (`Mesh`) à quatre coins : transparent en haut, sombre en bas.
+    let mut mesh = egui::Mesh::default();
+    let top = Color32::from_black_alpha(20);
+    let bottom = Color32::from_black_alpha(215);
+    mesh.colored_vertex(rect.left_top(), top);
+    mesh.colored_vertex(rect.right_top(), top);
+    mesh.colored_vertex(rect.right_bottom(), bottom);
+    mesh.colored_vertex(rect.left_bottom(), bottom);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(mesh);
+    painter.rect_stroke(
+        rect,
+        radius,
+        egui::Stroke::new(1.0, theme::BORDER),
+        egui::StrokeKind::Inside,
+    );
+
+    // Le texte, en bas à gauche de l'image.
+    let inner = rect.shrink2(egui::vec2(24.0, 22.0));
+    let mut clicked = false;
+    let mut content = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(inner)
+            .layout(egui::Layout::bottom_up(egui::Align::Min)),
+    );
+    // `bottom_up` : on pose d'abord le bouton (en bas), puis les textes au-dessus.
+    clicked |= widgets::primary_button(&mut content, button, true);
+    content.add_space(10.0);
+    content.label(RichText::new(text).color(theme::TEXT).size(15.0));
+    content.label(widgets::title(heading, 30.0));
+    content.label(widgets::caps("Prochain pas").color(theme::ACCENT));
+    clicked
 }
 
 #[cfg(test)]
@@ -208,6 +295,24 @@ mod tests {
             from_registry: false,
             trust: None,
         }
+    }
+
+    #[test]
+    fn le_jeu_mis_en_avant() {
+        let games = [
+            game("APQuest", false),
+            game("Hollow Knight", false),
+            game("Slime Rancher", true),
+        ];
+        // Le premier jeu prêt passe avant tout.
+        let pick = featured(&games, |_| true).map(|g| g.name.as_str());
+        assert_eq!(pick, Some("Slime Rancher"));
+        // Aucun prêt : le premier jeu de la Bibliothèque.
+        let none_ready = [game("APQuest", false), game("Hollow Knight", false)];
+        let pick = featured(&none_ready, |id| id == "hollow knight").map(|g| g.name.as_str());
+        assert_eq!(pick, Some("Hollow Knight"));
+        // Rien sur ce PC : pas de jeu mis en avant.
+        assert_eq!(featured(&none_ready, |_| false), None);
     }
 
     #[test]

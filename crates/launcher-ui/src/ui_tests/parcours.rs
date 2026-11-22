@@ -139,11 +139,11 @@ fn accueil_jeu_pret_propose_un_salon() {
         Shared::default(),
         JoinState::without_clipboard(),
     );
-    assert!(shows(&harness, "Accueil"));
+    // Vitrine : le prochain pas par-dessus l'image du jeu mis en avant.
     assert!(shows(&harness, "PROCHAIN PAS"));
     assert!(shows(&harness, "Slime Rancher est prêt"));
     assert!(shows(&harness, "Aucune partie en cours."));
-    assert!(shows(&harness, "Jeux prêts"));
+    assert!(shows(&harness, "Ta bibliothèque"));
     click(&mut harness, "Créer un salon");
     assert_eq!(harness.state().asked, Some(Page::Create));
 
@@ -167,7 +167,8 @@ fn accueil_sans_jeu_pret_mene_a_la_bibliotheque() {
         JoinState::without_clipboard(),
     );
     assert!(shows(&harness, "Prépare ton premier jeu"));
-    assert!(shows_part(&harness, "Aucun jeu prêt pour l'instant"));
+    // Le jeu est sur ce PC (mods pas installés) : il est dans « Ta bibliothèque ».
+    assert!(shows(&harness, "Fiche de Slime Rancher"));
     click(&mut harness, "Ouvrir la Bibliothèque");
     assert_eq!(harness.state().asked, Some(Page::Library));
 }
@@ -269,6 +270,40 @@ fn catalogue_complet_tient_dans_la_largeur() {
     );
     assert!(!shows(&harness, "Ajouter"));
     assert_eq!(harness.state().library.game_count(), 0);
+}
+
+/// Un clic sur une carte ouvre la fiche d'information du jeu (en lecture seule) ;
+/// « Fermer » la referme.
+#[test]
+fn catalogue_fiche_d_information() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = launcher_core::Catalog::embedded().unwrap();
+    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), Scan::default());
+    let state = Catalogue {
+        state: CatalogState::default(),
+        library,
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Catalogue| {
+            catalog::show(ui, &mut s.state, &mut s.library);
+        },
+        state,
+    );
+    harness.run();
+    assert!(!shows(&harness, "CE QUE RAFTUP INSTALLE"));
+    click(&mut harness, "Fiche de Hollow Knight");
+    assert_eq!(
+        harness.state().state.selected.as_deref(),
+        Some("hollow-knight")
+    );
+    assert!(shows(&harness, "CE QUE RAFTUP INSTALLE"));
+    assert!(shows_part(&harness, "Hollow Knight Modding API"));
+    assert!(shows_part(&harness, "Profil non testé"));
+    // Lecture seule : aucun bouton pour ajouter.
+    assert!(!shows(&harness, "Ajouter"));
+    click(&mut harness, "Fermer");
+    assert_eq!(harness.state().state.selected, None);
 }
 
 // ---------------------------------------------------------------------------

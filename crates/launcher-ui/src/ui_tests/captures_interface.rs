@@ -500,6 +500,11 @@ fn captures_interface() {
         );
         settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
         save(&mut harness, "13-catalogue");
+        // Fiche d'information d'un jeu, ouverte d'un clic sur sa carte.
+        click(&mut harness, "Fiche de Slime Rancher");
+        settle(&mut harness, |h| shows(h, "Illustration de Slime Rancher"));
+        tall(&mut harness);
+        save(&mut harness, "13b-catalogue-fiche");
     }
     // Mon profil (sans compte).
     {

@@ -1432,7 +1432,12 @@ fn hero_height(width: f32, has_image: bool) -> f32 {
 /// l'image large venue du hub (ADR 0047) si elle est prête ; sinon (pas de hub,
 /// jeu inconnu d'IGDB, image pas encore arrivée) un aplat de la teinte du jeu,
 /// avec son titre, comme les jaquettes de la grille.
-fn hero_banner(ui: &mut Ui, texture: Option<&egui::TextureHandle>, game_id: &str, name: &str) {
+pub(super) fn hero_banner(
+    ui: &mut Ui,
+    texture: Option<&egui::TextureHandle>,
+    game_id: &str,
+    name: &str,
+) {
     let width = ui.available_width();
     let height = hero_height(width, texture.is_some());
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), Sense::hover());

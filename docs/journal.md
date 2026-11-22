@@ -738,3 +738,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : selon l'avis de l'utilisatrice, étapes C (fiche d'info dans le Catalogue), D (Accueil vitrine), E (clic droit, raccourcis).
 
+### 2026-11-22 · Fiche d'information du Catalogue et Accueil vitrine
+- **Fait** : Catalogue : un clic sur une carte ouvre à droite une fiche en lecture seule (image large, état sur ce PC, « non testé », nom chez Archipelago, auteurs, licence, mods installés), « Fermer » ou second clic la referme (test `catalogue_fiche_d_information`, capture `13b-catalogue-fiche`). Accueil : vitrine en haut (image large du jeu mis en avant, dégradé sombre, prochain pas par-dessus ; `home::featured` testé), rangée « Ta bibliothèque » qui défile, l'ancien panneau « Jeux prêts » retiré ; tests de l'Accueil adaptés. fmt, clippy, `cargo test --workspace` et `cargo captures` passent (vues).
+- **Pas vérifié** : rendu avec les vraies illustrations IGDB à l'écran réel ; « Joués récemment » attend toujours un historique des parties.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : étape E (clic droit, raccourcis) si l'utilisatrice le veut ; relire la proposition d'ADR du salon par le Rafthub.
+
