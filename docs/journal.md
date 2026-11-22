@@ -627,3 +627,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
+
+### 2026-11-22 · Profils des jeux PC d'Archipelago, lot MVP (cloud/profils-mvp)
+- **Fait** : statut `untested` des profils (ADR 0049, choix de l'utilisatrice) : installable, marqué « Non testé » dans la Bibliothèque et la fiche. Recherches des 4 jeux du MVP : aucun profil propre à ce jour. Tests launcher-core et launcher-ui, clippy et fmt passent.
+- **Pas vérifié** : aucun profil ajouté au catalogue (voir blocages dans la PR) ; brouillons Risk of Rain 2 et Hollow Knight gardés hors du dépôt.
+- **Ne pas toucher** : `docs/profils-en-attente/`.
+- **Suite** : à l'utilisatrice : trancher les blocages (licence du mod RoR2, Assembly-CSharp.dll de l'API Hollow Knight, installateur de SMAPI, accès aux dépôts de A Short Hike).

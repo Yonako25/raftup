@@ -119,6 +119,9 @@ pub struct GameInfo {
 #[serde(rename_all = "snake_case")]
 pub enum GameStatus {
     Available,
+    /// Profil jamais essayé avec le vrai jeu (ADR 0049) : installable comme
+    /// `available`, mais le launcher l'annonce « Non testé ».
+    Untested,
     Broken,
 }
 

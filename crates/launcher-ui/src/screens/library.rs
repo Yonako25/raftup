@@ -338,6 +338,16 @@ pub enum Tone {
     Dim,
 }
 
+/// Vrai pour un profil jamais essayé avec le vrai jeu (ADR 0049).
+pub fn is_untested(profile: &Profile) -> bool {
+    profile.game.status == launcher_core::profile::GameStatus::Untested
+}
+
+/// Message de la fiche d'un profil « non testé » (ADR 0049).
+pub const UNTESTED_NOTE: &str =
+    "Profil non testé : personne ne l'a encore essayé avec le vrai jeu. \
+     L'installation se défait avec « Désinstaller le mod ».";
+
 /// Calcule l'état affiché d'un jeu d'après sa détection et son reçu d'installation.
 pub fn view(
     profile: &Profile,
@@ -1198,8 +1208,15 @@ fn card(
         status,
         status_color,
         fraction,
-        // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non).
-        marker: from_registry.then_some(("Registre", theme::ITEM)),
+        // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non) ;
+        // sinon, un profil jamais essayé avec le vrai jeu est marqué (ADR 0049).
+        marker: if from_registry {
+            Some(("Registre", theme::ITEM))
+        } else if is_untested(profile) {
+            Some(("Non testé", theme::AMBER))
+        } else {
+            None
+        },
         cover,
     };
     cover_card(ui, &look, selected)
@@ -1366,6 +1383,10 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 ui.label(widgets::dim(origin).size(12.0));
             });
         });
+        if is_untested(&profile) {
+            ui.add_space(6.0);
+            ui.label(RichText::new(UNTESTED_NOTE).size(13.0).color(theme::AMBER));
+        }
         ui.add_space(10.0);
 
         // Boutons d'action : « Lancer » en bleu quand le jeu est prêt ; sinon c'est
@@ -1704,6 +1725,23 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         assert_eq!(v.label, "Mod non installé");
         assert!(v.can_install && !v.can_launch && !v.can_uninstall);
         assert_eq!(v.install_label, "Installer");
+    }
+
+    #[test]
+    fn profil_non_teste_s_installe_et_se_signale() {
+        // ADR 0049 : même comportement qu'un profil « available », mais annoncé.
+        let text = DEMO.replace("status = \"available\"", "status = \"untested\"");
+        let untested = Catalog::from_texts(&[("demo.toml", &text)]).unwrap();
+        let p = untested.get("demo").unwrap();
+        assert!(is_untested(p));
+        let g = found(GameState::Ready);
+        let v = view(p, Some(&g), Some(&Ok(InstallStatus::NotInstalled)));
+        assert!(v.can_install);
+        let v = view(p, Some(&g), Some(&Ok(InstallStatus::Installed)));
+        assert!(v.can_launch);
+        // Le profil de démonstration tel quel (« available ») n'est pas marqué.
+        let available = catalog();
+        assert!(!is_untested(available.get("demo").unwrap()));
     }
 
     #[test]
