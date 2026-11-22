@@ -99,10 +99,6 @@ pub struct LibraryState {
     notice: Option<Notice>,
     /// Le joueur a cliqué une première fois sur « Désinstaller » : on attend la confirmation.
     confirm_uninstall: bool,
-    /// Jeux ouverts depuis le Catalogue pendant cette session : ils restent dans la
-    /// Bibliothèque même s'ils ne sont pas (encore) trouvés sur ce PC.
-    /// `BTreeSet` : ordre stable, sans doublon.
-    added: std::collections::BTreeSet<String>,
     /// Choix d'un dossier demandé pour ce jeu (la boîte de dialogue s'ouvre hors du dessin).
     pending_pick: Option<String>,
     /// Debug seulement (`RAFTUP_DEV_INSTALLER=1`) : lancer l'installation du jeu
@@ -134,7 +130,6 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
-            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: cfg!(debug_assertions)
                 && std::env::var_os("RAFTUP_DEV_INSTALLER").is_some(),
@@ -161,7 +156,6 @@ impl LibraryState {
             form: LaunchForm::default(),
             notice: None,
             confirm_uninstall: false,
-            added: std::collections::BTreeSet::new(),
             pending_pick: None,
             dev_auto_install: false,
             registry: RegistryPanel::disabled(),
@@ -194,9 +188,9 @@ impl LibraryState {
         self.library_ids().len()
     }
 
-    /// Vrai si le jeu est dans la Bibliothèque : trouvé sur ce PC, avec des mods posés
-    /// par Raftup (reçu d'installation), ou ouvert depuis le Catalogue (« Ajouter »).
-    /// Les autres jeux du catalogue ne sont montrés que dans l'écran « Catalogue ».
+    /// Vrai si le jeu est dans la Bibliothèque : trouvé sur ce PC, ou avec des mods posés
+    /// par Raftup (reçu d'installation). Les autres jeux du catalogue ne sont montrés que
+    /// dans l'écran « Catalogue », qui est en lecture seule.
     ///
     /// Attention : la détection range un état des mods pour **chaque** jeu du catalogue,
     /// « non installé » compris ; seul un autre état compte comme « sur ce PC ».
@@ -208,7 +202,7 @@ impl LibraryState {
             );
             scan.found.contains_key(game_id) || has_mods
         });
-        on_pc || self.added.contains(game_id)
+        on_pc
     }
 
     /// Les jeux de la Bibliothèque, dans l'ordre du catalogue.
@@ -335,9 +329,6 @@ impl LibraryState {
         }
         self.selected = Some(game_id.to_string());
         self.native.selected = None;
-        // Un jeu ouvert depuis le Catalogue reste dans la Bibliothèque pour cette
-        // session, le temps de l'installer ou d'indiquer son dossier.
-        self.added.insert(game_id.to_string());
     }
 }
 
@@ -1917,8 +1908,8 @@ mod tests {
     use super::*;
 
     /// Bug signalé le 22 novembre 2026 : la Bibliothèque montrait tous les jeux du
-    /// catalogue, même ceux absents du PC. Elle ne garde que les jeux trouvés (ou
-    /// ouverts depuis le Catalogue) ; les autres restent dans l'écran « Catalogue ».
+    /// catalogue, même ceux absents du PC. Elle ne garde que les jeux trouvés ; les
+    /// autres restent dans l'écran « Catalogue ».
     #[test]
     fn seuls_les_jeux_du_pc_sont_dans_la_bibliotheque() {
         let catalog = Catalog::from_texts(&[
@@ -1950,16 +1941,11 @@ mod tests {
         scan.status
             .insert("hollow-knight".to_string(), Ok(InstallStatus::NotInstalled));
         let root = tempfile::tempdir().unwrap();
-        let mut state = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
+        let state = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
 
         assert_eq!(state.library_ids(), vec!["slime-rancher".to_string()]);
         assert_eq!(state.game_count(), 1);
         assert!(!state.in_library("hollow-knight"));
-
-        // « Ajouter » dans le Catalogue ouvre sa fiche : le jeu entre dans la Bibliothèque.
-        state.select("hollow-knight");
-        assert!(state.in_library("hollow-knight"));
-        assert_eq!(state.game_count(), 2);
     }
 
     #[test]

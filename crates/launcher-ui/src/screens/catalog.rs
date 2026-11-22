@@ -1,16 +1,18 @@
 //! Écran « Catalogue » (plan de l'interface, étape 4) : les jeux pris en charge par
 //! Raftup, ceux du catalogue embarqué et ceux du registre signé, avec un filtre.
 //!
-//! Chaque ligne dit d'où vient le profil (et son niveau de confiance pour un profil du
-//! registre, ADR 0045), son état sur ce PC, et ouvre sa fiche dans la Bibliothèque,
-//! où se font l'installation et le lancement.
+//! Chaque carte dit d'où vient le profil (et son niveau de confiance pour un profil du
+//! registre, ADR 0045) et son état sur ce PC.
+//!
+//! C'est un **référentiel en lecture seule** (choix de l'utilisatrice, 22 novembre
+//! 2026) : on y voit les jeux compatibles, on n'y ajoute rien. La Bibliothèque montre
+//! d'elle-même les jeux trouvés sur ce PC.
 
 use egui::Ui;
 use launcher_core::art::ArtKind;
 
 use super::library::{cover_card, CardLook, GameSummary, LibraryState, Tone};
 use super::registry_panel;
-use crate::app::Page;
 use crate::theme;
 use crate::widgets;
 
@@ -45,8 +47,7 @@ fn tone_color(tone: Tone) -> egui::Color32 {
     }
 }
 
-pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -> Option<Page> {
-    let mut goto = None;
+pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) {
     let games = library.summaries();
     let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
@@ -109,32 +110,10 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -
                                 marker,
                                 cover,
                             };
-                            let mut open = cover_card(ui, &look, false);
+                            // Carte seule, sans bouton : rien ne s'ajoute d'ici.
+                            cover_card(ui, &look, false);
                             if let Some(trust) = &game.trust {
                                 registry_panel::trust_badge(ui, trust);
-                            }
-                            // Même largeur que la jaquette.
-                            // « Ajouter » en bleu (action principale), « Dans la bibliothèque » discret.
-                            let button = if game.ready {
-                                egui::Button::new(
-                                    egui::RichText::new("Dans la bibliothèque").size(13.0),
-                                )
-                            } else {
-                                egui::Button::new(
-                                    egui::RichText::new("Ajouter")
-                                        .color(egui::Color32::from_rgb(0x08, 0x12, 0x22))
-                                        .strong()
-                                        .family(theme::bold_family()),
-                                )
-                                .fill(theme::ACCENT)
-                            };
-                            // Taille fixe, celle de la jaquette : toutes les colonnes ont la
-                            // même largeur, et la grille reste alignée.
-                            let size = egui::vec2(super::library::CARD_WIDTH, 30.0);
-                            open |= ui.add_sized(size, button).clicked();
-                            if open {
-                                library.select(&game.id);
-                                goto = Some(Page::Library);
                             }
                         });
                     }
@@ -153,7 +132,6 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) -
             .size(12.0),
         );
     });
-    goto
 }
 
 #[cfg(test)]

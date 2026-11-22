@@ -288,7 +288,11 @@ impl eframe::App for App {
         egui::CentralPanel::no_frame().show(ui, |ui| {
             let next = match &self.page {
                 Page::Home => home::show(ui, &shared, &mut self.library, &self.join),
-                Page::Catalog => catalog::show(ui, &mut self.catalog, &mut self.library),
+                Page::Catalog => {
+                    // Référentiel en lecture seule : il ne mène à aucun autre écran.
+                    catalog::show(ui, &mut self.catalog, &mut self.library);
+                    None
+                }
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
                 Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
                 Page::Library => {

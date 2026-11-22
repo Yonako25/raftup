@@ -726,3 +726,9 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : relire la proposition d'ADR du salon par le Rafthub.
 
+### 2026-11-22 · Catalogue en lecture seule (référentiel)
+- **Fait** : à la demande de l'utilisatrice, « Parcourir » n'ajoute plus de jeu : plus de bouton « Ajouter » ni « Dans la bibliothèque », `catalog::show` ne renvoie plus d'écran ; la Bibliothèque ne garde que les jeux trouvés sur ce PC ou avec un reçu d'installation (champ `added` retiré). Tests adaptés (`catalogue_complet_tient_dans_la_largeur`, plus de bouton) ; capture `04b` retirée ; Catalogue vu en capture. fmt, clippy, `cargo test --workspace` passent.
+- **Pas vérifié** : écran réel.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : relire la proposition d'ADR du salon par le Rafthub.
+

@@ -199,7 +199,6 @@ fn accueil_partie_hebergee_et_invitation() {
 struct Catalogue {
     state: CatalogState,
     library: LibraryState,
-    asked: Option<Page>,
     _root: tempfile::TempDir,
 }
 
@@ -208,14 +207,11 @@ fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
     let state = Catalogue {
         state: CatalogState::default(),
         library,
-        asked: None,
         _root: root,
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Catalogue| {
-            if let Some(page) = catalog::show(ui, &mut s.state, &mut s.library) {
-                s.asked = Some(page);
-            }
+            catalog::show(ui, &mut s.state, &mut s.library);
         },
         state,
     );
@@ -236,57 +232,43 @@ fn catalogue_liste_filtre_et_ouvre_la_fiche() {
     assert!(shows(&harness, "0 jeu"));
     assert!(shows(&harness, "Aucun jeu ne correspond à ce filtre."));
 
-    let mut harness = catalogue(scan(false));
-    // Mods pas installés : « Ajouter » ouvre la fiche, où se fait l'installation.
-    click(&mut harness, "Ajouter");
-    assert_eq!(harness.state().asked, Some(Page::Library));
+    // Référentiel en lecture seule : aucun bouton pour ajouter un jeu.
+    let harness = catalogue(scan(false));
+    assert!(!shows(&harness, "Ajouter"));
+    assert!(!shows(&harness, "Dans la bibliothèque"));
 }
 
 /// Bug signalé le 22 novembre 2026 : avec le vrai catalogue (dix jeux), toutes les
-/// cartes tenaient sur une rangée qui sortait de l'écran, et les derniers jeux ne
-/// pouvaient pas être ajoutés. Le dernier bouton doit être dans l'écran et « Ajouter »
-/// doit mettre le jeu dans la Bibliothèque.
+/// cartes tenaient sur une rangée qui sortait de l'écran. Le dernier jeu doit être dans
+/// la largeur de l'écran ; le Catalogue n'ajoute rien à la Bibliothèque.
 #[test]
-fn catalogue_complet_le_dernier_jeu_s_ajoute() {
+fn catalogue_complet_tient_dans_la_largeur() {
     let root = tempfile::tempdir().unwrap();
     let catalog = launcher_core::Catalog::embedded().unwrap();
-    let last = catalog.profiles.keys().last().unwrap().clone();
+    let last = catalog.profiles.values().last().unwrap().game.name.clone();
     let library = LibraryState::for_tests(catalog, Paths::under(root.path()), Scan::default());
     let state = Catalogue {
         state: CatalogState::default(),
         library,
-        asked: None,
         _root: root,
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Catalogue| {
-            if let Some(page) = catalog::show(ui, &mut s.state, &mut s.library) {
-                s.asked = Some(page);
-            }
+            catalog::show(ui, &mut s.state, &mut s.library);
         },
         state,
     );
     harness.run();
-    assert!(!harness.state().library.in_library(&last));
     let width = harness.ctx.content_rect().width();
-    // Le dernier « Ajouter » de la grille : celui du dernier jeu du catalogue.
-    let button = harness.query_all_by_label("Ajouter").last().unwrap();
+    // Le nom du dernier jeu (sous sa jaquette), le plus à droite de la dernière rangée.
+    let name = harness.query_all_by_label(&last).last().unwrap();
     assert!(
-        button.rect().right() <= width,
-        "le dernier bouton sort de l'écran : {:?} (largeur {width})",
-        button.rect()
+        name.rect().right() <= width,
+        "le dernier jeu sort de l'écran : {:?} (largeur {width})",
+        name.rect()
     );
-    // Comme un joueur : défiler jusqu'au bouton (dernière rangée), puis cliquer.
-    button.scroll_to_me();
-    harness.run();
-    harness
-        .query_all_by_label("Ajouter")
-        .last()
-        .unwrap()
-        .click();
-    harness.run();
-    assert_eq!(harness.state().asked, Some(Page::Library));
-    assert!(harness.state().library.in_library(&last));
+    assert!(!shows(&harness, "Ajouter"));
+    assert_eq!(harness.state().library.game_count(), 0);
 }
 
 // ---------------------------------------------------------------------------
