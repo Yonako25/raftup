@@ -25,7 +25,7 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 pub use discord::{DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, DISCORD_WAIT};
-pub use games::{CreatedGame, GameStatus, GameUpload, HostedGame, MAX_SEED_BYTES};
+pub use games::{CreatedGame, GameExport, GameStatus, GameUpload, HostedGame, MAX_SEED_BYTES};
 pub use token::{KeyringStore, MemoryStore, TokenStore, TokenStoreError};
 pub use types::{
     Account, ApiInfo, ErrorCode, Friend, FriendRequests, HubInfo, Me, Password, Player, Presence,
@@ -116,6 +116,9 @@ pub enum HubClientError {
     /// Identifiant de partie mal formé (32 chiffres hexadécimaux attendus).
     #[error("identifiant de partie refusé")]
     BadGameId,
+    /// Export d'une partie illisible (pas un zip, fichier manquant ou trop gros).
+    #[error("export de la partie illisible : {0}")]
+    BadExport(String),
 }
 
 impl HubClientError {
@@ -643,6 +646,26 @@ impl HubClient {
         self.call(Method::Get, &path, None, true)
     }
 
+    /// `GET /v1/games/{id}/export` : la seed et la sauvegarde de la partie (hôte
+    /// seulement), pour la reprendre sur ce PC.
+    pub fn export_game(&self, id: &str) -> Result<GameExport, HubClientError> {
+        let path = format!("{}/export", game_path(id)?);
+        // Le zip contient deux fichiers de 32 Mio au plus, compressés : 2 × 32 Mio
+        // plus l'en-tête du zip suffisent toujours.
+        let limit = 2 * MAX_SEED_BYTES + 1024 * 1024;
+        let (_, bytes) = self.send_raw(Method::Get, &path, None, true, UPLOAD_TIMEOUT, limit)?;
+        GameExport::from_zip(&bytes)
+    }
+
+    /// `POST /v1/games/{id}/wake` : réveille une partie en veille (ou relance une
+    /// partie arrêtée) et rend son nouvel état.
+    pub fn wake_game(&self, id: &str) -> Result<HostedGame, HubClientError> {
+        let path = format!("{}/wake", game_path(id)?);
+        // Le hub relit la seed avant de répondre : un peu plus long qu'un appel simple.
+        let (status, text) = self.send_with(Method::Post, &path, None, true, UPLOAD_TIMEOUT)?;
+        serde_json::from_str(&text).map_err(|e| unexpected(status, e.to_string()))
+    }
+
     /// `DELETE /v1/games/{id}` : arrête et supprime la partie (hôte seulement).
     pub fn delete_game(&self, id: &str) -> Result<(), HubClientError> {
         let path = game_path(id)?;
@@ -697,6 +720,23 @@ impl HubClient {
         auth: bool,
         timeout: Duration,
     ) -> Result<(u16, String), HubClientError> {
+        let (status, bytes) =
+            self.send_raw(method, path, body, auth, timeout, MAX_RESPONSE_BYTES)?;
+        // Une réponse JSON est toujours en UTF-8 ; autre chose ne se relira pas plus loin.
+        Ok((status, String::from_utf8(bytes).unwrap_or_default()))
+    }
+
+    /// Envoie la requête et rend le corps brut d'une réponse réussie, sans dépasser
+    /// `limit` octets (l'export d'une partie est un zip, pas du JSON).
+    fn send_raw(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+        auth: bool,
+        timeout: Duration,
+        limit: u64,
+    ) -> Result<(u16, Vec<u8>), HubClientError> {
         let url = self.url.join(path);
         let bearer = if auth {
             let token = self.token.as_ref().ok_or(HubClientError::NotLoggedIn)?;
@@ -745,18 +785,17 @@ impl HubClient {
         // Le message d'ureq ne contient ni le jeton (en-tête) ni le corps.
         let mut response = result.map_err(|e| HubClientError::Network(e.to_string()))?;
         let status = response.status().as_u16();
-        let text = response
-            .body_mut()
-            .with_config()
-            .limit(MAX_RESPONSE_BYTES)
-            .read_to_string()
-            // Pas de corps (204) : texte vide, ce n'est pas une erreur.
-            .unwrap_or_default();
-
+        let read = response.body_mut().with_config().limit(limit).read_to_vec();
         if (200..300).contains(&status) {
-            return Ok((status, text));
+            return match read {
+                Ok(bytes) => Ok((status, bytes)),
+                // Pas de corps (204) : vide, ce n'est pas une erreur.
+                Err(_) if status == 204 => Ok((status, Vec::new())),
+                Err(e) => Err(HubClientError::Network(e.to_string())),
+            };
         }
-        match serde_json::from_str::<types::ErrorJson>(&text) {
+        let text = read.unwrap_or_default();
+        match serde_json::from_slice::<types::ErrorJson>(&text) {
             Ok(error) => Err(HubClientError::Api {
                 status,
                 code: ErrorCode::parse(&error.error),

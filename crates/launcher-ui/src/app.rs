@@ -255,6 +255,12 @@ impl eframe::App for App {
         self.friends.set_presence(presence);
 
         let mut goto: Option<Page> = after_hub;
+        // « Reprendre sur mon PC » : export téléchargé, serveur de ce PC, retrait du hub.
+        if let Some(page) =
+            hub_game::resume_background(&mut self.hub_games, &self.worker, &shared, &mut self.error)
+        {
+            goto = Some(page);
+        }
         // Génération et hébergement avancent même si l'écran « Créer » n'est pas affiché.
         let started = create::background(
             &ctx,
