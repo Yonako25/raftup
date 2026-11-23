@@ -756,3 +756,9 @@ untime2`.
 - **Pas vérifié** : badges et curseur regardés dans la vraie fenêtre ; rien de l'ADR 0052 n'est codé.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (numéro 0048 à changer à la fusion).
 - **Suite** : ADR 0052, étape 1 (le hub héberge une seed envoyée, avec sauvegarde et plage de ports), dans une nouvelle session.
+
+### 2026-11-23 · Inventaire de conversion des mondes d'Archipelago
+- **Fait** : test réel `inventaire_real` (export, import et contrôle croisé, conversion, seed Rust, aller-retour) lancé sur les 81 mondes intégrés de 0.6.8, options par défaut ; résultat dans `docs/inventaire-conversion.md` : 14 convertis (tous avec des points à vérifier, seed Rust et aller-retour réussis), 67 échecs (objet verrouillé 24, `collect` maison 21, ROM 8, règle opaque 8 en 1ʳᵉ cause, 36 jeux avec des règles opaques) ; clippy du test passe.
+- **Pas vérifié** : les causes cachées derrière la première (le convertisseur s'arrête au premier refus) ; aucun converti joué avec son mod ; `slot_data` non repris (conversion sans seed).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
+- **Suite** : faire valider les 4 décisions de l'inventaire (périmètre, licence, repli Python, badge « Converti »), puis lot 0 (bogue `has_all` vide, bruit des options communes).
