@@ -258,7 +258,7 @@ impl DevScript {
                 }
             }
             Step::Retrying if elapsed > Duration::from_millis(500) => {
-                create::dev_retry(form, error, worker, self.port.saturating_add(1));
+                create::dev_retry(ctx, form, error, worker, self.port.saturating_add(1));
                 self.next(Step::Retried);
             }
             Step::Retried => {

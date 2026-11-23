@@ -43,3 +43,5 @@ rfd = { workspace = true, features = ["xdg-portal"] }
 tempfile.workspace = true
 # Tests de l'interface sans ouvrir de fenêtre (`src/ui_tests/`, voir `tests/README.md`).
 egui_kittest.workspace = true
+# Réponses du hub écrites en JSON dans les tests des parties hébergées (`ui_tests/rafthub.rs`).
+serde_json.workspace = true

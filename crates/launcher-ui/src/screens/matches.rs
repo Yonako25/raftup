@@ -4,9 +4,13 @@
 //! progression de chaque joueur (plan de l'interface, étape 3). Une partie rejointe
 //! chez un ami n'est pas encore suivie : il faudrait un client de suivi connecté à
 //! son serveur (question laissée ouverte, voir la PR de l'étape 3).
+//!
+//! En dessous, les parties hébergées sur Rafthub par le compte connecté (ADR 0052) :
+//! « Ouvrir » mène à leur écran (`hub_game`).
 
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 
+use super::hub_game::{self, HubGames};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -14,7 +18,7 @@ use crate::widgets;
 use crate::worker::Shared;
 
 /// `error` : erreur du worker à montrer (« La partie s'est arrêtée d'elle-même »…).
-pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>) -> Option<Page> {
+pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGames) -> Option<Page> {
     let mut goto = None;
     super::page(ui, |ui| {
         // Titre et sous-titre sur la même ligne, comme sur la maquette.
@@ -28,19 +32,38 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>) -> Option<Page> {
             ui.add_space(10.0);
         }
 
-        match &shared.status {
-            Some(_) => {
-                list_frame(ui, |ui| {
-                    if hosted_row(ui, shared) {
-                        goto = Some(Page::Hosted);
-                    }
-                });
-            }
-            None => {
-                if empty_state(ui, shared.starting) {
+        if shared.status.is_some() {
+            list_frame(ui, |ui| {
+                if hosted_row(ui, shared) {
                     goto = Some(Page::Hosted);
                 }
-            }
+            });
+        } else if hub.count() == 0 && empty_state(ui, shared.starting) {
+            // Rien sur ce PC ni sur Rafthub : le panneau propose d'héberger.
+            goto = Some(Page::Hosted);
+        }
+        // Parties hébergées sur Rafthub : `open` garde l'identifiant cliqué, la
+        // sélection se fait après la boucle (on ne modifie pas `hub` en le parcourant).
+        let mut open = None;
+        if hub.count() > 0 {
+            ui.add_space(12.0);
+            list_frame(ui, |ui| {
+                for (index, game) in hub.games().iter().enumerate() {
+                    if index > 0 {
+                        ui.separator();
+                    }
+                    // `push_id` : deux lignes ont les mêmes boutons « Ouvrir ».
+                    ui.push_id(&game.id, |ui| {
+                        if hub_game::row(ui, game) {
+                            open = Some(game.id.clone());
+                        }
+                    });
+                }
+            });
+        }
+        if let Some(id) = open {
+            hub_game::select(hub, &id);
+            goto = Some(Page::HubGame);
         }
     });
     goto

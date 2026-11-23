@@ -78,6 +78,10 @@ pub struct HubInfo {
     /// `open`, `invite` ou `closed` (ADR 0036).
     #[serde(default)]
     pub registration_mode: String,
+    /// Le hub accepte d'héberger des parties (`POST /v1/games`, ADR 0052). Absent chez
+    /// un hub plus ancien : faux.
+    #[serde(default)]
+    pub hosting: bool,
 }
 
 impl HubInfo {
@@ -89,7 +93,13 @@ impl HubInfo {
             version: String::new(),
             login_methods: vec!["password".to_string()],
             registration_mode: "open".to_string(),
+            hosting: false,
         }
+    }
+
+    /// Vrai si le hub propose d'héberger des parties (ADR 0052).
+    pub fn offers_hosting(&self) -> bool {
+        self.hosting
     }
 
     /// Vrai si le hub propose la connexion Discord.
@@ -297,6 +307,26 @@ pub enum ErrorCode {
     InvalidToken,
     /// Compte suspendu par un admin.
     AccountSuspended,
+    /// Ce hub n'héberge pas de parties (réglage `hosting` éteint, ADR 0052).
+    HostingDisabled,
+    /// Partie hébergée inconnue (ou supprimée).
+    GameNotFound,
+    /// Seul l'hôte de la partie peut faire ceci (export, suppression).
+    NotGameHost,
+    /// Le fichier envoyé n'est pas une seed lisible.
+    InvalidSeed,
+    /// La sauvegarde envoyée ne va pas avec cette seed.
+    InvalidSave,
+    /// Seed (ou sauvegarde) trop grosse pour le hub.
+    SeedTooLarge,
+    /// Trop de joueurs dans la seed pour une partie hébergée.
+    TooManyPlayers,
+    /// Le compte a déjà le nombre maximal de parties hébergées.
+    GameLimitReached,
+    /// Le hub héberge déjà le nombre maximal de parties.
+    HubFull,
+    /// Plus aucun port libre dans la plage des parties.
+    NoFreePort,
     BadRequest,
     Internal,
     Other(String),
@@ -333,6 +363,16 @@ impl ErrorCode {
             "last_identity" => ErrorCode::LastIdentity,
             "invalid_token" => ErrorCode::InvalidToken,
             "account_suspended" => ErrorCode::AccountSuspended,
+            "hosting_disabled" => ErrorCode::HostingDisabled,
+            "game_not_found" => ErrorCode::GameNotFound,
+            "not_game_host" => ErrorCode::NotGameHost,
+            "invalid_seed" => ErrorCode::InvalidSeed,
+            "invalid_save" => ErrorCode::InvalidSave,
+            "seed_too_large" => ErrorCode::SeedTooLarge,
+            "too_many_players" => ErrorCode::TooManyPlayers,
+            "game_limit_reached" => ErrorCode::GameLimitReached,
+            "hub_full" => ErrorCode::HubFull,
+            "no_free_port" => ErrorCode::NoFreePort,
             "bad_request" => ErrorCode::BadRequest,
             "internal" => ErrorCode::Internal,
             other => ErrorCode::Other(other.to_string()),

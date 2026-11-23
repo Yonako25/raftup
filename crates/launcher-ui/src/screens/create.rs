@@ -12,6 +12,11 @@
 //! `generator_setup`). S'il est prêt, la génération part dans un thread (étape 3,
 //! `generation`). La seed générée est ensuite hébergée par le worker (étape 4,
 //! `hosting`), puis l'écran bascule vers « Partie en cours ».
+//!
+//! Hébergement sur Rafthub (ADR 0052) : si le joueur est connecté à un hub qui l'annonce
+//! (`hosting` dans `GET /v1/info`), le panneau « Hébergement » propose « Héberger sur mon
+//! PC » / « Héberger sur Rafthub ». Pour Rafthub, la seed est générée ici de la même
+//! façon, puis envoyée au hub (`hub_game::Upload`) au lieu d'être donnée au worker.
 
 use std::path::PathBuf;
 
@@ -23,6 +28,7 @@ use launcher_core::generation::{
 use launcher_core::profile::StepKind;
 use launcher_core::PartyHostOptions;
 
+use super::hub_game::{self, HubAccess};
 use super::library::{load_catalog, load_paths, AP_VERSION};
 use super::prefs;
 use super::presets::Preset;
@@ -33,6 +39,34 @@ use crate::format;
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Shared, Worker};
+
+/// Où tourne la partie (ADR 0052).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HostMode {
+    /// Sur ce PC (self-host) : toujours possible, sans compte.
+    #[default]
+    ThisPc,
+    /// Sur le Rafthub où le joueur est connecté, s'il le propose.
+    Rafthub,
+}
+
+/// Ce qu'il faut pour envoyer la seed au hub une fois générée, lu au clic.
+struct RafthubTarget {
+    access: HubAccess,
+    /// Nom tapé par l'hôte (peut être vide : `hub_game::game_name` en choisit un).
+    title: String,
+    my_name: String,
+    password: Option<String>,
+}
+
+/// Ce que [`background`] vient de voir démarrer.
+pub enum Started {
+    Nothing,
+    /// Le serveur tourne sur ce PC.
+    HereOnPc,
+    /// Le hub a créé la partie. `Box` : la réponse est grosse à côté des autres cas.
+    OnRafthub(Box<launcher_core::hub_client::CreatedGame>),
+}
 
 /// Avertissement obligatoire avant d'ajouter un apworld (contrat, « Avertissements »).
 pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur votre PC, sans bac \
@@ -150,6 +184,16 @@ pub struct CreateForm {
     open_advanced_apworlds: bool,
     /// Ouvre de force les options avancées de « Ton monde » (YAML ou apworlds refusés).
     open_advanced_world: bool,
+    /// Mode d'hébergement choisi (ADR 0052).
+    host_mode: HostMode,
+    /// Nom de la partie sur Rafthub (facultatif).
+    game_title: String,
+    /// Accès au hub pour héberger, recopié à chaque image ; `None` : pas de choix Rafthub.
+    rafthub: Option<HubAccess>,
+    /// Réglages de l'envoi au hub, lus au clic sur « Générer » (comme `pending_host`).
+    pending_rafthub: Option<RafthubTarget>,
+    /// L'envoi de la seed générée au hub.
+    upload: hub_game::Upload,
 }
 
 impl Default for CreateForm {
@@ -185,6 +229,11 @@ impl Default for CreateForm {
             open_advanced: false,
             open_advanced_apworlds: false,
             open_advanced_world: false,
+            host_mode: HostMode::default(),
+            game_title: String::new(),
+            rafthub: None,
+            pending_rafthub: None,
+            upload: hub_game::Upload::default(),
         }
     }
 }
@@ -300,6 +349,23 @@ impl CreateForm {
         Ok(members)
     }
 
+    /// Vrai si la partie partira sur Rafthub : le mode est choisi et le hub le propose.
+    pub fn on_rafthub(&self) -> bool {
+        self.host_mode == HostMode::Rafthub && self.rafthub.is_some()
+    }
+
+    /// Tests de l'interface : le mode d'hébergement choisi.
+    #[cfg(test)]
+    pub(crate) fn host_mode(&self) -> HostMode {
+        self.host_mode
+    }
+
+    /// Tests de l'interface : l'adresse publique du serveur de ce PC.
+    #[cfg(test)]
+    pub(crate) fn set_public_host_for_tests(&mut self, host: &str) {
+        self.public_host = host.to_string();
+    }
+
     /// Nombre de joueurs de la partie : les YAML importés, sinon l'équipage.
     fn player_count(&self) -> usize {
         if self.yamls.is_empty() {
@@ -317,13 +383,14 @@ impl CreateForm {
 /// une erreur de démarrage du serveur arrive dans le panneau d'hébergement (avec
 /// « Réessayer ») au lieu de s'afficher, puis de se perdre, sur un autre écran.
 ///
-/// Rend vrai quand le serveur vient de démarrer.
+/// Rend ce qui vient de démarrer : le serveur sur ce PC, ou la partie sur Rafthub.
 pub fn background(
+    ctx: &egui::Context,
     form: &mut CreateForm,
     error: &mut Option<String>,
     worker: &Worker,
     shared: &Shared,
-) -> bool {
+) -> Started {
     generation::poll(&mut form.generation);
     // Seed tout juste générée : on l'héberge avec les réglages du clic (une fois).
     if let Some(output) = form.generation.output() {
@@ -332,23 +399,43 @@ pub fn background(
             // du démarrage : `poll` prend la première erreur qu'il trouve.
             *error = None;
             form.hosting = hosting::start(worker, shared, output.clone(), options);
+        } else if let Some(target) = form.pending_rafthub.take() {
+            form.upload = upload(ctx, &target, output.clone());
         }
     }
     if hosting::poll(&mut form.hosting, shared, error) == hosting::Outcome::Started {
         // Le serveur tourne : l'écran repart propre pour la prochaine partie.
         form.generation = generation::Generation::Idle;
-        return true;
+        return Started::HereOnPc;
     }
-    false
+    if let Some(created) = hub_game::poll_upload(&mut form.upload) {
+        form.generation = generation::Generation::Idle;
+        return Started::OnRafthub(Box::new(created));
+    }
+    Started::Nothing
 }
 
+/// Envoie la seed au hub, avec le nom et le mot de passe du clic.
+fn upload(
+    ctx: &egui::Context,
+    target: &RafthubTarget,
+    output: launcher_core::generation::GenerateOutput,
+) -> hub_game::Upload {
+    let name = hub_game::game_name(&target.title, &target.my_name, &output.seed_name);
+    hub_game::start_upload(ctx, &target.access, output, name, target.password.clone())
+}
+
+/// `rafthub` : accès au hub pour y héberger la partie, si le joueur y est connecté et
+/// que le hub le propose (sinon, seul « Héberger sur mon PC » existe).
 pub fn show(
     ui: &mut Ui,
     form: &mut CreateForm,
     error: &mut Option<String>,
     worker: &Worker,
     shared: &Shared,
+    rafthub: Option<&HubAccess>,
 ) -> Option<Page> {
+    form.rafthub = rafthub.cloned();
     let mut goto = None;
     super::page(ui, |ui| {
         let count = form.player_count();
@@ -376,7 +463,11 @@ pub fn show(
         super::estimate::show(ui, form.generation.output()); // Durée estimée (ADR 0030).
                                                              // Démarrage du serveur, ou échec avec « Réessayer ».
         if hosting::show(ui, &mut form.hosting) {
-            retry_hosting(form, error, worker, shared);
+            retry_hosting(ui.ctx(), form, error, worker, shared);
+        }
+        // Envoi sur Rafthub, ou échec avec « Réessayer ».
+        if hub_game::show_upload(ui, &mut form.upload) {
+            retry_hosting(ui.ctx(), form, error, worker, shared);
         }
 
         // Deux colonnes comme la maquette : le salon à gauche, la session à droite.
@@ -803,9 +894,26 @@ fn caps_panel(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui)) {
     });
 }
 
-/// Panneau « Hébergement » : mot de passe, résumé du serveur, options d'expert repliées.
+/// Panneau « Hébergement » : choix du mode (si Rafthub le propose), mot de passe,
+/// résumé du serveur, options d'expert repliées.
 fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
     caps_panel(ui, "Hébergement", |ui| {
+        if let Some(hub) = form.rafthub.as_ref().map(|a| a.host().to_string()) {
+            ui.horizontal_wrapped(|ui| {
+                let here = form.host_mode == HostMode::ThisPc;
+                if widgets::segment(ui, "Héberger sur mon PC", here) {
+                    form.host_mode = HostMode::ThisPc;
+                }
+                if widgets::segment(ui, "Héberger sur Rafthub", !here) {
+                    form.host_mode = HostMode::Rafthub;
+                }
+            });
+            ui.add_space(6.0);
+            if form.host_mode == HostMode::Rafthub {
+                rafthub_panel(ui, form, &hub);
+                return;
+            }
+        }
         widgets::pill(ui, "Sur ce PC", theme::TEXT, theme::ACCENT_BG);
         ui.add_space(6.0);
         ui.label(
@@ -843,11 +951,45 @@ fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
     });
 }
 
+/// Réglages d'une partie hébergée par Rafthub : nom et mot de passe, sans port ni
+/// certificat (le hub les choisit).
+fn rafthub_panel(ui: &mut Ui, form: &mut CreateForm, hub: &str) {
+    widgets::pill(
+        ui,
+        &format!("Sur Rafthub · {hub}"),
+        theme::TEXT,
+        theme::ACCENT_BG,
+    );
+    ui.add_space(6.0);
+    ui.label(
+        widgets::dim(
+            "La seed est générée sur ce PC, puis envoyée à Rafthub qui fait tourner le \
+             serveur : la partie continue quand ton PC est éteint. Rafthub garde la seed \
+             et la sauvegarde.",
+        )
+        .size(13.0),
+    );
+    ui.add_space(6.0);
+    labelled(ui, "Nom de la partie (facultatif)");
+    ui.add(
+        egui::TextEdit::singleline(&mut form.game_title)
+            .hint_text("Partie de …")
+            .char_limit(64)
+            .desired_width(f32::INFINITY),
+    );
+    labelled(ui, "Mot de passe de la salle (facultatif)");
+    ui.add(
+        egui::TextEdit::singleline(&mut form.password)
+            .password(true)
+            .desired_width(f32::INFINITY),
+    );
+}
+
 /// Panneau « Lancer la partie » : ce qui manque, puis « Générer et héberger ».
 fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) {
     caps_panel(ui, "Lancer la partie", |ui| {
         // Le même contrôle que le clic : on annonce ici ce qui serait refusé.
-        let (ready, status) = match build_request(form) {
+        let (ready, status) = match check_form(form) {
             Ok(_) if !form.yamls.is_empty() => (
                 true,
                 format!("{} YAML importés, prêts à générer.", form.yamls.len()),
@@ -866,8 +1008,10 @@ fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         ui.label(RichText::new(status).color(color));
         ui.add_space(10.0);
         // Grisé pendant l'installation du générateur et pendant la génération.
-        let enabled =
-            !form.setup.is_busy() && !form.generation.is_busy() && !form.hosting.is_busy();
+        let enabled = !form.setup.is_busy()
+            && !form.generation.is_busy()
+            && !form.hosting.is_busy()
+            && !form.upload.is_busy();
         let button = egui::Button::new(
             RichText::new("Générer et héberger")
                 .font(theme::title_font(17.0))
@@ -879,13 +1023,14 @@ fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
             on_generate(ui.ctx(), form, error);
         }
         ui.add_space(8.0);
-        ui.label(
-            widgets::dim(
-                "La seed est créée par le générateur officiel d'Archipelago, dans un process \
-                 séparé sur ce PC.",
-            )
-            .size(12.0),
-        );
+        let note = if form.on_rafthub() {
+            "La seed est créée sur ce PC par le générateur officiel d'Archipelago, puis \
+             envoyée à Rafthub."
+        } else {
+            "La seed est créée par le générateur officiel d'Archipelago, dans un process \
+             séparé sur ce PC."
+        };
+        ui.label(widgets::dim(note).size(12.0));
     });
 }
 
@@ -1028,8 +1173,13 @@ fn open_refused_block(form: &mut CreateForm) {
 fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<String>) {
     // Relu à chaque clic : un jeu a pu être installé depuis l'ouverture de l'écran.
     form.refresh_installed();
-    match build_request(form) {
-        Ok((mut request, host)) => {
+    let built = if form.on_rafthub() {
+        build_rafthub(form).map(|(request, target)| (request, Pending::Rafthub(target)))
+    } else {
+        build_request(form).map(|(request, host)| (request, Pending::Local(host)))
+    };
+    match built {
+        Ok((mut request, pending)) => {
             if request.player_files.is_empty() {
                 match write_crew(form) {
                     Ok(files) => request.player_files = files,
@@ -1041,9 +1191,13 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
                 }
             }
             *error = None;
-            // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage.
-            prefs::remember(host.webhook.as_ref(), Some(form.preset));
+            // Mémorise le webhook (ou l'efface s'il est vide) et le préréglage. Le webhook
+            // est un réglage du serveur de ce PC : en mode Rafthub, on n'y touche pas.
+            if let Pending::Local(host) = &pending {
+                prefs::remember(host.webhook.as_ref(), Some(form.preset));
+            }
             form.hosting = hosting::Hosting::Idle;
+            form.upload = hub_game::Upload::Idle;
             let (engine, note) = choose_engine(
                 form.rust_engine,
                 &request.player_files,
@@ -1054,7 +1208,7 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             if engine == generation::Engine::Rust {
                 // Pas de Python : rien à installer.
                 form.setup = generator_setup::Setup::Ready;
-                form.pending_host = Some(host);
+                keep_pending(form, pending);
                 form.generation = generation::start(ctx, request, engine, note, time_balance);
                 return;
             }
@@ -1064,7 +1218,7 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             form.generation = match form.setup {
                 generator_setup::Setup::Ready => {
                     // Gardés pour héberger la seed à la fin de la génération.
-                    form.pending_host = Some(host);
+                    keep_pending(form, pending);
                     generation::start(ctx, request, engine, note, time_balance)
                 }
                 _ => generation::Generation::Idle,
@@ -1074,6 +1228,26 @@ fn on_generate(ctx: &egui::Context, form: &mut CreateForm, error: &mut Option<St
             form.generation = generation::Generation::Idle;
             open_refused_block(form);
             *error = Some(message);
+        }
+    }
+}
+
+/// Où héberger la seed une fois générée, lu au clic.
+enum Pending {
+    Local(PartyHostOptions),
+    Rafthub(RafthubTarget),
+}
+
+/// Range les réglages du clic pour la fin de la génération (un seul des deux).
+fn keep_pending(form: &mut CreateForm, pending: Pending) {
+    match pending {
+        Pending::Local(host) => {
+            form.pending_host = Some(host);
+            form.pending_rafthub = None;
+        }
+        Pending::Rafthub(target) => {
+            form.pending_rafthub = Some(target);
+            form.pending_host = None;
         }
     }
 }
@@ -1161,23 +1335,48 @@ pub fn dev_state(form: &CreateForm) -> DevState {
 
 /// Macro : change le port, puis comme un clic sur « Réessayer ».
 #[cfg(debug_assertions)]
-pub fn dev_retry(form: &mut CreateForm, error: &mut Option<String>, worker: &Worker, port: u16) {
+pub fn dev_retry(
+    ctx: &egui::Context,
+    form: &mut CreateForm,
+    error: &mut Option<String>,
+    worker: &Worker,
+    port: u16,
+) {
     form.port = port.to_string();
     let shared = worker.lock();
-    retry_hosting(form, error, worker, &shared);
+    retry_hosting(ctx, form, error, worker, &shared);
 }
 
-/// « Réessayer » après un démarrage raté : relit les réglages du serveur dans le
-/// formulaire (l'hôte a pu changer le port) et relance avec la MÊME seed.
+/// « Réessayer » après un démarrage (ou un envoi) raté : relit les réglages dans le
+/// formulaire (l'hôte a pu changer le port, ou passer de Rafthub à son PC) et relance
+/// avec la MÊME seed.
 fn retry_hosting(
+    ctx: &egui::Context,
     form: &mut CreateForm,
     error: &mut Option<String>,
     worker: &Worker,
     shared: &Shared,
 ) {
-    let Some(output) = form.hosting.failed_output().cloned() else {
+    let Some(output) = form
+        .hosting
+        .failed_output()
+        .or(form.upload.failed_output())
+        .cloned()
+    else {
         return;
     };
+    if form.on_rafthub() {
+        match build_rafthub(form) {
+            Ok((_, target)) => {
+                *error = None;
+                form.hosting = hosting::Hosting::Idle;
+                form.upload = upload(ctx, &target, output);
+            }
+            Err(message) => *error = Some(message),
+        }
+        return;
+    }
+    form.upload = hub_game::Upload::Idle;
     match build_request(form) {
         Ok((_, host)) => {
             *error = None;
@@ -1258,10 +1457,9 @@ fn all_apworlds(form: &CreateForm) -> Vec<PathBuf> {
     all
 }
 
-/// `pub(crate)` : les tests de l'interface comparent ce refus au texte affiché.
-pub(crate) fn build_request(
-    form: &CreateForm,
-) -> Result<(GenerateRequest, PartyHostOptions), String> {
+/// La demande de génération seule (équipage ou YAML, apworlds, préréglage), commune
+/// aux deux modes d'hébergement.
+fn build_generation(form: &CreateForm) -> Result<GenerateRequest, String> {
     // Sans YAML importés, c'est l'équipage qui fera les joueurs : on le vérifie ici,
     // ses YAML ne sont écrits qu'au moment de générer (`on_generate`).
     if form.yamls.is_empty() {
@@ -1270,15 +1468,6 @@ pub(crate) fn build_request(
     if !form.apworlds.is_empty() && !form.apworld_ack {
         return Err(format!("Cochez « J'ai compris » : {APWORLD_WARNING}"));
     }
-    let port = format::parse_port(&form.port)?;
-    let public_host = form.public_host.trim().to_string();
-    if public_host.is_empty() {
-        return Err("Indiquez l'adresse que les autres joueurs utiliseront.".into());
-    }
-    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
-    let password = Some(form.password.clone()).filter(|p| !p.is_empty());
-    let webhook = format::parse_webhook(&form.webhook)?;
-
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
     let mut request = GenerateRequest {
@@ -1289,6 +1478,49 @@ pub(crate) fn build_request(
     };
     // Le preset ne règle que des champs génériques de la demande (F06, ADR 0023).
     form.preset.apply(&mut request);
+    Ok(request)
+}
+
+/// Comme [`build_request`], pour une partie hébergée par Rafthub : ni port, ni adresse,
+/// ni certificat à vérifier (le hub les choisit).
+fn build_rafthub(form: &CreateForm) -> Result<(GenerateRequest, RafthubTarget), String> {
+    let request = build_generation(form)?;
+    let access = form
+        .rafthub
+        .clone()
+        .ok_or("Connecte-toi à Rafthub (écran « Amis ») pour y héberger la partie.")?;
+    let target = RafthubTarget {
+        access,
+        title: form.game_title.clone(),
+        my_name: form.my_name.clone(),
+        password: Some(form.password.clone()).filter(|p| !p.is_empty()),
+    };
+    Ok((request, target))
+}
+
+/// Ce que le clic refuserait, selon le mode choisi (texte du panneau « Lancer »).
+/// `pub(crate)` : les tests de l'interface s'en servent.
+pub(crate) fn check_form(form: &CreateForm) -> Result<GenerateRequest, String> {
+    if form.on_rafthub() {
+        build_rafthub(form).map(|(request, _)| request)
+    } else {
+        build_request(form).map(|(request, _)| request)
+    }
+}
+
+/// `pub(crate)` : les tests de l'interface comparent ce refus au texte affiché.
+pub(crate) fn build_request(
+    form: &CreateForm,
+) -> Result<(GenerateRequest, PartyHostOptions), String> {
+    let request = build_generation(form)?;
+    let port = format::parse_port(&form.port)?;
+    let public_host = form.public_host.trim().to_string();
+    if public_host.is_empty() {
+        return Err("Indiquez l'adresse que les autres joueurs utiliseront.".into());
+    }
+    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
+    let password = Some(form.password.clone()).filter(|p| !p.is_empty());
+    let webhook = format::parse_webhook(&form.webhook)?;
     let host = PartyHostOptions {
         port,
         password,
@@ -1716,7 +1948,10 @@ game: Slime Rancher
         let (output, message) = wait_for(Duration::from_secs(300), || {
             take_worker_error(&worker, &mut error);
             let shared = worker.lock();
-            assert!(!background(&mut form, &mut error, &worker, &shared));
+            assert!(matches!(
+                background(&ctx, &mut form, &mut error, &worker, &shared),
+                Started::Nothing
+            ));
             if let generation::Generation::Failed { failure, log, .. } = &form.generation {
                 panic!("génération ratée : {failure:?}\n{log:?}")
             }
@@ -1744,14 +1979,14 @@ game: Slime Rancher
 
         // 4. « Réessayer » sur un port libre : même seed, pas de nouvelle génération.
         form.port = "38297".into();
-        retry_hosting(&mut form, &mut error, &worker, &worker.lock());
+        retry_hosting(&ctx, &mut form, &mut error, &worker, &worker.lock());
         assert_eq!(error, None);
         wait_for(Duration::from_secs(10), || {
             take_worker_error(&worker, &mut error);
             let shared = worker.lock();
-            let started = background(&mut form, &mut error, &worker, &shared);
+            let started = background(&ctx, &mut form, &mut error, &worker, &shared);
             assert_eq!(error, None);
-            started.then_some(())
+            matches!(started, Started::HereOnPc).then_some(())
         });
         // L'écran repart propre pour la prochaine partie.
         assert!(matches!(form.generation, generation::Generation::Idle));

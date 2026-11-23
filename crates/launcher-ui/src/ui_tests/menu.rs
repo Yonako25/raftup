@@ -31,7 +31,7 @@ pub fn menu() -> Harness<'static, Menu> {
                     username: None,
                     online: 0,
                 };
-                if let Some(page) = sidebar(ui, &s.page, &s.shared, 1, &summary) {
+                if let Some(page) = sidebar(ui, &s.page, &s.shared, 0, 1, &summary) {
                     s.asked = Some(page);
                 }
             },
