@@ -750,3 +750,9 @@ untime2`.
 - **Pas vérifié** : rendu réel avec les images Steam du PC (Slime Rancher, Planet Crafter) dans la fenêtre ; aucun profil n'a encore de section `[art]` ; registre : un jeu ajouté par le registre n'a pas d'appid Steam pour les images.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : regarder le launcher à l'œil avec les images Steam, puis retirer les routes `/v1/art` et la clé IGDB du hub.
+
+### 2026-11-23 · Curseur, badges de monde, parties hébergées (ADR 0052)
+- **Fait** : curseur en main sur tout ce qui se clique (`f8d85d7`) ; badge « Archipelago », « Natif » ou « Converti » sur les jaquettes (`59e6b53`, `26b22c7`) ; illustrations de l'ancienne API rangées dans `%LOCALAPPDATA%\Raftup\art` sur ce PC seulement ; ADR 0052 (partie hébergée par Rafthub ou en self-host) écrit et accepté. Inventaire de conversion de tous les mondes d'Archipelago confié à une autre session.
+- **Pas vérifié** : badges et curseur regardés dans la vraie fenêtre ; rien de l'ADR 0052 n'est codé.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (numéro 0048 à changer à la fusion).
+- **Suite** : ADR 0052, étape 1 (le hub héberge une seed envoyée, avec sauvegarde et plage de ports), dans une nouvelle session.
