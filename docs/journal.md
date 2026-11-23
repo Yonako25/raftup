@@ -628,6 +628,12 @@ untime2`.
 - **Suite** : l'utilisatrice a choisi de garder le secret Twitch passé dans la conversation ; le régénérer un jour veut dire mettre à jour le `.env` du serveur (ou la console `/admin`).
 
 
+### 2026-11-21 · Proposition d'ADR : salon par le Rafthub (cloud/adr-salon-rafthub)
+- **Fait** : ADR 0048 rédigé avec le statut « proposé » : routes `/v1/lobbies`, accès par code ou invitation d'un ami, tables en base (schéma 7), relecture toutes les 3 s, « prêt » déclaré avant le lancement, lancement qui publie adresse et empreinte aux seuls membres, limites, RGPD. Rien n'est codé.
+- **Pas vérifié** : rien à tester (document seul).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; pas de code du salon en ligne avant la validation de l'ADR 0048.
+- **Suite** : à l'utilisatrice : trancher les choix 1, 3, 4 et 6 de l'ADR 0048, puis le passer en « accepté ».
+
 ### 2026-11-22 · The Planet Crafter en monde natif, étape 1 (ADR 0048)
 - **Fait** : monde existant trouvé (mod TPCA et apworld 0.0.1-poc de Hawkrex, sans logique) ; ADR 0048 accepté (TPCA sans modification, dépôt à part `D:\planet-crafter`, paliers nommés, seuils du wiki) ; `D:\planet-crafter\monde\world.toml` importé (214 objets, 235 lieux ; doublon 157 de Hawkrex, `BootsSpeed3` passé à 215) ; exporté en apworld et généré par le moteur Rust (test ignoré `generate --test monde_externe`, 5 graines, 1 et 2 joueurs). fmt et clippy de `generate` passent.
 - **Pas vérifié** : apworld exporté dans le vrai Archipelago ; datapackage comparé à celui de Hawkrex ; TPCA jamais lancé (BepInEx pas installé) ; licence du dossier de Hawkrex à confirmer.
