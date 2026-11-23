@@ -19,6 +19,7 @@ mod ecrans;
 mod menu;
 mod parcours;
 mod partie;
+mod rafthub;
 mod salon;
 
 use egui_kittest::kittest::Queryable;

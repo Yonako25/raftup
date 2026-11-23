@@ -3,7 +3,8 @@
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
 use crate::screens::{
-    catalog, create, friends, home, join, library, matches, running, settings, setup, soon, welcome,
+    catalog, create, friends, home, hub_game, join, library, matches, running, settings, setup,
+    soon, welcome,
 };
 use crate::theme;
 use crate::widgets;
@@ -24,6 +25,8 @@ pub enum Page {
     Library,
     /// La partie hébergée par ce PC, ou le formulaire d'hébergement s'il n'y en a pas.
     Hosted,
+    /// La partie hébergée sur Rafthub qu'on regarde (ADR 0052).
+    HubGame,
     /// « Créer une partie » : générer une partie à partir des YAML des joueurs.
     Create,
     /// « Rejoindre » : lire un lien d'invitation avant de continuer vers la Bibliothèque.
@@ -47,6 +50,8 @@ pub struct App {
     join: join::JoinState,
     /// Compte sur le hub, amis, présence (ADR 0035).
     friends: friends::FriendsState,
+    /// Parties hébergées sur Rafthub (ADR 0052).
+    hub_games: hub_game::HubGames,
     /// Filtre de l'écran « Catalogue ».
     catalog: catalog::CatalogState,
     /// Assistant du premier lancement (plan de l'interface, étape 5).
@@ -88,6 +93,7 @@ impl App {
             library: library::LibraryState::new(),
             join: join::JoinState::default(),
             friends: friends::FriendsState::new(),
+            hub_games: hub_game::HubGames::default(),
             catalog: catalog::CatalogState::default(),
             welcome: welcome::load(),
             update: crate::update_ui::UpdateState::new(),
@@ -230,6 +236,10 @@ impl eframe::App for App {
         friends::background(&mut self.friends, &ctx);
         // Lien `raftup://hub/…` en attente : la question s'affiche par-dessus l'écran.
         friends::switch_dialog(&ctx, &mut self.friends);
+        // Accès au hub pour héberger (compte connecté, hub qui le propose) ; parties
+        // hébergées relues à la connexion, état de la partie regardée toutes les 5 s.
+        let rafthub = self.friends.hosting_access();
+        let after_hub = hub_game::background(&mut self.hub_games, rafthub.clone(), &ctx);
 
         // Le verrou est tenu le temps du dessin : le worker attend au plus une image.
         let shared = self.worker.lock();
@@ -244,13 +254,30 @@ impl eframe::App for App {
         );
         self.friends.set_presence(presence);
 
-        let mut goto: Option<Page> = None;
+        let mut goto: Option<Page> = after_hub;
         // Génération et hébergement avancent même si l'écran « Créer » n'est pas affiché.
-        let started = create::background(&mut self.create, &mut self.error, &self.worker, &shared);
+        let started = create::background(
+            &ctx,
+            &mut self.create,
+            &mut self.error,
+            &self.worker,
+            &shared,
+        );
         // On ne bascule vers la partie que si l'hôte regarde l'écran « Créer » : ailleurs,
         // on ne lui retire pas l'écran sous les yeux (la partie apparaît dans « En cours »).
-        if started && self.page == Page::Create {
-            goto = Some(Page::Hosted);
+        match started {
+            create::Started::Nothing => {}
+            create::Started::HereOnPc => {
+                if self.page == Page::Create {
+                    goto = Some(Page::Hosted);
+                }
+            }
+            create::Started::OnRafthub(created) => {
+                hub_game::adopt(&mut self.hub_games, *created);
+                if self.page == Page::Create {
+                    goto = Some(Page::HubGame);
+                }
+            }
         }
         // Plus de partie : la fenêtre « Arrêter le serveur ? », l'onglet et le message en
         // cours de frappe ne doivent pas réapparaître sur la partie suivante.
@@ -281,9 +308,14 @@ impl eframe::App for App {
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         let summary = self.friends.summary();
-                        if let Some(page) =
-                            sidebar(ui, &self.page, &shared, self.library.game_count(), &summary)
-                        {
+                        if let Some(page) = sidebar(
+                            ui,
+                            &self.page,
+                            &shared,
+                            self.hub_games.count(),
+                            self.library.game_count(),
+                            &summary,
+                        ) {
                             goto = Some(page);
                         }
                     });
@@ -300,7 +332,10 @@ impl eframe::App for App {
                     None
                 }
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
-                Page::InProgress => matches::show(ui, &shared, self.error.as_deref()),
+                Page::InProgress => {
+                    matches::show(ui, &shared, self.error.as_deref(), &mut self.hub_games)
+                }
+                Page::HubGame => hub_game::show(ui, &mut self.hub_games),
                 Page::Library => {
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
                 }
@@ -315,9 +350,14 @@ impl eframe::App for App {
                 Page::Hosted => {
                     setup::show(ui, &mut self.setup, &mut self.error, &self.worker, &shared)
                 }
-                Page::Create => {
-                    create::show(ui, &mut self.create, &mut self.error, &self.worker, &shared)
-                }
+                Page::Create => create::show(
+                    ui,
+                    &mut self.create,
+                    &mut self.error,
+                    &self.worker,
+                    &shared,
+                    rafthub.as_ref(),
+                ),
                 Page::Join => join::show(ui, &mut self.join, &mut self.library),
                 Page::Friends => friends::show(ui, &mut self.friends),
                 Page::Settings => settings::show(ui, &mut self.friends, self.library.paths()),
@@ -328,8 +368,11 @@ impl eframe::App for App {
             }
         });
 
-        // « Lancer et connecter » de la partie hébergée : la Bibliothèque lance le jeu.
-        if let Some(request) = running::take_launch_request(&mut self.running) {
+        // « Lancer et connecter » de la partie hébergée (ici ou sur Rafthub) : la
+        // Bibliothèque lance le jeu.
+        let launch = running::take_launch_request(&mut self.running)
+            .or_else(|| hub_game::take_launch_request(&mut self.hub_games));
+        if let Some(request) = launch {
             use library::LaunchInto;
             match library::launch_into(
                 &mut self.library,
@@ -418,10 +461,12 @@ type NavLink = (&'static str, usize, Page);
 
 /// Barre latérale : logo, liens rangés par section, cartes du bas. Renvoie la page demandée.
 /// `pub(crate)` : les tests de l'interface (`ui_tests::menu`) la dessinent seule.
+/// `hub_games` : parties hébergées sur Rafthub (comptées dans « En cours »).
 pub(crate) fn sidebar(
     ui: &mut Ui,
     current: &Page,
     shared: &crate::worker::Shared,
+    hub_games: usize,
     games: usize,
     friends: &friends::Summary,
 ) -> Option<Page> {
@@ -444,8 +489,11 @@ pub(crate) fn sidebar(
     ui.add_space(10.0);
 
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
-    let hosted = usize::from(shared.status.is_some());
-    let in_progress = matches!(current, Page::InProgress | Page::Hosted | Page::Create);
+    let hosted = usize::from(shared.status.is_some()) + hub_games;
+    let in_progress = matches!(
+        current,
+        Page::InProgress | Page::Hosted | Page::HubGame | Page::Create
+    );
     let sections: [(&str, Vec<NavLink>); 4] = [
         (
             "JEUX",

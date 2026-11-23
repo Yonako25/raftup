@@ -8,11 +8,13 @@
 //!   l'appelle depuis un thread à part, jamais depuis le thread du dessin ;
 //! - [`token`] : où ranger le jeton de session (trousseau du système, ou mémoire) ;
 //! - [`discord`] : connexion Discord (serveur local du retour, `start`, `finish`) ;
+//! - [`games`] : parties hébergées par le hub (`/v1/games`, ADR 0052) ;
 //! - [`HubClientError`] : erreurs typées, avec le code stable du hub quand il répond.
 //!
 //! Ni le mot de passe ni le jeton n'apparaissent dans un `Debug` ou un message d'erreur.
 
 pub mod discord;
+pub mod games;
 pub mod token;
 pub mod types;
 
@@ -23,6 +25,7 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 pub use discord::{DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, DISCORD_WAIT};
+pub use games::{CreatedGame, GameStatus, GameUpload, HostedGame, MAX_SEED_BYTES};
 pub use token::{KeyringStore, MemoryStore, TokenStore, TokenStoreError};
 pub use types::{
     Account, ApiInfo, ErrorCode, Friend, FriendRequests, HubInfo, Me, Password, Player, Presence,
@@ -58,6 +61,10 @@ const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
 /// Durée maximale d'un appel, connexion comprise.
 const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Délai de l'envoi d'une seed (`POST /v1/games`) : jusqu'à ~85 Mo en base64, à faire
+/// monter sur une connexion de particulier.
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// Caractères encodés dans un pseudo placé dans le chemin : tout sauf lettres et chiffres
 /// ASCII. `/`, `?`, `#`, `.` deviennent `%2F`, `%3F`… et ne changent jamais la route.
@@ -100,6 +107,15 @@ pub enum HubClientError {
     /// Le trousseau du système a refusé de lire ou de ranger le jeton.
     #[error(transparent)]
     TokenStore(#[from] TokenStoreError),
+    /// Fichier à envoyer illisible (seed ou sauvegarde).
+    #[error("{what} illisible : {detail}")]
+    File { what: &'static str, detail: String },
+    /// Fichier à envoyer plus gros que ce que le hub accepte ([`MAX_SEED_BYTES`]).
+    #[error("{what} trop grosse ({bytes} octets)")]
+    TooLarge { what: &'static str, bytes: u64 },
+    /// Identifiant de partie mal formé (32 chiffres hexadécimaux attendus).
+    #[error("identifiant de partie refusé")]
+    BadGameId,
 }
 
 impl HubClientError {
@@ -588,6 +604,51 @@ impl HubClient {
         self.call_empty(Method::Delete, &path, None)
     }
 
+    // ---------- Parties hébergées (ADR 0052) ----------
+
+    /// `POST /v1/games` : envoie la seed (et la sauvegarde) ; le hub démarre la partie.
+    ///
+    /// Un refus de taille du hub (413) arrive parfois sans corps JSON (limite de la
+    /// requête) : il devient quand même le code `seed_too_large`.
+    pub fn create_game(&self, upload: &GameUpload) -> Result<CreatedGame, HubClientError> {
+        let result = self.send_with(
+            Method::Post,
+            "/v1/games",
+            Some(upload.to_json()),
+            true,
+            UPLOAD_TIMEOUT,
+        );
+        let (status, text) = match result {
+            Err(HubClientError::UnexpectedResponse { status: 413, .. }) => {
+                return Err(HubClientError::Api {
+                    status: 413,
+                    code: ErrorCode::SeedTooLarge,
+                    message: "seed trop grosse".to_string(),
+                })
+            }
+            other => other?,
+        };
+        serde_json::from_str(&text).map_err(|e| unexpected(status, e.to_string()))
+    }
+
+    /// `GET /v1/games` : les parties hébergées par ce compte.
+    pub fn games(&self) -> Result<Vec<HostedGame>, HubClientError> {
+        let list: games::GameList = self.call(Method::Get, "/v1/games", None, true)?;
+        Ok(list.games)
+    }
+
+    /// `GET /v1/games/{id}` : état d'une partie (joueurs connectés, avancement).
+    pub fn game_status(&self, id: &str) -> Result<GameStatus, HubClientError> {
+        let path = game_path(id)?;
+        self.call(Method::Get, &path, None, true)
+    }
+
+    /// `DELETE /v1/games/{id}` : arrête et supprime la partie (hôte seulement).
+    pub fn delete_game(&self, id: &str) -> Result<(), HubClientError> {
+        let path = game_path(id)?;
+        self.call_empty(Method::Delete, &path, None)
+    }
+
     // ---------- Appels HTTP ----------
 
     /// Appel dont la réponse est un objet JSON lu en `T`.
@@ -624,6 +685,18 @@ impl HubClient {
         body: Option<serde_json::Value>,
         auth: bool,
     ) -> Result<(u16, String), HubClientError> {
+        self.send_with(method, path, body, auth, TIMEOUT)
+    }
+
+    /// Comme [`Self::send`], avec un délai au choix (envoi d'une seed).
+    fn send_with(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+        auth: bool,
+        timeout: Duration,
+    ) -> Result<(u16, String), HubClientError> {
         let url = self.url.join(path);
         let bearer = if auth {
             let token = self.token.as_ref().ok_or(HubClientError::NotLoggedIn)?;
@@ -644,7 +717,12 @@ impl HubClient {
                 if let Some(bearer) = &bearer {
                     request = request.header("Authorization", bearer);
                 }
-                request.call()
+                // `config()` règle le délai de cette seule requête.
+                request
+                    .config()
+                    .timeout_global(Some(timeout))
+                    .build()
+                    .call()
             }
             Method::Post | Method::Put | Method::Patch => {
                 let mut request = match method {
@@ -655,6 +733,7 @@ impl HubClient {
                 if let Some(bearer) = &bearer {
                     request = request.header("Authorization", bearer);
                 }
+                let request = request.config().timeout_global(Some(timeout)).build();
                 match body {
                     Some(body) => request
                         .header("Content-Type", "application/json")
@@ -703,6 +782,14 @@ fn non_empty(username: &str) -> Result<&str, HubClientError> {
         return Err(HubClientError::EmptyUsername);
     }
     Ok(username)
+}
+
+/// Chemin `/v1/games/{id}`, après vérification de l'identifiant.
+fn game_path(id: &str) -> Result<String, HubClientError> {
+    if !games::valid_id(id) {
+        return Err(HubClientError::BadGameId);
+    }
+    Ok(format!("/v1/games/{id}"))
 }
 
 /// Pseudo encodé pour un morceau de chemin.

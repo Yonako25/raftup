@@ -24,6 +24,8 @@ zip.workspace = true
 tar.workspace = true
 flate2.workspace = true
 ureq.workspace = true
+# Seed et sauvegarde envoyées au hub en base64 (`POST /v1/games`, ADR 0052).
+base64 = "0.22"
 directories.workspace = true
 keyvalues-parser.workspace = true
 # Liens d'invitation `raftup://` (ADR 0020).

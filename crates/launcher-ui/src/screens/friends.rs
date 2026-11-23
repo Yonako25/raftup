@@ -37,8 +37,11 @@ use launcher_core::config;
 use launcher_core::hub_client::{
     DiscordOutcome, DiscordReturn, DiscordStart, DiscordTicket, ErrorCode, Friend, FriendRequests,
     HubClient, HubClientError, HubInfo, HubUrl, KeyringStore, MemoryStore, Password, Presence,
-    RequestOutcome, Session, Status, TokenStore, DEFAULT_HUB_URL, DISCORD_WAIT, HAS_OFFICIAL_HUB,
+    RequestOutcome, Session, SessionToken, Status, TokenStore, DEFAULT_HUB_URL, DISCORD_WAIT,
+    HAS_OFFICIAL_HUB,
 };
+
+use super::hub_game::HubAccess;
 
 use super::library::load_paths;
 use crate::app::Page;
@@ -262,6 +265,9 @@ pub struct FriendsState {
     /// Dernière présence partie vers le hub ; différente de `presence` : on la renvoie
     /// tout de suite, sans attendre la synchronisation de la minute.
     presence_sent: Option<Presence>,
+    /// Copie du jeton de la session en cours : le client part dans les threads, mais
+    /// les parties hébergées (ADR 0052) ont besoin du jeton à tout moment.
+    session_token: Option<SessionToken>,
 }
 
 /// Résumé pour les cartes de la barre latérale.
@@ -348,6 +354,7 @@ impl FriendsState {
             confirm_unlink: false,
             presence: Presence::online(),
             presence_sent: None,
+            session_token: None,
         }
     }
 
@@ -360,6 +367,29 @@ impl FriendsState {
     /// Vrai si la présence voulue n'est pas celle envoyée en dernier.
     fn presence_changed(&self) -> bool {
         self.presence_sent.as_ref() != Some(&self.presence)
+    }
+
+    /// Accès pour héberger une partie sur le hub (ADR 0052) : seulement si le joueur est
+    /// connecté et que le hub annonce `hosting` dans `GET /v1/info`.
+    pub fn hosting_access(&self) -> Option<HubAccess> {
+        let hosting = self.info.as_ref().is_some_and(HubInfo::offers_hosting);
+        if !hosting || self.username.is_none() {
+            return None;
+        }
+        Some(HubAccess {
+            url: self.url.as_ref().ok()?.clone(),
+            token: self.session_token.clone()?,
+        })
+    }
+
+    /// Tests : connecté à un hub qui héberge des parties (sans réseau).
+    #[cfg(test)]
+    pub(crate) fn set_logged_in_for_tests(&mut self, username: &str, hosting: bool) {
+        self.username = Some(username.to_string());
+        self.session_token = Some(SessionToken::new("jeton-de-test"));
+        let mut info = HubInfo::password_only();
+        info.hosting = hosting;
+        self.info = Some(info);
     }
 
     /// Vrai si le hub en service propose la connexion Discord.
@@ -437,6 +467,7 @@ impl FriendsState {
             }
         };
         self.job = None;
+        self.session_token = outcome.client.token().cloned();
         self.client = Some(outcome.client);
         match outcome.result {
             Ok(Done::LoggedIn {

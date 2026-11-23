@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use ap_protocol::{ItemId, LocationId, SlotId, TeamId};
 use multidata::MultiData;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Taille du fil d'événements : un abonné trop lent perd les plus anciens.
 pub(crate) const EVENT_CAPACITY: usize = 1024;
@@ -28,7 +28,10 @@ pub struct ServerStatus {
 }
 
 /// Où en est un slot.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+///
+/// `Deserialize` : le launcher relit cette forme quand Rafthub la renvoie pour une
+/// partie hébergée (`GET /v1/games/{id}`, ADR 0052).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SlotStatus {
     pub team: TeamId,
     pub slot: SlotId,

@@ -774,3 +774,9 @@ untime2`.
 - **Pas vérifié** : `cargo test --workspace` ; l'import du moteur « export » refuse toujours les classifications mixtes (changement de l'ADR 0028, à proposer).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
 - **Suite** : lot 1, objets posés d'avance (format version 3) : proposer l'ADR avant de coder, dans une nouvelle session.
+
+### 2026-11-23 · Parties hébergées par Rafthub, étape 2 (ADR 0052, launcher)
+- **Fait** : client `hub_client::games` (`create_game`, `games`, `game_status`, `delete_game`, `HubInfo.hosting`, codes d'erreur des parties) ; « Créer une partie » propose « Héberger sur mon PC » / « Héberger sur Rafthub » (connecté + hub qui l'annonce), seed générée ici puis envoyée, « Réessayer » sans régénérer ; écran de la partie hébergée (adresse, admin, avancement toutes les 5 s, invitations `wss` + `fp`, Lancer et connecter, suppression) ; parties du compte dans « En cours » ; erreurs du hub en français. Tests : faux serveur HTTP (`launcher-core/tests/hub_games.rs`) et egui_kittest (`ui_tests/rafthub.rs`). fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : contre le vrai `rafthub` (aucun test de bout en bout dans `crates/hub/tests/`, non touché) ; écran jamais regardé à l'œil ; vrai mod sur une partie hébergée ; présence « en partie » pour une partie du hub.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/generate/`.
+- **Suite** : test de bout en bout hub + client du launcher dans `crates/hub/tests/`, puis l'étape 3 (veille, réveil, export).

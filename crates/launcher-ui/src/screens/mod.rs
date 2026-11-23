@@ -9,6 +9,7 @@ pub mod generation;
 pub mod generator_setup;
 pub mod home;
 pub mod hosting;
+pub mod hub_game;
 pub mod join;
 pub mod library;
 pub mod matches;

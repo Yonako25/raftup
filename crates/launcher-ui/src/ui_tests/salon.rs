@@ -33,7 +33,7 @@ pub fn salon() -> Harness<'static, Salon> {
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Salon| {
             // Champs distincts de `s` : Rust permet de les emprunter en même temps.
-            create::show(ui, &mut s.form, &mut s.error, &s.worker, &s.shared);
+            create::show(ui, &mut s.form, &mut s.error, &s.worker, &s.shared, None);
         },
         state,
     );
