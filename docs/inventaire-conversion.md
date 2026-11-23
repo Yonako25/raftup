@@ -1,6 +1,6 @@
 # Inventaire de conversion des mondes d'Archipelago 0.6.8
 
-Mesuré le **23 novembre 2026** sur les **81 mondes intégrés** d'Archipelago 0.6.8 (dossier `worlds/` du générateur épinglé, sans le monde caché « Archipelago » ni les apworlds ajoutées), avec les **options par défaut**, un joueur, seed 1. Rien n'a été publié ; les `world.toml` produits sont restés hors du dépôt.
+Mesuré le **23 novembre 2026** (puis remesuré le même jour après le lot 0) sur les **81 mondes intégrés** d'Archipelago 0.6.8 (dossier `worlds/` du générateur épinglé, sans le monde caché « Archipelago » ni les apworlds ajoutées), avec les **options par défaut**, un joueur, seed 1. Rien n'a été publié ; les `world.toml` produits sont restés hors du dépôt.
 
 Chaîne essayée pour chaque jeu (test `launcher-core/tests/inventaire_real.rs`) :
 
@@ -15,21 +15,21 @@ Chaîne essayée pour chaque jeu (test `launcher-core/tests/inventaire_real.rs`)
 | Résultat | Jeux |
 | --- | --- |
 | Converti sans point à vérifier | **0** |
-| Converti avec des points « À vérifier » | **14** (seed Rust et aller-retour réussis pour les 14) |
-| Échec | **67** |
+| Converti avec des points « À vérifier » | **16** (seed Rust et aller-retour réussis pour les 16) ; 14 avant le lot 0 |
+| Échec | **65** |
 
-- Les 14 convertis : A Short Hike, APQuest, Adventure, Bumper Stickers, Choo-Choo Charles, Civilization VI, Hylics 2, Inscryption, Muse Dash, Risk of Rain 2, Saving Princess, Sonic Adventure 2 Battle, Undertale, VVVVVV.
-- Sur les 49 jeux PC (sans ROM ni ISO), **13 convertis** ; sur les 32 jeux à ROM ou ISO, 1 (Adventure).
+- Les 16 convertis : A Short Hike, APQuest, Adventure, Bumper Stickers, Choo-Choo Charles, Civilization VI, Hylics 2, Inscryption, Mega Man 2, Mega Man 3, Muse Dash, Risk of Rain 2, Saving Princess, Sonic Adventure 2 Battle, Undertale, VVVVVV.
+- Sur les 49 jeux PC (sans ROM ni ISO), **13 convertis** ; sur les 32 jeux à ROM ou ISO, 3 (Adventure, Mega Man 2, Mega Man 3).
 - Aucun jeu de la liste n'est sur une console Nintendo actuelle (Switch) ; 21 demandent une ROM ou un ISO d'une ancienne console Nintendo.
-- Durée du lot : 7 minutes (426 s) pour les 81 jeux.
+- Durée du lot : 7 minutes (426 s, puis 442 s) pour les 81 jeux.
 
 ### Ce que « converti » veut dire ici
 
 Un monde converti n'est pas encore jouable tel quel :
 
 - c'est un **instantané** des options par défaut (ADR 0042, § 1) : tant que l'auteur n'a pas écrit les `when`, le YAML ne peut régler aucune option du jeu ;
-- **`slot_data` absent** : l'inventaire convertit sans seed d'Archipelago. 11 des 14 mondes ont un `fill_slot_data` que leur mod lit ; il faut le reprendre (option `--seed` de `raftup-monde`, en valeurs littérales) puis l'écrire à la main s'il dépend des options ;
-- **fichier de sortie** : 3 convertis écrivent un fichier à la génération (`generate_output`) que le moteur Rust ne produit pas : Adventure (patch de ROM), Civilization VI (mod propre à la seed), VVVVVV (fichier en solo seulement). Sans lui, le jeu ne se lance pas (sauf VVVVVV en multi).
+- **`slot_data` absent** : l'inventaire convertit sans seed d'Archipelago. 11 des 14 premiers convertis ont un `fill_slot_data` que leur mod lit ; il faut le reprendre (option `--seed` de `raftup-monde`, en valeurs littérales) puis l'écrire à la main s'il dépend des options ;
+- **fichier de sortie** : 5 convertis écrivent un fichier à la génération (`generate_output`) que le moteur Rust ne produit pas : Adventure, Mega Man 2 et Mega Man 3 (patch de ROM), Civilization VI (mod propre à la seed), VVVVVV (fichier en solo seulement). Sans lui, le jeu ne se lance pas (sauf VVVVVV en multi).
 
 ## Causes d'échec, par fréquence
 
@@ -41,7 +41,7 @@ Le convertisseur s'arrête à la **première** cause ; l'export, lui, compte tou
 | `collect` / `remove` redéfinis (compteurs maison, objets qui valent N) | 21 | 21 | 5 | Format : objets qui **ajoutent à un compteur** (`gives = { "Argent" = 50 }`) et règles sur ce compteur ; les cas plus libres restent au portage à la main. À valider (ADR) |
 | Règle opaque (sondeur) | 8 | **36** | 8 | Sondeur : voir le détail plus bas |
 | ROM demandée dès la génération | 8 | 8 | 8 | En mode export, ne pas exiger la ROM (elle ne sert qu'à `generate_output`) ; mais le patch reste écrit par Python : décision 3 |
-| `has_all` vide | 2 | 2 | 2 | **Bogue du convertisseur** : `has_all` d'une liste vide vaut `true` (Mega Man 2, Mega Man 3) |
+| `has_all` vide | 2 | 2 | 2 | **Corrigé au lot 0** : `has_all` d'une liste vide vaut `true`, `has_any` vaut `false` (Mega Man 2 et 3 se convertissent) |
 | `has_from_list` hors groupe déclaré | 1 | 1 | 1 | Format : règle « somme d'exemplaires sur une liste » (prévue par l'ADR 0042, version 3) |
 | Plus de 256 combinaisons (`au moins 6 parmi 23`) | 1 | 1 | 0 | Format : règle `at_least(n, liste)` au lieu du dépliage |
 | Objet d'événement qui a aussi un numéro | 1 | 1 | 0 | Même chose que l'objet verrouillé (version 3) |
@@ -64,19 +64,21 @@ Raisons relevées (échantillon de 8 raisons distinctes par jeu, 36 jeux) :
 | `count_from_list_unique`, `update_reachable_regions` | 2 | Ajouter ces deux questions au sondeur |
 | Règle non monotone, résultat instable (Stardew) | 2 | Rien à faire dans le sondeur : portage à la main |
 
-### Points « À vérifier » des 14 convertis
+### Points « À vérifier » des 16 convertis (après le lot 0)
 
 | Code | Point | Jeux |
 | --- | --- | --- |
-| `classif` | objet ni dans le pool ni au départ, écrit `filler` | 12 |
-| `pool` | fin du pool écrite en `[filler]` : le monde tire-t-il des pièges ? | 11 |
-| `option` | option d'un type que le format ne connaît pas (listes, dictionnaires, poids) ; `start_inventory_from_pool`, option commune, est signalée à tort (**bruit à retirer du convertisseur**) | 8 jeux, 40 options |
-| `absents` | lieux absents avec ces options, gardés avec `when = 'false'` | 7 |
-| `mixte` | exemplaires d'un même objet avec des classifications différentes | 3 jeux, 25 objets |
+| `classif` | objet ni dans le pool ni au départ, écrit `filler` | 13 |
+| `pool` | fin du pool écrite en `[filler]` : le monde tire-t-il des pièges ? | 13 |
+| `absents` | lieux absents avec ces options, gardés avec `when = 'false'` | 9 |
+| `option` | option d'un type que le format ne connaît pas (listes, dictionnaires, poids) | 6 jeux, 40 options |
+| `mixte` | exemplaires d'un même objet avec des classifications différentes : l'union de leurs drapeaux est gardée | 3 jeux, 25 objets |
 | `item_rule` | règles d'objet non converties | 3 |
 | `early`, `drapeaux` | objets à placer tôt ignorés ; drapeaux de classification inconnus | 1 chacun |
 
-À noter : pour Muse Dash, Sonic Adventure 2 Battle et Saving Princess, l'**import** (moteur « export » de l'ADR 0028) refuse l'objet à classifications mixtes alors que la conversion le garde avec un point à vérifier. Les deux chemins devraient se comporter pareil.
+Avant le lot 0, `start_inventory_from_pool` (option déclarée par chaque monde mais appliquée par Archipelago avant l'export) était signalée à tort dans 5 jeux, et le convertisseur gardait la classification du **premier** exemplaire d'un objet mixte, ce qui pouvait faire d'une progression un simple remplissage.
+
+À noter : pour Muse Dash, Sonic Adventure 2 Battle et Saving Princess, l'**import** (moteur « export » de l'ADR 0028) refuse toujours l'objet à classifications mixtes, alors que la conversion garde l'union des drapeaux. Laisser l'import faire pareil changerait le comportement décrit par l'ADR 0028 : à proposer à part.
 
 ## Tableau par jeu
 
@@ -86,7 +88,7 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | --- | --- | --- | --- | --- | --- |
 | A Hat in Time | PC | Échec | `collect` personnalisé | — | — |
 | A Link to the Past | SNES | Échec | ROM demandée à la génération | — | — |
-| A Short Hike | PC | Converti (3 à vérifier) | item_rule, option, pool | oui (131 lieux) | contrôle croisé OK |
+| A Short Hike | PC | Converti (2 à vérifier) | item_rule, pool | oui (131 lieux) | contrôle croisé OK |
 | APQuest | PC | Converti (3 à vérifier) | absents, classif, pool | oui (6 lieux) | contrôle croisé OK |
 | Adventure | Atari 2600 · fichier de sortie | Converti (3 à vérifier) | classif, item_rule, pool | oui (24 lieux) | contrôle croisé OK |
 | Aquaria | PC | Échec | objet verrouillé hors événement | — | — |
@@ -98,8 +100,8 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | Celeste (Open World) | PC · licence restrictive | Échec | objet verrouillé hors événement | — | — |
 | Celeste 64 | PC · licence restrictive | Échec | objet verrouillé hors événement | — | — |
 | ChecksFinder | PC | Échec | `has_from_list` hors groupe | — | — |
-| Choo-Choo Charles | PC | Converti (2 à vérifier) | classif, option | oui (691 lieux) | contrôle croisé OK |
-| Civilization VI | PC · fichier de sortie | Converti (8 à vérifier) | absents, classif, early, item_rule, option ×3, pool | oui (148 lieux) | contrôle croisé OK |
+| Choo-Choo Charles | PC | Converti (1 à vérifier) | classif | oui (691 lieux) | contrôle croisé OK |
+| Civilization VI | PC · fichier de sortie | Converti (7 à vérifier) | absents, classif, early, item_rule, option ×2, pool | oui (148 lieux) | contrôle croisé OK |
 | DLCQuest | PC | Échec | `collect` personnalisé, 16 règle(s) opaque(s) | — | — |
 | DOOM 1993 | PC | Échec | objet verrouillé hors événement | — | — |
 | DOOM II | PC | Échec | objet verrouillé hors événement | — | — |
@@ -113,7 +115,7 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | Heretic | PC | Échec | objet verrouillé hors événement | — | — |
 | Hollow Knight | PC | Échec | `collect` personnalisé, 326 règle(s) opaque(s) | — | — |
 | Hylics 2 | PC | Converti (3 à vérifier) | absents, classif, option | oui (133 lieux) | contrôle croisé OK |
-| Inscryption | PC | Converti (3 à vérifier) | classif, option, pool | oui (100 lieux) | contrôle croisé OK |
+| Inscryption | PC | Converti (2 à vérifier) | classif, pool | oui (100 lieux) | contrôle croisé OK |
 | Jak and Daxter: The Precursor Legacy | PS2 (ISO, portage OpenGOAL) | Échec | `collect` personnalisé, 15 règle(s) opaque(s) | — | — |
 | Kingdom Hearts | PC | Échec | 63 règle(s) opaque(s), objet verrouillé hors événement | — | — |
 | Kingdom Hearts 2 | PC | Échec | 30 règle(s) opaque(s), objet verrouillé hors événement | — | — |
@@ -123,8 +125,8 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | Links Awakening DX | GBC | Échec | `collect` personnalisé, 97 règle(s) opaque(s) | — | — |
 | Lufia II Ancient Cave | SNES | Échec | ROM demandée à la génération | — | — |
 | Mario & Luigi Superstar Saga | GBA | Échec | objet verrouillé hors événement | — | — |
-| Mega Man 2 | NES | Échec | `has_all` vide (bogue du convertisseur) | — | — |
-| Mega Man 3 | NES | Échec | `has_all` vide (bogue du convertisseur) | — | — |
+| Mega Man 2 | NES · fichier de sortie | Converti (5 à vérifier) | absents, classif, option ×2, pool | oui (44 lieux) | contrôle croisé OK |
+| Mega Man 3 | NES · fichier de sortie | Converti (4 à vérifier) | absents, option ×2, pool | oui (64 lieux) | contrôle croisé OK |
 | MegaMan Battle Network 3 | GBA | Échec | ROM demandée à la génération | — | — |
 | Meritous | PC | Échec | objet verrouillé hors événement | — | — |
 | Muse Dash | PC | Converti (31 à vérifier) | absents, classif, drapeaux, mixte ×21, option ×7 | oui (90 lieux) | contrôle croisé OK |
@@ -139,7 +141,7 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | Risk of Rain 2 | PC | Converti (3 à vérifier) | absents, classif, pool | oui (187 lieux) | contrôle croisé OK |
 | SMZ3 | SNES | Échec | `collect` personnalisé, 357 règle(s) opaque(s) | — | — |
 | Satisfactory | PC | Échec | `collect` personnalisé, 38 règle(s) opaque(s) | — | — |
-| Saving Princess | PC | Converti (6 à vérifier) | classif, mixte ×3, option, pool | oui (36 lieux) | contrôle croisé OK |
+| Saving Princess | PC | Converti (5 à vérifier) | classif, mixte ×3, pool | oui (36 lieux) | contrôle croisé OK |
 | Secret of Evermore | SNES | Échec | ROM demandée à la génération | — | — |
 | Shivers | PC | Échec | 1 règle(s) opaque(s), objet verrouillé hors événement | — | — |
 | Sonic Adventure 2 Battle | PC · licence restrictive | Converti (30 à vérifier) | absents, classif, mixte, option ×26, pool | oui (206 lieux) | contrôle croisé OK |
@@ -166,10 +168,6 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | Zillion | Master System | Échec | 147 règle(s) opaque(s), objet verrouillé hors événement | — | — |
 | shapez | PC | Échec | 1 règle(s) opaque(s) | — | — |
 
-cumul [('objet verrouillé hors événement', 24), ('`collect` personnalisé', 21), ('ROM demandée à la génération', 8), ('1', 3), ('30', 2), ('4', 2), ('`has_all` vide (bogue du convertisseur)', 2), ('3', 2), ('40', 2), ('87', 1), ('78', 1), ('5', 1), ('`has_from_list` hors groupe', 1), ('16', 1), ('10', 1), ('options par défaut refusées (réglages FFR)', 1), ('326', 1), ('15', 1), ('63', 1), ('97', 1), ('35', 1), ('126', 1), ('131', 1), ('143', 1), ('142', 1), ('357', 1), ('38', 1), ('162', 1), ('545', 1), ('135', 1), ('événement avec numéro', 1), ('301', 1), ('14', 1), ('23', 1), ('75', 1), ('90', 1), ('plus de 256 combinaisons', 1), ('147', 1)]
-seul [('objet verrouillé hors événement', 14), ('ROM demandée à la génération', 8), ('`collect` personnalisé', 5), ('1', 2), ('`has_all` vide (bogue du convertisseur)', 2), ('5', 1), ('`has_from_list` hors groupe', 1), ('options par défaut refusées (réglages FFR)', 1), ('4', 1), ('35', 1), ('126', 1), ('162', 1), ('40', 1)]
-PC 49 convertis PC 13
-
 Codes des points à vérifier : voir le tableau précédent.
 
 ## Licences des mondes
@@ -183,7 +181,7 @@ Codes des points à vérifier : voir le tableau précédent.
 
 Ordre des lots, du moins cher au plus cher :
 
-1. **Lot 0, corrections du convertisseur, sans décision** : `has_all` vide ⇒ `true` (bogue, avec un test), ne plus signaler les options communes (`start_inventory_from_pool`…), même traitement des classifications mixtes à l'import et à la conversion. Gain attendu : Mega Man 2 et Mega Man 3 (16 convertis).
+1. **Lot 0, corrections du convertisseur, fait le 23 novembre 2026** : `has_all` / `has_any` vides, `start_inventory_from_pool` plus signalée, union des drapeaux pour les classifications mixtes (tests dans `generate/tests/conversion.rs`). Mesuré : Mega Man 2 et Mega Man 3 convertis (16 au total), 5 points à vérifier en moins. Reste : l'import du moteur « export » refuse toujours les classifications mixtes.
 2. **Lot 1, objets posés d'avance (format version 3, ADR à valider)** : un lieu à numéro peut porter un objet fixé. Débloque jusqu'à 14 jeux qui n'ont que cette cause : Aquaria, DOOM 1993, DOOM II, Dark Souls III, Heretic, Meritous, Noita (PC), Celeste 64 et Celeste (Open World) (licence restrictive), Castlevania - Circle of the Moon, Faxanadu, Landstalker, Mario & Luigi Superstar Saga, Super Mario 64 (ROM). Il peut rester des causes cachées derrière la première : à remesurer.
 3. **Lot 2, sondeur** : `state.multiworld` et `prog_items` en lecture seule, résultat non booléen, `count_from_list_unique`, plafonds réglables ; puis la règle « somme pondérée » dans `logic` et le format (avec `has_from_list` et `at_least`). Vise les 8 jeux qui n'ont que des règles opaques (Castlevania 64, Kirby's Dream Land 3, Lingo, Old School Runescape, Overcooked! 2, Starcraft 2, Wargroove, shapez), ChecksFinder et Yu-Gi-Oh! 2006, et une part des 10 jeux « verrouillé + opaque ».
 4. **Lot 3, compteurs (format, ADR à valider)** : objets qui ajoutent à un compteur, pour les 21 `collect` personnalisés (dont Hollow Knight, Stardew Valley, TUNIC, The Witness, Factorio, Satisfactory). Le plus gros lot ; certains (Stardew Valley, 545 règles dont des objets de règle instables) relèveront du portage à la main.

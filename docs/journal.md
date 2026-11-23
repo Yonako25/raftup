@@ -762,3 +762,9 @@ untime2`.
 - **Pas vérifié** : les causes cachées derrière la première (le convertisseur s'arrête au premier refus) ; aucun converti joué avec son mod ; `slot_data` non repris (conversion sans seed).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
 - **Suite** : 4 décisions acceptées (ADR 0053) ; lot 0 du convertisseur (bogue `has_all` vide, bruit des options communes), dans une nouvelle session.
+
+### 2026-11-23 · Lot 0 du convertisseur (mondes d'Archipelago en natif)
+- **Fait** : `has_all` / `has_any` vides écrits `true` / `false`, `start_inventory_from_pool` plus signalée comme option du jeu, union des drapeaux pour un objet aux classifications mixtes (3 tests dans `generate/tests/conversion.rs`) ; inventaire relancé : 16 convertis sur 81 (Mega Man 2 et 3 en plus, seed Rust et aller-retour réussis), `docs/inventaire-conversion.md` à jour. fmt, clippy (`generate`, `launcher-core`) et `cargo test -p generate` passent.
+- **Pas vérifié** : `cargo test --workspace` ; l'import du moteur « export » refuse toujours les classifications mixtes (changement de l'ADR 0028, à proposer).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
+- **Suite** : lot 1, objets posés d'avance (format version 3) : proposer l'ADR avant de coder, dans une nouvelle session.

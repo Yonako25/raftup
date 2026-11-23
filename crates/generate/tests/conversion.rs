@@ -226,3 +226,72 @@ fn regles_depliees() {
         c.toml
     );
 }
+
+/// `has_all` et `has_any` d'une liste vide (Mega Man 2 et 3 dans l'inventaire) : le
+/// format refuse `has_all()`, la conversion écrit `true` et `false`, comme Python.
+#[test]
+fn listes_vides() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    v["players"][0]["locations"][0]["rule"] = serde_json::json!({"t": "or", "of": [
+        {"t": "and", "of": [
+            {"t": "has_all", "player": 1, "items": []},
+            {"t": "has", "player": 1, "item": "Key", "count": 1}
+        ]},
+        {"t": "has_any", "player": 1, "items": []}
+    ]});
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(
+        c.toml.contains("rule = 'true and has(Key) or false'"),
+        "{}",
+        c.toml
+    );
+    worlds_native::parse_world(&c.toml).unwrap();
+}
+
+/// Exemplaires d'un même objet aux classifications différentes (Muse Dash, Sonic
+/// Adventure 2 Battle, Saving Princess) : l'union des drapeaux est gardée, pour que
+/// l'objet reste une progression même si le premier exemplaire n'en est pas une.
+#[test]
+fn classifications_mixtes_union() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    v["pool"][3]["classification"] = Value::from(0);
+    v["pool"][4]["classification"] = Value::from(1);
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(
+        c.toml
+            .contains("name = \"Health Upgrade\"\nid = 5\nclassification = \"progression\""),
+        "{}",
+        c.toml
+    );
+    assert!(
+        c.notes
+            .iter()
+            .any(|n| n.contains("Health Upgrade") && n.contains("union")),
+        "{:?}",
+        c.notes
+    );
+}
+
+/// `start_inventory_from_pool`, déclarée par chaque monde mais appliquée par Archipelago
+/// avant l'export, n'est ni recopiée ni signalée comme une option du jeu.
+#[test]
+fn option_commune_ignoree() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    v["players"][0]["options"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"name": "start_inventory_from_pool",
+            "display": "Start Inventory from Pool", "kind": "other"}));
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(!c.toml.contains("start_inventory_from_pool"), "{}", c.toml);
+    assert!(
+        !c.notes
+            .iter()
+            .any(|n| n.contains("start_inventory_from_pool")),
+        "{:?}",
+        c.notes
+    );
+}
