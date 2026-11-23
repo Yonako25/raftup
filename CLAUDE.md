@@ -17,7 +17,7 @@ Le cahier des charges complet est dans `docs/SPEC.md` : lis-le avant toute tâch
 - Async : `tokio`. Sérialisation : `serde` / `serde_json`. Erreurs : `thiserror` dans les bibliothèques, `anyhow` dans les binaires. Logs : `tracing`.
 - Launcher : egui / eframe (rendu wgpu), interface 100 % Rust, sans webview (ADR 0011).
 - Protocole, serveur et client : écrits par Raftup (ADR 0004), sur `tokio` et `ap-protocol`. Pas de dépendance à pahoa ni à `archipelago_rs` : ce sont des références, avec le serveur Python officiel comme oracle des tests différentiels.
-- Génération au MVP : générateur Archipelago officiel, version épinglée, lancé dans un process Python séparé (python-build-standalone), dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
+- Génération : Keel, le moteur Rust, seul moteur (ADR 0052), à partir de Raftworlds. Python (générateur officiel épinglé, process séparé python-build-standalone, JSON-RPC sur stdin/stdout, sans port réseau) ne sert plus qu'à Ferry, la conversion apworld → Raftworld.
 
 ## Structure du dépôt
 

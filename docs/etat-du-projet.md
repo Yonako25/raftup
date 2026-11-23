@@ -8,12 +8,13 @@
 > - Aucun test ne casse sur le workspace (`cargo test --workspace`) ; les tests réels sont `#[ignore]`
 > - Différentiel : **0 écart** sur 24 scénarios fixes (dont `commandes` et `indices`) et 100 au hasard avec commandes `!`, indices et `!hint` seul (graine 7), indices non triés, mesuré le 17 novembre 2026
 
-Mis à jour le **22 novembre 2026** (contrôle visuel du launcher terminé ; The Planet Crafter en monde natif, étapes 1 et 2 côté logique, ADR 0048 ; le 21 novembre : V3 finie côté code : phases B et C fusionnées, mondes natifs dans la Bibliothèque et le registre, ADR 0046 ; tests d'interface sans fenêtre ; tests réels de la V3 passés ; illustrations des jeux par le hub, ADR 0047).
+Mis à jour le **23 novembre 2026** (ADR 0052 : Keel seul moteur, Python seulement pour Ferry, à mettre en œuvre ; le 22 novembre : contrôle visuel du launcher terminé ; The Planet Crafter en monde natif, étapes 1 et 2 côté logique, ADR 0048 ; le 21 novembre : V3 finie côté code : phases B et C fusionnées, mondes natifs dans la Bibliothèque et le registre, ADR 0046 ; tests d'interface sans fenêtre ; tests réels de la V3 passés ; illustrations des jeux par le hub, ADR 0047).
 
 Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 
 ## À faire
 
+- [ ] **ADR 0052, Keel par défaut** (accepté le 23 novembre 2026) : étapes 1 noms (`raftup-ferry`, `.raftworld`), 2 Keel seul dans « Créer une partie », 3 catalogue filtré (jeux sans Raftworld masqués), 4 Ferry chez le joueur (Python à la demande), 5 ménage du moteur « export » ; rien de commencé
 - [ ] **V2, générateur Rust** (ADR 0027, accepté le 18 novembre 2026) : étapes 1 `logic`, 2 écriture du `.archipelago`, 3 `fill`, 4 `generate` + APQuest + `RustBackend` (case « Moteur Rust », décochée par défaut) et 5 équilibrage de progression faites ; reste : vraie partie APQuest sur seed Rust (avant de rendre le moteur Rust par défaut), étape 6 export des mondes Python (ADR 0028) : sous-étapes 1 (`export_worlds`, `generate::imported`, APQuest exporté identique au portage Rust en vrai), 2 (sondage des lambdas, contrôle croisé, refus du `collect` personnalisé) , 3 (lieux prioritaires et exclus dans `logic` et `fill`) et 4 (`finish_worlds` : Archipelago écrit la seed placée par Raftup ; `ExportBackend` avec repli Python ; case « Moteur Rust » → export quand le moteur Rust seul ne suffit pas ; `PYTHONHASHSEED=0`) faites ; étape 5 (Slime Rancher : 147 règles traduites, 0 opaque, seed identique à celle d'Archipelago seul sauf le placement, même `slot_data`) faite ; reste une vraie partie de Slime Rancher sur une seed placée par Raftup (case « Moteur Rust » cochée)
 
 - [x] **Interface de génération** : écran « Créer une partie », étapes 1 à 4 codées (préparation, installation du générateur, génération, hébergement avec « Réessayer »), vérifiées par un test réel (`reel_generer_puis_heberger`) et regardées sur captures (macro `RAFTUP_DEV_CAPTURE`) ; contrat dans `docs/contrat-ui-generation.md`, décisions prises (ADR 0019)
@@ -179,6 +180,7 @@ Méthode de travail avec les agents : voir `docs/regles-agents.md`.
 - **0035** : client du hub dans le launcher : sans dépendre de la crate AGPL, `ureq` bloquant hors du thread d'interface, jeton dans le trousseau (`keyring`), adresse par défaut locale, HTTPS sauf vers ce PC (accepté en autonomie, à relire)
 - **0041** : format de monde natif déclaratif (TOML versionné + mini-langage de règles), compilé vers `logic` sans nouveau moteur ; spécification dans `spec/monde-natif/` ; APQuest natif identique au portage (accepté en autonomie, à relire)
 - **0044** : salon local : équipage saisi par l'hôte, un YAML par joueur écrit par Raftup (`launcher_core::crew`, `generations/salon/`), format des profils inchangé (accepté le 21 novembre 2026)
+- **0052** : Keel (moteur Rust) seul moteur de génération ; Python seulement pour Ferry (conversion apworld → Raftworld, auteur ou joueur) ; jeux sans Raftworld masqués ; noms Keel, Raftworld (`.raftworld`), Ferry (`raftup-ferry`), Knot (accepté le 23 novembre 2026)
 - **0043** : chiffrement par défaut sans PEM : certificat auto-signé généré par Raftup, ws et wss sur le même port, empreinte `fp` dans le lien d'invitation et épinglée par le launcher (accepté le 21 novembre 2026, à coder)
 - **0031** : suivi async (option de la salle, désactivée par défaut) : absence, résumé de retour, release par vote à la majorité, fil d'activité, `.raftup` version 2
 

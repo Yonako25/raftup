@@ -28,8 +28,8 @@ Positionnement : « implémentation alternative compatible », pas concurrent. U
 ```
 Launcher (egui)  ──► launcher-core ──► installe mods / profils, lance le jeu avec les identifiants
       │                    │
-      │                    ├──► py-bridge ──► générateur Archipelago officiel (process séparé, MVP)
-      │                    │                    └─► fichier .archipelago
+      │                    ├──► Keel (logic, fill, generate) ──► fichier .archipelago (ADR 0052)
+      │                    ├──► Ferry ──► py-bridge ──► conversion apworld → Raftworld (seulement à la demande)
       │                    └──► server (maison)   ◄── lit .archipelago / .raftup
       │                                   ▲
       └── client-core (suivi de partie)    │  protocole Archipelago (WebSocket, wss)
@@ -45,18 +45,19 @@ Launcher (egui)  ──► launcher-core ──► installe mods / profils, lanc
 | `client-core` | Client Archipelago maison (tokio + `ap-protocol`) : connexion, objets reçus, progression | J0 |
 | `multidata` | Modèle de partie ; lecture sécurisée du `.archipelago` (pickle en liste blanche, quotas) ; format natif `.raftup` (JSON lignes, versionné, ADR 0014) | J1 |
 | `server` | Serveur WebSocket maison (tokio + `ap-protocol`) | J1 |
-| `py-bridge` | Lance et pilote le générateur officiel dans un process Python séparé | J3 |
+| `py-bridge` | Lance et pilote le générateur officiel dans un process Python séparé ; depuis l'ADR 0052, sert seulement à Ferry (conversion) | J3 |
 | `launcher-core` | Catalogue, profils, installation, détection des jeux, lancement | J3 |
 | `launcher-ui` | Interface egui (ADR 0011) | J3 |
-| `logic`, `fill`, `generate` | Générateur Rust | V2 |
-| `worlds-native` | Format de world natif déclaratif | V3 |
+| `logic`, `fill`, `generate` | Keel, le générateur Rust, seul moteur de génération (ADR 0052) ; Ferry, le convertisseur apworld → Raftworld | V2 |
+| `worlds-native` | Raftworld, format de monde natif déclaratif, et Knot, son langage de règles | V3 |
 | `hub` | Service `raftup-hub` : comptes, amis, présence (AGPL) | V2 |
 
 ### Décisions déjà prises
 
 - **Protocole, serveur et client maison** : `ap-protocol`, `server` et `client-core` sont écrits par Raftup, sans dépendre de pahoa ni de `archipelago_rs` ; ces projets et le serveur Python officiel servent de références et d'oracles de test (ADR 0004).
-- **Génération au MVP** : 100 % par le générateur Archipelago officiel, version épinglée. Aucune règle Python ne traverse la frontière au MVP.
-- **Process Python** : python-build-standalone téléchargé au premier usage, un environnement par version d'Archipelago ; dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
+- **Génération** (ADR 0052, remplace la règle du MVP) : 100 % par Keel, le moteur Rust, à partir de Raftworlds. Un apworld d'Archipelago est converti en Raftworld par Ferry, chez l'auteur, dans la CI du registre ou chez le joueur. Les jeux sans Raftworld sont masqués dans le launcher.
+- **Noms techniques** (ADR 0052) : Keel (moteur), Raftworld (monde, paquet `.raftworld`), Ferry (convertisseur, `raftup-ferry`), Knot (langage des règles).
+- **Process Python** : seulement pour Ferry ; python-build-standalone téléchargé à la première conversion, un environnement par version d'Archipelago ; dialogue JSON-RPC sur stdin/stdout (un message JSON par ligne), sans port réseau ouvert.
 - **Pas de PyO3** (Python embarqué dans le process du launcher) : packaging difficile, pas d'isolation.
 - **Une version d'Archipelago épinglée par version de Raftup**, tests de non-régression sur des seeds de référence.
 - **Catalogue public** : le catalogue entier (profils d'installation) vit dans le dépôt, sous `profiles/`, sans base de données privée, embarqué dans chaque version du launcher ; contributions par pull request (ADR 0001).

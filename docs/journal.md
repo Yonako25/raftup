@@ -750,3 +750,9 @@ untime2`.
 - **Pas vérifié** : rendu réel avec les images Steam du PC (Slime Rancher, Planet Crafter) dans la fenêtre ; aucun profil n'a encore de section `[art]` ; registre : un jeu ajouté par le registre n'a pas d'appid Steam pour les images.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : regarder le launcher à l'œil avec les images Steam, puis retirer les routes `/v1/art` et la clé IGDB du hub.
+
+### 2026-11-23 · Keel par défaut, Ferry et noms techniques (décision)
+- **Fait** : diapo « Raftup aujourd'hui » (artifact, hors dépôt) ; ADR 0052 accepté par l'utilisatrice : Keel (moteur Rust) seul moteur de génération, Python seulement pour Ferry (conversion apworld → Raftworld, chez l'auteur ou le joueur), jeux sans Raftworld masqués, noms Keel / Raftworld / Ferry / Knot ; SPEC § 3 et CLAUDE.md à jour.
+- **Pas vérifié** : aucun code modifié ; rien n'est encore mis en œuvre (5 étapes listées dans l'ADR 0052).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
+- **Suite** : ADR 0052 étape 1, les noms (`raftup-ferry`, extension `.raftworld`, textes de l'interface).
