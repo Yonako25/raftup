@@ -3,7 +3,7 @@
   "description": "Jumeau d'Archipelago en Rust (serveur multiworld compatible) avec un launcher de bureau.",
   "status": "en cours",
   "created": "2026-11-11",
-  "updated": "2026-11-22",
+  "updated": "2026-11-23",
   "stack": [
     "Rust",
     "tokio",
@@ -507,7 +507,9 @@
     "Jouer la vraie partie Planet Crafter",
     "Relire les ADR 0029 à 0035",
     "Regarder à l'œil les écrans non contrôlés",
-    "Jouer une partie APQuest sur seed Rust"
+    "Jouer une partie APQuest sur seed Rust",
+    "Tester le hub sur PostgreSQL, MySQL et MariaDB",
+    "Lot 1 du convertisseur : proposer l'ADR des objets posés d'avance"
   ],
   "blockers": [],
   "decisions": [
@@ -564,6 +566,16 @@
     {
       "date": "2026-11-22",
       "summary": "Illustrations : images du créateur installées avec le world, cache Steam local, plus d'IGDB dans le launcher (ADR 0051).",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-23",
+      "summary": "Rafthub héberge une partie envoyée par l'hôte (ADR 0052, étape 1) : /v1/games, serveur de jeu dans le hub, plage de ports, sauvegarde reprise, mots de passe chiffrés, limites (8d3559f).",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-23",
+      "summary": "Fusion dans main des parties hébergées (ADR 0052, étape 1) et de la conversion (inventaire, ADR 0053, lot 0 : 16 mondes sur 81) ; fmt, clippy et tests du workspace passent (9b31740).",
       "tasks": []
     }
   ]
