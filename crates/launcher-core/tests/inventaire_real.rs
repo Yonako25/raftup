@@ -149,6 +149,27 @@ fn round_trip(runtime: &Runtime, toml: &str) -> Result<(), String> {
     result
 }
 
+/// Objets posés d'avance du joueur 1 dans l'export brut : `(lieu, objet)`, triés.
+fn placed_pairs(bytes: &[u8]) -> Vec<(String, String)> {
+    let Ok(raw) = serde_json::from_slice::<Value>(bytes) else {
+        return Vec::new();
+    };
+    let mut pairs: Vec<(String, String)> = raw["players"][0]["locations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|l| !l["address"].is_null() && !l["item"].is_null())
+        .map(|l| {
+            (
+                l["name"].as_str().unwrap_or("").to_string(),
+                l["item"]["name"].as_str().unwrap_or("").to_string(),
+            )
+        })
+        .collect();
+    pairs.sort();
+    pairs
+}
+
 /// Passe un jeu par toute la chaîne ; rend une ligne du rapport.
 fn inventory_one(runtime: &Runtime, game: &str, round_trip_games: &[String]) -> Value {
     let started = Instant::now();
@@ -164,6 +185,13 @@ fn inventory_one(runtime: &Runtime, game: &str, round_trip_games: &[String]) -> 
         }
     };
     row["probed_rules"] = json!(probed);
+    if let Some(dir) = std::env::var_os("RAFTUP_INVENTAIRE_EXPORTS") {
+        let safe: String = game
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect();
+        let _ = std::fs::write(PathBuf::from(dir).join(format!("{safe}.json")), &bytes);
+    }
     if let Ok(raw) = serde_json::from_slice::<Value>(&bytes) {
         let mut reasons = Vec::new();
         opaque_reasons(&raw, &mut reasons);
@@ -203,6 +231,32 @@ fn inventory_one(runtime: &Runtime, game: &str, round_trip_games: &[String]) -> 
             row["seconds"] = json!(started.elapsed().as_secs_f64());
             return row;
         }
+    };
+    // ADR 0054, § 5 : la conversion est déterministe ; une seconde seed (mêmes options)
+    // qui donne un autre texte trahit un monde qui tire quelque chose au hasard pendant la
+    // génération (objet posé d'avance, pool, pièges).
+    row["hasard"] = match self::export(runtime, work.path(), &default_yaml(game), 2) {
+        Ok((bytes2, _)) => {
+            row["pose_hasard"] = json!(placed_pairs(&bytes) != placed_pairs(&bytes2));
+            match generate::imported::read_export(&bytes2)
+                .map_err(short)
+                .and_then(|e| generate::convert::convert(&e, 1, None).map_err(short))
+            {
+                Ok(second) => {
+                    // Première ligne qui change, pour savoir quoi regarder.
+                    let first = conversion
+                        .toml
+                        .lines()
+                        .zip(second.toml.lines())
+                        .find(|(a, b)| a != b)
+                        .map(|(a, b)| format!("{} | {}", short(a), short(b)));
+                    row["hasard_ligne"] = json!(first);
+                    json!(second.toml != conversion.toml)
+                }
+                Err(e) => json!({ "error": e }),
+            }
+        }
+        Err(e) => json!({ "error": short(e) }),
     };
     row["notes"] = json!(conversion
         .notes

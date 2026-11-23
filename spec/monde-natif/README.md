@@ -20,7 +20,7 @@ Décision et raisons : ADR 0041 du dépôt Raftup.
 ## Structure du fichier
 
 ```toml
-format_version = 1          # obligatoire : 1 ou 2 (voir « Versions »)
+format_version = 1          # obligatoire : 1, 2 ou 3 (voir « Versions »)
 
 [game]                      # obligatoire
 [[options]]                 # options du joueur (YAML)
@@ -101,13 +101,18 @@ Une entrée présente qui touche une région absente est une erreur : écrire le
 | `region` | texte ou cas | Région du lieu. |
 | `rule` | règle | Condition d'accès ; `true` par défaut. |
 | `progress` | `default`, `priority`, `excluded` | Lieu prioritaire (reçoit de la progression) ou exclu (seulement du remplissage). |
+| `item` | texte ou cas | **Version 3.** Objet posé d'avance (un objet de `[[items]]`) : toujours dans ce lieu, jamais dans le pool, jamais déplacé par l'équilibrage. C'est `place_locked_item` d'Archipelago : fin de niveau, boutique fixe, objet à sa place d'origine. Permis aussi dans un lieu `excluded`. |
 | `when` | condition | Présent seulement si la condition est vraie. |
+
+Un lieu posé d'avance ne compte pas dans les lieux que `[[pool]]` et `[filler]` remplissent.
 
 ### `[[events]]`
 
 Un événement est un lieu **sans numéro** où un **objet d'événement** (sans numéro, de progression) est posé d'office : « bouton pressé », « boss vaincu ». Champs : `name`, `region`, `rule`, `when`, et `item` (nom d'un nouvel objet d'événement, distinct des `[[items]]`).
 
 En version 1, chaque événement a son propre objet. En **version 2**, plusieurs événements peuvent donner le **même** objet d'événement : il est créé une fois, chaque événement en pose un exemplaire, et une règle le compte (`has("Pink Plort", 3)`). C'est ce que font beaucoup d'apworlds.
+
+En **version 3**, `item` peut aussi nommer un objet de `[[items]]` (à numéro) : l'événement en pose un exemplaire, compté par les règles avec les autres, mais jamais envoyé au jeu (un événement n'a pas de numéro).
 
 ### `[[pool]]`, `[filler]`, `[[start]]`
 
@@ -201,8 +206,9 @@ Fichier de 4 Mio au plus ; 100 000 éléments par liste ; règle de 16 Kio ; 64 
 | --- | --- |
 | 1 | Première version. |
 | 2 | Plusieurs `[[events]]` peuvent donner le même objet d'événement. |
+| 3 | Objets posés d'avance : `item` sur un `[[locations]]`, et un `[[events]]` qui donne un objet de `[[items]]` (ADR 0054). |
 
-Un lecteur de la version 2 lit aussi la version 1. Écrire `format_version = 1` quand on n'a pas besoin de la 2 : le fichier reste lisible par plus d'outils.
+Un lecteur de la version 3 lit aussi les versions 1 et 2, sans rien y changer. Écrire la plus petite version qui suffit : le fichier reste lisible par plus d'outils.
 
 ## Ce que le format ne sait pas encore faire
 

@@ -199,6 +199,9 @@ pub struct LocationDef {
     pub id: i64,
     pub region: Choice<u32>,
     pub rule: Expr,
+    /// Objet posé d'avance (format 3, ADR 0054) : position dans [`NativeWorld::items`].
+    /// Le lieu est verrouillé et l'objet n'entre pas dans le pool.
+    pub item: Option<Choice<u32>>,
     pub progress: Progress,
     pub when: Option<Expr>,
 }
@@ -208,7 +211,8 @@ pub struct EventDef {
     pub name: String,
     pub region: Choice<u32>,
     pub rule: Expr,
-    /// Nom de l'objet d'événement posé ici.
+    /// Nom de l'objet d'événement posé ici. À partir du format 3, ce peut être le nom
+    /// d'un objet de [`NativeWorld::items`] : l'événement en pose alors un exemplaire.
     pub item: String,
     pub when: Option<Expr>,
 }
@@ -244,7 +248,7 @@ pub struct SlotDataDef {
 /// Un monde natif lu et vérifié.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeWorld {
-    /// `format_version` écrit dans le fichier (1 ou 2), affiché par la Bibliothèque.
+    /// `format_version` écrit dans le fichier (1 à 3), affiché par la Bibliothèque.
     pub format_version: i64,
     pub game: String,
     /// Région de départ ; `None` : la première région présente.

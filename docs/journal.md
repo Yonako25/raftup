@@ -774,3 +774,9 @@ untime2`.
 - **Pas vérifié** : `cargo test --workspace` ; l'import du moteur « export » refuse toujours les classifications mixtes (changement de l'ADR 0028, à proposer).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
 - **Suite** : lot 1, objets posés d'avance (format version 3) : proposer l'ADR avant de coder, dans une nouvelle session.
+
+### 2026-11-23 · Lot 1 du convertisseur : objets posés d'avance (ADR 0054)
+- **Fait** : ADR 0054 accepté ; format de monde en version 3 (`item` sur un lieu à numéro, événement qui donne un objet à numéro), `logic::Location::locked` et `place_locked`, les deux équilibrages ne déplacent plus un lieu verrouillé (bogue du moteur « export », testé), convertisseur (objets posés, objet jamais créé écrit `false`), export apworld, spec `spec/monde-natif/` ; inventaire relancé avec une seconde seed : 29 convertis sur 81 (21 jeux PC), `docs/inventaire-conversion.md` à jour. fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : aucun des 13 nouveaux convertis joué avec son mod ; Dark Souls III, Faxanadu et Noita tirent leurs objets posés au hasard (instantané figé) ; Aquaria bute sur un pool plus grand que les lieux.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-ui/` (autre session).
+- **Suite** : lot 2 (sondeur : `state.multiworld`, `prog_items`, résultats non booléens), dans une nouvelle session.

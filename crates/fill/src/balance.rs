@@ -68,10 +68,9 @@ struct Balancer<'a> {
 }
 
 impl Balancer<'_> {
+    /// Lieu que l'équilibrage ne déplace pas : événement ou objet posé d'avance (ADR 0054).
     fn locked(&self, location: LocationId) -> bool {
-        self.world
-            .location(location)
-            .is_none_or(|l| l.address.is_none())
+        self.world.is_locked(location)
     }
 
     fn owner(&self, location: LocationId) -> Option<SlotId> {
@@ -280,8 +279,8 @@ fn plan_and_swap<R: Rng + ?Sized>(
     let locations = world.locations().len();
     let mut total = vec![0u64; slots];
     for id in world.location_ids() {
-        let location = world.location(id);
-        if let Some(l) = location.filter(|l| l.address.is_some()) {
+        // Comme Archipelago, le total ne compte que les lieux non verrouillés.
+        if let Some(l) = world.location(id).filter(|_| !world.is_locked(id)) {
             bump(&mut total, l.slot.index());
         }
     }

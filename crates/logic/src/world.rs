@@ -135,6 +135,10 @@ pub struct Location {
     pub rule: Rule,
     /// Objet placé ici, s'il y en a un.
     pub item: Option<ItemKindId>,
+    /// Objet posé d'avance par le monde (`place_locked_item` d'Archipelago, ADR 0054) :
+    /// le placement et les équilibrages n'y touchent jamais. Posé par
+    /// [`MultiWorld::place_locked`] ; un événement (sans numéro) est toujours verrouillé.
+    pub locked: bool,
     /// Normal, prioritaire ou exclu (`LocationProgressType` d'Archipelago).
     pub progress: Progress,
     /// Règle d'objet du lieu ; `None` : tout objet est accepté (voir
@@ -299,6 +303,7 @@ impl MultiWorld {
             address,
             rule,
             item: None,
+            locked: false,
             progress: Progress::Default,
             item_rule: None,
         });
@@ -535,6 +540,27 @@ impl MultiWorld {
         Ok(())
     }
 
+    /// Pose un objet d'avance et verrouille le lieu (ADR 0054) : comme [`MultiWorld::place`],
+    /// puis plus aucun équilibrage ne déplace cet objet.
+    pub fn place_locked(
+        &mut self,
+        location: LocationId,
+        item: ItemKindId,
+    ) -> Result<(), LogicError> {
+        self.place(location, item)?;
+        if let Some(location) = self.locations.get_mut(location.index()) {
+            location.locked = true;
+        }
+        Ok(())
+    }
+
+    /// Le lieu est-il verrouillé ? Oui s'il a été posé par [`MultiWorld::place_locked`],
+    /// ou s'il n'a pas de numéro (un événement ne bouge jamais). Un lieu inconnu aussi.
+    pub fn is_locked(&self, location: LocationId) -> bool {
+        self.location(location)
+            .is_none_or(|l| l.locked || l.address.is_none())
+    }
+
     /// Retire l'objet d'un lieu et le renvoie (`None` si le lieu était vide).
     pub fn take(&mut self, location: LocationId) -> Result<Option<ItemKindId>, LogicError> {
         let location = self
@@ -542,6 +568,8 @@ impl MultiWorld {
             .get_mut(location.index())
             .ok_or(LogicError::UnknownLocation(location.raw()))?;
         // `take` sur une `Option` : renvoie la valeur et laisse `None` à sa place.
+        // Le verrou reste : il dit ce qu'est le lieu, pas ce qu'il contient (les
+        // équilibrages vident puis reposent tous les lieux pour revenir en arrière).
         Ok(location.item.take())
     }
 

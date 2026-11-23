@@ -306,3 +306,19 @@ fn plusieurs_joueurs_attente_qui_baisse_et_resultat_reproductible() {
     assert_eq!(t.total_idle(), report.idle_after);
     assert_eq!(t.makespan(), report.makespan_after);
 }
+
+#[test]
+fn objet_pose_d_avance_laisse_en_place() {
+    // ADR 0054 : la clé de Bob posée d'avance (lieu à numéro verrouillé) ne bouge pas,
+    // même si Bob attend.
+    let (mut w, _, a3) = bob_attend();
+    let key = w.take(a3).unwrap().unwrap();
+    w.place_locked(a3, key).unwrap();
+    let before = placement(&w);
+    let report = {
+        let start = State::new(&w);
+        time_balance(&mut w, &enabled(vec![100, 10]), &start).unwrap()
+    };
+    assert_eq!(report.moved, 0);
+    assert_eq!(placement(&w), before);
+}

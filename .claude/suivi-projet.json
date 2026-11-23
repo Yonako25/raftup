@@ -3,7 +3,7 @@
   "description": "Jumeau d'Archipelago en Rust (serveur multiworld compatible) avec un launcher de bureau.",
   "status": "en cours",
   "created": "2026-11-11",
-  "updated": "2026-11-22",
+  "updated": "2026-11-23",
   "stack": [
     "Rust",
     "tokio",
@@ -524,6 +524,10 @@
     {
       "date": "2026-11-22",
       "title": "ADR 0051 : images du créateur installées avec le world (remplace 0047)"
+    },
+    {
+      "date": "2026-11-23",
+      "title": "ADR 0054 : objets posés d'avance (format version 3)"
     }
   ],
   "log": [
@@ -564,6 +568,11 @@
     {
       "date": "2026-11-22",
       "summary": "Illustrations : images du créateur installées avec le world, cache Steam local, plus d'IGDB dans le launcher (ADR 0051).",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-23",
+      "summary": "Lot 1 du convertisseur : objets posés d'avance, format de monde en version 3 (ADR 0054) ; 29 mondes d'Archipelago convertis sur 81 (21 jeux PC).",
       "tasks": []
     }
   ]

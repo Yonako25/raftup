@@ -167,6 +167,8 @@ struct RawLocation {
     region: RawChoice,
     rule: Option<Spanned<String>>,
     progress: Option<String>,
+    /// Objet posé d'avance (format 3, ADR 0054).
+    item: Option<RawChoice>,
     when: Option<Spanned<String>>,
 }
 
@@ -627,10 +629,14 @@ impl Loader<'_> {
                         format!("événement « {} » : l'objet « {} » est déjà donné par un autre événement (permis à partir de format_version = 2)", event.name.get_ref(), event.item),
                     ));
                 }
+                // Format 3 : un événement peut donner un exemplaire d'un objet à numéro,
+                // compté par la logique et jamais envoyé (ADR 0054). Le nom reste celui
+                // de l'objet déclaré.
+                Some(ItemRef::Item(_)) if raw.format_version >= 3 => {}
                 Some(ItemRef::Item(_)) => {
                     return Err(self.invalid(
                         event.name.span(),
-                        format!("événement « {} » : l'objet « {} » existe déjà (un objet d'événement est un nouvel objet)", event.name.get_ref(), event.item),
+                        format!("événement « {} » : l'objet « {} » existe déjà (un objet d'événement est un nouvel objet ; donner un objet à numéro est permis à partir de format_version = 3)", event.name.get_ref(), event.item),
                     ));
                 }
             }
@@ -868,9 +874,24 @@ impl Loader<'_> {
                     ))
                 }
             };
+            // Objet posé d'avance : à partir du format 3 seulement, et toujours un objet à
+            // numéro (un lieu à numéro porte un objet à numéro, comme chez Archipelago).
+            let item = match &location.item {
+                None => None,
+                Some(_) if raw.format_version < 3 => {
+                    return Err(self.invalid(
+                        at,
+                        format!("{context} : « item » (objet posé d'avance) est permis à partir de format_version = 3"),
+                    ))
+                }
+                Some(choice) => {
+                    Some(self.choice(choice, &names, &context, at.clone(), real_item)?)
+                }
+            };
             locations.push(LocationDef {
                 name: location.name.get_ref().clone(),
                 id: location.id,
+                item,
                 region: self.choice(&location.region, &names, &context, at, region_index)?,
                 rule: self.rule(&location.rule, &names, &context)?,
                 progress,

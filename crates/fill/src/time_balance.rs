@@ -138,6 +138,12 @@ fn is_event(world: &MultiWorld, id: LocationId) -> bool {
     world.location(id).is_none_or(|l| l.address.is_none())
 }
 
+/// Lieu dont l'objet peut être échangé : ni événement, ni objet posé d'avance (ADR 0054).
+/// Un lieu posé d'avance prend quand même du temps à visiter (il a un numéro).
+fn movable(world: &MultiWorld, id: LocationId) -> bool {
+    !world.is_locked(id)
+}
+
 fn progression_item(world: &MultiWorld, id: LocationId) -> Option<ItemKindId> {
     let item = world.location(id)?.item?;
     let kind = world.item_kind(item)?;
@@ -359,7 +365,7 @@ fn candidates(
 ) -> Vec<LocationId> {
     let mut found: Vec<(u64, LocationId)> = world
         .location_ids()
-        .filter(|id| !is_event(world, *id) && progress(world, *id) != Progress::Priority)
+        .filter(|id| movable(world, *id) && progress(world, *id) != Progress::Priority)
         .filter(|id| {
             progression_item(world, *id)
                 .and_then(|item| world.item_kind(item))
@@ -386,7 +392,7 @@ fn targets(world: &MultiWorld, timeline: &Timeline, stall: u64) -> Vec<LocationI
     let mut found: Vec<(std::cmp::Reverse<u64>, LocationId)> = world
         .location_ids()
         .filter(|id| {
-            !is_event(world, *id)
+            movable(world, *id)
                 && progression_item(world, *id).is_none()
                 && progress(world, *id) != Progress::Excluded
         })

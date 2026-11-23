@@ -28,10 +28,12 @@ pub use error::{BuildError, LoadError, Position};
 pub use load::{load_path, parse_world};
 pub use model::NativeWorld;
 
-/// Dernière version du format comprise par cette crate. Les versions 1 et 2 sont lues ;
-/// la 2 ajoute une seule chose : plusieurs événements peuvent donner le même objet
-/// d'événement (ADR 0042).
-pub const FORMAT_VERSION: i64 = 2;
+/// Dernière version du format comprise par cette crate. Les versions 1 à 3 sont lues :
+/// - la 2 ajoute une seule chose : plusieurs événements peuvent donner le même objet
+///   d'événement (ADR 0042) ;
+/// - la 3 ajoute les objets posés d'avance : `item` sur un lieu à numéro, et un
+///   événement qui donne un objet à numéro (ADR 0054).
+pub const FORMAT_VERSION: i64 = 3;
 /// Première version du format comprise.
 pub const MIN_FORMAT_VERSION: i64 = 1;
 /// Taille maximale d'un fichier de monde.

@@ -195,12 +195,17 @@ fn refus_clairs() {
             {"t": "has_from_list", "player": 1, "items": ["Key", "Sword"], "count": 2})
     });
     assert!(why.contains("groupe"), "{why}");
-    // Un objet verrouillé avec un numéro (pas un événement).
+    // Un lieu à numéro qui porte l'objet d'un autre joueur, ou un objet sans numéro.
     let why = refuse(&|v| {
         v["players"][0]["locations"][0]["item"] =
-            serde_json::json!({"player": 1, "name": "Key", "code": 1, "classification": 1})
+            serde_json::json!({"player": 2, "name": "Key", "code": 1, "classification": 1})
     });
-    assert!(why.contains("déjà posé"), "{why}");
+    assert!(why.contains("autre joueur"), "{why}");
+    let why = refuse(&|v| {
+        v["players"][0]["locations"][0]["item"] =
+            serde_json::json!({"player": 1, "name": "Key", "code": null, "classification": 1})
+    });
+    assert!(why.contains("sans numéro"), "{why}");
     assert!(matches!(
         convert(&read_export(EXPORT).unwrap(), 9, None),
         Err(ConvertError::UnknownPlayer(9))
@@ -291,6 +296,114 @@ fn option_commune_ignoree() {
         !c.notes
             .iter()
             .any(|n| n.contains("start_inventory_from_pool")),
+        "{:?}",
+        c.notes
+    );
+}
+
+/// Objet posé d'avance dans un lieu à numéro (ADR 0054, DOOM, Meritous…) : écrit en
+/// format 3, `item = …` sur le lieu, hors du pool, verrouillé dans la seed Rust.
+#[test]
+fn objet_pose_d_avance_format_3() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    // « Key » posée par le monde dans « Bottom Left Chest » : elle sort du pool exporté,
+    // comme le fait `place_locked_item` d'Archipelago.
+    let key = v["pool"].as_array_mut().unwrap().remove(0);
+    assert_eq!(key["name"], "Key");
+    let location = &mut v["players"][0]["locations"][0];
+    location["item"] = key;
+    location["locked"] = Value::Bool(true);
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(c.toml.contains("\nformat_version = 3\n"), "{}", c.toml);
+    assert!(
+        c.toml.contains(
+            "name = \"Bottom Left Chest\"\nid = 3\nregion = \"Overworld\"\nitem = \"Key\"\n"
+        ),
+        "{}",
+        c.toml
+    );
+    assert!(
+        c.toml
+            .contains("name = \"Key\"\nid = 1\nclassification = \"progression\""),
+        "{}",
+        c.toml
+    );
+    assert!(
+        c.notes.iter().any(|n| n.contains("posé(s) d'avance")),
+        "{:?}",
+        c.notes
+    );
+
+    // Moteur Rust : la clé reste dans son lieu, verrouillée, et la seed se génère.
+    for seed in [1u64, 2, 3] {
+        let built = build(&request(seed, native(&c.toml), native(&c.toml))).unwrap();
+        let chests: Vec<&logic::Location> = built
+            .world
+            .locations()
+            .iter()
+            .filter(|l| l.name == "Bottom Left Chest")
+            .collect();
+        assert_eq!(chests.len(), 2);
+        for chest in chests {
+            assert!(chest.locked);
+            assert_eq!(chest.item, built.world.item_named(chest.slot, "Key"));
+        }
+        generate(&request(seed, native(&c.toml), native(&c.toml))).unwrap();
+    }
+}
+
+/// Sans objet posé ni événement partagé, la conversion reste en format 1.
+#[test]
+fn version_minimale() {
+    assert!(converted().toml.contains("\nformat_version = 1\n"));
+}
+
+/// Événement qui donne un objet portant le nom d'un objet à numéro (Super Mario Land 2) :
+/// format 3, l'événement nomme l'objet déclaré, qui reste une progression.
+#[test]
+fn evenement_qui_donne_un_objet_a_numero() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    // Un nouvel événement donne « Shield » (sans numéro, comme chez Archipelago).
+    v["players"][0]["locations"].as_array_mut().unwrap().push(
+        serde_json::json!({"name": "Shield Shrine", "address": null,
+            "region": "Overworld", "rule": {"t": "true"}, "progress_type": 1,
+            "locked": true, "item": {"player": 1, "name": "Shield", "code": null,
+            "classification": 1}}),
+    );
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(c.toml.contains("\nformat_version = 3\n"), "{}", c.toml);
+    assert!(
+        c.toml.contains(
+            "[[events]]\nname = \"Shield Shrine\"\nregion = \"Overworld\"\nitem = \"Shield\"\n"
+        ),
+        "{}",
+        c.toml
+    );
+    let world = worlds_native::parse_world(&c.toml).unwrap();
+    assert_eq!(world.items.iter().filter(|i| i.name == "Shield").count(), 1);
+}
+
+/// Objet cité par une règle mais jamais créé (« CANNOT ACCESS » de Celeste 64) : compté à
+/// zéro par Archipelago, écrit `false` (avant : monde produit illisible).
+#[test]
+fn objet_jamais_cree_vaut_false() {
+    let mut v: Value = serde_json::from_slice(EXPORT).unwrap();
+    v["players"][0]["locations"][0]["rule"] = serde_json::json!({"t": "or", "of": [
+        {"t": "has", "player": 1, "item": "CANNOT ACCESS", "count": 1},
+        {"t": "has_any", "player": 1, "items": ["CANNOT ACCESS", "Key"]},
+        {"t": "has_all", "player": 1, "items": ["CANNOT ACCESS", "Key"]}
+    ]});
+    let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+    let c = convert(&export, 1, None).unwrap();
+    assert!(
+        c.toml.contains("rule = 'false or has_any(Key) or false'"),
+        "{}",
+        c.toml
+    );
+    assert!(
+        c.notes.iter().any(|n| n.contains("CANNOT ACCESS")),
         "{:?}",
         c.notes
     );

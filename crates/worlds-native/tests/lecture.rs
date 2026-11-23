@@ -401,3 +401,131 @@ fn format_1_refuse_l_objet_d_evenement_partage() {
     let e = parse_world(&PLORTS.replace("format_version = 2", "format_version = 1")).unwrap_err();
     assert!(e.to_string().contains("format_version = 2"), "{e}");
 }
+
+/// Format 3 (ADR 0054) : un lieu à numéro porte un objet posé d'avance, et un événement
+/// donne un objet à numéro.
+const DOOMISH: &str = r#"
+format_version = 3
+
+[game]
+name = "Doomish"
+goal = 'has("E1M1 - Complete") and has(Map)'
+
+[[options]]
+name = "fast_exit"
+type = "toggle"
+default = false
+
+[[items]]
+name = "E1M1 - Complete"
+id = 1
+classification = "progression"
+
+[[items]]
+name = "Map"
+id = 2
+classification = "progression"
+
+[[items]]
+name = "Shells"
+id = 3
+classification = "filler"
+
+[[regions]]
+name = "Hangar"
+
+[[locations]]
+name = "E1M1 - Exit"
+id = 10
+region = "Hangar"
+item = "E1M1 - Complete"
+
+[[locations]]
+name = "Shop"
+id = 11
+region = "Hangar"
+progress = "excluded"
+item = [{ when = "option(fast_exit)", value = "Map" }, { value = "Shells" }]
+
+[[locations]]
+name = "Crate"
+id = 12
+region = "Hangar"
+
+[[events]]
+name = "Map Found"
+region = "Hangar"
+item = "Map"
+
+[filler]
+item = "Shells"
+"#;
+
+#[test]
+fn format_3_objets_poses_d_avance() {
+    let world = parse_world(DOOMISH).unwrap();
+    assert_eq!(world.format_version, 3);
+    let (w, built) = build(&world, &[]);
+    let exit = w
+        .locations()
+        .iter()
+        .find(|l| l.name == "E1M1 - Exit")
+        .unwrap();
+    let complete = w
+        .item_kinds()
+        .iter()
+        .position(|k| k.name == "E1M1 - Complete");
+    assert_eq!(exit.item.map(|i| i.index()), complete);
+    assert!(exit.locked);
+    assert_eq!(exit.address, Some(10));
+    // Liste de cas : sans l'option, « Shells » ; même dans un lieu exclu.
+    let shop = w.locations().iter().find(|l| l.name == "Shop").unwrap();
+    assert!(shop.locked);
+    let shells = w.item_named(shop.slot, "Shells").unwrap();
+    assert_eq!(shop.item, Some(shells));
+    // Seul « Crate » reste à remplir : un objet dans le pool.
+    assert_eq!(built.pool.len(), 1);
+    // L'événement donne un exemplaire de « Map » (l'objet à numéro), sans créer d'objet.
+    let maps = w.item_kinds().iter().filter(|k| k.name == "Map").count();
+    assert_eq!(maps, 1);
+    let event = w
+        .locations()
+        .iter()
+        .find(|l| l.name == "Map Found")
+        .unwrap();
+    assert_eq!(event.item, w.item_named(event.slot, "Map"));
+    assert_eq!(event.address, None);
+    let result = logic::sweep(&w, logic::State::new(&w));
+    assert!(result.all_goals_reached(&w));
+
+    let (w, _) = build(&world, &[("fast_exit", 1)]);
+    let shop = w.locations().iter().find(|l| l.name == "Shop").unwrap();
+    assert_eq!(shop.item, w.item_named(shop.slot, "Map"));
+}
+
+#[test]
+fn format_2_refuse_les_objets_poses_d_avance() {
+    let v2 = DOOMISH.replace("format_version = 3", "format_version = 2");
+    let e = parse_world(&v2).unwrap_err();
+    assert!(e.to_string().contains("format_version = 3"), "{e}");
+    // Sans les `item` des lieux, l'événement qui donne « Map » est encore refusé en 2.
+    let v2 = v2.replace("item = \"E1M1 - Complete\"\n", "").replace(
+        "item = [{ when = \"option(fast_exit)\", value = \"Map\" }, { value = \"Shells\" }]\n",
+        "",
+    );
+    let e = parse_world(&v2).unwrap_err();
+    assert!(e.to_string().contains("format_version = 3"), "{e}");
+}
+
+#[test]
+fn format_3_refuse_un_objet_d_evenement_pose_dans_un_lieu() {
+    let text = DOOMISH.replace(
+        "item = \"E1M1 - Complete\"",
+        "item = \"Victory\"\n\n[[events]]\nname = \"Win\"\nregion = \"Hangar\"\nitem = \"Victory\"",
+    );
+    let e = parse_world(&text).unwrap_err();
+    assert!(e.to_string().contains("objet d'événement"), "{e}");
+    let text = DOOMISH.replace("item = \"E1M1 - Complete\"", "item = \"Nothing\"");
+    let e = parse_world(&text).unwrap_err();
+    assert!(e.to_string().contains("inconnu"), "{e}");
+}

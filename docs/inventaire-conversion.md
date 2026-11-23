@@ -1,6 +1,6 @@
 # Inventaire de conversion des mondes d'Archipelago 0.6.8
 
-Mesuré le **23 novembre 2026** (puis remesuré le même jour après le lot 0) sur les **81 mondes intégrés** d'Archipelago 0.6.8 (dossier `worlds/` du générateur épinglé, sans le monde caché « Archipelago » ni les apworlds ajoutées), avec les **options par défaut**, un joueur, seed 1. Rien n'a été publié ; les `world.toml` produits sont restés hors du dépôt.
+Mesuré le **23 novembre 2026** (puis remesuré le même jour après le lot 0 et après le lot 1) sur les **81 mondes intégrés** d'Archipelago 0.6.8 (dossier `worlds/` du générateur épinglé, sans le monde caché « Archipelago » ni les apworlds ajoutées), avec les **options par défaut**, un joueur, seed 1. Rien n'a été publié ; les `world.toml` produits sont restés hors du dépôt.
 
 Chaîne essayée pour chaque jeu (test `launcher-core/tests/inventaire_real.rs`) :
 
@@ -8,20 +8,23 @@ Chaîne essayée pour chaque jeu (test `launcher-core/tests/inventaire_real.rs`)
 2. **import** de l'export et contrôle croisé des règles contre le vrai Archipelago (moteur « export ») ;
 3. **conversion** en monde natif (`generate::convert`, ADR 0042), relue par `worlds_native::parse_world` ;
 4. **seed complète par le moteur Rust seul** (sans Python), relue par `multidata` ;
-5. **aller-retour** : le monde converti, renommé « … Natif », réexporté en apworld, réexporté par le worker et repassé au contrôle croisé.
+5. **aller-retour** : le monde converti, renommé « … Natif », réexporté en apworld, réexporté par le worker et repassé au contrôle croisé ;
+6. **seconde seed** (depuis le lot 1, ADR 0054 § 5) : export et conversion refaits avec la seed 2 ; `hasard` si le texte change, `pose au hasard` si ce sont les objets posés d'avance qui changent.
 
 ## Totaux
 
 | Résultat | Jeux |
 | --- | --- |
 | Converti sans point à vérifier | **0** |
-| Converti avec des points « À vérifier » | **16** (seed Rust et aller-retour réussis pour les 16) ; 14 avant le lot 0 |
-| Échec | **65** |
+| Converti avec des points « À vérifier » | **29** (seed Rust et aller-retour réussis pour les 29) ; 14 au départ, 16 après le lot 0 |
+| Échec | **52** |
 
-- Les 16 convertis : A Short Hike, APQuest, Adventure, Bumper Stickers, Choo-Choo Charles, Civilization VI, Hylics 2, Inscryption, Mega Man 2, Mega Man 3, Muse Dash, Risk of Rain 2, Saving Princess, Sonic Adventure 2 Battle, Undertale, VVVVVV.
-- Sur les 49 jeux PC (sans ROM ni ISO), **13 convertis** ; sur les 32 jeux à ROM ou ISO, 3 (Adventure, Mega Man 2, Mega Man 3).
+- Les 29 convertis : A Short Hike, APQuest, Adventure, Bumper Stickers, Castlevania - Circle of the Moon, Celeste (Open World), Celeste 64, Choo-Choo Charles, Civilization VI, DOOM 1993, DOOM II, Dark Souls III, Faxanadu, Heretic, Hylics 2, Inscryption, Landstalker, Mario & Luigi Superstar Saga, Mega Man 2, Mega Man 3, Meritous, Muse Dash, Noita, Risk of Rain 2, Saving Princess, Sonic Adventure 2 Battle, Super Mario 64, Undertale, VVVVVV.
+- Sur les 49 jeux PC (sans ROM ni ISO), **21 convertis** (13 avant le lot 1) ; sur les 32 jeux à ROM ou ISO, 8.
+- Lot 1 : 13 des 14 jeux visés se convertissent ; Aquaria bute sur une cause qui était cachée (pool plus grand que les lieux). Celeste 64 et Celeste (Open World) demandaient en plus une correction du convertisseur (objet cité par une règle mais jamais créé).
+- **Hasard** : 20 convertis changent d'une seed à l'autre ; pour 15 d'entre eux, c'est le pool (remplissage, pièges ou objets présents tirés au hasard) ; pour Mega Man 3, une option par défaut tirée au hasard ; pour Landstalker, une règle (`has_all(Lantern, "Axe Magic")` devient `has_all("Axe Magic")`), à regarder. Pour **3** (Dark Souls III, Faxanadu, Noita), ce sont les **objets posés d'avance** qui changent : l'instantané fige un tirage, à réécrire à la main avant toute publication.
 - Aucun jeu de la liste n'est sur une console Nintendo actuelle (Switch) ; 21 demandent une ROM ou un ISO d'une ancienne console Nintendo.
-- Durée du lot : 7 minutes (426 s, puis 442 s) pour les 81 jeux.
+- Durée du lot : 7 minutes (426 s, puis 442 s) pour les 81 jeux ; 13 minutes (774 s) avec la seconde seed.
 
 ### Ce que « converti » veut dire ici
 
@@ -33,21 +36,24 @@ Un monde converti n'est pas encore jouable tel quel :
 
 ## Causes d'échec, par fréquence
 
-Le convertisseur s'arrête à la **première** cause ; l'export, lui, compte toutes les règles opaques et signale le `collect` personnalisé. Les chiffres de la colonne « en tout » sont donc des minimums pour les objets verrouillés.
+Le convertisseur s'arrête à la **première** cause ; l'export, lui, compte toutes les règles opaques et signale le `collect` personnalisé. Chiffres après le lot 1.
 
 | Cause | 1ʳᵉ cause | En tout | Seule cause | Ce qu'il faudrait faire |
 | --- | --- | --- | --- | --- |
-| Objet verrouillé dans un lieu à numéro (objet vanilla, boutique, sortie de niveau) | 24 | ≥ 24 | 14 | **Format version 3** : `item = "…"` sur un lieu à numéro (objet posé d'avance, gardé dans le datapackage) ; à valider (ADR) |
 | `collect` / `remove` redéfinis (compteurs maison, objets qui valent N) | 21 | 21 | 5 | Format : objets qui **ajoutent à un compteur** (`gives = { "Argent" = 50 }`) et règles sur ce compteur ; les cas plus libres restent au portage à la main. À valider (ADR) |
-| Règle opaque (sondeur) | 8 | **36** | 8 | Sondeur : voir le détail plus bas |
+| Règle opaque (sondeur) | 18 | **36** | 8 | Sondeur : voir le détail plus bas. Les 10 jeux « objet verrouillé + règles opaques » et Super Mario Land 2 ont maintenant la règle opaque pour première cause |
 | ROM demandée dès la génération | 8 | 8 | 8 | En mode export, ne pas exiger la ROM (elle ne sert qu'à `generate_output`) ; mais le patch reste écrit par Python : décision 3 |
-| `has_all` vide | 2 | 2 | 2 | **Corrigé au lot 0** : `has_all` d'une liste vide vaut `true`, `has_any` vaut `false` (Mega Man 2 et 3 se convertissent) |
+| Pool plus grand que les lieux | 1 | 1 | 1 | Aquaria (217 objets pour 195 lieux) : Archipelago laisse le surplus non placé, avec un avertissement. Format : dire quel surplus laisser tomber, ou garder Aquaria au repli Python |
+| Lieu sans numéro et sans objet d'événement | 1 | 1 | 0 | Pokemon Red and Blue (« Buy Fire Stone ») : à regarder avec ses règles opaques |
 | `has_from_list` hors groupe déclaré | 1 | 1 | 1 | Format : règle « somme d'exemplaires sur une liste » (prévue par l'ADR 0042, version 3) |
 | Plus de 256 combinaisons (`au moins 6 parmi 23`) | 1 | 1 | 0 | Format : règle `at_least(n, liste)` au lieu du dépliage |
-| Objet d'événement qui a aussi un numéro | 1 | 1 | 0 | Même chose que l'objet verrouillé (version 3) |
 | Options par défaut refusées par le monde | 1 | 1 | 1 | Final Fantasy exige des réglages faits sur le site de FFR : à essayer avec un vrai YAML |
+| Objet verrouillé dans un lieu à numéro | 0 | — | — | **Fait au lot 1** (format version 3, ADR 0054) : `item = "…"` sur le lieu ; 24 jeux l'avaient en 1ʳᵉ cause |
+| Objet d'événement qui a aussi un numéro | 0 | — | — | **Fait au lot 1** : en version 3, l'événement nomme l'objet à numéro |
+| Objet cité par une règle, jamais créé | 0 | — | — | **Corrigé au lot 1** : écrit `false`, comme Archipelago le compte (Celeste 64, Celeste (Open World)) |
+| `has_all` vide | 0 | — | — | **Corrigé au lot 0** (Mega Man 2 et 3) |
 
-Combinaisons des 28 jeux à plusieurs causes : `collect` + règles opaques (16), objet verrouillé + règles opaques (10), règles opaques + autre (2).
+Combinaisons des jeux à plusieurs causes : `collect` + règles opaques (16), règles opaques + autre (2).
 
 ### Règles opaques : d'où elles viennent
 
@@ -64,17 +70,20 @@ Raisons relevées (échantillon de 8 raisons distinctes par jeu, 36 jeux) :
 | `count_from_list_unique`, `update_reachable_regions` | 2 | Ajouter ces deux questions au sondeur |
 | Règle non monotone, résultat instable (Stardew) | 2 | Rien à faire dans le sondeur : portage à la main |
 
-### Points « À vérifier » des 16 convertis (après le lot 0)
+### Points « À vérifier » des 29 convertis (après le lot 1)
 
 | Code | Point | Jeux |
 | --- | --- | --- |
-| `classif` | objet ni dans le pool ni au départ, écrit `filler` | 13 |
-| `pool` | fin du pool écrite en `[filler]` : le monde tire-t-il des pièges ? | 13 |
-| `absents` | lieux absents avec ces options, gardés avec `when = 'false'` | 9 |
-| `option` | option d'un type que le format ne connaît pas (listes, dictionnaires, poids) | 6 jeux, 40 options |
-| `mixte` | exemplaires d'un même objet avec des classifications différentes : l'union de leurs drapeaux est gardée | 3 jeux, 25 objets |
-| `item_rule` | règles d'objet non converties | 3 |
-| `early`, `drapeaux` | objets à placer tôt ignorés ; drapeaux de classification inconnus | 1 chacun |
+| `classif` | objet ni dans le pool, ni au départ, ni posé, écrit `filler` | 24 |
+| `pool` | fin du pool écrite en `[filler]` : le monde tire-t-il des pièges ? | 23 |
+| `absents` | lieux absents avec ces options, gardés avec `when = 'false'` | 20 |
+| `pose` | objets posés d'avance : dépendent-ils des options ou du hasard ? (`pose au hasard` dans le tableau quand la seconde seed le prouve) | 13 |
+| `option` | option d'un type que le format ne connaît pas (listes, dictionnaires, poids) | 12 jeux, 84 options |
+| `mixte` | exemplaires d'un même objet avec des classifications différentes : l'union de leurs drapeaux est gardée | 7 jeux, 30 objets |
+| `item_rule` | règles d'objet non converties | 6 |
+| `early` | objets à placer tôt ignorés | 3 |
+| `jamais` | objets cités par les règles mais jamais créés, écrits `false` | 2 |
+| `drapeaux` | drapeaux de classification inconnus | 2 |
 
 Avant le lot 0, `start_inventory_from_pool` (option déclarée par chaque monde mais appliquée par Archipelago avant l'export) était signalée à tort dans 5 jeux, et le convertisseur gardait la classification du **premier** exemplaire d'un objet mixte, ce qui pouvait faire d'une progression un simple remplissage.
 
@@ -90,82 +99,82 @@ Support : « PC » quand le jeu se joue sur sa version PC sans ROM ni ISO. « li
 | A Link to the Past | SNES | Échec | ROM demandée à la génération | — | — |
 | A Short Hike | PC | Converti (2 à vérifier) | item_rule, pool | oui (131 lieux) | contrôle croisé OK |
 | APQuest | PC | Converti (3 à vérifier) | absents, classif, pool | oui (6 lieux) | contrôle croisé OK |
-| Adventure | Atari 2600 · fichier de sortie | Converti (3 à vérifier) | classif, item_rule, pool | oui (24 lieux) | contrôle croisé OK |
-| Aquaria | PC | Échec | objet verrouillé hors événement | — | — |
+| Adventure | Atari 2600 · fichier de sortie | Converti (3 à vérifier) | classif, item_rule, pool · hasard | oui (24 lieux) | contrôle croisé OK |
+| Aquaria | PC | Échec | pool plus grand que les lieux (217 pour 195) | — | — |
 | Blasphemous | PC | Échec | `collect` personnalisé, 87 règle(s) opaque(s) | — | — |
 | Bomb Rush Cyberfunk | PC | Échec | `collect` personnalisé, 78 règle(s) opaque(s) | — | — |
-| Bumper Stickers | PC | Converti (2 à vérifier) | classif, pool | oui (100 lieux) | contrôle croisé OK |
-| Castlevania - Circle of the Moon | GBA | Échec | objet verrouillé hors événement | — | — |
+| Bumper Stickers | PC | Converti (2 à vérifier) | classif, pool · hasard | oui (100 lieux) | contrôle croisé OK |
+| Castlevania - Circle of the Moon | GBA | Converti (4 à vérifier) | absents, early, pool, pose · hasard | oui (124 lieux) | contrôle croisé OK |
 | Castlevania 64 | N64 | Échec | 5 règle(s) opaque(s) | — | — |
-| Celeste (Open World) | PC · licence restrictive | Échec | objet verrouillé hors événement | — | — |
-| Celeste 64 | PC · licence restrictive | Échec | objet verrouillé hors événement | — | — |
+| Celeste (Open World) | PC · licence restrictive | Converti (23 à vérifier) | absents, classif, jamais, mixte, option ×17, pool, pose | oui (233 lieux) | contrôle croisé OK |
+| Celeste 64 | PC · licence restrictive | Converti (9 à vérifier) | absents, jamais, mixte, option ×4, pool, pose | oui (40 lieux) | contrôle croisé OK |
 | ChecksFinder | PC | Échec | `has_from_list` hors groupe | — | — |
 | Choo-Choo Charles | PC | Converti (1 à vérifier) | classif | oui (691 lieux) | contrôle croisé OK |
-| Civilization VI | PC · fichier de sortie | Converti (7 à vérifier) | absents, classif, early, item_rule, option ×2, pool | oui (148 lieux) | contrôle croisé OK |
+| Civilization VI | PC · fichier de sortie | Converti (7 à vérifier) | absents, classif, early, item_rule, option ×2, pool · hasard | oui (148 lieux) | contrôle croisé OK |
 | DLCQuest | PC | Échec | `collect` personnalisé, 16 règle(s) opaque(s) | — | — |
-| DOOM 1993 | PC | Échec | objet verrouillé hors événement | — | — |
-| DOOM II | PC | Échec | objet verrouillé hors événement | — | — |
-| Dark Souls III | PC | Échec | objet verrouillé hors événement | — | — |
-| EarthBound | SNES | Échec | 10 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| DOOM 1993 | PC | Converti (4 à vérifier) | absents, classif, pool, pose · hasard | oui (348 lieux) | contrôle croisé OK |
+| DOOM II | PC | Converti (4 à vérifier) | absents, classif, pool, pose · hasard | oui (453 lieux) | contrôle croisé OK |
+| Dark Souls III | PC | Converti (25 à vérifier) | absents, classif, early, item_rule, option ×19, pool, pose · pose au hasard, hasard | oui (1190 lieux) | contrôle croisé OK |
+| EarthBound | SNES | Échec | 10 règle(s) opaque(s) | — | — |
 | Factorio | PC | Échec | `collect` personnalisé | — | — |
-| Faxanadu | NES | Échec | objet verrouillé hors événement | — | — |
+| Faxanadu | NES | Converti (4 à vérifier) | classif, item_rule, mixte, pose · pose au hasard, hasard | oui (110 lieux) | contrôle croisé OK |
 | Final Fantasy | NES | Échec | options par défaut refusées (réglages FFR) | — | — |
 | Final Fantasy Mystic Quest | SNES | Échec | `collect` personnalisé | — | — |
 | Gauntlet Legends | N64 | Échec | `collect` personnalisé | — | — |
-| Heretic | PC | Échec | objet verrouillé hors événement | — | — |
+| Heretic | PC | Converti (4 à vérifier) | absents, classif, pool, pose · hasard | oui (502 lieux) | contrôle croisé OK |
 | Hollow Knight | PC | Échec | `collect` personnalisé, 326 règle(s) opaque(s) | — | — |
 | Hylics 2 | PC | Converti (3 à vérifier) | absents, classif, option | oui (133 lieux) | contrôle croisé OK |
 | Inscryption | PC | Converti (2 à vérifier) | classif, pool | oui (100 lieux) | contrôle croisé OK |
 | Jak and Daxter: The Precursor Legacy | PS2 (ISO, portage OpenGOAL) | Échec | `collect` personnalisé, 15 règle(s) opaque(s) | — | — |
-| Kingdom Hearts | PC | Échec | 63 règle(s) opaque(s), objet verrouillé hors événement | — | — |
-| Kingdom Hearts 2 | PC | Échec | 30 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| Kingdom Hearts | PC | Échec | 63 règle(s) opaque(s) | — | — |
+| Kingdom Hearts 2 | PC | Échec | 30 règle(s) opaque(s) | — | — |
 | Kirby's Dream Land 3 | SNES | Échec | 1 règle(s) opaque(s) | — | — |
-| Landstalker - The Treasures of King Nole | Mega Drive | Échec | objet verrouillé hors événement | — | — |
+| Landstalker - The Treasures of King Nole | Mega Drive | Converti (6 à vérifier) | absents, classif, item_rule, mixte ×2, pose · hasard | oui (291 lieux) | contrôle croisé OK |
 | Lingo | PC | Échec | 4 règle(s) opaque(s) | — | — |
 | Links Awakening DX | GBC | Échec | `collect` personnalisé, 97 règle(s) opaque(s) | — | — |
 | Lufia II Ancient Cave | SNES | Échec | ROM demandée à la génération | — | — |
-| Mario & Luigi Superstar Saga | GBA | Échec | objet verrouillé hors événement | — | — |
-| Mega Man 2 | NES · fichier de sortie | Converti (5 à vérifier) | absents, classif, option ×2, pool | oui (44 lieux) | contrôle croisé OK |
-| Mega Man 3 | NES · fichier de sortie | Converti (4 à vérifier) | absents, option ×2, pool | oui (64 lieux) | contrôle croisé OK |
+| Mario & Luigi Superstar Saga | GBA | Converti (5 à vérifier) | absents, classif, option, pool, pose · hasard | oui (556 lieux) | contrôle croisé OK |
+| Mega Man 2 | NES · fichier de sortie | Converti (5 à vérifier) | absents, classif, option ×2, pool · hasard | oui (44 lieux) | contrôle croisé OK |
+| Mega Man 3 | NES · fichier de sortie | Converti (4 à vérifier) | absents, option ×2, pool · hasard | oui (64 lieux) | contrôle croisé OK |
 | MegaMan Battle Network 3 | GBA | Échec | ROM demandée à la génération | — | — |
-| Meritous | PC | Échec | objet verrouillé hors événement | — | — |
-| Muse Dash | PC | Converti (31 à vérifier) | absents, classif, drapeaux, mixte ×21, option ×7 | oui (90 lieux) | contrôle croisé OK |
-| Noita | PC | Échec | objet verrouillé hors événement | — | — |
+| Meritous | PC | Converti (3 à vérifier) | classif, pool, pose · hasard | oui (104 lieux) | contrôle croisé OK |
+| Muse Dash | PC | Converti (31 à vérifier) | absents, classif, drapeaux, mixte ×21, option ×7 · hasard | oui (90 lieux) | contrôle croisé OK |
+| Noita | PC | Converti (6 à vérifier) | absents, classif, option ×2, pool, pose · pose au hasard, hasard | oui (109 lieux) | contrôle croisé OK |
 | Ocarina of Time | N64 | Échec | ROM demandée à la génération | — | — |
 | Old School Runescape | PC | Échec | 35 règle(s) opaque(s) | — | — |
 | Overcooked! 2 | PC | Échec | 126 règle(s) opaque(s) | — | — |
 | Paint | PC | Échec | `collect` personnalisé, 131 règle(s) opaque(s) | — | — |
 | Pokemon Emerald | GBA | Échec | `collect` personnalisé | — | — |
-| Pokemon Red and Blue | GB | Échec | 143 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| Pokemon Red and Blue | GB | Échec | 143 règle(s) opaque(s), lieu sans numéro ni événement | — | — |
 | Raft | PC | Échec | `collect` personnalisé, 142 règle(s) opaque(s) | — | — |
-| Risk of Rain 2 | PC | Converti (3 à vérifier) | absents, classif, pool | oui (187 lieux) | contrôle croisé OK |
+| Risk of Rain 2 | PC | Converti (3 à vérifier) | absents, classif, pool · hasard | oui (187 lieux) | contrôle croisé OK |
 | SMZ3 | SNES | Échec | `collect` personnalisé, 357 règle(s) opaque(s) | — | — |
 | Satisfactory | PC | Échec | `collect` personnalisé, 38 règle(s) opaque(s) | — | — |
-| Saving Princess | PC | Converti (5 à vérifier) | classif, mixte ×3, pool | oui (36 lieux) | contrôle croisé OK |
+| Saving Princess | PC | Converti (5 à vérifier) | classif, mixte ×3, pool · hasard | oui (36 lieux) | contrôle croisé OK |
 | Secret of Evermore | SNES | Échec | ROM demandée à la génération | — | — |
-| Shivers | PC | Échec | 1 règle(s) opaque(s), objet verrouillé hors événement | — | — |
-| Sonic Adventure 2 Battle | PC · licence restrictive | Converti (30 à vérifier) | absents, classif, mixte, option ×26, pool | oui (206 lieux) | contrôle croisé OK |
+| Shivers | PC | Échec | 1 règle(s) opaque(s) | — | — |
+| Sonic Adventure 2 Battle | PC · licence restrictive | Converti (30 à vérifier) | absents, classif, mixte, option ×26, pool · hasard | oui (206 lieux) | contrôle croisé OK |
 | Starcraft 2 | PC | Échec | 162 règle(s) opaque(s) | — | — |
 | Stardew Valley | PC | Échec | `collect` personnalisé, 545 règle(s) opaque(s) | — | — |
-| Subnautica | PC | Échec | 135 règle(s) opaque(s), objet verrouillé hors événement | — | — |
-| Super Mario 64 | N64 (ROM, portage sm64ex) | Échec | objet verrouillé hors événement | — | — |
-| Super Mario Land 2 | GB | Échec | 30 règle(s) opaque(s), événement avec numéro | — | — |
+| Subnautica | PC | Échec | 135 règle(s) opaque(s) | — | — |
+| Super Mario 64 | N64 (ROM, portage sm64ex) | Converti (5 à vérifier) | absents, classif, drapeaux, option, pose | oui (149 lieux) | contrôle croisé OK |
+| Super Mario Land 2 | GB | Échec | 30 règle(s) opaque(s) | — | — |
 | Super Mario World | SNES · licence restrictive | Échec | ROM demandée à la génération | — | — |
 | Super Metroid | SNES | Échec | `collect` personnalisé, 301 règle(s) opaque(s) | — | — |
 | TUNIC | PC | Échec | `collect` personnalisé, 14 règle(s) opaque(s) | — | — |
-| Terraria | PC | Échec | 3 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| Terraria | PC | Échec | 3 règle(s) opaque(s) | — | — |
 | The Legend of Zelda | NES | Échec | ROM demandée à la génération | — | — |
 | The Messenger | PC | Échec | `collect` personnalisé, 23 règle(s) opaque(s) | — | — |
-| The Wind Waker | GameCube (ISO) | Échec | 40 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| The Wind Waker | GameCube (ISO) | Échec | 40 règle(s) opaque(s) | — | — |
 | The Witness | PC | Échec | `collect` personnalisé, 75 règle(s) opaque(s) | — | — |
-| Timespinner | PC | Échec | 3 règle(s) opaque(s), objet verrouillé hors événement | — | — |
-| Undertale | PC | Converti (3 à vérifier) | absents, classif, pool | oui (48 lieux) | contrôle croisé OK |
+| Timespinner | PC | Échec | 3 règle(s) opaque(s) | — | — |
+| Undertale | PC | Converti (3 à vérifier) | absents, classif, pool · hasard | oui (48 lieux) | contrôle croisé OK |
 | VVVVVV | PC · fichier de sortie | Converti (1 à vérifier) | pool | oui (20 lieux) | contrôle croisé OK |
 | Wargroove | PC | Échec | 40 règle(s) opaque(s) | — | — |
 | Yacht Dice | PC | Échec | `collect` personnalisé, 90 règle(s) opaque(s) | — | — |
 | Yoshi's Island | SNES | Échec | ROM demandée à la génération | — | — |
 | Yu-Gi-Oh! 2006 | GBA | Échec | 4 règle(s) opaque(s), plus de 256 combinaisons | — | — |
-| Zillion | Master System | Échec | 147 règle(s) opaque(s), objet verrouillé hors événement | — | — |
+| Zillion | Master System | Échec | 147 règle(s) opaque(s) | — | — |
 | shapez | PC | Échec | 1 règle(s) opaque(s) | — | — |
 
 Codes des points à vérifier : voir le tableau précédent.
@@ -182,7 +191,7 @@ Codes des points à vérifier : voir le tableau précédent.
 Ordre des lots, du moins cher au plus cher :
 
 1. **Lot 0, corrections du convertisseur, fait le 23 novembre 2026** : `has_all` / `has_any` vides, `start_inventory_from_pool` plus signalée, union des drapeaux pour les classifications mixtes (tests dans `generate/tests/conversion.rs`). Mesuré : Mega Man 2 et Mega Man 3 convertis (16 au total), 5 points à vérifier en moins. Reste : l'import du moteur « export » refuse toujours les classifications mixtes.
-2. **Lot 1, objets posés d'avance (format version 3, ADR à valider)** : un lieu à numéro peut porter un objet fixé. Débloque jusqu'à 14 jeux qui n'ont que cette cause : Aquaria, DOOM 1993, DOOM II, Dark Souls III, Heretic, Meritous, Noita (PC), Celeste 64 et Celeste (Open World) (licence restrictive), Castlevania - Circle of the Moon, Faxanadu, Landstalker, Mario & Luigi Superstar Saga, Super Mario 64 (ROM). Il peut rester des causes cachées derrière la première : à remesurer.
+2. **Lot 1, objets posés d'avance, fait le 23 novembre 2026** (format version 3, ADR 0054) : `item = "…"` sur un lieu à numéro, événement qui donne un objet à numéro, verrou respecté par les deux équilibrages (corrige aussi le moteur « export »), objet jamais créé écrit `false`, seconde seed dans l'inventaire. Mesuré : 29 convertis (13 de plus), dont 21 jeux PC. Reste : Aquaria (pool plus grand que les lieux) ; Dark Souls III, Faxanadu et Noita tirent leurs objets posés au hasard.
 3. **Lot 2, sondeur** : `state.multiworld` et `prog_items` en lecture seule, résultat non booléen, `count_from_list_unique`, plafonds réglables ; puis la règle « somme pondérée » dans `logic` et le format (avec `has_from_list` et `at_least`). Vise les 8 jeux qui n'ont que des règles opaques (Castlevania 64, Kirby's Dream Land 3, Lingo, Old School Runescape, Overcooked! 2, Starcraft 2, Wargroove, shapez), ChecksFinder et Yu-Gi-Oh! 2006, et une part des 10 jeux « verrouillé + opaque ».
 4. **Lot 3, compteurs (format, ADR à valider)** : objets qui ajoutent à un compteur, pour les 21 `collect` personnalisés (dont Hollow Knight, Stardew Valley, TUNIC, The Witness, Factorio, Satisfactory). Le plus gros lot ; certains (Stardew Valley, 545 règles dont des objets de règle instables) relèveront du portage à la main.
 5. **Pour chaque converti, avant le badge « Converti »** : `slot_data`, `when` des options principales, tirage des pièges, puis une vraie partie avec le mod. C'est un travail par jeu, à faire par lots de 3 ou 4 jeux PC du catalogue (`docs/jeux-pc-catalogue.md`).

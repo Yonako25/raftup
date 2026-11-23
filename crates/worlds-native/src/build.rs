@@ -398,9 +398,18 @@ impl NativeWorld {
         // qu'une fois : chaque événement en pose un exemplaire.
         let mut event_items = Vec::new();
         let mut created: std::collections::BTreeMap<&str, ItemKindId> = Default::default();
+        // Format 3 : un événement peut donner un objet déclaré (à numéro) ; on retrouve
+        // ces objets par leur nom.
+        let declared_items: std::collections::BTreeMap<&str, ItemKindId> = self
+            .items
+            .iter()
+            .map(|i| i.name.as_str())
+            .zip(items.iter().copied())
+            .collect();
         for event in &self.events {
-            let id = match created.get(event.item.as_str()) {
-                Some(id) => *id,
+            let declared = declared_items.get(event.item.as_str()).copied();
+            let id = match declared.or_else(|| created.get(event.item.as_str()).copied()) {
+                Some(id) => id,
                 None => {
                     let id = w.add_item_kind(
                         slot,
@@ -511,6 +520,15 @@ impl NativeWorld {
                 if location.progress != Progress::Default {
                     w.set_progress(id, location.progress)?;
                 }
+                // Objet posé d'avance (format 3) : posé et verrouillé avant de compter les
+                // lieux à remplir, comme `place_locked_item` d'Archipelago.
+                if let Some(choice) = &location.item {
+                    let item = items
+                        .get(*pick(choice, v)? as usize)
+                        .copied()
+                        .ok_or_else(|| missing("objet"))?;
+                    w.place_locked(id, item)?;
+                }
                 Some(id)
             } else {
                 None
@@ -522,7 +540,7 @@ impl NativeWorld {
                 let who = format!("l'événement « {} »", event.name);
                 let region = region_of(*pick(&event.region, v)?, &who)?;
                 let id = w.add_location(region, event.name.clone(), None, Rule::True)?;
-                w.place(id, *item)?;
+                w.place_locked(id, *item)?;
                 Some(id)
             } else {
                 None
