@@ -21,6 +21,55 @@ pub const ERR_EXPORT_FAILED: i64 = -32013;
 /// le worker passe par `python -c`, dont la ligne de commande est limitée en taille.
 pub const EXPORTER_SCRIPT: &str = include_str!("../worker/raftup_export.py");
 
+/// Plafonds du sondeur de règles de l'export (ADR 0028) : au-delà, une règle Python
+/// reste opaque et le monde garde le générateur Python.
+///
+/// Relever les plafonds traduit plus de règles, mais l'export est plus long (chaque
+/// chemin rejoue la règle deux fois). Les valeurs par défaut sont celles du script.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProbeLimits {
+    /// Feuilles de l'arbre de décision d'une règle (`MAX_PATHS`).
+    pub max_paths: u32,
+    /// Questions différentes sur un même chemin (`MAX_QUESTIONS`).
+    pub max_questions: u32,
+}
+
+impl ProbeLimits {
+    /// Plus grandes valeurs acceptées : au-delà, un export durerait des heures.
+    pub const MAX: ProbeLimits = ProbeLimits {
+        max_paths: 1_000_000,
+        max_questions: 4096,
+    };
+}
+
+impl Default for ProbeLimits {
+    fn default() -> Self {
+        ProbeLimits {
+            max_paths: 4096,
+            max_questions: 64,
+        }
+    }
+}
+
+/// Le module d'export avec d'autres plafonds pour le sondeur, à mettre dans
+/// [`ExportParams::exporter`]. Les valeurs sont bornées par [`ProbeLimits::MAX`].
+///
+/// Les plafonds sont des variables globales du script, lues au moment du sondage : il
+/// suffit de les redéfinir à la fin du texte.
+pub fn exporter_script(limits: ProbeLimits) -> String {
+    let paths = limits.max_paths.clamp(1, ProbeLimits::MAX.max_paths);
+    let questions = limits
+        .max_questions
+        .clamp(1, ProbeLimits::MAX.max_questions);
+    format!(
+        "{EXPORTER_SCRIPT}
+# Plafonds choisis par Raftup.
+MAX_PATHS = {paths}
+MAX_QUESTIONS = {questions}
+"
+    )
+}
+
 /// Paramètres de `generate`. Les chemins doivent être absolus (le worker change de dossier courant).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct GenerateParams {
