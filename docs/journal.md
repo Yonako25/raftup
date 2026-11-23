@@ -763,3 +763,14 @@ untime2`.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-core/tests/inventaire_real.rs` et `docs/inventaire-conversion.md` (session d'inventaire).
 - **Suite** : relancer `cargo test -p hub` avec `RAFTUP_HUB_TEST_POSTGRES` puis `RAFTUP_HUB_TEST_MYSQL`, puis l'étape 2 de l'ADR 0052 (launcher).
 
+### 2026-11-23 · Inventaire de conversion des mondes d'Archipelago
+- **Fait** : test réel `inventaire_real` (export, import et contrôle croisé, conversion, seed Rust, aller-retour) lancé sur les 81 mondes intégrés de 0.6.8, options par défaut ; résultat dans `docs/inventaire-conversion.md` : 14 convertis (tous avec des points à vérifier, seed Rust et aller-retour réussis), 67 échecs (objet verrouillé 24, `collect` maison 21, ROM 8, règle opaque 8 en 1ʳᵉ cause, 36 jeux avec des règles opaques) ; clippy du test passe.
+- **Pas vérifié** : les causes cachées derrière la première (le convertisseur s'arrête au premier refus) ; aucun converti joué avec son mod ; `slot_data` non repris (conversion sans seed).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
+- **Suite** : 4 décisions acceptées (ADR 0053) ; lot 0 du convertisseur (bogue `has_all` vide, bruit des options communes), dans une nouvelle session.
+
+### 2026-11-23 · Lot 0 du convertisseur (mondes d'Archipelago en natif)
+- **Fait** : `has_all` / `has_any` vides écrits `true` / `false`, `start_inventory_from_pool` plus signalée comme option du jeu, union des drapeaux pour un objet aux classifications mixtes (3 tests dans `generate/tests/conversion.rs`) ; inventaire relancé : 16 convertis sur 81 (Mega Man 2 et 3 en plus, seed Rust et aller-retour réussis), `docs/inventaire-conversion.md` à jour. fmt, clippy (`generate`, `launcher-core`) et `cargo test -p generate` passent.
+- **Pas vérifié** : `cargo test --workspace` ; l'import du moteur « export » refuse toujours les classifications mixtes (changement de l'ADR 0028, à proposer).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
+- **Suite** : lot 1, objets posés d'avance (format version 3) : proposer l'ADR avant de coder, dans une nouvelle session.

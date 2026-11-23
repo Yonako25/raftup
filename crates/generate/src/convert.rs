@@ -137,17 +137,22 @@ pub fn convert(
     let mut classes: BTreeMap<&str, u32> = BTreeMap::new();
     let mut mixed = BTreeSet::new();
     for item in &mine {
-        let seen = *classes
+        // `entry(...).or_insert(...)` rend une référence modifiable vers la valeur rangée :
+        // on y ajoute les drapeaux de chaque exemplaire (union des bits).
+        let bits = classes
             .entry(item.name.as_str())
             .or_insert(item.classification);
-        if seen != item.classification {
+        if *bits != item.classification {
             mixed.insert(item.name.as_str());
         }
+        *bits |= item.classification;
     }
+    // Le format n'a qu'une classification par objet. Garder l'union des drapeaux est sûr :
+    // si un seul exemplaire fait progresser, tous sont placés selon la logique.
     for name in &mixed {
         notes.push(format!(
             "les exemplaires de « {name} » n'ont pas tous la même classification : \
-             celle du premier est gardée"
+             l'union de leurs drapeaux est gardée"
         ));
     }
     let unknown_class: Vec<&str> = package
@@ -459,7 +464,13 @@ fn options_skeleton(out: &mut String, options: &[OptionExport], notes: &mut Vec<
         return;
     }
     out.push_str("# ---- Options de l'apworld (en commentaire : voir l'en-tête) ----\n#\n");
-    for o in options {
+    // Options que chaque monde déclare, mais qu'Archipelago applique lui-même avant
+    // l'export (le pool reçu en tient déjà compte) : ce ne sont pas des options du jeu.
+    const SHARED: [&str; 1] = ["start_inventory_from_pool"];
+    for o in options
+        .iter()
+        .filter(|o| !SHARED.contains(&o.name.as_str()))
+    {
         let mut lines = vec![
             "[[options]]".to_string(),
             format!("name = {}", toml_str(&o.name)),
@@ -703,6 +714,16 @@ impl Rules<'_> {
             } => {
                 self.same_player(*player)?;
                 atom(has(item, *count))
+            }
+            // Liste vide : le format refuse `has_all()` et `has_any()`. Comme en Python,
+            // « tous parmi rien » est vrai et « un parmi rien » est faux (Mega Man 2 et 3).
+            RuleExport::HasAll { player, items } if items.is_empty() => {
+                self.same_player(*player)?;
+                atom("true".into())
+            }
+            RuleExport::HasAny { player, items } if items.is_empty() => {
+                self.same_player(*player)?;
+                atom("false".into())
             }
             RuleExport::HasAll { player, items } => {
                 self.same_player(*player)?;
