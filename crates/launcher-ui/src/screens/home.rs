@@ -148,6 +148,7 @@ pub fn show(
                                 fraction: if game.ready { 1.0 } else { 0.0 },
                                 marker: None,
                                 cover,
+                                pin: library.pin_for(&game.ap_game),
                             };
                             if cover_card(ui, &look, false) {
                                 library.select(&game.id);

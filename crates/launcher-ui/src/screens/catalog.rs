@@ -154,6 +154,7 @@ fn grid(
                             fraction: if game.ready { 1.0 } else { 0.0 },
                             marker,
                             cover,
+                            pin: library.pin_for(&game.ap_game),
                         };
                         let selected = state.selected.as_deref() == Some(game.id.as_str());
                         if cover_card(ui, &look, selected) {

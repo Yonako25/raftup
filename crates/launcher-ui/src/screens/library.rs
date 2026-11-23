@@ -305,6 +305,16 @@ impl LibraryState {
         self.art_for(ctx, &id, kind)
     }
 
+    /// Badge d'un jeu du catalogue : celui de son monde natif s'il y en a un d'installé
+    /// (par le nom du jeu chez Archipelago), sinon aucun (monde Archipelago).
+    pub fn pin_for(&self, ap_game: &str) -> Option<WorldPin> {
+        self.native
+            .worlds()
+            .iter()
+            .find(|world| world.game == ap_game)
+            .map(world_pin)
+    }
+
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
     /// l'écran « Catalogue » montrent, sans redessiner la Bibliothèque.
     pub fn summaries(&self) -> Vec<GameSummary> {
@@ -1323,7 +1333,8 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
         let from_registry = state.registry.is_from_registry(id);
         // Jaquette du créateur ou de Steam si elle est prête, sinon la jaquette dessinée.
         let cover = state.art.texture(ui.ctx(), id, ArtKind::Cover);
-        let look = card_look(profile, &view, busy, from_registry, cover);
+        let mut look = card_look(profile, &view, busy, from_registry, cover);
+        look.pin = state.pin_for(&profile.game.ap_game);
         cards.push((look, selected, CardTarget::Game(id.clone())));
     }
     // Les mondes natifs, après les jeux du catalogue (ADR 0046).
@@ -1339,6 +1350,7 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
             marker: Some((native_panel::MARKER, theme::ACCENT)),
             // Un monde natif n'a pas encore d'images : il garde sa jaquette dessinée.
             cover: None,
+            pin: Some(world_pin(world)),
         };
         cards.push((look, selected, CardTarget::Native(world.key.clone())));
     }
@@ -1504,6 +1516,7 @@ fn card_look<'a>(
         fraction,
         // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non) ;
         // sinon, un profil jamais essayé avec le vrai jeu est marqué (ADR 0049).
+        pin: None,
         marker: if from_registry {
             Some(("Registre", theme::ITEM))
         } else if is_untested(profile) {
@@ -1528,6 +1541,71 @@ pub(super) struct CardLook<'a> {
     pub(super) marker: Option<(&'a str, Color32)>,
     /// Jaquette du jeu (ADR 0051) ; `None` : l'aplat coloré avec le titre.
     pub(super) cover: Option<egui::TextureHandle>,
+    /// Badge en haut à gauche de la jaquette : sorte de monde (« Natif »,
+    /// « Converti »), voir [`world_pin`]. `None` : monde Archipelago (apworld).
+    pub(super) pin: Option<WorldPin>,
+}
+
+/// Sorte de monde d'un jeu, montrée en badge sur sa jaquette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorldPin {
+    /// Monde écrit au format natif de Raftup (ADR 0041).
+    Native,
+    /// Monde natif obtenu en convertissant un apworld (ADR 0042).
+    Converted,
+}
+
+impl WorldPin {
+    pub fn label(self) -> &'static str {
+        match self {
+            WorldPin::Native => "Natif",
+            WorldPin::Converted => "Converti",
+        }
+    }
+
+    /// Couleur du texte et du fond du badge.
+    fn colors(self) -> (Color32, Color32) {
+        match self {
+            WorldPin::Native => (theme::GREEN, theme::GREEN_BG),
+            WorldPin::Converted => (theme::ACCENT, theme::ACCENT_BG),
+        }
+    }
+}
+
+/// Badge d'un monde natif installé : « Converti » si son reçu dit qu'il vient de la
+/// conversion d'un apworld, « Natif » sinon.
+pub fn world_pin(world: &launcher_core::native_worlds::InstalledNativeWorld) -> WorldPin {
+    let converted = world
+        .receipt
+        .as_ref()
+        .is_some_and(|receipt| receipt.conversion.is_some());
+    if converted {
+        WorldPin::Converted
+    } else {
+        WorldPin::Native
+    }
+}
+
+/// Dessine le badge `pin` dans le coin haut gauche de la jaquette `rect`.
+fn paint_pin(ui: &Ui, rect: egui::Rect, pin: WorldPin) {
+    let (fg, bg) = pin.colors();
+    let painter = ui.painter();
+    let galley = painter.layout_no_wrap(
+        pin.label().to_uppercase(),
+        egui::FontId::proportional(11.0),
+        fg,
+    );
+    let size = galley.size() + egui::vec2(12.0, 6.0);
+    let badge = egui::Rect::from_min_size(rect.min + egui::vec2(8.0, 8.0), size);
+    let radius = CornerRadius::same(theme::RADIUS);
+    painter.rect_filled(badge, radius, bg);
+    painter.rect_stroke(
+        badge,
+        radius,
+        egui::Stroke::new(1.0, fg),
+        egui::StrokeKind::Inside,
+    );
+    painter.galley(badge.center() - galley.size() / 2.0, galley, fg);
 }
 
 /// Dessine une carte. Renvoie vrai au clic.
@@ -1591,6 +1669,9 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
                     painter.galley(top_left, galley, theme::TEXT);
                 }
             }
+            if let Some(pin) = look.pin {
+                paint_pin(ui, rect, pin);
+            }
             let painter = ui.painter();
             if lift > 0.0 {
                 // Voile clair : la jaquette « s'allume » sous la souris.
@@ -1625,7 +1706,10 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
         // `interact` rend toute la carte cliquable, pas seulement son texte.
         .interact(Sense::click());
     // Nom de la carte entière pour un lecteur d'écran (et pour les tests sans fenêtre).
-    let label = format!("Fiche de {}", look.name);
+    let label = match look.pin {
+        Some(pin) => format!("Fiche de {} ({})", look.name, pin.label()),
+        None => format!("Fiche de {}", look.name),
+    };
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -2456,6 +2540,35 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
             assert!(shown.iter().any(|t| t == attendu), "{attendu} : {shown:?}");
         }
         assert!(shown.iter().any(|t| t.contains("à la main")));
+    }
+
+    /// Badge sur la jaquette : « Natif » pour un monde écrit au format de Raftup,
+    /// « Converti » quand son reçu dit qu'il vient d'un apworld (ADR 0042).
+    #[test]
+    fn badge_natif_ou_converti_sur_la_jaquette() {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+
+        let temp = tempfile::tempdir().unwrap();
+        let mut state = natif_state(temp.path());
+        let shown = draw(&ctx, &mut state);
+        assert!(shown.iter().any(|t| t == "NATIF"), "{shown:?}");
+        assert!(!shown.iter().any(|t| t == "CONVERTI"), "{shown:?}");
+
+        let temp = tempfile::tempdir().unwrap();
+        let paths = Paths::under(temp.path());
+        let dir = paths.native_worlds_dir().join("apquest");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(launcher_core::native_worlds::RECEIPT_FILE),
+            "format_version = 1\nfiles = [\"world.toml\"]\n\
+             [conversion]\napworld = \"apquest.apworld\"\nap_version = \"0.6.8\"\nnotes = 0\n",
+        )
+        .unwrap();
+        let mut state = natif_state(temp.path());
+        let shown = draw(&ctx, &mut state);
+        assert!(shown.iter().any(|t| t == "CONVERTI"), "{shown:?}");
+        assert!(!shown.iter().any(|t| t == "NATIF"), "{shown:?}");
     }
 
     #[test]
