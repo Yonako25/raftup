@@ -116,3 +116,59 @@ fn nom_de_module_verifie() {
     );
     assert_eq!(module_name("Slime Rancher"), "slime_rancher");
 }
+
+#[test]
+fn objets_poses_d_avance_en_python() {
+    let toml = r#"
+format_version = 3
+
+[game]
+name = "Doomish"
+goal = 'has("E1M1 - Complete")'
+
+[[options]]
+name = "fast_exit"
+type = "toggle"
+default = false
+
+[[items]]
+name = "E1M1 - Complete"
+id = 1
+classification = "progression"
+
+[[items]]
+name = "Shells"
+id = 2
+classification = "filler"
+
+[[regions]]
+name = "Hangar"
+
+[[locations]]
+name = "E1M1 - Exit"
+id = 10
+region = "Hangar"
+item = "E1M1 - Complete"
+
+[[locations]]
+name = "Shop"
+id = 11
+region = "Hangar"
+item = [{ when = "option(fast_exit)", value = "E1M1 - Complete" }, { value = "Shells" }]
+
+[filler]
+item = "Shells"
+"#;
+    let f = files(toml);
+    let regions = file(&f, "regions.py");
+    assert!(
+        regions.contains("    location.place_locked_item(w.create_item(\"E1M1 - Complete\"))\n"),
+        "{regions}"
+    );
+    assert!(regions.contains("    if "), "{regions}");
+    assert!(
+        regions
+            .contains("    else:\n        location.place_locked_item(w.create_item(\"Shells\"))\n"),
+        "{regions}"
+    );
+}

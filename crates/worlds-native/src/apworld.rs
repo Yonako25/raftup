@@ -465,6 +465,9 @@ impl Writer<'_> {
                 }
             }
             let _ = writeln!(out, "{indent}region.locations.append(location)");
+            if let Some(item) = &location.item {
+                self.item_choice(&mut out, &indent, item)?;
+            }
         }
         out.push('\n');
         for (i, event) in world.events.iter().enumerate() {
@@ -586,27 +589,53 @@ impl Writer<'_> {
         indent: &str,
         region: &Choice<u32>,
     ) -> Result<(), ApworldError> {
-        let mut names = Vec::new();
-        for (_, r) in &region.cases {
-            names.push(self.region_name(*r)?.to_string());
+        let mut lines = Vec::new();
+        for (when, r) in &region.cases {
+            let line = format!("region = regions[{}]", py_str(self.region_name(*r)?));
+            lines.push((when.as_ref(), line));
         }
-        let mut cases = region.cases.iter().zip(names);
-        let assign = |name: &str| format!("region = regions[{}]", py_str(name));
-        if region.cases.len() == 1 {
-            if let Some((_, name)) = cases.next() {
-                let _ = writeln!(out, "{indent}{}", assign(&name));
-            }
+        self.cases(out, indent, lines)
+    }
+
+    /// Objet posé d'avance (format 3) : `location.place_locked_item(...)`, cas par cas.
+    fn item_choice(
+        &self,
+        out: &mut String,
+        indent: &str,
+        item: &Choice<u32>,
+    ) -> Result<(), ApworldError> {
+        let mut lines = Vec::new();
+        for (when, i) in &item.cases {
+            let line = format!(
+                "location.place_locked_item(w.create_item({}))",
+                py_str(self.item_name(*i)?)
+            );
+            lines.push((when.as_ref(), line));
+        }
+        self.cases(out, indent, lines)
+    }
+
+    /// Une liste de cas `(condition, ligne)` en `if` / `elif` / `else` ; un seul cas (sans
+    /// condition) : la ligne seule.
+    fn cases(
+        &self,
+        out: &mut String,
+        indent: &str,
+        lines: Vec<(Option<&Expr>, String)>,
+    ) -> Result<(), ApworldError> {
+        if let [(_, line)] = lines.as_slice() {
+            let _ = writeln!(out, "{indent}{line}");
             return Ok(());
         }
-        for (i, ((condition, _), name)) in cases.enumerate() {
+        for (i, (condition, line)) in lines.iter().enumerate() {
             match condition {
                 Some(c) => {
                     let keyword = if i == 0 { "if" } else { "elif" };
                     let _ = writeln!(out, "{indent}{keyword} {}:", self.expr(c)?);
-                    let _ = writeln!(out, "{indent}    {}", assign(&name));
+                    let _ = writeln!(out, "{indent}    {line}");
                 }
                 None => {
-                    let _ = writeln!(out, "{indent}else:\n{indent}    {}", assign(&name));
+                    let _ = writeln!(out, "{indent}else:\n{indent}    {line}");
                 }
             }
         }

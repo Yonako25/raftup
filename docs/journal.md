@@ -780,3 +780,9 @@ untime2`.
 - **Pas vérifié** : contre le vrai `rafthub` (aucun test de bout en bout dans `crates/hub/tests/`, non touché) ; écran jamais regardé à l'œil ; vrai mod sur une partie hébergée ; présence « en partie » pour une partie du hub.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/generate/`.
 - **Suite** : test de bout en bout hub + client du launcher dans `crates/hub/tests/`, puis l'étape 3 (veille, réveil, export).
+
+### 2026-11-23 · Lot 1 du convertisseur : objets posés d'avance (ADR 0054)
+- **Fait** : ADR 0054 accepté ; format de monde en version 3 (`item` sur un lieu à numéro, événement qui donne un objet à numéro), `logic::Location::locked` et `place_locked`, les deux équilibrages ne déplacent plus un lieu verrouillé (bogue du moteur « export », testé), convertisseur (objets posés, objet jamais créé écrit `false`), export apworld, spec `spec/monde-natif/` ; inventaire relancé avec une seconde seed : 29 convertis sur 81 (21 jeux PC), `docs/inventaire-conversion.md` à jour. fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : aucun des 13 nouveaux convertis joué avec son mod ; Dark Souls III, Faxanadu et Noita tirent leurs objets posés au hasard (instantané figé) ; Aquaria bute sur un pool plus grand que les lieux.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-ui/` (autre session).
+- **Suite** : lot 2 (sondeur : `state.multiworld`, `prog_items`, résultats non booléens), dans une nouvelle session.

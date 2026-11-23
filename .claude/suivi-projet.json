@@ -526,6 +526,10 @@
     {
       "date": "2026-11-22",
       "title": "ADR 0051 : images du créateur installées avec le world (remplace 0047)"
+    },
+    {
+      "date": "2026-11-23",
+      "title": "ADR 0054 : objets posés d'avance (format version 3)"
     }
   ],
   "log": [
@@ -576,6 +580,16 @@
     {
       "date": "2026-11-23",
       "summary": "Fusion dans main des parties hébergées (ADR 0052, étape 1) et de la conversion (inventaire, ADR 0053, lot 0 : 16 mondes sur 81) ; fmt, clippy et tests du workspace passent (9b31740).",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-23",
+      "summary": "Lot 1 du convertisseur : objets posés d'avance, format de monde en version 3 (ADR 0054) ; 29 mondes d'Archipelago convertis sur 81 (21 jeux PC).",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-23",
+      "summary": "Fusion dans main de l'étape 2 de l'ADR 0052 (parties hébergées dans le launcher) et du lot 1 du convertisseur.",
       "tasks": []
     }
   ]

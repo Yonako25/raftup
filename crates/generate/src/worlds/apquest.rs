@@ -276,13 +276,13 @@ pub(crate) fn create<R: Rng + ?Sized>(
 
     // Événements : le bouton et la victoire, posés d'office.
     let button_location = w.add_location(top_left, "Top Left Room Button", None, Rule::True)?;
-    w.place(button_location, button)?;
+    w.place_locked(button_location, button)?;
     let mut boss = Rule::HasAll(vec![sword, shield]);
     if o.hard_mode {
         boss = Rule::And(vec![boss, Rule::has_count(health, 2)]);
     }
     let boss_location = w.add_location(final_boss, "Final Boss Defeated", None, boss)?;
-    w.place(boss_location, victory)?;
+    w.place_locked(boss_location, victory)?;
     w.set_goal(p, Rule::has(victory))?;
 
     // Objets du pool (`items.py`), puis remplissage jusqu'au nombre de lieux.

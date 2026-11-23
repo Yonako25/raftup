@@ -80,16 +80,27 @@ pub fn convert(
     // ---- Lieux et événements, dans l'ordre de création ----
     let locations = in_creation_order(&p.locations, |l| l.n);
     let mut events: Vec<&LocationExport> = Vec::new();
+    // Lieux à numéro : vides (remplis par le pool) ou posés d'avance (format 3, ADR 0054).
     let mut real: Vec<&LocationExport> = Vec::new();
+    let mut placed = 0usize;
     for location in locations {
         match (location.address, &location.item) {
             (Some(_), None) => real.push(location),
+            (Some(_), Some(item)) if item.player == player && item.code.is_some() => {
+                placed += 1;
+                real.push(location)
+            }
             (Some(_), Some(item)) => {
+                let kind = if item.code.is_none() {
+                    "sans numéro"
+                } else {
+                    "d'un autre joueur"
+                };
                 return Err(unsupported(format!(
-                    "le lieu « {} » a un numéro et un objet déjà posé (« {} ») : le format 1 \
-                     ne connaît que les événements (lieux sans numéro)",
+                    "le lieu « {} » a un numéro et porte « {} », un objet {kind} : le format \
+                     ne pose d'avance qu'un objet à numéro du même joueur",
                     location.name, item.name
-                )))
+                )));
             }
             (None, Some(item)) if item.code.is_none() && item.player == player => {
                 events.push(location)
@@ -106,16 +117,18 @@ pub fn convert(
     // format 2 ; sinon on écrit le format 1, lu par plus de versions de Raftup.
     let mut event_items = BTreeSet::new();
     let mut shared_events = false;
+    // Un événement qui donne un objet portant le nom d'un objet à numéro (Super Mario Land
+    // 2) : Archipelago compte les deux ensemble, par leur nom ; le format 3 l'écrit tel quel.
+    let mut numbered_events = false;
     for event in &events {
         let item = event.item.as_ref().map(|i| i.name.as_str()).unwrap_or("");
+        if package.item_name_to_id.contains_key(item) {
+            numbered_events = true;
+            continue;
+        }
         if !event_items.insert(item) {
             shared_events = true;
             continue;
-        }
-        if package.item_name_to_id.contains_key(item) {
-            return Err(unsupported(format!(
-                "l'objet d'événement « {item} » a aussi un numéro"
-            )));
         }
         if let Some(i) = &event.item {
             if i.classification & 1 == 0 {
@@ -128,10 +141,20 @@ pub fn convert(
     }
 
     // ---- Classification des objets : prise sur les exemplaires du joueur ----
+    // Les objets posés d'avance comptent aussi : un objet qui n'existe que posé (« E1M1 -
+    // Complete ») garde sa vraie classification au lieu de `filler`.
+    // Même chose pour un événement qui donne un objet à numéro : la logique doit le
+    // compter, il faut donc qu'il reste une progression.
+    let preplaced = real
+        .iter()
+        .chain(events.iter())
+        .filter_map(|l| l.item.as_ref())
+        .filter(|i| i.code.is_some() || package.item_name_to_id.contains_key(&i.name));
     let mine: Vec<&ItemExport> = export
         .pool
         .iter()
         .chain(p.precollected.iter())
+        .chain(preplaced)
         .filter(|i| i.player == player)
         .collect();
     let mut classes: BTreeMap<&str, u32> = BTreeMap::new();
@@ -175,13 +198,50 @@ pub fn convert(
         .filter(|(name, _)| name.as_str() != "Everything")
         .map(|(name, members)| (name.as_str(), members.iter().map(String::as_str).collect()))
         .collect();
+    // Objets que le monde déclare (datapackage et objets d'événement). Une règle peut en
+    // citer un autre, jamais créé (« CANNOT ACCESS » de Celeste 64, pour un passage
+    // fermé) : Archipelago le compte à zéro, la conversion l'écrit `false`.
+    let mut known: BTreeSet<&str> = package.item_name_to_id.keys().map(String::as_str).collect();
+    known.extend(
+        events
+            .iter()
+            .filter_map(|e| e.item.as_ref())
+            .map(|i| i.name.as_str()),
+    );
+    let mut cited = Vec::new();
+    p.goal.items(&mut cited);
+    for entrance in &p.entrances {
+        entrance.rule.items(&mut cited);
+    }
+    for location in &p.locations {
+        location.rule.items(&mut cited);
+    }
+    let never: BTreeSet<&str> = cited
+        .iter()
+        .filter(|(who, item)| *who == player && !known.contains(item.as_str()))
+        .map(|(_, item)| item.as_str())
+        .collect();
+    if !never.is_empty() {
+        notes.push(format!(
+            "objets cités par les règles mais jamais créés, écrits « false » : {}",
+            never.iter().copied().collect::<Vec<_>>().join(", ")
+        ));
+    }
     let rules = Rules {
         player,
         groups: &groups,
+        known: &known,
     };
 
     let mut out = String::new();
-    let format_version = if shared_events { 2 } else { 1 };
+    // La plus petite version qui suffit : lue par plus de versions de Raftup.
+    let format_version = if placed > 0 || numbered_events {
+        3
+    } else if shared_events {
+        2
+    } else {
+        1
+    };
     header(&mut out, p, format_version);
     let head_len = out.len();
 
@@ -199,10 +259,14 @@ pub fn convert(
     unique(entrances.iter().map(|(e, _)| e.name.as_str()), "entrée")?;
 
     // ---- Autres points à vérifier ----
-    if real.iter().any(|l| l.item_rule.is_some()) {
+    // Un lieu posé d'avance n'a que faire de sa règle d'objet : le placement n'y va pas.
+    if real
+        .iter()
+        .any(|l| l.item_rule.is_some() && l.item.is_none())
+    {
         let names: Vec<&str> = real
             .iter()
-            .filter(|l| l.item_rule.is_some())
+            .filter(|l| l.item_rule.is_some() && l.item.is_none())
             .map(|l| l.name.as_str())
             .collect();
         notes.push(format!(
@@ -234,13 +298,19 @@ pub fn convert(
         .filter(|i| i.player == player)
         .map(|i| i.name.as_str())
         .collect();
-    if pool.len() != real.len() {
+    let to_fill = real.len() - placed;
+    if pool.len() != to_fill {
         return Err(unsupported(format!(
-            "{} objets dans le pool du joueur pour {} lieux : le format 1 remplit les lieux \
-             du joueur avec son propre pool",
-            pool.len(),
-            real.len()
+            "{} objets dans le pool du joueur pour {to_fill} lieux à remplir : le format \
+             remplit les lieux du joueur avec son propre pool",
+            pool.len()
         )));
+    }
+    if placed > 0 {
+        notes.push(format!(
+            "{placed} objet(s) posé(s) d'avance (item = …) : vérifier qu'ils ne dépendent ni \
+             des options ni du hasard de la génération"
+        ));
     }
     let mut fixed = pool.len();
     let mut filler = None;
@@ -313,6 +383,9 @@ pub fn convert(
         let _ = writeln!(out, "id = {}", location.address.unwrap_or(0));
         let _ = writeln!(out, "region = {}", toml_str(&location.region));
         write_rule(&mut out, &rules.text(&location.rule)?);
+        if let Some(item) = &location.item {
+            let _ = writeln!(out, "item = {}", toml_str(&item.name));
+        }
         match location.progress_type {
             1 => {}
             2 => out.push_str("progress = \"priority\"\n"),
@@ -678,6 +751,8 @@ struct Rules<'a> {
     player: u32,
     /// Groupes d'objets déclarés (sans « Everything »), pour `has_from_list`.
     groups: &'a [(&'a str, BTreeSet<&'a str>)],
+    /// Objets déclarés par le monde ; un autre nom vaut « jamais possédé ».
+    known: &'a BTreeSet<&'a str>,
 }
 
 impl Rules<'_> {
@@ -693,6 +768,24 @@ impl Rules<'_> {
                 "une règle lit l'inventaire du joueur {player} : le format 1 ne décrit qu'un monde"
             )))
         }
+    }
+
+    /// `has(item, count)`, ou `false` pour un objet jamais créé (compté à zéro).
+    fn has(&self, item: &str, count: u32) -> String {
+        if count > 0 && !self.known.contains(item) {
+            "false".into()
+        } else {
+            has(item, count)
+        }
+    }
+
+    /// Les objets déclarés de la liste (on retire ceux qui ne seront jamais possédés).
+    fn known_of<'b>(&self, items: &'b [String]) -> Vec<&'b str> {
+        items
+            .iter()
+            .map(String::as_str)
+            .filter(|i| self.known.contains(i))
+            .collect()
     }
 
     fn tree(&self, rule: &RuleExport) -> Result<Text, ConvertError> {
@@ -713,7 +806,7 @@ impl Rules<'_> {
                 count,
             } => {
                 self.same_player(*player)?;
-                atom(has(item, *count))
+                atom(self.has(item, *count))
             }
             // Liste vide : le format refuse `has_all()` et `has_any()`. Comme en Python,
             // « tous parmi rien » est vrai et « un parmi rien » est faux (Mega Man 2 et 3).
@@ -727,22 +820,35 @@ impl Rules<'_> {
             }
             RuleExport::HasAll { player, items } => {
                 self.same_player(*player)?;
+                if self.known_of(items).len() < items.len() {
+                    return atom("false".into());
+                }
                 atom(call("has_all", items.iter().map(String::as_str)))
             }
             RuleExport::HasAny { player, items } => {
                 self.same_player(*player)?;
-                atom(call("has_any", items.iter().map(String::as_str)))
+                let known = self.known_of(items);
+                if known.is_empty() {
+                    return atom("false".into());
+                }
+                atom(call("has_any", known.into_iter()))
             }
             RuleExport::HasAllCounts { player, items } => {
                 self.same_player(*player)?;
                 Ok(Text::And(
-                    items.iter().map(|(i, n)| Text::Atom(has(i, *n))).collect(),
+                    items
+                        .iter()
+                        .map(|(i, n)| Text::Atom(self.has(i, *n)))
+                        .collect(),
                 ))
             }
             RuleExport::HasAnyCount { player, items } => {
                 self.same_player(*player)?;
                 Ok(Text::Or(
-                    items.iter().map(|(i, n)| Text::Atom(has(i, *n))).collect(),
+                    items
+                        .iter()
+                        .map(|(i, n)| Text::Atom(self.has(i, *n)))
+                        .collect(),
                 ))
             }
             RuleExport::HasFromList {
@@ -762,7 +868,10 @@ impl Rules<'_> {
                 }
                 match count {
                     0 => atom("true".into()),
-                    1 => atom(call("has_any", items.iter().map(String::as_str))),
+                    1 => match self.known_of(items) {
+                        known if known.is_empty() => atom("false".into()),
+                        known => atom(call("has_any", known.into_iter())),
+                    },
                     _ => Err(unsupported(format!(
                         "somme d'exemplaires sur une liste qui n'est pas un groupe déclaré \
                          ({count} parmi {})",

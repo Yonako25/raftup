@@ -336,7 +336,7 @@ impl RuleExport {
     }
 
     /// Objets cités par la règle : `(joueur, nom)`.
-    fn items(&self, out: &mut Vec<(u32, String)>) {
+    pub(crate) fn items(&self, out: &mut Vec<(u32, String)>) {
         match self {
             RuleExport::Has { player, item, .. } => out.push((*player, item.clone())),
             RuleExport::HasAll { player, items }
@@ -612,7 +612,14 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
                 world.set_item_rule(id, Some(rule))?;
             }
             if let Some(item) = &location.item {
-                world.place(id, names.item(item.player, &item.name)?)?;
+                let kind = names.item(item.player, &item.name)?;
+                // Objet verrouillé par le monde (`place_locked_item`) : aucun équilibrage
+                // ne doit le déplacer (ADR 0054).
+                if location.locked {
+                    world.place_locked(id, kind)?;
+                } else {
+                    world.place(id, kind)?;
+                }
             }
         }
     }

@@ -301,3 +301,19 @@ fn le_joueur_le_plus_en_retard_avance_plus_tot() {
     }
     assert!(with < without, "avec {with}, sans {without}");
 }
+
+#[test]
+fn objet_pose_d_avance_laisse_en_place() {
+    // Bogue corrigé par l'ADR 0054 : « Key B » posée d'avance par le monde (lieu à numéro,
+    // verrouillé) était échangée comme un objet placé, parce que seul un lieu sans
+    // numéro comptait comme verrouillé.
+    let (mut w, d10) = bob_bloque();
+    let key_b = w.take(d10).unwrap().unwrap();
+    w.place_locked(d10, key_b).unwrap();
+    assert!(w.is_locked(d10));
+    let start = State::new(&w);
+    let report = balance(&mut w, &[0, 99], &start, &mut rng(1)).unwrap();
+    assert_eq!(report.moved, 0);
+    assert_eq!(where_is(&w, 1, "Key B"), d10);
+    assert!(w.is_locked(d10));
+}
