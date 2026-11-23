@@ -82,7 +82,7 @@ struct SettingsPage {
 }
 
 /// Les réglages de chaque groupe, dans l'ordre d'affichage.
-const GROUPS: [(&str, &[SettingKey]); 6] = [
+const GROUPS: [(&str, &[SettingKey]); 7] = [
     ("general", &[SettingKey::HubName, SettingKey::PublicUrl]),
     ("registration", &[SettingKey::RegistrationMode]),
     ("email", &[SettingKey::SmtpUrl, SettingKey::MailFrom]),
@@ -95,6 +95,7 @@ const GROUPS: [(&str, &[SettingKey]); 6] = [
         &[SettingKey::IgdbClientId, SettingKey::IgdbClientSecret],
     ),
     ("download", &[SettingKey::PublicDownload]),
+    ("hosting", &[SettingKey::Hosting]),
 ];
 
 /// Les réglages d'un groupe, ou `None` si le groupe n'existe pas. Le groupe
@@ -158,6 +159,11 @@ fn describe(key: SettingKey) -> (&'static str, &'static str, &'static str) {
             "Page /telecharger, où chacun récupère le launcher relié à ce hub.",
             "",
         ),
+        SettingKey::Hosting => (
+            "Parties hébergées par le hub",
+            "Les joueurs peuvent envoyer une seed pour que ce hub fasse tourner la partie (plage de ports à ouvrir).",
+            "",
+        ),
     }
 }
 
@@ -178,6 +184,7 @@ fn choices(key: SettingKey, current: &str) -> Vec<Choice> {
             ("closed", "Fermées"),
         ],
         SettingKey::PublicDownload => &[("true", "Activée"), ("false", "Désactivée")],
+        SettingKey::Hosting => &[("true", "Activées"), ("false", "Désactivées")],
         _ => &[],
     };
     list.iter()
@@ -267,6 +274,10 @@ fn build_groups(settings: &PublicSettings, discord_allowed: bool) -> Vec<Group> 
                 "art" => (
                     "Illustrations des jeux",
                     "Jaquettes et images des jeux de la Bibliothèque, prises chez IGDB et gardées en cache par le hub (ADR 0047). Sans application Twitch, le launcher garde ses aplats colorés.".to_string(),
+                ),
+                "hosting" => (
+                    "Parties hébergées",
+                    "Le hub fait tourner les parties que les joueurs lui envoient, chacune sur un port de sa plage (ADR 0052).".to_string(),
                 ),
                 _ => ("Page publique", String::new()),
             };

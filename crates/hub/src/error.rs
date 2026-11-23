@@ -93,6 +93,30 @@ pub enum HubError {
     ArtUnavailable,
     #[error("trop de demandes d'illustrations, réessayer plus tard")]
     ArtRateLimited,
+    /// Parties hébergées (ADR 0052).
+    #[error("ce hub n'héberge pas de parties")]
+    HostingDisabled,
+    #[error("aucune partie hébergée avec cet identifiant")]
+    GameNotFound,
+    #[error("seul l'hôte de la partie peut faire cela")]
+    NotGameHost,
+    #[error("nom de partie : 1 à {0} caractères, sans caractère de contrôle")]
+    InvalidGameName(usize),
+    /// Le texte vient de la lecture sécurisée de `multidata` (jamais de mot de passe).
+    #[error("seed refusée : {0}")]
+    InvalidSeed(String),
+    #[error("sauvegarde refusée : {0}")]
+    InvalidSave(String),
+    #[error("seed ou sauvegarde trop grosse")]
+    SeedTooLarge,
+    #[error("trop de joueurs dans la seed : {0} au plus")]
+    TooManyPlayers(usize),
+    #[error("déjà {0} parties hébergées sur ce compte : en supprimer une d'abord")]
+    GameLimitReached(i64),
+    #[error("ce hub héberge déjà autant de parties qu'il peut, réessayer plus tard")]
+    HubFull,
+    #[error("aucun port libre pour une nouvelle partie, réessayer plus tard")]
+    NoFreePort,
     /// Corps de requête illisible (JSON mal formé, champ manquant…).
     #[error("requête invalide : {0}")]
     BadRequest(String),
@@ -149,6 +173,17 @@ impl HubError {
             HubError::ArtNotFound => (StatusCode::NOT_FOUND, "art_not_found"),
             HubError::ArtUnavailable => (StatusCode::BAD_GATEWAY, "art_unavailable"),
             HubError::ArtRateLimited => (StatusCode::TOO_MANY_REQUESTS, "art_rate_limited"),
+            HubError::HostingDisabled => (StatusCode::SERVICE_UNAVAILABLE, "hosting_disabled"),
+            HubError::GameNotFound => (StatusCode::NOT_FOUND, "game_not_found"),
+            HubError::NotGameHost => (StatusCode::FORBIDDEN, "not_game_host"),
+            HubError::InvalidGameName(_) => (StatusCode::BAD_REQUEST, "invalid_game_name"),
+            HubError::InvalidSeed(_) => (StatusCode::BAD_REQUEST, "invalid_seed"),
+            HubError::InvalidSave(_) => (StatusCode::BAD_REQUEST, "invalid_save"),
+            HubError::SeedTooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "seed_too_large"),
+            HubError::TooManyPlayers(_) => (StatusCode::BAD_REQUEST, "too_many_players"),
+            HubError::GameLimitReached(_) => (StatusCode::CONFLICT, "game_limit_reached"),
+            HubError::HubFull => (StatusCode::SERVICE_UNAVAILABLE, "hub_full"),
+            HubError::NoFreePort => (StatusCode::SERVICE_UNAVAILABLE, "no_free_port"),
             HubError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             HubError::Database(_) | HubError::Internal(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")

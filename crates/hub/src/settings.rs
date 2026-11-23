@@ -78,11 +78,13 @@ pub enum SettingKey {
     IgdbClientSecret,
     /// Page publique `/telecharger` active (`true` / `false`).
     PublicDownload,
+    /// Parties hébergées par le hub (ADR 0052) : `true` / `false`, éteint par défaut.
+    Hosting,
 }
 
 impl SettingKey {
     /// Tous les réglages, dans l'ordre d'affichage.
-    pub const ALL: [SettingKey; 10] = [
+    pub const ALL: [SettingKey; 11] = [
         SettingKey::HubName,
         SettingKey::PublicUrl,
         SettingKey::RegistrationMode,
@@ -93,6 +95,7 @@ impl SettingKey {
         SettingKey::IgdbClientId,
         SettingKey::IgdbClientSecret,
         SettingKey::PublicDownload,
+        SettingKey::Hosting,
     ];
 
     /// Nom en base (et dans les formulaires de la console).
@@ -108,6 +111,7 @@ impl SettingKey {
             SettingKey::IgdbClientId => "igdb_client_id",
             SettingKey::IgdbClientSecret => "igdb_client_secret",
             SettingKey::PublicDownload => "public_download",
+            SettingKey::Hosting => "hosting",
         }
     }
 
@@ -124,6 +128,7 @@ impl SettingKey {
             SettingKey::IgdbClientId => "RAFTUP_HUB_IGDB_CLIENT_ID",
             SettingKey::IgdbClientSecret => "RAFTUP_HUB_IGDB_CLIENT_SECRET",
             SettingKey::PublicDownload => "RAFTUP_HUB_PUBLIC_DOWNLOAD",
+            SettingKey::Hosting => "RAFTUP_HUB_HOSTING",
         }
     }
 
@@ -226,6 +231,12 @@ impl SettingKey {
                 "true" | "false" => Ok(value.to_string()),
                 _ => Err(HubError::InvalidSetting("page publique : true ou false")),
             },
+            SettingKey::Hosting => match value {
+                "true" | "false" => Ok(value.to_string()),
+                _ => Err(HubError::InvalidSetting(
+                    "parties hébergées : true ou false",
+                )),
+            },
         }
     }
 }
@@ -309,6 +320,8 @@ pub struct Settings {
     pub igdb_client_id: Option<String>,
     pub igdb_client_secret: Option<String>,
     pub public_download: bool,
+    /// Parties hébergées par le hub permises (ADR 0052).
+    pub hosting: bool,
     /// Source de chaque réglage (pour la console).
     sources: BTreeMap<SettingKey, SettingSource>,
 }
@@ -324,6 +337,7 @@ impl fmt::Debug for Settings {
             .field("discord_client_id", &self.discord_client_id)
             .field("igdb_client_id", &self.igdb_client_id)
             .field("public_download", &self.public_download)
+            .field("hosting", &self.hosting)
             .finish_non_exhaustive()
     }
 }
@@ -375,6 +389,9 @@ impl Settings {
         let igdb_client_secret = pick(SettingKey::IgdbClientSecret);
         // Page publique active par défaut (ADR 0036 : « désactivable »).
         let public_download = pick(SettingKey::PublicDownload).is_none_or(|v| v == "true");
+        // Parties hébergées éteintes par défaut : héberger des parties consomme du
+        // CPU, de la mémoire et une plage de ports à ouvrir (ADR 0052).
+        let hosting = pick(SettingKey::Hosting).is_some_and(|v| v == "true");
 
         Settings {
             hub_name,
@@ -387,6 +404,7 @@ impl Settings {
             igdb_client_id,
             igdb_client_secret,
             public_download,
+            hosting,
             sources,
         }
     }
@@ -459,6 +477,7 @@ impl Settings {
                     SettingKey::DiscordClientId => self.discord_client_id.clone(),
                     SettingKey::IgdbClientId => self.igdb_client_id.clone(),
                     SettingKey::PublicDownload => Some(self.public_download.to_string()),
+                    SettingKey::Hosting => Some(self.hosting.to_string()),
                 };
                 let configured = match key {
                     SettingKey::SmtpUrl => self.smtp_url.is_some(),
@@ -561,6 +580,17 @@ mod tests {
             SettingSource::Default
         );
         assert!(settings.public_download);
+        assert!(!settings.hosting);
+    }
+
+    #[test]
+    fn hebergement_regle_par_l_environnement() {
+        let env = EnvSettings::from_lookup(|name| {
+            (name == "RAFTUP_HUB_HOSTING").then(|| "true".to_string())
+        });
+        let settings = Settings::resolve(&BTreeMap::new(), &env, "http://h");
+        assert!(settings.hosting);
+        assert!(SettingKey::Hosting.validate("oui").is_err());
     }
 
     #[test]

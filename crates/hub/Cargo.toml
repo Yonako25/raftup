@@ -69,6 +69,16 @@ tokio-rustls.workspace = true
 # `ring` au lieu d'aws-lc ; `futures-util` (MIT OR Apache-2.0) fait avancer son flux.
 rustls-acme = { version = "0.15", default-features = false, features = ["ring", "tls12", "webpki-roots", "tokio"] }
 futures-util.workspace = true
+# Parties hébergées par le hub (ADR 0052) : le serveur de jeu de Raftup et la lecture
+# sécurisée des seeds, en MIT / Apache (sens permis : le hub AGPL dépend d'eux).
+server.workspace = true
+multidata.workspace = true
+ap-protocol.workspace = true
+# Certificat auto-signé des parties (ADR 0043), comme le launcher (MIT OR Apache-2.0).
+rcgen.workspace = true
+# Chiffrement au repos du mot de passe des parties (ChaCha20-Poly1305). `ring` est déjà
+# le moteur de rustls dans tout le dépôt (Apache-2.0 AND ISC) : pas de nouvelle crate.
+ring = "0.17"
 # Binaire seulement.
 anyhow.workspace = true
 tracing-subscriber.workspace = true
@@ -79,8 +89,8 @@ tower = { version = "0.5", default-features = false, features = ["util"] }
 tempfile.workspace = true
 # Signer un faux exe avec une clé générée dans le test (distribution, MIT).
 minisign.workspace = true
-# Certificat auto-signé créé pendant le test HTTPS (MIT OR Apache-2.0).
-rcgen.workspace = true
 # Test de bout en bout avec le vrai client du launcher (`tests/launcher_discord.rs`).
 # Sens permis : le hub (AGPL) dépend du launcher (MIT / Apache), jamais l'inverse.
 launcher-core = { path = "../launcher-core" }
+# Client Archipelago de Raftup : se connecte à une partie hébergée comme un mod (ADR 0052).
+client-core.workspace = true

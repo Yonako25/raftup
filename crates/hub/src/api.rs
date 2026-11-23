@@ -32,6 +32,11 @@
 //! | `GET /v1/blocks` | joueurs bloqués |
 //! | `POST /v1/blocks` | bloquer (`username`) : retire l'amitié et les demandes |
 //! | `DELETE /v1/blocks/{username}` | lever un blocage |
+//! | `POST /v1/games` | héberge une seed (`name`, `password`, `seed` et `save` en base64) : ADR 0052 |
+//! | `GET /v1/games` | mes parties hébergées |
+//! | `GET /v1/games/{id}` | état d'une partie (joueurs connectés, avancement) |
+//! | `GET /v1/games/{id}/export` | zip de la seed et de la sauvegarde (hôte seulement) |
+//! | `DELETE /v1/games/{id}` | arrête et supprime la partie (hôte seulement) |
 //! | `GET /v1/art/steam/{appid}` | illustrations d'un jeu Steam (ADR 0047), sans compte |
 //! | `GET /v1/art/igdb/{id}` | illustrations d'un jeu IGDB, sans compte |
 //! | `GET /v1/art/images/{image_id}/{kind}` | image JPEG (`cover` ou `hero`), sans compte |
@@ -128,6 +133,8 @@ pub fn public_router(state: AppState) -> Router {
         )
         .route("/v1/blocks", get(list_blocks).post(block_player))
         .route("/v1/blocks/{username}", delete(unblock_player))
+        // Parties hébergées par le hub (ADR 0052), avec leur propre limite de corps.
+        .merge(crate::games::routes::routes())
         // Illustrations des jeux (ADR 0047) : publiques, sans compte.
         .route("/v1/art/steam/{appid}", get(art_by_steam))
         .route("/v1/art/igdb/{id}", get(art_by_igdb))
@@ -428,6 +435,9 @@ async fn hub_info(State(state): State<AppState>) -> Result<Json<serde_json::Valu
         "version": env!("CARGO_PKG_VERSION"),
         "login_methods": login_methods,
         "registration_mode": settings.registration_mode.as_str(),
+        // Parties hébergées par ce hub (ADR 0052) : le launcher ne propose
+        // « Héberger sur Rafthub » que si ce champ vaut `true`.
+        "hosting": settings.hosting,
     })))
 }
 
@@ -918,6 +928,9 @@ async fn delete_account(
         }
         limiter.reset(&key);
     }
+    // Parties hébergées d'abord (ADR 0052, point 11) : leurs serveurs s'arrêtent et
+    // leurs dossiers partent avec le compte.
+    state.games().delete_all_of(store, user.user_id).await?;
     store.delete_account(user.user_id).await?;
     state.inner.presence.clear(user.user_id);
     tracing::info!(user_id = user.user_id, "compte supprimé");

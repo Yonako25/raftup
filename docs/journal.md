@@ -756,3 +756,10 @@ untime2`.
 - **Pas vérifié** : badges et curseur regardés dans la vraie fenêtre ; rien de l'ADR 0052 n'est codé.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` (numéro 0048 à changer à la fusion).
 - **Suite** : ADR 0052, étape 1 (le hub héberge une seed envoyée, avec sauvegarde et plage de ports), dans une nouvelle session.
+
+### 2026-11-23 · Parties hébergées par Rafthub, étape 1 (ADR 0052)
+- **Fait** : module `hub::games` : `POST/GET /v1/games`, `GET /v1/games/{id}`, `/export` (zip seed + sauvegarde), `DELETE` ; seed relue par `multidata`, `server::Server` dans le processus du hub sur un port libre de la plage (`RAFTUP_HUB_GAME_PORTS`), port mixte ws/wss avec certificat du hub (`fp`), sauvegarde dans `parties/<id>/` reprise à la relance ; mots de passe chiffrés (ChaCha20-Poly1305, `ring`), admin tiré au hasard ; limites 2 / 40 / 16 ; réglage `hosting` éteint par défaut, annoncé dans `/v1/info` ; schéma en version 7 ; `tests/games.rs` (9 tests, `client-core` comme un mod). fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : tests sur PostgreSQL, MySQL et MariaDB (Docker Desktop ne démarre pas sur ce PC) ; vrai mod non modifié face au hub ; binaire `rafthub` lancé avec des parties.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-core/tests/inventaire_real.rs` et `docs/inventaire-conversion.md` (session d'inventaire).
+- **Suite** : relancer `cargo test -p hub` avec `RAFTUP_HUB_TEST_POSTGRES` puis `RAFTUP_HUB_TEST_MYSQL`, puis l'étape 2 de l'ADR 0052 (launcher).
+

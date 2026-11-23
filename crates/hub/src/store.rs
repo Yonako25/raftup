@@ -27,15 +27,18 @@ use crate::error::HubError;
 // - `store/admin.rs` : suspension, réglages, invitations, journal, liste des joueurs.
 mod admin;
 mod admin_auth;
+// Parties hébergées par le hub (ADR 0052).
+mod games;
 pub use admin::EventFilter;
 pub use admin::{
     AdminEvent, DashboardCounts, InviteRow, Page, PlayerFilter, PlayerSummary, MAX_PAGE_SIZE,
 };
 pub use admin_auth::Role;
+pub use games::GameRow;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -145,7 +148,21 @@ CREATE TABLE IF NOT EXISTS admin_events (
     target_id BIGINT,
     detail TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS admin_events_created ON admin_events (created_at)
+CREATE INDEX IF NOT EXISTS admin_events_created ON admin_events (created_at);
+CREATE TABLE IF NOT EXISTS hosted_games (
+    id {key} PRIMARY KEY,
+    owner_id BIGINT NOT NULL,
+    name TEXT NOT NULL,
+    port BIGINT NOT NULL UNIQUE,
+    seed_name TEXT NOT NULL,
+    player_count BIGINT NOT NULL,
+    seed_size BIGINT NOT NULL,
+    password_enc TEXT,
+    admin_password_enc TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS hosted_games_owner ON hosted_games (owner_id)
 ";
 
 /// Migrations d'une version à la suivante : `(version atteinte, instructions)`.
@@ -167,6 +184,9 @@ const MIGRATIONS: &[(i64, &str)] = &[
     // Version 6 (console Rafthub, ADR 0036) : suspension des comptes. Les tables
     // `settings`, `invites` et `admin_events` sont créées par `SCHEMA`.
     (6, "ALTER TABLE users ADD COLUMN suspended_at BIGINT"),
+    // Version 7 (ADR 0052) : parties hébergées par le hub, table `hosted_games`
+    // créée par `SCHEMA`.
+    (7, ""),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.

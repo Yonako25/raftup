@@ -1,6 +1,6 @@
 # ADR 0052 — Partie hébergée par Rafthub ou en self-host
 
-- Statut : **accepté** le 23 novembre 2026 par l'utilisatrice, avec toutes les recommandations (points 1 à 12) ; rien n'est codé
+- Statut : **accepté** le 23 novembre 2026 par l'utilisatrice, avec toutes les recommandations (points 1 à 12) ; étape 1 codée le 23 novembre 2026 (branche `hub-parties-hebergees`, voir « Mise en œuvre »)
 - Date : 2026-11-23
 - Complète l'ADR 0002 et l'ADR 0033 (hub et son API `/v1`), l'ADR 0035 (client du hub), l'ADR 0031 (suivi async), l'ADR 0043 (chiffrement et empreinte dans le lien) et la proposition de salon par le Rafthub (branche `cloud/adr-salon-rafthub`, numérotée 0048 là-bas, à renuméroter à la fusion)
 
@@ -89,3 +89,19 @@ Chaque point est à valider ; la recommandation est en premier.
 3. Veille et réveil, export et reprise en self-host.
 4. Console d'admin (page « Parties », limites) et RGPD.
 5. Déploiement sur le hub officiel (ports, pare-feu), puis une vraie partie avec un mod non modifié.
+
+## Mise en œuvre de l'étape 1 (23 novembre 2026, précisions à relire)
+
+- **Module `hub::games`** : `GameHost` garde les serveurs qui tournent ; un seul verrou (tokio) sérialise les créations, donc deux envois simultanés ne prennent ni le même port ni plus que les limites. `server::Server` est lancé avec `with_tls`, `with_save`, `with_limits` (valeurs par défaut de `server::Limits`) et le suivi async (ADR 0031) activé, comme dans le launcher.
+- **Fichiers** : `<données>/parties/<id>/partie.archipelago` et `partie.raftup` (même nom de base : un export se reprend tel quel en self-host). La sauvegarde est écrite par le serveur avant chaque réponse (ADR 0014) et compactée à l'arrêt du hub ; au démarrage, `AppState` relance chaque partie sur son port (`GameHost::restore`). Une partie qui ne repart pas reste « `stopped` » avec une erreur au journal.
+- **Envoi** : `POST /v1/games` en JSON (`name`, `password` facultatif, `seed` et `save` en base64 standard), plus simple qu'un `multipart` pour le launcher. Limite de corps propre à la route (~85 Mio : deux fichiers de 32 Mio en base64). Seed relue par `multidata::load_archipelago` sur un thread à part ; sauvegarde vérifiée contre l'empreinte de la seed (`invalid_save` sinon). En cas d'échec, rien ne reste (ni dossier ni ligne).
+- **Ports** : premier port libre de la plage (`RAFTUP_HUB_GAME_PORTS`, défaut `38281-38380`), en sautant ceux des autres parties et ceux qu'un autre programme occupe. Écoute sur `0.0.0.0` (réglable, `127.0.0.1` dans les tests).
+- **Chiffrement de la connexion** : certificat auto-signé du hub (`<données>/parties/tls/`, 10 ans) avec `ws` accepté sur le même port (ADR 0043) ; l'empreinte est rendue dans `fingerprint` (le `fp` des liens). L'adresse rendue est `hôte:port` sans schéma, l'hôte venant de l'adresse publique du hub. Le certificat du domaine pourra le remplacer à l'étape 5.
+- **Mots de passe** : mot de passe de la partie et mot de passe d'admin chiffrés par ChaCha20-Poly1305 (`ring`, déjà le moteur de rustls), clé de 32 octets dans `<données>/parties/games.key` (droits 600 sous Unix), nonce aléatoire, données associées « partie + usage ». Mot de passe d'admin tiré au hasard (16 caractères en base32 de Crockford), rendu à l'hôte seulement (`POST` et `GET /v1/games/{id}`). Mot de passe de partie : 256 octets au plus.
+- **Réglage** `hosting` (base > `RAFTUP_HUB_HOSTING` > **éteint** par défaut), dans un groupe « Parties hébergées » de la page « Réglages ». Éteint : `POST /v1/games` répond `503 hosting_disabled`, les parties existantes continuent et restent exportables. `GET /v1/info` porte `hosting`.
+- **Accès** : `GET /v1/games/{id}` pour tout compte qui connaît l'identifiant (128 bits aléatoires) ; export et suppression pour l'hôte seulement (`403 not_game_host`) ; identifiant mal formé = `404 game_not_found`, sans toucher au disque.
+- **Limites** : `game_limit_reached` (409, 2 par compte), `hub_full` (503, 40 sur le hub), `too_many_players` (400, 16 joueurs, groupes non comptés), `seed_too_large` (413, 32 Mio), `no_free_port` (503).
+- **Schéma version 7** : table `hosted_games` (identifiant, hôte avec `ON DELETE CASCADE`, nom, port unique, nom de la seed, joueurs, taille, mots de passe chiffrés, date). La suppression du compte arrête et supprime aussi ses parties et leurs dossiers (avance sur le point 11).
+- **Tests** (`crates/hub/tests/games.rs`, sans réseau extérieur) : envoi, connexion par `client-core` comme un mod (repli `wss` → `ws`) et en `wss` épinglé, arrêt et relance du hub avec reprise de la sauvegarde, mot de passe appliqué et absent de la base, limites, seeds refusées, réglage, export puis reprise ailleurs avec la sauvegarde, suppression, suppression du compte, migration depuis la version 6.
+- **Pas encore** : veille et réveil (étape 3), dernière activité, page « Parties » et journal `admin_events` (étape 4), export RGPD des métadonnées, launcher (étape 2), déploiement et ports dans `docker-compose.yml` (étape 5).
+

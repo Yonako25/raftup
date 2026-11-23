@@ -66,6 +66,8 @@
 //! | `RAFTUP_HUB_NAME` | nom du hub affiché (défaut : Rafthub) |
 //! | `RAFTUP_HUB_REGISTRATION` | inscriptions : `open`, `invite` ou `closed` |
 //! | `RAFTUP_HUB_PUBLIC_DOWNLOAD` | page publique de téléchargement : `true` ou `false` |
+//! | `RAFTUP_HUB_HOSTING` | parties hébergées par le hub (ADR 0052) : `true` ou `false` (défaut) |
+//! | `RAFTUP_HUB_GAME_PORTS` | plage de ports des parties hébergées (défaut : `38281-38380`) |
 //! | `RAFTUP_HUB_CACHE_DIR` | dossier du launcher officiel en cache et des illustrations (sous-dossier `art`) (défaut : `rafthub-data/cache`) |
 //! | `RAFTUP_HUB_TLS_CERT` | certificat PEM (comme `--tls-cert`) |
 //! | `RAFTUP_HUB_TLS_KEY` | clé privée PEM (comme `--tls-key`) |
@@ -337,10 +339,10 @@ async fn main() -> anyhow::Result<()> {
     if let Some(domain) = &args.tls_acme {
         config.public_url = format!("https://{domain}");
     }
-    if let Some(url) = args.public_url {
+    if let Some(url) = &args.public_url {
         config
             .settings_env
-            .set(SettingKey::PublicUrl, &url)
+            .set(SettingKey::PublicUrl, url)
             .context("--public-url")?;
     }
     // Dossier du cache de l'exe officiel du launcher (page « Distribution »).
@@ -350,6 +352,15 @@ async fn main() -> anyhow::Result<()> {
     };
     // Cache des illustrations des jeux (ADR 0047), dans le même dossier.
     config.art.cache_dir = config.distribution.cache_dir.join("art");
+    // Parties hébergées (ADR 0052) : seed et sauvegarde dans `rafthub-data/parties/`,
+    // une plage de ports à publier telle quelle (sans passer par le proxy).
+    config.games.data_dir = data_dir()?.join("parties");
+    if let Some(ports) = env("RAFTUP_HUB_GAME_PORTS") {
+        let (first, last) = hub::games::GamesConfig::parse_ports(&ports)
+            .context("RAFTUP_HUB_GAME_PORTS : attendu par exemple 38281-38380")?;
+        config.games.first_port = first;
+        config.games.last_port = last;
+    }
     // Aucun admin encore : code d'installation à usage unique, montré au journal
     // seulement (celui qui le lit a accès au serveur), pour `/admin/installation`.
     // Après l'assistant, on garde le même code : la personne l'a déjà sous les yeux.
@@ -402,6 +413,20 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&args.listen)
         .await
         .with_context(|| format!("écoute sur {}", args.listen))?;
+    // Copie gardée pour arrêter les parties hébergées à la fin (sauvegardes compactées).
+    let games_state = state.clone();
+    let served = serve(&args, listener, tls, state).await;
+    games_state.games().shutdown().await;
+    served
+}
+
+/// Sert l'API (et la console, ensemble ou à part) jusqu'à la demande d'arrêt.
+async fn serve(
+    args: &Args,
+    listener: tokio::net::TcpListener,
+    tls: Option<TlsSetup>,
+    state: AppState,
+) -> anyhow::Result<()> {
     let scheme = if tls.is_some() { "https" } else { "http" };
 
     let Some(admin_listen) = &args.admin_listen else {

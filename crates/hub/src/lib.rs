@@ -14,6 +14,7 @@ pub mod console;
 pub mod discord;
 pub mod distribution;
 pub mod error;
+pub mod games;
 pub mod health;
 pub mod identity;
 pub mod mail;
@@ -76,6 +77,8 @@ pub struct HubConfig {
     pub distribution: distribution::DistributionConfig,
     /// Illustrations des jeux : cache et source (ADR 0047).
     pub art: art::ArtConfig,
+    /// Parties hébergées par le hub : dossier, plage de ports, limites (ADR 0052).
+    pub games: games::GamesConfig,
     /// Connexion Discord permise : vrai seulement dans la version officielle
     /// (option de compilation `officiel`, ADR 0038). Faux : Discord reste éteint,
     /// même avec des réglages, et la console ne le propose pas.
@@ -118,6 +121,7 @@ impl Default for HubConfig {
             settings_env: EnvSettings::default(),
             distribution: distribution::DistributionConfig::default(),
             art: art::ArtConfig::default(),
+            games: games::GamesConfig::default(),
             setup_code: None,
             setup_pass: None,
             https: false,
@@ -188,6 +192,8 @@ struct Inner {
     distribution: distribution::Distribution,
     /// Illustrations des jeux (cache disque devant IGDB).
     art: art::ArtService,
+    /// Serveurs de jeu des parties hébergées (ADR 0052).
+    games: games::GameHost,
 }
 
 impl AppState {
@@ -232,7 +238,7 @@ impl AppState {
             password::hash_password(&Password::new("raftup-hub-dummy-password"), &params)
         })
         .await?;
-        Ok(AppState {
+        let state = AppState {
             inner: Arc::new(Inner {
                 presence: PresenceBoard::new(config.presence_ttl),
                 login_limiter: RateLimiter::new(config.login_max_failures, config.login_window),
@@ -252,16 +258,26 @@ impl AppState {
                 ),
                 distribution: distribution::Distribution::new(config.distribution.clone()),
                 art: art::ArtService::new(config.art.clone()),
+                games: games::GameHost::new(config.games.clone()),
                 store,
                 config,
                 dummy_hash,
             }),
-        })
+        };
+        // Les parties hébergées repartent tout de suite, chacune sur son port, avec
+        // sa sauvegarde (ADR 0052). Sans partie en base, rien n'est touché sur le disque.
+        state.inner.games.restore(&state.inner.store).await?;
+        Ok(state)
     }
 
     /// Distribution du launcher (cache de l'exe officiel).
     pub fn distribution(&self) -> &distribution::Distribution {
         &self.inner.distribution
+    }
+
+    /// Parties hébergées par le hub (ADR 0052).
+    pub fn games(&self) -> &games::GameHost {
+        &self.inner.games
     }
 
     /// Illustrations des jeux (ADR 0047).
