@@ -761,4 +761,4 @@ untime2`.
 - **Fait** : test réel `inventaire_real` (export, import et contrôle croisé, conversion, seed Rust, aller-retour) lancé sur les 81 mondes intégrés de 0.6.8, options par défaut ; résultat dans `docs/inventaire-conversion.md` : 14 convertis (tous avec des points à vérifier, seed Rust et aller-retour réussis), 67 échecs (objet verrouillé 24, `collect` maison 21, ROM 8, règle opaque 8 en 1ʳᵉ cause, 36 jeux avec des règles opaques) ; clippy du test passe.
 - **Pas vérifié** : les causes cachées derrière la première (le convertisseur s'arrête au premier refus) ; aucun converti joué avec son mod ; `slot_data` non repris (conversion sans seed).
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/` (session hub-parties-hebergees).
-- **Suite** : faire valider les 4 décisions de l'inventaire (périmètre, licence, repli Python, badge « Converti »), puis lot 0 (bogue `has_all` vide, bruit des options communes).
+- **Suite** : 4 décisions acceptées (ADR 0053) ; lot 0 du convertisseur (bogue `has_all` vide, bruit des options communes), dans une nouvelle session.

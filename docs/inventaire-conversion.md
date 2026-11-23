@@ -189,9 +189,9 @@ Ordre des lots, du moins cher au plus cher :
 4. **Lot 3, compteurs (format, ADR à valider)** : objets qui ajoutent à un compteur, pour les 21 `collect` personnalisés (dont Hollow Knight, Stardew Valley, TUNIC, The Witness, Factorio, Satisfactory). Le plus gros lot ; certains (Stardew Valley, 545 règles dont des objets de règle instables) relèveront du portage à la main.
 5. **Pour chaque converti, avant le badge « Converti »** : `slot_data`, `when` des options principales, tirage des pièges, puis une vraie partie avec le mod. C'est un travail par jeu, à faire par lots de 3 ou 4 jeux PC du catalogue (`docs/jeux-pc-catalogue.md`).
 
-## Décisions à faire valider
+## Décisions (validées le 23 novembre 2026, ADR 0053)
 
-Ces points ne sont pas dans `docs/SPEC.md` ; rien n'est tranché. Chaque décision validée ira dans un ADR.
+Les 4 recommandations ci-dessous ont été acceptées telles quelles par l'utilisatrice ; elles sont consignées dans l'ADR 0053.
 
 1. **Périmètre de « tous convertis »**. Aucun des 81 jeux n'est sur une console Nintendo actuelle, mais 32 demandent une ROM ou un ISO, et pour eux le fichier que lit le jeu (patch de ROM) est écrit par le code Python du monde (`generate_output`). Un monde natif peut placer les objets, pas écrire ce patch sans porter ce code. *Recommandation* : viser d'abord les **49 jeux PC** ; pour les jeux à ROM, garder le générateur Python (moteur « export » au mieux) et ne pas les compter dans l'objectif.
 2. **Licence et distribution des mondes convertis**. *Recommandation* : chaque monde converti publié comme paquet du registre (ADR 0046) **sous la licence de son monde d'origine** (MIT d'Archipelago, avec la notice, plus le fichier `LICENSE` du monde s'il en a un), et non sous MIT / Apache-2.0 de Raftup ; les 4 mondes « Modified MIT » de PoryGone ne sont pas publiés sans l'accord écrit des auteurs (conversion sur le PC seulement).
