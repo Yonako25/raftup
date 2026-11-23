@@ -786,3 +786,9 @@ untime2`.
 - **Pas vérifié** : aucun des 13 nouveaux convertis joué avec son mod ; Dark Souls III, Faxanadu et Noita tirent leurs objets posés au hasard (instantané figé) ; Aquaria bute sur un pool plus grand que les lieux.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-ui/` (autre session).
 - **Suite** : lot 2 (sondeur : `state.multiworld`, `prog_items`, résultats non booléens), dans une nouvelle session.
+
+### 2026-11-24 · Parties hébergées par Rafthub, étape 3 (ADR 0052)
+- **Fait** : 3 décisions acceptées (réveil quand un mod se connecte, activité et 10 min de grâce, « Reprendre sur mon PC »), point 6 de l'ADR corrigé ; veille après 2 h avec port gardé, réveil par connexion ou `POST /wake`, `last_activity_at` (schéma 8) ; launcher : « Réveiller », « Reprendre sur mon PC » (retrait du hub après démarrage réussi ici) ; test de bout en bout du vrai `hub_client` contre le vrai hub (`hub/tests/launcher_games.rs`) (`96e66ec`). fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : vrai mod non modifié réveillant une partie ; écran regardé à l'œil ; PostgreSQL, MySQL, MariaDB ; suppression après 30 jours (point 7) pas codée.
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/generate/`, `worlds-native/`, `logic/`, `fill/` (autre session).
+- **Suite** : étape 4 de l'ADR 0052 (page « Parties » de la console, limites, `admin_events`, RGPD), dans une nouvelle session.
