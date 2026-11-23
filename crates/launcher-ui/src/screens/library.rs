@@ -306,13 +306,16 @@ impl LibraryState {
     }
 
     /// Badge d'un jeu du catalogue : celui de son monde natif s'il y en a un d'installé
-    /// (par le nom du jeu chez Archipelago), sinon aucun (monde Archipelago).
+    /// (par le nom du jeu chez Archipelago), sinon « Archipelago » (son apworld ou le
+    /// monde intégré au générateur officiel).
     pub fn pin_for(&self, ap_game: &str) -> Option<WorldPin> {
-        self.native
+        let native = self
+            .native
             .worlds()
             .iter()
             .find(|world| world.game == ap_game)
-            .map(world_pin)
+            .map(world_pin);
+        Some(native.unwrap_or(WorldPin::Archipelago))
     }
 
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
@@ -1542,7 +1545,7 @@ pub(super) struct CardLook<'a> {
     /// Jaquette du jeu (ADR 0051) ; `None` : l'aplat coloré avec le titre.
     pub(super) cover: Option<egui::TextureHandle>,
     /// Badge en haut à gauche de la jaquette : sorte de monde (« Natif »,
-    /// « Converti »), voir [`world_pin`]. `None` : monde Archipelago (apworld).
+    /// « Converti », « Archipelago »), voir [`WorldPin`]. `None` : pas de badge.
     pub(super) pin: Option<WorldPin>,
 }
 
@@ -1553,6 +1556,8 @@ pub enum WorldPin {
     Native,
     /// Monde natif obtenu en convertissant un apworld (ADR 0042).
     Converted,
+    /// Monde d'Archipelago (apworld, ou monde intégré au générateur officiel).
+    Archipelago,
 }
 
 impl WorldPin {
@@ -1560,6 +1565,7 @@ impl WorldPin {
         match self {
             WorldPin::Native => "Natif",
             WorldPin::Converted => "Converti",
+            WorldPin::Archipelago => "Archipelago",
         }
     }
 
@@ -1568,6 +1574,7 @@ impl WorldPin {
         match self {
             WorldPin::Native => (theme::GREEN, theme::GREEN_BG),
             WorldPin::Converted => (theme::ACCENT, theme::ACCENT_BG),
+            WorldPin::Archipelago => (theme::TEXT_DIM, theme::FIELD),
         }
     }
 }
@@ -1706,10 +1713,7 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
         // `interact` rend toute la carte cliquable, pas seulement son texte.
         .interact(Sense::click());
     // Nom de la carte entière pour un lecteur d'écran (et pour les tests sans fenêtre).
-    let label = match look.pin {
-        Some(pin) => format!("Fiche de {} ({})", look.name, pin.label()),
-        None => format!("Fiche de {}", look.name),
-    };
+    let label = format!("Fiche de {}", look.name);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
     if response.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -2554,6 +2558,10 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let shown = draw(&ctx, &mut state);
         assert!(shown.iter().any(|t| t == "NATIF"), "{shown:?}");
         assert!(!shown.iter().any(|t| t == "CONVERTI"), "{shown:?}");
+        // Un jeu sans monde natif tourne avec le monde d'Archipelago.
+        let pin = state.pin_for("Un jeu sans monde natif");
+        assert_eq!(pin, Some(WorldPin::Archipelago));
+        assert_eq!(state.pin_for("APQuest"), Some(WorldPin::Native));
 
         let temp = tempfile::tempdir().unwrap();
         let paths = Paths::under(temp.path());
