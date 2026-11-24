@@ -26,7 +26,7 @@ pub fn menu() -> Harness<'static, Menu> {
         .with_size(egui::vec2(240.0, 820.0))
         .build_ui_state(
             |ui, s: &mut Menu| {
-                // Sans compte : la carte « Amis » invite à se connecter.
+                // Sans compte : la carte du compte invite à se connecter.
                 let summary = Summary {
                     username: None,
                     online: 0,
@@ -44,15 +44,17 @@ pub fn menu() -> Harness<'static, Menu> {
 #[test]
 fn le_menu_ne_montre_aucune_entree_bientot() {
     let harness = menu();
-    // Les écrans qui existent (l'Accueil et « Parcourir » depuis l'étape 4 du plan).
+    // Les écrans qui existent, en deux sections, et « Paramètres » à part.
     for label in [
+        "JEUX",
         "Accueil",
         "Bibliothèque",
+        "Catalogue",
+        "PARTIES",
+        "Nouvelle partie",
         "En cours",
         "Rejoindre",
         "Paramètres",
-        "Parcourir",
-        "CATALOGUE",
     ] {
         assert!(shows(&harness, label), "lien manquant : {label}");
     }
@@ -61,15 +63,22 @@ fn le_menu_ne_montre_aucune_entree_bientot() {
         assert!(!shows(&harness, label), "lien à cacher : {label}");
     }
     assert!(!shows_part(&harness, "Bientôt"));
+    // Une seule carte pour le compte et les amis ; pas de carte du serveur sans partie.
+    assert!(shows(&harness, "Joueur"));
+    assert!(shows(&harness, "Se connecter pour voir ses amis"));
+    assert!(!shows(&harness, "SERVEUR INTÉGRÉ"));
 }
 
 #[test]
-fn accueil_parcourir_et_profil_ouvrent_leur_ecran() {
+fn les_liens_ouvrent_leur_ecran() {
     for (label, page) in [
         ("Accueil", Page::Home),
-        ("Parcourir", Page::Catalog),
-        // La carte du profil, en bas de la barre (« Joueur » sans compte).
-        ("Joueur", Page::Profile),
+        ("Catalogue", Page::Catalog),
+        ("Nouvelle partie", Page::Create),
+        ("Rejoindre", Page::Join),
+        // La carte du compte, en bas de la barre (« Joueur » sans compte) : l'écran
+        // « Amis » montre aussi le profil.
+        ("Joueur", Page::Friends),
     ] {
         let mut harness = menu();
         click(&mut harness, label);

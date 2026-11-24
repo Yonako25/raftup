@@ -25,6 +25,11 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
         ui.horizontal(|ui| {
             ui.label(widgets::title("En cours", 28.0));
             ui.label(widgets::dim("Les parties lancées").size(14.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::primary_button(ui, "Nouvelle partie", true) {
+                    goto = Some(Page::Create);
+                }
+            });
         });
         ui.add_space(14.0);
         if let Some(message) = error {
@@ -39,8 +44,8 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
                 }
             });
         } else if hub.count() == 0 && empty_state(ui, shared.starting) {
-            // Rien sur ce PC ni sur Rafthub : le panneau propose d'héberger.
-            goto = Some(Page::Hosted);
+            // Rien sur ce PC ni sur Rafthub : le panneau mène au salon.
+            goto = Some(Page::Create);
         }
         // Parties hébergées sur Rafthub : `open` garde l'identifiant cliqué, la
         // sélection se fait après la boucle (on ne modifie pas `hub` en le parcourant).
@@ -178,7 +183,7 @@ fn empty_state(ui: &mut Ui, starting: bool) -> bool {
         let text = if starting {
             "Démarrage…"
         } else {
-            "Héberger une partie"
+            "Préparer une partie"
         };
         clicked = widgets::primary_button(ui, text, true);
     });

@@ -497,34 +497,29 @@ pub(crate) fn sidebar(
 
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
     let hosted = usize::from(shared.status.is_some()) + hub_games;
-    let in_progress = matches!(
-        current,
-        Page::InProgress | Page::Hosted | Page::HubGame | Page::Create
-    );
-    let sections: [(&str, Vec<NavLink>); 4] = [
+    let in_progress = matches!(current, Page::InProgress | Page::Hosted | Page::HubGame);
+    // Deux sections seulement : les jeux, puis les parties, avec le parcours principal
+    // (« Nouvelle partie ») en premier.
+    let sections: [(&str, Vec<NavLink>); 2] = [
         (
             "JEUX",
             vec![
                 ("Accueil", 0, Page::Home),
                 ("Bibliothèque", games, Page::Library),
+                ("Catalogue", 0, Page::Catalog),
                 ("Téléchargements", 0, Page::Soon("Téléchargements")),
+                ("Mises à jour", 0, Page::Soon("Mises à jour")),
             ],
         ),
         (
             "PARTIES",
             vec![
+                // Le salon de préparation (ADR 0044) : générer puis héberger.
+                ("Nouvelle partie", 0, Page::Create),
                 ("En cours", hosted, Page::InProgress),
-                ("Salons", 0, Page::Soon("Salons")),
                 // « Rejoindre » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
                 ("Rejoindre", 0, Page::Join),
-            ],
-        ),
-        ("RÉGLAGES", vec![("Paramètres", 0, Page::Settings)]),
-        (
-            "CATALOGUE",
-            vec![
-                ("Parcourir", 0, Page::Catalog),
-                ("Mises à jour", 0, Page::Soon("Mises à jour")),
+                ("Salons", 0, Page::Soon("Salons")),
             ],
         ),
     ];
@@ -537,6 +532,10 @@ pub(crate) fn sidebar(
                 goto = Some(page);
             }
         }
+    }
+    ui.add_space(10.0);
+    if nav_link(ui, "Paramètres", 0, *current == Page::Settings) {
+        goto = Some(Page::Settings);
     }
 
     // Le bas de la barre : amis, profil, serveur, mention de compatibilité.
@@ -553,13 +552,14 @@ pub(crate) fn sidebar(
     }
     let top = ui.cursor().top();
     ui.spacing_mut().item_spacing.y = 10.0;
-    if side_card(ui, |ui| friends_card(ui, friends)) {
+    // Une seule carte pour le compte et les amis : l'écran « Amis » montre aussi le profil.
+    if side_card(ui, |ui| profile_card(ui, friends)) {
         goto = Some(Page::Friends);
     }
-    if side_card(ui, |ui| profile_card(ui, friends.username.as_deref())) {
-        goto = Some(Page::Profile);
-    }
-    if side_card(ui, |ui| server_card(ui, shared)) {
+    // La carte du serveur ne sert que quand une partie tourne (sinon elle répète
+    // « En cours »).
+    if (shared.status.is_some() || shared.starting) && side_card(ui, |ui| server_card(ui, shared))
+    {
         goto = Some(Page::Hosted);
     }
     ui.horizontal(|ui| {
@@ -641,38 +641,10 @@ fn side_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> bool {
     clicked
 }
 
-/// Carte « Amis » : nombre d'amis présents, ou invitation à se connecter.
-fn friends_card(ui: &mut Ui, friends: &friends::Summary) {
-    ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("Amis")
-                .strong()
-                .family(theme::bold_family())
-                .color(theme::TEXT),
-        );
-        ui.with_layout(
-            egui::Layout::right_to_left(egui::Align::Center),
-            |ui| match (&friends.username, friends.online) {
-                (None, _) => {
-                    ui.label(widgets::dim("se connecter").size(12.0));
-                }
-                (Some(_), 0) => {
-                    ui.label(widgets::dim("personne en ligne").size(12.0));
-                }
-                (Some(_), n) => {
-                    ui.label(
-                        RichText::new(format!("● {n} en ligne"))
-                            .size(12.0)
-                            .color(theme::GREEN),
-                    );
-                }
-            },
-        );
-    });
-}
-
-/// Carte du profil : le pseudo du compte du hub, ou « Joueur » sans compte.
-fn profile_card(ui: &mut Ui, username: Option<&str>) {
+/// Carte du compte : pseudo du hub (ou « Joueur ») et, dessous, les amis en ligne (ou
+/// l'invitation à se connecter).
+fn profile_card(ui: &mut Ui, friends: &friends::Summary) {
+    let username = friends.username.as_deref();
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), Sense::hover());
         ui.painter()
@@ -697,12 +669,21 @@ fn profile_card(ui: &mut Ui, username: Option<&str>) {
                     .family(theme::bold_family())
                     .color(theme::TEXT),
             );
-            let subtitle = if username.is_some() {
-                "Compte Raftup"
-            } else {
-                "Sans compte"
-            };
-            ui.label(widgets::dim(subtitle).size(12.0));
+            match (username, friends.online) {
+                (None, _) => {
+                    ui.label(widgets::dim("Se connecter pour voir ses amis").size(12.0));
+                }
+                (Some(_), 0) => {
+                    ui.label(widgets::dim("Amis : personne en ligne").size(12.0));
+                }
+                (Some(_), n) => {
+                    ui.label(
+                        RichText::new(format!("● {n} ami{} en ligne", if n > 1 { "s" } else { "" }))
+                            .size(12.0)
+                            .color(theme::GREEN),
+                    );
+                }
+            }
         });
     });
 }

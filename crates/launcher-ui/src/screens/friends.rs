@@ -1238,8 +1238,15 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
     let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
         let logged_in = state.username.is_some();
-        // Copie de l'hôte : la fermeture ci-dessous emprunte `state` en écriture.
-        let host = state.host().map(str::to_string);
+        // Copie de l'hôte, montré seulement si ce n'est pas le Rafthub par défaut (le
+        // joueur n'a pas à savoir où il est s'il n'a rien changé). Copie : la fermeture
+        // ci-dessous emprunte `state` en écriture.
+        let host = state
+            .url
+            .as_ref()
+            .ok()
+            .filter(|url| url.as_str() != DEFAULT_HUB_URL)
+            .map(|url| url.host().to_string());
         super::header(ui, "Communauté", "Amis", |ui| {
             if let Some(host) = &host {
                 ui.label(widgets::dim(format!("Rafthub · {host}")).size(12.0));

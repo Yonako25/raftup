@@ -415,3 +415,35 @@ fn en_cours_liste_la_partie_hebergee() {
     click(&mut harness, "   Ouvrir   ");
     assert_eq!(harness.state().asked, Some(Page::HubGame));
 }
+
+/// « En cours » mène toujours au salon : par le bouton du haut, et par l'état vide.
+#[test]
+fn en_cours_mene_au_salon() {
+    struct State {
+        shared: Shared,
+        games: HubGames,
+        asked: Option<Page>,
+    }
+    for (games, label) in [
+        (HubGames::default(), "Préparer une partie"),
+        (HubGames::with_game(created(), None), "Nouvelle partie"),
+        (HubGames::default(), "Nouvelle partie"),
+    ] {
+        let state = State {
+            shared: Shared::default(),
+            games,
+            asked: None,
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut State| {
+                if let Some(page) = matches::show(ui, &s.shared, None, &mut s.games) {
+                    s.asked = Some(page);
+                }
+            },
+            state,
+        );
+        harness.run();
+        click(&mut harness, label);
+        assert_eq!(harness.state().asked, Some(Page::Create), "clic sur {label}");
+    }
+}
