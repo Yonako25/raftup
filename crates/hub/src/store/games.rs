@@ -14,7 +14,7 @@ use crate::error::HubError;
 
 /// Colonnes lues par toutes les requêtes de ce module, dans cet ordre.
 const COLUMNS: &str = "id, owner_id, name, port, seed_name, player_count, seed_size, \
-                       password_enc, admin_password_enc, created_at";
+                       password_enc, admin_password_enc, created_at, last_activity_at, asleep";
 
 /// Une partie hébergée, telle que la base la garde.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +37,12 @@ pub struct GameRow {
     /// Mot de passe d'admin (`!admin`), chiffré.
     pub admin_password_enc: String,
     pub created_at: i64,
+    /// Dernière fois qu'une connexion était entrée dans un slot (secondes depuis
+    /// 1970, relevé chaque minute) ; `None` : jamais.
+    pub last_activity_at: Option<i64>,
+    /// Vrai si la partie est en veille : au démarrage du hub, seul son port est
+    /// rouvert (ADR 0052, point 6).
+    pub asleep: bool,
 }
 
 fn game_from_row(row: &AnyRow) -> Result<GameRow, HubError> {
@@ -51,6 +57,9 @@ fn game_from_row(row: &AnyRow) -> Result<GameRow, HubError> {
         password_enc: row.try_get("password_enc")?,
         admin_password_enc: row.try_get("admin_password_enc")?,
         created_at: row.try_get("created_at")?,
+        last_activity_at: row.try_get("last_activity_at")?,
+        // Entier 0 / 1 : le même type sur SQLite, PostgreSQL et MySQL.
+        asleep: row.try_get::<i64, _>("asleep")? != 0,
     })
 }
 
@@ -59,8 +68,8 @@ impl Store {
     pub async fn insert_game(&self, game: &GameRow) -> Result<(), HubError> {
         self.q(concat!(
             "INSERT INTO hosted_games (id, owner_id, name, port, seed_name, player_count,",
-            " seed_size, password_enc, admin_password_enc, created_at)",
-            " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
+            " seed_size, password_enc, admin_password_enc, created_at, last_activity_at, asleep)",
+            " VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"
         ))
         .bind(&game.id)
         .bind(game.owner_id)
@@ -72,6 +81,8 @@ impl Store {
         .bind(game.password_enc.as_deref())
         .bind(&game.admin_password_enc)
         .bind(game.created_at)
+        .bind(game.last_activity_at)
+        .bind(i64::from(game.asleep))
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -128,6 +139,26 @@ impl Store {
         rows.iter()
             .map(|row| row.try_get("port").map_err(HubError::from))
             .collect()
+    }
+
+    /// Note la veille (`true`) ou le réveil (`false`) d'une partie.
+    pub async fn set_game_asleep(&self, id: &str, asleep: bool) -> Result<(), HubError> {
+        self.q("UPDATE hosted_games SET asleep = $1 WHERE id = $2")
+            .bind(i64::from(asleep))
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Note qu'une connexion était entrée dans un slot de la partie à `now`.
+    pub async fn touch_game(&self, id: &str, now: i64) -> Result<(), HubError> {
+        self.q("UPDATE hosted_games SET last_activity_at = $1 WHERE id = $2")
+            .bind(now)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Supprime une partie. `false` si elle n'existait pas.

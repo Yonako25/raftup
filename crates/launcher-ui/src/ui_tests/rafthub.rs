@@ -1,6 +1,9 @@
 //! Parties hébergées par Rafthub (ADR 0052, étape 2) : choix du mode dans « Créer une
 //! partie », écran de la partie hébergée, ligne dans « En cours ». Sans réseau : l'accès
 //! au hub vise le port 1 de ce PC, où personne n'écoute, et aucun clic ne l'appelle.
+//!
+//! Étape 3 : partie en veille (« Réveiller »), et « Reprendre sur mon PC » (confirmation,
+//! puis retrait du hub seulement après le démarrage réussi ici).
 
 use egui_kittest::Harness;
 use launcher_core::hub_client::{CreatedGame, GameStatus, HostedGame, HubUrl, SessionToken};
@@ -10,7 +13,7 @@ use super::{builder, click, demo_catalog, shows, shows_part, type_into};
 use crate::app::Page;
 use crate::screens::create::{self, CreateForm, HostMode};
 use crate::screens::friends::FriendsState;
-use crate::screens::hub_game::{self, HubAccess, HubGames};
+use crate::screens::hub_game::{self, HubAccess, HubGames, Resume};
 use crate::screens::matches;
 use crate::worker::{Shared, Worker};
 
@@ -139,6 +142,7 @@ fn hosted() -> HostedGame {
         players: 1,
         has_password: true,
         created_at: 0,
+        last_activity_at: None,
     }
 }
 
@@ -196,11 +200,15 @@ fn hosted_view() -> serde_json::Value {
 }
 
 fn game_screen(status: Option<GameStatus>) -> Harness<'static, HubGames> {
+    game_screen_with(HubGames::with_game(created(), status))
+}
+
+fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
     let mut harness = builder().build_ui_state(
         |ui, games: &mut HubGames| {
             hub_game::show(ui, games);
         },
-        HubGames::with_game(created(), status),
+        games,
     );
     // `run_steps` et non `run` : sans état, la roue d'attente redessine sans cesse.
     harness.run_steps(3);
@@ -258,6 +266,118 @@ fn supprimer_demande_une_confirmation() {
     assert!(shows(&harness, "Confirmer la suppression"));
     click(&mut harness, "Annuler");
     assert!(!shows(&harness, "Confirmer la suppression"));
+}
+
+/// Une partie en veille : « En veille », « Réveiller », et pas d'équipage à montrer.
+fn sleeping() -> HubGames {
+    let mut json = serde_json::to_value(hosted_view()).unwrap();
+    json["state"] = "sleeping".into();
+    json["admin_password"] = "ADMINPASS1234567".into();
+    json["resumed"] = false.into();
+    let created: CreatedGame = serde_json::from_value(json.clone()).unwrap();
+    json["is_host"] = true.into();
+    json["slots"] = serde_json::json!([]);
+    let status: GameStatus = serde_json::from_value(json).unwrap();
+    HubGames::with_game(created, Some(status))
+}
+
+#[test]
+fn partie_en_veille() {
+    let harness = game_screen_with(sleeping());
+    assert!(shows(&harness, "En veille"));
+    assert!(shows(&harness, "Réveiller"));
+    assert!(shows_part(&harness, "Elle se réveille toute seule"));
+    assert!(shows(
+        &harness,
+        "La partie dort : l'équipage s'affiche quand elle est réveillée."
+    ));
+}
+
+#[test]
+fn reprendre_sur_mon_pc_demande_une_confirmation() {
+    let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Reprendre sur mon PC");
+    assert!(matches!(harness.state().resume(), Resume::Confirm(form) if form.delete_from_hub));
+    assert!(shows(
+        &harness,
+        "Supprimer la partie du hub une fois lancée ici"
+    ));
+    assert!(shows_part(
+        &harness,
+        "pour ne pas avoir deux parties qui divergent"
+    ));
+    assert!(shows(&harness, "Lancer sur mon PC"));
+    click(&mut harness, "Annuler");
+    assert!(matches!(harness.state().resume(), Resume::Idle));
+    assert!(!shows(&harness, "Lancer sur mon PC"));
+}
+
+/// Démarrage réussi sur ce PC : la partie est retirée du hub et l'écran passe à la
+/// partie de ce PC.
+#[test]
+fn reprise_reussie_retire_la_partie_du_hub() {
+    let mut games = HubGames::with_game(created(), Some(status()));
+    games.set_resume_starting(true);
+    let worker = Worker::detached();
+    let mut error = None;
+    // Le serveur de ce PC démarre encore : on attend.
+    let starting = Shared {
+        starting: true,
+        ..Shared::default()
+    };
+    assert_eq!(
+        hub_game::resume_background(&mut games, &worker, &starting, &mut error),
+        None
+    );
+    assert_eq!(games.pending_delete(), None);
+    let started = Shared {
+        status: Some(super::parcours::hosted(false)),
+        ..Shared::default()
+    };
+    assert_eq!(
+        hub_game::resume_background(&mut games, &worker, &started, &mut error),
+        Some(Page::Hosted)
+    );
+    assert_eq!(
+        games.pending_delete(),
+        Some("0123456789abcdef0123456789abcdef")
+    );
+    assert!(matches!(games.resume(), Resume::Idle));
+}
+
+/// Le serveur de ce PC refuse de démarrer (port pris…) : la partie reste sur le hub.
+#[test]
+fn reprise_ratee_garde_la_partie_sur_le_hub() {
+    let mut games = HubGames::with_game(created(), Some(status()));
+    games.set_resume_starting(true);
+    let mut error = Some("port déjà utilisé".to_string());
+    let page = hub_game::resume_background(
+        &mut games,
+        &Worker::detached(),
+        &Shared::default(),
+        &mut error,
+    );
+    assert_eq!(page, None);
+    assert_eq!(games.pending_delete(), None);
+    assert!(matches!(games.resume(), Resume::Idle));
+    // Le message est repris par l'écran de la partie, plus par le bandeau général.
+    assert_eq!(error, None);
+    let harness = game_screen_with(games);
+    assert!(shows_part(&harness, "Elle reste sur Rafthub"));
+}
+
+/// Sans la case cochée, rien n'est retiré du hub.
+#[test]
+fn reprise_sans_suppression() {
+    let mut games = HubGames::with_game(created(), Some(status()));
+    games.set_resume_starting(false);
+    let started = Shared {
+        status: Some(super::parcours::hosted(false)),
+        ..Shared::default()
+    };
+    let page = hub_game::resume_background(&mut games, &Worker::detached(), &started, &mut None);
+    assert_eq!(page, Some(Page::Hosted));
+    assert_eq!(games.pending_delete(), None);
 }
 
 /// « En cours » liste la partie hébergée ; « Ouvrir » mène à son écran.

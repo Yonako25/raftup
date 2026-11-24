@@ -38,7 +38,7 @@ pub use games::GameRow;
 
 /// Version du schéma de la base. À augmenter à chaque changement de schéma,
 /// en ajoutant la migration correspondante dans [`MIGRATIONS`].
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 
 /// Tables : le compte (`users`) est séparé de ses moyens de connexion
 /// (`user_identities`), comme le demande l'ADR 0002. Les amitiés et les demandes
@@ -160,6 +160,8 @@ CREATE TABLE IF NOT EXISTS hosted_games (
     password_enc TEXT,
     admin_password_enc TEXT NOT NULL,
     created_at BIGINT NOT NULL,
+    last_activity_at BIGINT,
+    asleep BIGINT NOT NULL DEFAULT 0,
     FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS hosted_games_owner ON hosted_games (owner_id)
@@ -187,6 +189,13 @@ const MIGRATIONS: &[(i64, &str)] = &[
     // Version 7 (ADR 0052) : parties hébergées par le hub, table `hosted_games`
     // créée par `SCHEMA`.
     (7, ""),
+    // Version 8 (ADR 0052, étape 3) : veille des parties hébergées et dernière
+    // activité (une connexion entrée dans un slot).
+    (
+        8,
+        "ALTER TABLE hosted_games ADD COLUMN last_activity_at BIGINT;
+         ALTER TABLE hosted_games ADD COLUMN asleep BIGINT NOT NULL DEFAULT 0",
+    ),
 ];
 
 /// Fournisseur de connexion « e-mail + mot de passe » dans `user_identities`.

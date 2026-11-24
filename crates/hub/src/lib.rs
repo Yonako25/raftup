@@ -196,6 +196,37 @@ struct Inner {
     games: games::GameHost,
 }
 
+/// Tâche de veille des parties hébergées : relevé d'activité tous les `every`, et
+/// réveil d'une partie quand la garde de son port reçoit une connexion.
+///
+/// `Weak` : une référence qui ne garde pas le hub en vie. `upgrade()` rend l'état
+/// tant qu'il existe, `None` après : la tâche s'arrête alors d'elle-même.
+async fn supervise_games(
+    inner: std::sync::Weak<Inner>,
+    mut wakes: tokio::sync::mpsc::UnboundedReceiver<String>,
+    every: Duration,
+) {
+    let mut ticker = tokio::time::interval(every);
+    // Un relevé en retard n'est pas rattrapé en rafale.
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            _ = ticker.tick() => {
+                let Some(inner) = inner.upgrade() else { return };
+                inner.games.check_activity(&inner.store, now_unix()).await;
+            }
+            id = wakes.recv() => {
+                // `None` : le canal est fermé, le hub n'existe plus.
+                let Some(id) = id else { return };
+                let Some(inner) = inner.upgrade() else { return };
+                if let Err(error) = inner.games.wake(&inner.store, &id).await {
+                    tracing::error!(game = %id, %error, "réveil de la partie impossible");
+                }
+            }
+        }
+    }
+}
+
 impl AppState {
     /// État sans envoi d'e-mail ([`DisabledMailer`]).
     pub async fn new(store: Store, config: HubConfig) -> Result<AppState, HubError> {
@@ -267,6 +298,12 @@ impl AppState {
         // Les parties hébergées repartent tout de suite, chacune sur son port, avec
         // sa sauvegarde (ADR 0052). Sans partie en base, rien n'est touché sur le disque.
         state.inner.games.restore(&state.inner.store).await?;
+        // Veille et réveil des parties (ADR 0052, point 6). La tâche ne garde qu'une
+        // référence faible (`Weak`) : elle s'arrête quand le hub est lâché.
+        if let Some(wakes) = state.inner.games.take_wake_receiver() {
+            let every = state.inner.config.games.activity_check;
+            tokio::spawn(supervise_games(Arc::downgrade(&state.inner), wakes, every));
+        }
         Ok(state)
     }
 

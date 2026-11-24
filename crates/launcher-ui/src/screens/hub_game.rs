@@ -12,11 +12,18 @@
 //!   connexion) et celle qu'on regarde, dont l'état est relu toutes les 5 s
 //!   (`GET /v1/games/{id}`) : joueurs connectés, avancement par slot.
 //!
+//! - Veille (étape 3) : une partie sans joueur depuis 2 h dort sur le hub ; la première
+//!   connexion la réveille, et l'écran propose « Réveiller » (`POST /v1/games/{id}/wake`).
+//! - [`Resume`] : « Reprendre sur mon PC » télécharge l'export (seed + sauvegarde),
+//!   relance la partie sur ce PC comme « Héberger une partie », puis la retire du hub
+//!   si l'hôte l'a demandé, **seulement** une fois la partie démarrée ici.
+//!
 //! L'adresse rendue par le hub est `hôte:port`, sans schéma, avec l'empreinte du
 //! certificat : les liens d'invitation portent `wss://hôte:port` et `fp=…`, comme une
 //! partie chiffrée par Raftup en self-host (ADR 0043). « Rejoindre » n'a donc rien de
 //! particulier à faire pour une partie hébergée.
 
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 
@@ -26,13 +33,16 @@ use launcher_core::hub_client::{
     CreatedGame, ErrorCode, GameStatus, GameUpload, HostedGame, HubClient, HubClientError, HubUrl,
     SessionToken,
 };
-use launcher_core::SlotStatus;
+use launcher_core::{Encryption, HostOptions, SlotStatus};
 
+use super::library::load_paths;
 use super::matches::{fraction, progress};
 use super::running::LaunchRequest;
 use crate::app::Page;
+use crate::format;
 use crate::theme;
 use crate::widgets;
+use crate::worker::{Command, Shared, Worker};
 
 /// Toutes les combien on relit l'état de la partie regardée.
 const POLL_EVERY: Duration = Duration::from_secs(5);
@@ -42,6 +52,9 @@ const MAX_NAME_CHARS: usize = 64;
 
 /// Durée d'affichage de « Copié ».
 const COPIED_FOR: Duration = Duration::from_secs(2);
+
+/// Port proposé pour reprendre une partie sur ce PC : celui d'Archipelago.
+const RESUME_PORT: u16 = 38281;
 
 /// De quoi parler au hub au nom du compte connecté : son adresse et le jeton de session.
 ///
@@ -286,6 +299,51 @@ enum Job {
         id: String,
         result: Result<(), String>,
     },
+    Woken {
+        id: String,
+        result: Result<HostedGame, String>,
+    },
+}
+
+/// Réglages de « Reprendre sur mon PC », tapés dans le panneau de confirmation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResumeForm {
+    pub port: String,
+    /// Adresse que les joueurs utiliseront pour rejoindre ce PC.
+    pub public_host: String,
+    /// Mot de passe de la salle sur ce PC (celui du hub n'est jamais rendu).
+    pub password: String,
+    /// Retirer la partie du hub une fois lancée ici (coché par défaut).
+    pub delete_from_hub: bool,
+}
+
+impl Default for ResumeForm {
+    fn default() -> Self {
+        ResumeForm {
+            port: RESUME_PORT.to_string(),
+            public_host: "localhost".to_string(),
+            password: String::new(),
+            delete_from_hub: true,
+        }
+    }
+}
+
+/// Où en est « Reprendre sur mon PC ».
+#[derive(Default)]
+pub enum Resume {
+    #[default]
+    Idle,
+    /// Panneau de confirmation ouvert.
+    Confirm(ResumeForm),
+    /// Téléchargement de l'export dans un thread ; la réponse est le chemin de la seed.
+    Downloading {
+        id: String,
+        options: Box<HostOptions>,
+        delete_from_hub: bool,
+        receiver: Receiver<Result<PathBuf, String>>,
+    },
+    /// Seed et sauvegarde sur ce PC ; le serveur de ce PC démarre.
+    Starting { id: String, delete_from_hub: bool },
 }
 
 /// Ce que le launcher garde des parties hébergées sur le hub.
@@ -308,6 +366,10 @@ pub struct HubGames {
     copied_at: Option<Instant>,
     /// Clic sur « Lancer et connecter », pas encore traité par l'application.
     launch_request: Option<LaunchRequest>,
+    /// « Reprendre sur mon PC ».
+    resume: Resume,
+    /// Partie reprise sur ce PC, à retirer du hub dès qu'aucun autre appel ne tourne.
+    pending_delete: Option<String>,
 }
 
 impl HubGames {
@@ -319,6 +381,29 @@ impl HubGames {
     /// Les parties hébergées du compte, dans l'ordre du hub.
     pub fn games(&self) -> &[HostedGame] {
         &self.mine
+    }
+
+    /// Où en est « Reprendre sur mon PC » (tests de l'interface).
+    #[cfg(test)]
+    pub(crate) fn resume(&self) -> &Resume {
+        &self.resume
+    }
+
+    /// Tests de l'interface : la reprise attend le démarrage du serveur de ce PC.
+    #[cfg(test)]
+    pub(crate) fn set_resume_starting(&mut self, delete_from_hub: bool) {
+        if let Some(id) = self.current.as_ref().map(|t| t.game.id.clone()) {
+            self.resume = Resume::Starting {
+                id,
+                delete_from_hub,
+            };
+        }
+    }
+
+    /// Partie à retirer du hub après une reprise (tests de l'interface).
+    #[cfg(test)]
+    pub(crate) fn pending_delete(&self) -> Option<&str> {
+        self.pending_delete.as_deref()
     }
 
     /// Tests de l'interface : une partie déjà créée, sans réseau.
@@ -374,14 +459,34 @@ impl HubGames {
             Job::Listed(Err(_)) => {}
             Job::Status { id, result } => self.on_status(&id, result),
             Job::Deleted { id, result: Ok(()) } => {
+                let shown = self.current.as_ref().is_some_and(|t| t.game.id == id);
                 self.mine.retain(|g| g.id != id);
-                if self.current.as_ref().is_some_and(|t| t.game.id == id) {
+                if shown {
                     self.current = None;
                 }
                 self.notice = None;
-                return Some(Page::InProgress);
+                // Après une reprise sur ce PC, l'hôte regarde déjà sa partie locale.
+                if shown {
+                    return Some(Page::InProgress);
+                }
             }
             Job::Deleted { result: Err(e), .. } => self.notice = Some(e),
+            Job::Woken {
+                id,
+                result: Ok(game),
+            } => {
+                if let Some(known) = self.mine.iter_mut().find(|g| g.id == id) {
+                    *known = game.clone();
+                }
+                if let Some(tracked) = self.current.as_mut().filter(|t| t.game.id == id) {
+                    tracked.game = game;
+                    tracked.status = None;
+                }
+                // L'état détaillé (joueurs) est relu tout de suite.
+                self.last_poll = None;
+                self.notice = None;
+            }
+            Job::Woken { result: Err(e), .. } => self.notice = Some(e),
         }
         None
     }
@@ -463,6 +568,15 @@ pub fn background(
     ctx: &egui::Context,
 ) -> Option<Page> {
     let goto = state.poll();
+    // Partie reprise sur ce PC : retirée du hub dès que la place est libre.
+    if state.job.is_none() && state.access.is_some() && access == state.access {
+        if let Some(id) = state.pending_delete.take() {
+            state.start(ctx, move |client| {
+                let result = client.delete_game(&id).map_err(|e| error_text(&e));
+                Job::Deleted { id, result }
+            });
+        }
+    }
     if access != state.access {
         // Autre compte, autre hub ou déconnexion : on oublie ce qu'on savait.
         let same_account = matches!((&access, &state.access), (Some(a), Some(b)) if a.url == b.url);
@@ -501,11 +615,153 @@ pub fn background(
     goto
 }
 
+/// Lance le téléchargement de l'export pour « Reprendre sur mon PC ».
+fn start_resume(state: &mut HubGames, ctx: &egui::Context, form: ResumeForm) {
+    let Some(id) = state.current.as_ref().map(|t| t.game.id.clone()) else {
+        return;
+    };
+    let Some(access) = state.access.clone() else {
+        state.notice = Some("Connecte-toi à Rafthub pour reprendre la partie.".to_string());
+        return;
+    };
+    let built = format::parse_port(&form.port).and_then(|port| {
+        let public_host = form.public_host.trim().to_string();
+        if public_host.is_empty() {
+            return Err("Indiquez l'adresse que les autres joueurs utiliseront.".to_string());
+        }
+        let paths =
+            load_paths().map_err(|e| format!("Dossiers de Raftup introuvables sur ce PC : {e}"))?;
+        Ok((port, public_host, paths))
+    });
+    let (port, public_host, paths) = match built {
+        Ok(parts) => parts,
+        Err(message) => {
+            state.notice = Some(message);
+            state.resume = Resume::Confirm(form);
+            return;
+        }
+    };
+    let dir = paths.resumed_games_dir().join(&id);
+    let options = HostOptions {
+        // Remplacé par le vrai chemin à la fin du téléchargement.
+        seed: dir.join(launcher_core::hub_client::games::EXPORT_SEED_FILE),
+        port,
+        password: Some(form.password.clone()).filter(|p| !p.is_empty()),
+        // Chiffré par Raftup, comme « Héberger une partie » par défaut (ADR 0043).
+        encryption: Encryption::Generated {
+            dir: paths.tls_dir(),
+        },
+        public_host,
+        disable_save: false,
+        webhook: None,
+    };
+    let (sender, receiver) = mpsc::channel();
+    let client = access.client();
+    let ctx = ctx.clone();
+    let thread_id = id.clone();
+    // `move` : le thread possède sa copie du client, de l'identifiant et du dossier.
+    std::thread::spawn(move || {
+        let result = client
+            .export_game(&thread_id)
+            .and_then(|export| export.save_in(&dir))
+            .map_err(|e| error_text(&e));
+        let _ = sender.send(result);
+        ctx.request_repaint();
+    });
+    state.notice = None;
+    state.resume = Resume::Downloading {
+        id,
+        options: Box::new(options),
+        delete_from_hub: form.delete_from_hub,
+        receiver,
+    };
+}
+
+/// À appeler à chaque image : avance « Reprendre sur mon PC ». Une fois l'export sur
+/// ce PC, le serveur local démarre ; une fois démarré, la partie est retirée du hub
+/// (si demandé) et l'écran passe à la partie de ce PC. Un échec laisse la partie sur
+/// le hub, avec un message.
+pub fn resume_background(
+    state: &mut HubGames,
+    worker: &Worker,
+    shared: &Shared,
+    error: &mut Option<String>,
+) -> Option<Page> {
+    match &mut state.resume {
+        Resume::Idle | Resume::Confirm(_) => None,
+        Resume::Downloading {
+            id,
+            options,
+            delete_from_hub,
+            receiver,
+        } => {
+            let seed = match receiver.try_recv() {
+                Err(TryRecvError::Empty) => return None,
+                Ok(Ok(seed)) => seed,
+                Ok(Err(message)) => {
+                    state.notice = Some(message);
+                    state.resume = Resume::Idle;
+                    return None;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    state.notice = Some("Le téléchargement s'est arrêté net.".to_string());
+                    state.resume = Resume::Idle;
+                    return None;
+                }
+            };
+            if shared.status.is_some() || shared.starting {
+                state.notice = Some(
+                    "Une partie tourne déjà sur ce PC : arrête-la, puis reprends celle-ci."
+                        .to_string(),
+                );
+                state.resume = Resume::Idle;
+                return None;
+            }
+            let mut options = (**options).clone();
+            options.seed = seed;
+            worker.send(Command::Start(options));
+            state.resume = Resume::Starting {
+                id: id.clone(),
+                delete_from_hub: *delete_from_hub,
+            };
+            None
+        }
+        Resume::Starting {
+            id,
+            delete_from_hub,
+        } => {
+            if shared.status.is_some() {
+                if *delete_from_hub {
+                    // Elle n'est plus regardée : sa suppression ne change pas d'écran.
+                    if state.current.as_ref().is_some_and(|t| &t.game.id == id) {
+                        state.current = None;
+                    }
+                    state.pending_delete = Some(id.clone());
+                }
+                state.resume = Resume::Idle;
+                return Some(Page::Hosted);
+            }
+            if shared.starting {
+                return None;
+            }
+            if let Some(reason) = error.take() {
+                state.notice = Some(format!(
+                    "La partie n'a pas démarré sur ce PC : {reason}. Elle reste sur Rafthub."
+                ));
+                state.resume = Resume::Idle;
+            }
+            None
+        }
+    }
+}
+
 /// Écran « Partie en cours » d'une partie hébergée sur Rafthub.
 pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
     let mut goto = None;
     let mut copy: Option<String> = None;
     let mut delete = false;
+    let mut wake = false;
+    let mut resume_with: Option<ResumeForm> = None;
     super::page(ui, |ui| {
         let Some(tracked) = &state.current else {
             super::header(ui, "En cours", "Partie hébergée", |_| {});
@@ -534,8 +790,10 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
             widgets::error_banner(ui, message);
             ui.add_space(10.0);
         }
-        address_panel(ui, game, &mut copy);
+        let busy = state.job.is_some();
+        wake = address_panel(ui, game, busy, &mut copy);
         ui.add_space(12.0);
+        let is_host = tracked.admin_password.is_some();
         if let Some(password) = &tracked.admin_password {
             admin_panel(ui, password, &mut state.show_admin, &mut copy);
             ui.add_space(12.0);
@@ -545,6 +803,10 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
             state.launch_request = request;
         }
         ui.add_space(12.0);
+        if is_host {
+            resume_with = resume_panel(ui, &mut state.resume);
+            ui.add_space(12.0);
+        }
         widgets::panel(ui, "Supprimer la partie", |ui| {
             ui.label(widgets::dim(
                 "Arrête le serveur sur Rafthub et efface la seed et la sauvegarde du hub. \
@@ -566,6 +828,17 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
             }
         });
     });
+    if wake {
+        if let Some(id) = state.current.as_ref().map(|t| t.game.id.clone()) {
+            state.start(ui.ctx(), move |client| {
+                let result = client.wake_game(&id).map_err(|e| error_text(&e));
+                Job::Woken { id, result }
+            });
+        }
+    }
+    if let Some(form) = resume_with {
+        start_resume(state, ui.ctx(), form);
+    }
     if delete {
         state.confirm_delete = false;
         if let Some(id) = state.current.as_ref().map(|t| t.game.id.clone()) {
@@ -590,15 +863,27 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
     goto
 }
 
-/// Adresse à donner aux mods, avec « Copier ».
-fn address_panel(ui: &mut Ui, game: &HostedGame, copy: &mut Option<String>) {
+/// Adresse à donner aux mods, avec « Copier ». Rend vrai au clic sur « Réveiller ».
+fn address_panel(ui: &mut Ui, game: &HostedGame, busy: bool, copy: &mut Option<String>) -> bool {
+    let mut wake = false;
     widgets::panel(ui, "Adresse de la partie", |ui| {
         ui.horizontal(|ui| {
             widgets::pill(ui, "Sur Rafthub", theme::TEXT, theme::ACCENT_BG);
             if game.is_active() {
                 widgets::pill(ui, "● En ligne", theme::GREEN, theme::ACCENT_BG);
+            } else if game.is_sleeping() {
+                widgets::pill(ui, "En veille", theme::ACCENT, theme::ACCENT_BG);
             } else {
                 widgets::pill(ui, "Arrêtée", theme::AMBER, theme::ACCENT_BG);
+            }
+            if let Some(at) = game.last_activity_at {
+                ui.label(
+                    widgets::dim(format!(
+                        "Dernier joueur : {}",
+                        format::ago(format::now(), Some(at as f64))
+                    ))
+                    .size(13.0),
+                );
             }
         });
         ui.add_space(6.0);
@@ -622,13 +907,111 @@ fn address_panel(ui: &mut Ui, game: &HostedGame, copy: &mut Option<String>) {
             "Pas de mot de passe de salle."
         };
         ui.label(widgets::dim(password).size(13.0));
-        if !game.is_active() {
+        if game.is_sleeping() {
+            ui.label(
+                RichText::new(
+                    "En veille : personne n'a joué depuis un moment. Elle se réveille toute \
+                     seule quand un joueur se connecte (quelques secondes d'attente).",
+                )
+                .color(theme::ACCENT),
+            );
+            ui.add_space(4.0);
+            wake = !busy && widgets::primary_button(ui, "Réveiller", true);
+        } else if !game.is_active() {
             ui.label(
                 RichText::new("Le serveur de cette partie ne tourne pas sur le hub en ce moment.")
                     .color(theme::AMBER),
             );
+            ui.add_space(4.0);
+            wake = !busy && widgets::ghost_button(ui, "Relancer sur le hub");
         }
     });
+    wake
+}
+
+/// « Reprendre sur mon PC » (hôte seulement). Rend les réglages au clic sur « Lancer
+/// sur mon PC ».
+fn resume_panel(ui: &mut Ui, resume: &mut Resume) -> Option<ResumeForm> {
+    let mut launch = None;
+    let mut cancel = false;
+    widgets::panel(ui, "Continuer sans Rafthub", |ui| {
+        ui.label(widgets::dim(
+            "Télécharge la seed et la sauvegarde depuis Rafthub, puis relance la partie sur \
+             ce PC. L'adresse change : les joueurs devront recevoir une nouvelle invitation.",
+        ));
+        ui.add_space(6.0);
+        match resume {
+            Resume::Idle => {
+                if widgets::ghost_button(ui, "Reprendre sur mon PC") {
+                    *resume = Resume::Confirm(ResumeForm::default());
+                }
+            }
+            Resume::Confirm(form) => {
+                egui::Grid::new("reprise").num_columns(2).show(ui, |ui| {
+                    ui.label("Port");
+                    ui.add(egui::TextEdit::singleline(&mut form.port).desired_width(90.0));
+                    ui.end_row();
+                    ui.label("Adresse pour les joueurs");
+                    ui.add(egui::TextEdit::singleline(&mut form.public_host).desired_width(260.0));
+                    ui.end_row();
+                    ui.label("Mot de passe de la salle (facultatif)");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut form.password)
+                            .password(true)
+                            .desired_width(260.0),
+                    );
+                    ui.end_row();
+                });
+                ui.checkbox(
+                    &mut form.delete_from_hub,
+                    "Supprimer la partie du hub une fois lancée ici",
+                );
+                if form.delete_from_hub {
+                    ui.label(
+                        widgets::dim(
+                            "La partie sera retirée du hub une fois lancée ici, pour ne pas \
+                             avoir deux parties qui divergent.",
+                        )
+                        .size(13.0),
+                    );
+                } else {
+                    ui.label(
+                        RichText::new(
+                            "La partie restera aussi sur le hub : deux copies qui avanceront \
+                             chacune de leur côté.",
+                        )
+                        .color(theme::AMBER),
+                    );
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if widgets::primary_button(ui, "Lancer sur mon PC", true) {
+                        launch = Some(form.clone());
+                    }
+                    cancel = widgets::ghost_button(ui, "Annuler");
+                });
+            }
+            Resume::Downloading { .. } => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Téléchargement de la partie depuis Rafthub…");
+                });
+            }
+            Resume::Starting { .. } => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Démarrage de la partie sur ce PC…");
+                });
+            }
+        }
+    });
+    if cancel {
+        *resume = Resume::Idle;
+    }
+    if launch.is_some() {
+        *resume = Resume::Idle;
+    }
+    launch
 }
 
 /// Mot de passe d'admin, masqué par défaut.
@@ -673,6 +1056,12 @@ fn crew_panel(
             return;
         };
         let players: Vec<&SlotStatus> = status.slots.iter().filter(|s| !s.is_group).collect();
+        if players.is_empty() && game.is_sleeping() {
+            ui.label(widgets::dim(
+                "La partie dort : l'équipage s'affiche quand elle est réveillée.",
+            ));
+            return;
+        }
         if players.is_empty() {
             ui.label(widgets::dim("Aucun joueur à afficher (partie arrêtée ?)."));
             return;
@@ -730,6 +1119,8 @@ pub fn row(ui: &mut Ui, game: &HostedGame) -> bool {
             );
             let (line, color) = if game.is_active() {
                 ("En ligne sur Rafthub", theme::GREEN)
+            } else if game.is_sleeping() {
+                ("En veille sur Rafthub", theme::ACCENT)
             } else {
                 ("Arrêtée sur Rafthub", theme::AMBER)
             };

@@ -505,7 +505,7 @@ async fn suppression_du_compte_supprime_ses_parties() {
     assert!(join(&address, "Alice", None).await.is_err());
 }
 
-/// Une base en version 6 (avant les parties hébergées) passe en version 7 : la
+/// Une base en version 6 (avant les parties hébergées) passe en version 8 : la
 /// table `hosted_games` est créée et sert tout de suite.
 #[tokio::test(flavor = "multi_thread")]
 async fn base_en_version_6_migree() {
@@ -537,7 +537,7 @@ async fn base_en_version_6_migree() {
         "version",
     );
     assert_eq!(version, hub::store::SCHEMA_VERSION);
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     let (_state, app) = hub(&store, config(&dir.path().join("parties"), 47260, true)).await;
     let token = account(&app, "Hote").await;
     let (status, body) = upload(&app, &token, "Après migration", None, None).await;

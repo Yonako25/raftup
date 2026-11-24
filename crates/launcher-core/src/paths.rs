@@ -93,6 +93,12 @@ impl Paths {
         self.data_dir.join("generator").join(ap_version)
     }
 
+    /// Parties reprises sur ce PC depuis Rafthub (ADR 0052, étape 3) : un dossier par
+    /// partie, avec la seed et la sauvegarde téléchargées.
+    pub fn resumed_games_dir(&self) -> PathBuf {
+        self.data_dir.join("parties-reprises")
+    }
+
     /// Certificat de partie généré par Raftup et sa clé (ADR 0043).
     pub fn tls_dir(&self) -> PathBuf {
         self.data_dir.join("tls")

@@ -3,7 +3,7 @@
   "description": "Jumeau d'Archipelago en Rust (serveur multiworld compatible) avec un launcher de bureau.",
   "status": "en cours",
   "created": "2026-11-11",
-  "updated": "2026-11-23",
+  "updated": "2026-11-24",
   "stack": [
     "Rust",
     "tokio",
@@ -509,7 +509,7 @@
     "Regarder à l'œil les écrans non contrôlés",
     "Jouer une partie APQuest sur seed Rust",
     "Tester le hub sur PostgreSQL, MySQL et MariaDB",
-    "Lot 1 du convertisseur : proposer l'ADR des objets posés d'avance"
+    "ADR 0052, étape 4 : page « Parties » de la console"
   ],
   "blockers": [],
   "decisions": [
@@ -590,6 +590,11 @@
     {
       "date": "2026-11-23",
       "summary": "Fusion dans main de l'étape 2 de l'ADR 0052 (parties hébergées dans le launcher) et du lot 1 du convertisseur.",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-24",
+      "summary": "Parties hébergées par Rafthub, étape 3 (ADR 0052) : veille après 2 h avec port gardé, réveil à la connexion, « Reprendre sur mon PC », test de bout en bout du client du launcher contre le vrai hub.",
       "tasks": []
     }
   ]

@@ -55,7 +55,7 @@ fn library(scan: Scan) -> (LibraryState, tempfile::TempDir) {
 }
 
 /// Une partie hébergée à deux joueurs, sans mot de passe.
-fn hosted(has_password: bool) -> HostStatus {
+pub(super) fn hosted(has_password: bool) -> HostStatus {
     let slot = |n: u32, name: &str, game: &str, checked: usize| SlotStatus {
         team: 0,
         slot: n,

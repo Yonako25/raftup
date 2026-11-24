@@ -13,8 +13,15 @@
 //! compactée à l'arrêt ; au redémarrage, le hub relance chaque partie sur son port
 //! et elle reprend là où elle en était ([`GameHost::restore`]).
 //!
-//! Pas encore fait (étapes 2 à 5 de l'ADR 0052) : veille et réveil, page « Parties »
-//! de la console, export RGPD, déploiement.
+//! Veille (étape 3, point 6) : une partie sans connexion entrée dans un slot pendant
+//! `idle_after` (2 h) s'arrête, mais le hub **garde son port ouvert** ([`guard_port`]).
+//! La première connexion sur ce port la réveille : le serveur repart sur le même
+//! écouteur et reçoit la connexion déjà acceptée, si bien qu'un mod non modifié ne
+//! voit qu'un court délai. Les relevés d'activité et les réveils sont faits par une
+//! tâche du hub (`supervise_games`, dans `lib.rs`).
+//!
+//! Pas encore fait (étapes 4 et 5 de l'ADR 0052) : page « Parties » de la console,
+//! export RGPD, déploiement.
 
 pub mod cert;
 pub mod routes;
@@ -22,13 +29,17 @@ pub mod secret;
 
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use ap_protocol::SlotType;
 use multidata::{load_archipelago, ArchiveLimits, MultiData};
 use server::save::open_or_create;
 use server::{Limits, Room, RunningServer, Server, ServerStatus, TlsConfig};
-use tokio::sync::Mutex;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 
 use crate::error::HubError;
 use crate::session::{new_invite_code, new_token};
@@ -71,6 +82,13 @@ pub struct GamesConfig {
     pub max_save_bytes: usize,
     /// Limites de connexion et de débit de chaque serveur de jeu (ADR 0007).
     pub limits: Limits,
+    /// Veille après ce délai sans connexion entrée dans un slot (2 h).
+    pub idle_after: Duration,
+    /// Après un réveil, délai pour qu'une connexion entre dans un slot avant de se
+    /// rendormir (10 min) : un balayage de ports ne garde pas la partie allumée.
+    pub wake_grace: Duration,
+    /// Intervalle des relevés d'activité (1 min).
+    pub activity_check: Duration,
 }
 
 impl Default for GamesConfig {
@@ -86,6 +104,9 @@ impl Default for GamesConfig {
             max_seed_bytes: 32 * 1024 * 1024,
             max_save_bytes: 32 * 1024 * 1024,
             limits: Limits::default(),
+            idle_after: Duration::from_secs(2 * 3600),
+            wake_grace: Duration::from_secs(10 * 60),
+            activity_check: Duration::from_secs(60),
         }
     }
 }
@@ -137,24 +158,92 @@ pub struct Created {
 struct Running {
     server: RunningServer,
     fingerprint: String,
+    /// Sans connexion entrée dans un slot d'ici là, la partie se met en veille.
+    /// Repoussé de `idle_after` à chaque relevé où quelqu'un joue ; `wake_grace`
+    /// seulement après un réveil.
+    sleep_at: Instant,
+}
+
+/// Une partie en veille : plus de serveur, seulement une tâche qui garde le port
+/// ouvert et attend la connexion qui la réveillera (ADR 0052, point 6).
+struct Asleep {
+    fingerprint: String,
+    /// Envoyer ici (ou lâcher ce côté du canal) finit la garde sans connexion.
+    cancel: oneshot::Sender<()>,
+    guard: JoinHandle<GuardExit>,
+}
+
+/// Ce que rend la garde du port en finissant.
+struct GuardExit {
+    listener: TcpListener,
+    /// La connexion qui a réveillé la partie ; `None` : réveil demandé autrement.
+    pending: Option<(TcpStream, SocketAddr)>,
+}
+
+/// Une partie connue du hub, éveillée ou en veille. Une partie absente de la table
+/// est « arrêtée » (elle n'a pas pu repartir).
+enum Game {
+    Awake(Running),
+    Asleep(Asleep),
+}
+
+/// État d'une partie, vu par l'API.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameState {
+    /// Le serveur tourne.
+    Active,
+    /// En veille : le port est gardé, la première connexion la réveille.
+    Sleeping,
+    /// Ni l'un ni l'autre : elle n'a pas pu repartir (voir le journal).
+    Stopped,
+}
+
+impl GameState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            GameState::Active => "active",
+            GameState::Sleeping => "sleeping",
+            GameState::Stopped => "stopped",
+        }
+    }
+}
+
+/// Comment ouvrir le port d'un serveur de jeu.
+enum Bind<'a> {
+    /// Le port de la partie (reprise au démarrage, relance d'une partie arrêtée).
+    Port(u16),
+    /// Le premier port libre de la plage, sauf ceux-là (réservés par d'autres parties).
+    Free(&'a [i64]),
+    /// L'écouteur gardé pendant la veille, et peut-être la connexion qui réveille.
+    Listener(TcpListener, Option<(TcpStream, SocketAddr)>),
 }
 
 /// Les serveurs de jeu du hub.
 pub struct GameHost {
     config: GamesConfig,
-    /// Parties qui tournent, par identifiant.
+    /// Parties éveillées ou en veille, par identifiant.
     ///
     /// Mutex de tokio (et pas de `std`) : il reste pris pendant des `.await` (ouvrir
     /// un port, arrêter un serveur). Il sérialise aussi les créations : deux envois
     /// simultanés ne prennent pas le même port et ne dépassent pas les limites.
-    running: Mutex<BTreeMap<String, Running>>,
+    games: Mutex<BTreeMap<String, Game>>,
+    /// Les gardes de port envoient ici l'identifiant de la partie à réveiller ; la
+    /// tâche de veille du hub ([`GameHost::take_wake_receiver`]) fait le réveil.
+    wake_tx: mpsc::UnboundedSender<String>,
+    /// Récepteur de `wake_tx`, pris une seule fois par la tâche de veille.
+    /// Mutex de `std` : jamais pris pendant un `.await`.
+    wake_rx: std::sync::Mutex<Option<mpsc::UnboundedReceiver<String>>>,
 }
 
 impl GameHost {
     pub fn new(config: GamesConfig) -> GameHost {
+        // Canal sans borne : au plus un message par garde de port, qui finit aussitôt.
+        let (wake_tx, wake_rx) = mpsc::unbounded_channel();
         GameHost {
             config,
-            running: Mutex::new(BTreeMap::new()),
+            games: Mutex::new(BTreeMap::new()),
+            wake_tx,
+            wake_rx: std::sync::Mutex::new(Some(wake_rx)),
         }
     }
 
@@ -162,29 +251,52 @@ impl GameHost {
         &self.config
     }
 
+    /// Le récepteur des demandes de réveil des gardes de port, pour la tâche de
+    /// veille du hub. `None` s'il a déjà été pris.
+    pub fn take_wake_receiver(&self) -> Option<mpsc::UnboundedReceiver<String>> {
+        self.wake_rx.lock().ok()?.take()
+    }
+
     /// Dossier d'une partie. L'identifiant est vérifié avant (voir [`valid_id`]).
     fn game_dir(&self, id: &str) -> PathBuf {
         self.config.data_dir.join(id)
     }
 
-    /// Relance toutes les parties de la base (démarrage du hub). Une partie qui ne
-    /// repart pas (fichier abîmé, port pris par un autre programme) reste arrêtée,
-    /// avec une erreur au journal ; les autres repartent quand même.
+    /// Certificat des parties (le même pour toutes), créé au premier besoin.
+    fn certificate(&self) -> Result<cert::GameCertificate, HubError> {
+        cert::ensure(&self.config.data_dir.join("tls"))
+    }
+
+    /// Relance toutes les parties de la base (démarrage du hub). Une partie en
+    /// veille retrouve seulement la garde de son port. Une partie qui ne repart pas
+    /// (fichier abîmé, port pris par un autre programme) reste arrêtée, avec une
+    /// erreur au journal ; les autres repartent quand même.
     pub async fn restore(&self, store: &Store) -> Result<(), HubError> {
         let rows = store.all_games().await?;
         if rows.is_empty() {
             return Ok(());
         }
         let key = GameKey::load_or_create(&self.config.data_dir)?;
-        let mut running = self.running.lock().await;
+        let mut games = self.games.lock().await;
         for row in rows {
-            if running.contains_key(&row.id) {
+            if games.contains_key(&row.id) {
                 continue;
             }
-            match self.relaunch(&key, &row).await {
+            let restored = if row.asleep {
+                self.guard_port(&row).await.map(Game::Asleep)
+            } else {
+                match port_of(&row) {
+                    Ok(port) => self
+                        .relaunch(&key, &row, Bind::Port(port))
+                        .await
+                        .map(Game::Awake),
+                    Err(error) => Err(error),
+                }
+            };
+            match restored {
                 Ok(game) => {
-                    tracing::info!(game = %row.id, port = row.port, "partie hébergée reprise");
-                    running.insert(row.id.clone(), game);
+                    tracing::info!(game = %row.id, port = row.port, asleep = row.asleep, "partie hébergée reprise");
+                    games.insert(row.id.clone(), game);
                 }
                 Err(error) => {
                     tracing::error!(game = %row.id, %error, "partie hébergée non reprise");
@@ -194,8 +306,40 @@ impl GameHost {
         Ok(())
     }
 
-    /// Relance une partie déjà enregistrée, sur son port.
-    async fn relaunch(&self, key: &GameKey, row: &GameRow) -> Result<Running, HubError> {
+    /// Rouvre le port d'une partie en veille (démarrage du hub) et le garde.
+    async fn guard_port(&self, row: &GameRow) -> Result<Asleep, HubError> {
+        let port = port_of(row)?;
+        let listener = TcpListener::bind((self.config.listen_host.as_str(), port))
+            .await
+            .map_err(|e| HubError::Internal(format!("port {port} : {e}")))?;
+        let fingerprint = self.certificate()?.fingerprint;
+        Ok(self.spawn_guard(&row.id, listener, fingerprint))
+    }
+
+    /// Lance la garde d'un port : elle attend une connexion, prévient la tâche de
+    /// veille, puis rend l'écouteur et la connexion à [`GameHost::wake`].
+    fn spawn_guard(&self, id: &str, listener: TcpListener, fingerprint: String) -> Asleep {
+        let (cancel, cancelled) = oneshot::channel();
+        let guard = tokio::spawn(guard_port(
+            id.to_string(),
+            listener,
+            cancelled,
+            self.wake_tx.clone(),
+        ));
+        Asleep {
+            fingerprint,
+            cancel,
+            guard,
+        }
+    }
+
+    /// Relance une partie déjà enregistrée.
+    async fn relaunch(
+        &self,
+        key: &GameKey,
+        row: &GameRow,
+        bind: Bind<'_>,
+    ) -> Result<Running, HubError> {
         let dir = self.game_dir(&row.id);
         let seed = std::fs::read(dir.join(SEED_FILE))
             .map_err(|e| HubError::Internal(format!("seed illisible : {e}")))?;
@@ -206,20 +350,15 @@ impl GameHost {
             .map(|sealed| key.open(&row.id, PASSWORD_PURPOSE, sealed))
             .transpose()?;
         let admin_password = key.open(&row.id, ADMIN_PURPOSE, &row.admin_password_enc)?;
-        let port = u16::try_from(row.port)
-            .map_err(|_| HubError::Internal("port de partie invalide".to_string()))?;
         let (running, _) = self
-            .launch(&dir, data, &seed, password, admin_password, Some(port), &[])
+            .launch(&dir, data, &seed, password, admin_password, bind)
             .await?;
         Ok(running)
     }
 
-    /// Ouvre un port, la sauvegarde, puis démarre le serveur de jeu.
-    ///
-    /// `port` : celui de la partie (reprise), ou `None` pour prendre le premier port
-    /// libre de la plage, sauf ceux de `reserved` (réservés par d'autres parties).
-    /// Rend le serveur lancé et `true` si une sauvegarde existante a repris.
-    #[allow(clippy::too_many_arguments)]
+    /// Ouvre un port (ou reprend l'écouteur gardé), la sauvegarde, puis démarre le
+    /// serveur de jeu. Rend le serveur lancé et `true` si une sauvegarde existante a
+    /// repris.
     async fn launch(
         &self,
         dir: &Path,
@@ -227,10 +366,9 @@ impl GameHost {
         seed: &[u8],
         password: Option<String>,
         admin_password: String,
-        port: Option<u16>,
-        reserved: &[i64],
+        bind: Bind<'_>,
     ) -> Result<(Running, bool), HubError> {
-        let certificate = cert::ensure(&self.config.data_dir.join("tls"))?;
+        let certificate = self.certificate()?;
         let tls = TlsConfig::from_pem(
             certificate.cert_pem.as_bytes(),
             certificate.key_pem.as_bytes(),
@@ -251,11 +389,18 @@ impl GameHost {
         }
 
         let host = self.config.listen_host.as_str();
-        let server = match port {
-            Some(port) => Server::bind((host, port), room)
+        let server = match bind {
+            Bind::Port(port) => Server::bind((host, port), room)
                 .await
                 .map_err(|e| HubError::Internal(format!("port {port} : {e}")))?,
-            None => self.bind_free_port(host, room, reserved).await?,
+            Bind::Free(reserved) => self.bind_free_port(host, room, reserved).await?,
+            Bind::Listener(listener, pending) => {
+                let server = Server::from_listener(listener, room);
+                match pending {
+                    Some((stream, peer)) => server.with_pending_connection(stream, peer),
+                    None => server,
+                }
+            }
         };
         // La sauvegarde est ouverte APRÈS l'ouverture du port (comme le launcher) : si
         // aucun port n'est libre, aucun `.raftup` n'est créé.
@@ -272,6 +417,7 @@ impl GameHost {
             Running {
                 server,
                 fingerprint: certificate.fingerprint,
+                sleep_at: Instant::now() + self.config.idle_after,
             },
             resumed,
         ))
@@ -331,7 +477,7 @@ impl GameHost {
         }
 
         // Tout ce qui suit est sous le verrou : limites, choix du port, écriture.
-        let mut running = self.running.lock().await;
+        let mut games = self.games.lock().await;
         if store.count_games(Some(owner_id)).await? >= self.config.max_per_account {
             return Err(HubError::GameLimitReached(self.config.max_per_account));
         }
@@ -361,8 +507,7 @@ impl GameHost {
                     &upload.seed,
                     password.clone(),
                     admin_password.clone(),
-                    None,
-                    &reserved,
+                    Bind::Free(&reserved),
                 )
                 .await?;
             let port = game.server.local_addr().port();
@@ -380,6 +525,8 @@ impl GameHost {
                     .transpose()?,
                 admin_password_enc: key.seal(&id, ADMIN_PURPOSE, &admin_password)?,
                 created_at: now,
+                last_activity_at: None,
+                asleep: false,
             };
             if let Err(error) = store.insert_game(&row).await {
                 game.server.stop().await;
@@ -393,7 +540,7 @@ impl GameHost {
             Ok((game, row, resumed)) => {
                 tracing::info!(game = %id, port = row.port, owner = owner_id, "partie hébergée créée");
                 let fingerprint = game.fingerprint.clone();
-                running.insert(id, game);
+                games.insert(id, Game::Awake(game));
                 Ok(Created {
                     row,
                     fingerprint,
@@ -421,26 +568,147 @@ impl GameHost {
         key.open(&row.id, ADMIN_PURPOSE, &row.admin_password_enc)
     }
 
-    /// Empreinte du certificat de la partie, si elle tourne.
-    pub async fn fingerprint(&self, id: &str) -> Option<String> {
-        let running = self.running.lock().await;
-        running.get(id).map(|game| game.fingerprint.clone())
+    /// État de la partie, et l'empreinte de son certificat si elle est éveillée ou
+    /// en veille (les liens d'invitation restent bons pendant la veille).
+    pub async fn state(&self, id: &str) -> (GameState, Option<String>) {
+        let games = self.games.lock().await;
+        match games.get(id) {
+            Some(Game::Awake(game)) => (GameState::Active, Some(game.fingerprint.clone())),
+            Some(Game::Asleep(game)) => (GameState::Sleeping, Some(game.fingerprint.clone())),
+            None => (GameState::Stopped, None),
+        }
     }
 
-    /// Photo de la partie (joueurs connectés, avancement), si elle tourne.
+    /// Empreinte du certificat de la partie, si elle est éveillée ou en veille.
+    pub async fn fingerprint(&self, id: &str) -> Option<String> {
+        self.state(id).await.1
+    }
+
+    /// Photo de la partie (joueurs connectés, avancement), si elle est éveillée.
     pub async fn status(&self, id: &str) -> Option<ServerStatus> {
-        let running = self.running.lock().await;
+        let games = self.games.lock().await;
         // La photo est demandée à la salle sous le verrou : elle répond vite (une
         // lecture de son état), et le serveur ne peut pas être arrêté entre-temps.
-        running.get(id)?.server.status().await
+        match games.get(id)? {
+            Game::Awake(game) => game.server.status().await,
+            Game::Asleep(_) => None,
+        }
     }
 
-    /// Arrête une partie (la sauvegarde est compactée), sans la supprimer.
-    async fn stop(&self, id: &str) {
-        let game = self.running.lock().await.remove(id);
-        if let Some(game) = game {
-            game.server.stop().await;
+    /// Relevé d'activité (appelé chaque `activity_check` par la tâche de veille) :
+    /// une partie où une connexion est entrée dans un slot repousse sa veille de
+    /// `idle_after` et note l'heure `now` en base ; une partie vide depuis son
+    /// échéance s'endort.
+    pub async fn check_activity(&self, store: &Store, now: i64) {
+        let mut to_sleep = Vec::new();
+        let mut active = Vec::new();
+        {
+            let mut games = self.games.lock().await;
+            for (id, game) in games.iter_mut() {
+                let Game::Awake(game) = game else { continue };
+                let playing = game
+                    .server
+                    .status()
+                    .await
+                    .is_some_and(|status| status.slots.iter().any(|slot| slot.connections > 0));
+                if playing {
+                    game.sleep_at = Instant::now() + self.config.idle_after;
+                    active.push(id.clone());
+                } else if Instant::now() >= game.sleep_at {
+                    to_sleep.push(id.clone());
+                }
+            }
         }
+        // La base est écrite sans le verrou des parties.
+        for id in active {
+            if let Err(error) = store.touch_game(&id, now).await {
+                tracing::warn!(game = %id, %error, "dernière activité non écrite");
+            }
+        }
+        for id in to_sleep {
+            if let Err(error) = self.sleep(store, &id).await {
+                tracing::error!(game = %id, %error, "mise en veille impossible");
+            }
+        }
+    }
+
+    /// Met une partie éveillée en veille : le serveur s'arrête (sauvegarde
+    /// compactée), le port reste ouvert et gardé. Sans effet si elle n'est pas
+    /// éveillée.
+    pub async fn sleep(&self, store: &Store, id: &str) -> Result<(), HubError> {
+        let mut games = self.games.lock().await;
+        let game = match games.remove(id) {
+            Some(Game::Awake(game)) => game,
+            Some(other) => {
+                games.insert(id.to_string(), other);
+                return Ok(());
+            }
+            None => return Ok(()),
+        };
+        let address = game.server.local_addr();
+        let listener = match game.server.stop_keeping_listener().await {
+            Some(listener) => listener,
+            // Ne devrait pas arriver : on rouvre le port à la main.
+            None => TcpListener::bind(address)
+                .await
+                .map_err(|e| HubError::Internal(format!("port {} : {e}", address.port())))?,
+        };
+        games.insert(
+            id.to_string(),
+            Game::Asleep(self.spawn_guard(id, listener, game.fingerprint)),
+        );
+        drop(games);
+        store.set_game_asleep(id, true).await?;
+        tracing::info!(game = %id, "partie hébergée en veille");
+        Ok(())
+    }
+
+    /// Réveille une partie (`POST /v1/games/{id}/wake`, ou connexion sur son port).
+    /// En veille : le serveur repart sur le port gardé, avec la connexion qui l'a
+    /// réveillée s'il y en a une, et `wake_grace` pour qu'un joueur entre. Arrêtée :
+    /// nouvel essai sur son port. Déjà éveillée : rien à faire.
+    pub async fn wake(&self, store: &Store, id: &str) -> Result<(), HubError> {
+        let mut games = self.games.lock().await;
+        let listener = match games.remove(id) {
+            Some(Game::Awake(game)) => {
+                games.insert(id.to_string(), Game::Awake(game));
+                return Ok(());
+            }
+            Some(Game::Asleep(asleep)) => {
+                // La garde a peut-être déjà fini (connexion reçue) : l'envoi échoue
+                // alors, ce qui ne change rien.
+                let _ = asleep.cancel.send(());
+                let exit = asleep
+                    .guard
+                    .await
+                    .map_err(|e| HubError::Internal(format!("garde du port : {e}")))?;
+                Some((exit.listener, exit.pending))
+            }
+            None => None,
+        };
+        let Some(row) = store.game(id).await? else {
+            // Supprimée entre-temps : l'écouteur éventuel est lâché, le port se ferme.
+            return Err(HubError::GameNotFound);
+        };
+        let bind = match listener {
+            Some((listener, pending)) => Bind::Listener(listener, pending),
+            None => Bind::Port(port_of(&row)?),
+        };
+        let key = GameKey::load_or_create(&self.config.data_dir)?;
+        let mut game = self.relaunch(&key, &row, bind).await?;
+        game.sleep_at = Instant::now() + self.config.wake_grace;
+        games.insert(id.to_string(), Game::Awake(game));
+        drop(games);
+        store.set_game_asleep(id, false).await?;
+        tracing::info!(game = %id, "partie hébergée réveillée");
+        Ok(())
+    }
+
+    /// Retire une partie de la table et l'arrête : serveur arrêté (sauvegarde
+    /// compactée) ou garde du port finie. Le port est fermé au retour.
+    async fn stop(&self, id: &str) {
+        let game = self.games.lock().await.remove(id);
+        stop_game(game).await;
     }
 
     /// Arrête et supprime une partie : serveur, ligne de la base et dossier.
@@ -471,15 +739,71 @@ impl GameHost {
     }
 
     /// Arrête toutes les parties (arrêt du hub). Chaque sauvegarde est compactée ;
-    /// les parties repartent au prochain lancement ([`GameHost::restore`]).
+    /// les parties repartent au prochain lancement ([`GameHost::restore`]), en veille
+    /// pour celles qui l'étaient.
     pub async fn shutdown(&self) {
         // `std::mem::take` vide la table sous le verrou, puis on arrête sans lui.
-        let games = std::mem::take(&mut *self.running.lock().await);
+        let games = std::mem::take(&mut *self.games.lock().await);
         for (id, game) in games {
-            game.server.stop().await;
+            stop_game(Some(game)).await;
             tracing::info!(game = %id, "partie hébergée arrêtée");
         }
     }
+}
+
+/// Arrête une partie sortie de la table (éveillée ou en veille).
+async fn stop_game(game: Option<Game>) {
+    match game {
+        Some(Game::Awake(game)) => game.server.stop().await,
+        Some(Game::Asleep(asleep)) => {
+            let _ = asleep.cancel.send(());
+            // L'écouteur rendu est lâché ici : le port se ferme.
+            let _ = asleep.guard.await;
+        }
+        None => {}
+    }
+}
+
+/// Garde le port d'une partie en veille : attend une connexion (et prévient alors
+/// la tâche de veille par `wake`), ou la fin de la garde (`cancelled`).
+async fn guard_port(
+    id: String,
+    listener: TcpListener,
+    cancelled: oneshot::Receiver<()>,
+    wake: mpsc::UnboundedSender<String>,
+) -> GuardExit {
+    // `select!` attend le premier des deux qui arrive ; l'autre est abandonné. Le
+    // résultat est rangé dans `pending` avant de rendre l'écouteur, qu'`accept_one`
+    // emprunte pendant l'attente.
+    let pending = tokio::select! {
+        connection = accept_one(&listener) => Some(connection),
+        // Envoi ou canal fermé (partie supprimée, hub arrêté) : on rend la main.
+        _ = cancelled => None,
+    };
+    if pending.is_some() {
+        // Personne n'écoute plus (hub arrêté) : la connexion sera simplement fermée.
+        let _ = wake.send(id);
+    }
+    GuardExit { listener, pending }
+}
+
+/// Accepte une connexion ; une erreur passagère (trop de fichiers ouverts…) fait
+/// seulement attendre un peu.
+async fn accept_one(listener: &TcpListener) -> (TcpStream, SocketAddr) {
+    loop {
+        match listener.accept().await {
+            Ok(connection) => return connection,
+            Err(error) => {
+                tracing::warn!(%error, "connexion refusée sur un port en veille");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+}
+
+/// Port d'une partie de la base.
+fn port_of(row: &GameRow) -> Result<u16, HubError> {
+    u16::try_from(row.port).map_err(|_| HubError::Internal("port de partie invalide".to_string()))
 }
 
 /// Relit une seed sur un thread à part : le pickle peut faire 32 Mio.

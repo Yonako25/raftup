@@ -27,9 +27,10 @@ pub mod save;
 pub mod tls;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::net::{TcpListener, ToSocketAddrs};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
@@ -55,6 +56,9 @@ pub struct Server {
     tls: Option<TlsConfig>,
     /// `None` : pas de sauvegarde (`--disable_save`).
     save: Option<SaveState>,
+    /// Connexion déjà acceptée par l'appelant, servie en premier (réveil d'une
+    /// partie en veille sur le hub, ADR 0052).
+    pending: Option<(TcpStream, SocketAddr)>,
 }
 
 impl Server {
@@ -62,13 +66,27 @@ impl Server {
     /// (pratique pour les tests) : voir [`Server::local_addr`].
     pub async fn bind(address: impl ToSocketAddrs, room: Room) -> Result<Server, ServerError> {
         let listener = TcpListener::bind(address).await?;
-        Ok(Server {
+        Ok(Server::from_listener(listener, room))
+    }
+
+    /// Serveur sur un port déjà ouvert par l'appelant. Le hub s'en sert pour garder
+    /// le port d'une partie en veille et la relancer dessus sans le fermer (ADR 0052).
+    pub fn from_listener(listener: TcpListener, room: Room) -> Server {
+        Server {
             listener,
             room,
             limits: Limits::default(),
             tls: None,
             save: None,
-        })
+            pending: None,
+        }
+    }
+
+    /// Sert d'abord cette connexion, déjà acceptée sur le port par l'appelant : le
+    /// client qui a réveillé la partie est accueilli comme les suivants.
+    pub fn with_pending_connection(mut self, stream: TcpStream, peer: SocketAddr) -> Server {
+        self.pending = Some((stream, peer));
+        self
     }
 
     /// Remplace les limites par défaut (celles de la spec) ; utile aux tests.
@@ -143,14 +161,19 @@ impl Server {
                 // Prévient `stop` ; personne n'attend peut-être : on ignore l'échec.
                 let _ = done.send(());
             })?;
+        // `Arc` : la boucle d'accueil et le `RunningServer` partagent l'écouteur ;
+        // `stop_keeping_listener` le récupère une fois la boucle finie.
+        let listener = Arc::new(self.listener);
         let accept = tokio::spawn(accept_loop(
-            self.listener,
+            Arc::clone(&listener),
+            self.pending,
             events.clone(),
             self.limits,
             self.tls,
         ));
         Ok(RunningServer {
             address,
+            listener,
             events,
             monitor,
             accept,
@@ -161,14 +184,20 @@ impl Server {
 
 /// Accueille les clients sans fin, une tâche par connexion.
 async fn accept_loop(
-    listener: TcpListener,
+    listener: Arc<TcpListener>,
+    mut pending: Option<(TcpStream, SocketAddr)>,
     events: mpsc::Sender<Event>,
     limits: Limits,
     tls: Option<TlsConfig>,
 ) {
     let mut next_id = 0;
     loop {
-        match listener.accept().await {
+        // `take()` : la connexion en attente est servie une seule fois, en premier.
+        let accepted = match pending.take() {
+            Some(connection) => Ok(connection),
+            None => listener.accept().await,
+        };
+        match accepted {
             Ok((stream, peer)) => {
                 next_id += 1;
                 // `tokio::spawn` lance la connexion en parallèle des autres.
@@ -197,6 +226,8 @@ async fn accept_loop(
 /// Un serveur lancé par [`Server::start`] : on peut le suivre et l'arrêter.
 pub struct RunningServer {
     address: SocketAddr,
+    /// Écouteur du port, partagé avec la boucle d'accueil.
+    listener: Arc<TcpListener>,
     /// Copie de l'entrée de la tâche salle, pour lui demander une photo.
     events: mpsc::Sender<Event>,
     monitor: broadcast::Sender<GameEvent>,
@@ -236,14 +267,26 @@ impl RunningServer {
     ///
     /// Le port est libéré au retour de la fonction.
     pub async fn stop(self) {
+        // L'écouteur rendu est lâché ici : le port se ferme.
+        let _ = self.stop_keeping_listener().await;
+    }
+
+    /// Arrête le serveur comme [`RunningServer::stop`] (sauvegarde compactée,
+    /// connexions fermées), mais rend l'écouteur **sans fermer le port** : le hub y
+    /// attend la connexion qui réveillera la partie (ADR 0052). `None` seulement si
+    /// l'écouteur est encore partagé, ce qui n'arrive pas une fois l'accueil fini.
+    pub async fn stop_keeping_listener(self) -> Option<TcpListener> {
         self.accept.abort();
         // La salle s'arrête à la réception de `Stop` ; si elle est déjà
         // arrêtée, l'envoi échoue, ce qui ne change rien.
         let _ = self.events.send(Event::Stop).await;
-        // On attend la fin réelle des deux : l'écoute du port est alors
-        // fermée. Une tâche annulée répond par une erreur « cancelled ».
+        // On attend la fin réelle des deux. Une tâche annulée répond par une
+        // erreur « cancelled ».
         let _ = self.accept.await;
         let _ = self.room.await;
         info!(address = %self.address, "serveur arrêté");
+        // La boucle d'accueil est finie : il ne reste qu'une seule copie de l'`Arc`,
+        // `try_unwrap` rend l'écouteur lui-même.
+        Arc::try_unwrap(self.listener).ok()
     }
 }

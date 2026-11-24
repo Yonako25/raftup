@@ -5,6 +5,7 @@
 //! | `POST /v1/games` | compte | envoie une seed (et peut-être une sauvegarde) ; rend l'identifiant, l'adresse, l'empreinte `fp` et le mot de passe d'admin |
 //! | `GET /v1/games` | compte | ses parties hébergées |
 //! | `GET /v1/games/{id}` | qui connaît l'identifiant | état : joueurs connectés, avancement par slot |
+//! | `POST /v1/games/{id}/wake` | qui connaît l'identifiant | réveille une partie en veille (ou relance une partie arrêtée) |
 //! | `GET /v1/games/{id}/export` | hôte | zip de la seed et de la sauvegarde |
 //! | `DELETE /v1/games/{id}` | hôte | arrête et supprime la partie |
 //!
@@ -48,6 +49,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/v1/games/{id}", get(game_status).delete(delete_game))
         .route("/v1/games/{id}/export", get(export_game))
+        .route("/v1/games/{id}/wake", post(wake_game))
 }
 
 /// Taille du corps de `POST /v1/games` : les deux fichiers en base64 (4 octets pour
@@ -88,7 +90,8 @@ pub struct GameView {
     pub id: String,
     pub name: String,
     pub seed_name: String,
-    /// `active` (le serveur tourne) ou `stopped` (il n'a pas pu repartir).
+    /// `active` (le serveur tourne), `sleeping` (en veille : la première connexion
+    /// la réveille) ou `stopped` (elle n'a pas pu repartir).
     pub state: &'static str,
     /// Adresse à donner aux mods : `hôte:port`, sans schéma, pour qu'un client essaie
     /// `wss://` puis retombe sur `ws://` (ADR 0043).
@@ -100,6 +103,8 @@ pub struct GameView {
     pub players: i64,
     pub has_password: bool,
     pub created_at: i64,
+    /// Dernier relevé où une connexion était entrée dans un slot ; `None` : jamais.
+    pub last_activity_at: Option<i64>,
 }
 
 /// État détaillé (`GET /v1/games/{id}`).
@@ -134,16 +139,12 @@ async fn public_host(state: &AppState) -> Result<String, HubError> {
 }
 
 async fn view(state: &AppState, row: &GameRow, host: &str) -> GameView {
-    let fingerprint = state.games().fingerprint(&row.id).await;
+    let (game_state, fingerprint) = state.games().state(&row.id).await;
     GameView {
         id: row.id.clone(),
         name: row.name.clone(),
         seed_name: row.seed_name.clone(),
-        state: if fingerprint.is_some() {
-            "active"
-        } else {
-            "stopped"
-        },
+        state: game_state.as_str(),
         address: format!("{host}:{}", row.port),
         host: host.to_string(),
         port: row.port,
@@ -151,6 +152,7 @@ async fn view(state: &AppState, row: &GameRow, host: &str) -> GameView {
         players: row.player_count,
         has_password: row.password_enc.is_some(),
         created_at: row.created_at,
+        last_activity_at: row.last_activity_at,
     }
 }
 
@@ -262,6 +264,21 @@ async fn game_status(
         connections,
         slots,
     }))
+}
+
+/// Réveille la partie et rend son nouvel état. Une partie déjà éveillée reste comme
+/// elle est ; une partie qui ne repart pas répond par une erreur.
+async fn wake_game(
+    State(state): State<AppState>,
+    _user: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<GameView>, HubError> {
+    let row = find(&state, &id).await?;
+    state.games().wake(state.store(), &row.id).await?;
+    let host = public_host(&state).await?;
+    // Relue : `asleep` vient de changer en base.
+    let row = find(&state, &id).await?;
+    Ok(Json(view(&state, &row, &host).await))
 }
 
 async fn export_game(
