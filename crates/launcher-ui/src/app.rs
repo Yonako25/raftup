@@ -6,6 +6,7 @@ use crate::screens::{
     catalog, create, friends, home, hub_game, join, library, matches, running, settings, setup,
     soon, welcome,
 };
+use crate::format;
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -720,14 +721,8 @@ fn server_card(ui: &mut Ui, shared: &crate::worker::Shared) {
     });
     match &shared.status {
         Some(status) => {
-            let name: String = status.seed.seed_name.chars().take(8).collect();
-            let dots = if status.seed.seed_name.chars().count() > 8 {
-                "…"
-            } else {
-                ""
-            };
             ui.label(RichText::new("● En ligne").color(theme::GREEN));
-            ui.label(widgets::dim(format!("seed {name}{dots}")).size(12.0));
+            ui.label(widgets::dim(format::party_title(&status.server.slots)).size(12.0));
             let connected = status
                 .server
                 .slots

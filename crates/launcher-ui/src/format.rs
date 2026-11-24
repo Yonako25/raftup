@@ -89,6 +89,24 @@ pub fn join_names(names: &[String]) -> String {
     }
 }
 
+/// Nom lisible d'une partie de ce PC, d'après ses jeux : « Partie Slime Rancher »,
+/// « Partie Slime Rancher et A Short Hike », « Partie Slime Rancher, A Short Hike +2 ».
+/// Le numéro de seed ne parle pas aux joueurs : il reste dans l'infobulle et le journal.
+pub fn party_title(slots: &[SlotStatus]) -> String {
+    // Les jeux sans doublon, dans l'ordre des joueurs (un `Vec` garde l'ordre).
+    let mut games: Vec<String> = Vec::new();
+    for slot in slots.iter().filter(|s| !s.is_group) {
+        if !games.contains(&slot.game) {
+            games.push(slot.game.clone());
+        }
+    }
+    match games.len() {
+        0 => "Partie sur ce PC".to_string(),
+        1 | 2 => format!("Partie {}", join_names(&games)),
+        n => format!("Partie {}, {} +{}", games[0], games[1], n - 2),
+    }
+}
+
 /// « 1 lieu », « 25 lieux ».
 pub fn locations_count(n: usize) -> String {
     if n > 1 {
@@ -535,6 +553,30 @@ mod tests {
             away: None,
             release_votes: 0,
         }
+    }
+
+    #[test]
+    fn nom_de_partie_d_apres_les_jeux() {
+        let game = |name: &str, game: &str| SlotStatus {
+            game: game.to_string(),
+            ..slot(name, 0, 0)
+        };
+        assert_eq!(party_title(&[]), "Partie sur ce PC");
+        let one = [game("A", "Slime Rancher"), game("B", "Slime Rancher")];
+        assert_eq!(party_title(&one), "Partie Slime Rancher");
+        let two = [game("A", "Slime Rancher"), game("B", "A Short Hike")];
+        assert_eq!(party_title(&two), "Partie Slime Rancher et A Short Hike");
+        let mut four = two.to_vec();
+        four.push(game("C", "Hollow Knight"));
+        four.push(game("D", "Risk of Rain 2"));
+        assert_eq!(party_title(&four), "Partie Slime Rancher, A Short Hike +2");
+        // Un groupe d'objets n'est pas un jeu joué.
+        let mut group = game("G", "Groupe");
+        group.is_group = true;
+        assert_eq!(
+            party_title(&[game("A", "Slime Rancher"), group]),
+            "Partie Slime Rancher"
+        );
     }
 
     #[test]

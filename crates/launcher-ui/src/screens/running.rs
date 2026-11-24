@@ -269,10 +269,12 @@ fn hero(
                     // Place gardée à droite pour la pastille et les deux boutons : un
                     // sous-titre long passe à la ligne au lieu de glisser sous eux.
                     ui.set_max_width((ui.available_width() - HERO_BUTTONS_WIDTH).max(200.0));
+                    // Le numéro de seed reste au survol, pour qui en a besoin.
                     ui.label(widgets::title(
-                        &format!("seed {}", status.seed.seed_name),
+                        &format::party_title(&status.server.slots),
                         28.0,
-                    ));
+                    ))
+                    .on_hover_text(format!("Seed {}", status.seed.seed_name));
                     ui.label(widgets::dim(format!(
                         "{players} joueur{plural} · hébergée sur ce PC · {mode} · démarrée il y a {}{resumed}",
                         format::short_duration(now - status.started_at)

@@ -185,7 +185,7 @@ fn accueil_partie_hebergee_et_invitation() {
     let mut harness = accueil(scan(true), shared, join);
     // La partie passe avant l'invitation.
     assert!(shows(&harness, "Une partie tourne sur ce PC"));
-    assert!(shows(&harness, "seed 12345"));
+    assert!(shows(&harness, "Partie Slime Rancher et A Short Hike"));
     assert!(shows(&harness, "10 / 80 lieux"));
     assert!(shows(&harness, "Invitation reçue"));
     assert!(shows(&harness, "Une partie de Slime Rancher t'attend."));

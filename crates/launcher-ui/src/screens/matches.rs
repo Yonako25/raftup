@@ -106,7 +106,7 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
             ui.label(
-                RichText::new(format!("seed {}", status.seed.seed_name))
+                RichText::new(format::party_title(&status.server.slots))
                     .size(17.0)
                     .strong()
                     .family(theme::bold_family())

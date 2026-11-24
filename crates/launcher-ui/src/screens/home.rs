@@ -168,7 +168,7 @@ pub fn show(
                 let total: usize = players.iter().map(|s| s.total).sum();
                 ui.horizontal(|ui| {
                     ui.label(
-                        RichText::new(format!("seed {}", status.seed.seed_name))
+                        RichText::new(format::party_title(&status.server.slots))
                             .strong()
                             .color(theme::TEXT),
                     );

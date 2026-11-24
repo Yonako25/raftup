@@ -1128,10 +1128,8 @@ pub fn row(ui: &mut Ui, game: &HostedGame) -> bool {
             let players = game.players as usize;
             ui.label(
                 widgets::dim(format!(
-                    "{} · {} · seed {}",
+                    "{} · sur Rafthub",
                     widgets::plural(players, "joueur", "joueurs"),
-                    game.address,
-                    game.seed_name
                 ))
                 .size(13.0),
             );
