@@ -786,3 +786,9 @@ untime2`.
 - **Pas vérifié** : aucun des 13 nouveaux convertis joué avec son mod ; Dark Souls III, Faxanadu et Noita tirent leurs objets posés au hasard (instantané figé) ; Aquaria bute sur un pool plus grand que les lieux.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/launcher-ui/` (autre session).
 - **Suite** : lot 2 (sondeur : `state.multiworld`, `prog_items`, résultats non booléens), dans une nouvelle session.
+
+### 2026-11-24 · Lot 2 du convertisseur : sondeur élargi et sommes de compteurs (ADR 0055)
+- **Fait** : sondeur élargi (a8cc792) ; ADR 0055 accepté : `logic::Rule::Sum`, format de monde en version 4 (`count(a) + 2 * count(b) >= n`, `count_from_list`, `count_unique`, `count_group`), export en version 3 (question « somme »), import et convertisseur, export apworld, spec ; inventaire relancé : 36 convertis sur 81 (25 jeux PC), aucun des 29 précédents perdu, `docs/inventaire-conversion.md` à jour. fmt, clippy et `cargo test --workspace` passent.
+- **Pas vérifié** : aucun des 7 nouveaux convertis joué avec son mod ; les 6 échecs `TestExport` de `test_worker.py` existaient avant ce lot (faux Archipelago sans `BaseClasses`).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `crates/hub/`, `crates/launcher-ui/`, `crates/launcher-core/src/` (autre session).
+- **Suite** : causes du convertisseur révélées (Yu-Gi-Oh! 2006, Super Mario Land 2, shapez), dans une nouvelle session.

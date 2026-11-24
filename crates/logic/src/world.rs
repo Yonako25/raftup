@@ -698,6 +698,9 @@ impl MultiWorld {
             Rule::HasAllCounts(pairs) => pairs
                 .iter()
                 .try_for_each(|(item, _)| self.item_or_err(*item).map(|_| ())),
+            Rule::Sum { terms, .. } => terms
+                .iter()
+                .try_for_each(|term| self.item_or_err(term.item).map(|_| ())),
             Rule::HasGroup { group, .. } => self
                 .item_group(*group)
                 .map(|_| ())

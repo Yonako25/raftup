@@ -32,8 +32,15 @@ pub use model::NativeWorld;
 /// - la 2 ajoute une seule chose : plusieurs événements peuvent donner le même objet
 ///   d'événement (ADR 0042) ;
 /// - la 3 ajoute les objets posés d'avance : `item` sur un lieu à numéro, et un
-///   événement qui donne un objet à numéro (ADR 0054).
-pub const FORMAT_VERSION: i64 = 3;
+///   événement qui donne un objet à numéro (ADR 0054) ;
+/// - la 4 ajoute les sommes de compteurs : `count(a) + 2 * count(b) >= n` (ADR 0055).
+pub const FORMAT_VERSION: i64 = 4;
+/// Première version qui permet les sommes de compteurs.
+pub const SUM_FORMAT_VERSION: i64 = 4;
+/// Poids maximal d'un terme de somme (`1000 * count(x)`).
+pub const MAX_WEIGHT: u32 = 1_000;
+/// Nombre maximal d'objets cités par une somme (bornes contre un texte hostile).
+pub const MAX_SUM_ITEMS: usize = 256;
 /// Première version du format comprise.
 pub const MIN_FORMAT_VERSION: i64 = 1;
 /// Taille maximale d'un fichier de monde.

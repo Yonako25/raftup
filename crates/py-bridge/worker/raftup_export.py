@@ -4,7 +4,7 @@ Ce module n'est pas lance seul : le worker (raftup_worker.py) le recoit en texte
 la requete `export_worlds`, l'execute, puis appelle `export(mw, path, max_bytes)` une
 fois que les mondes ont fini `pre_fill`, juste avant le placement d'Archipelago.
 
-Le fichier ecrit (JSON, `format_version` 2) decrit, pour chaque joueur : regions,
+Le fichier ecrit (JSON, `format_version` 3) decrit, pour chaque joueur : regions,
 entrees, lieux, objets du pool, objets deja poses, inventaire de depart, condition de
 victoire, accessibilite, objets a placer tot et datapackage ; et, pour les lieux, leurs
 regles d'objet sous forme de listes d'objets du pool (ADR 0029). Les regles `rule_builder` sont traduites telles quelles ; une
@@ -26,7 +26,9 @@ MAX_QUESTIONS = 64  # questions differentes sur un chemin
 SAMPLES = 64  # inventaires du controle croise
 SAMPLE_SEED = 0x52414654  # graine fixe : meme export, memes inventaires
 
-FORMAT_VERSION = 2  # 2 : regles d'objet, objets a placer tot, accessibilite (ADR 0029)
+# 2 : regles d'objet, objets a placer tot, accessibilite (ADR 0029) ;
+# 3 : regle « sum », somme ponderee de compteurs (ADR 0055).
+FORMAT_VERSION = 3
 
 
 def _rule_table():
@@ -62,17 +64,32 @@ class Refused(Exception):
     """Le sondage ne peut pas traduire cette regle : elle restera opaque."""
 
 
+MAX_WEIGHT = 1000  # poids maximal d'un terme de somme (format natif, ADR 0055)
+MAX_SUM_TERMS = 256  # objets au plus dans une question « somme »
+
+
+def _is_int(o):
+    # `bool` est un `int` en Python : True vaut 1, comme dans `count * True`.
+    return isinstance(o, int)
+
+
 class ProbeCount:
     """Nombre lu par la regle : exemplaires d'un objet (`state.count`, `prog_items`), ou
     somme sur une liste (`count_from_list`, `count_group`, versions `_unique`).
 
     `question(n)` donne la question « au moins n » ; `cap` est le plus grand nombre
     possible (exemplaires qui existent dans la partie). Une comparaison a un nombre pose
-    une seule question. Un calcul (`+`, `*`, `range(...)`, `int(...)`) demande la valeur
-    exacte : on la trouve en posant « au moins 1 », « au moins 2 »... jusqu'a `cap`."""
+    une seule question. Une somme a poids entiers positifs (`a + 2 * b`) reste
+    symbolique (ProbeSum, ADR 0055) ; un autre calcul (`range(...)`, `int(...)`,
+    division, flottant) demande la valeur exacte : on la trouve en posant « au moins 1 »,
+    « au moins 2 »... jusqu'a `cap`.
 
-    def __init__(self, state, question, cap):
+    `flat` : les objets comptes, un couple (objet, unique) par element de la liste
+    (`unique` : l'objet compte au plus 1, comme dans `count_from_list_unique`)."""
+
+    def __init__(self, state, question, cap, player, flat):
         self.state, self.question, self.cap = state, question, cap
+        self.player, self.flat = player, flat
 
     def at_least(self, n):
         # `n` est entier ici ; 0 exemplaire suffit toujours.
@@ -89,7 +106,7 @@ class ProbeCount:
     # on arrondit vers le haut pour >= et <, vers le bas pour > et <=.
     @staticmethod
     def _number(n):
-        if isinstance(n, ProbeCount):
+        if isinstance(n, (ProbeCount, ProbeSum)):
             return n.value()
         if isinstance(n, (bool, int, float)):
             return n
@@ -126,7 +143,7 @@ class ProbeCount:
     def __bool__(self):
         return self.at_least(1)
 
-    # Calculs : sur la valeur exacte. `__index__` sert a `range(...)` et aux indices.
+    # Calculs. `__index__` sert a `range(...)` et aux indices : valeur exacte.
     def __int__(self):
         return self.value()
 
@@ -135,23 +152,24 @@ class ProbeCount:
     def __float__(self):
         return float(self.value())
 
-    def __add__(self, o):
-        return self.value() + o
+    def _sum(self):
+        return ProbeSum([(self, 1)], 0)
 
-    def __radd__(self, o):
-        return o + self.value()
+    def __add__(self, o):
+        return self._sum() + o
+
+    __radd__ = __add__  # l'addition est commutative ; `sum([...])` commence par 0 + ...
 
     def __sub__(self, o):
-        return self.value() - o
+        return self._sum() - o
 
     def __rsub__(self, o):
         return o - self.value()
 
     def __mul__(self, o):
-        return self.value() * o
+        return self._sum() * o
 
-    def __rmul__(self, o):
-        return o * self.value()
+    __rmul__ = __mul__
 
     def __truediv__(self, o):
         return self.value() / o
@@ -168,6 +186,9 @@ class ProbeCount:
     def __mod__(self, o):
         return self.value() % o
 
+    def __pow__(self, o):
+        return self.value() ** o
+
     def __neg__(self):
         return -self.value()
 
@@ -178,6 +199,155 @@ class ProbeCount:
 
     def __getattr__(self, name):
         raise Refused("calcul sur un compteur (%s)" % name)
+
+
+class ProbeSum:
+    """Somme de compteurs a poids entiers positifs, plus une constante :
+    `count(a) + 2 * count(b) + 3`. Comparee a un nombre, elle pose UNE question
+    (« somme », ADR 0055) au lieu d'enumerer la valeur de chaque compteur. Un calcul
+    qui sort du lineaire (soustraction de deux compteurs, poids negatif ou flottant,
+    division...) retombe sur la valeur exacte, comme ProbeCount.
+
+    `parts` : liste de (ProbeCount, poids) ; `const` : entier."""
+
+    def __init__(self, parts, const):
+        self.parts, self.const = parts, const
+
+    def _linear(self):
+        """La somme sans la constante, en valeur exacte."""
+        return sum(pc.value() * w for pc, w in self.parts)
+
+    def value(self):
+        return self._linear() + self.const
+
+    def at_least(self, t):
+        """Somme sans constante >= t (t entier)."""
+        if t <= 0:
+            return True
+        players = {int(pc.player) for pc, w in self.parts if w}
+        weights = {}  # (objet, unique) -> poids, dans l'ordre d'apparition
+        for pc, w in self.parts:
+            for key in pc.flat:
+                if w:
+                    weights[key] = weights.get(key, 0) + w
+        if not weights:
+            return False  # 0 >= t, avec t > 0
+        if (len(players) != 1 or len(weights) > MAX_SUM_TERMS
+                or max(weights.values()) > MAX_WEIGHT):
+            return self._linear() >= t
+        player = players.pop()
+        state = self.parts[0][0].state
+        # Plus que le maximum possible (exemplaires qui existent) : faux sans question,
+        # comme ProbeCount.value qui s'arrete au plafond.
+        best = 0
+        for (item, unique), w in weights.items():
+            cap = state._copies.get((player, str(item)), 0)
+            best += w * (min(cap, 1) if unique else cap)
+        if best < t:
+            return False
+        if len(weights) == 1:
+            ((item, unique), w), = weights.items()
+            if unique:
+                # w * [a l'objet] >= t
+                return t <= w and state.ask(("has", player, item, 1))
+            # Division arrondie vers le haut : w * n >= t <=> n >= ceil(t / w).
+            return state.ask(("has", player, item, -(-t // w)))
+        terms = tuple(sorted((item, w, unique) for (item, unique), w in weights.items()))
+        return state.ask(("sum", player, terms, int(t)))
+
+    # Comparaisons : `somme + c >= n` revient a `somme >= n - c`.
+    def __ge__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else self.at_least(math.ceil(n - self.const))
+
+    def __gt__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else self.at_least(math.floor(n - self.const) + 1)
+
+    def __le__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else not self.at_least(math.floor(n - self.const) + 1)
+
+    def __lt__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else not self.at_least(math.ceil(n - self.const))
+
+    def __eq__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else self.value() == n
+
+    def __ne__(self, n):
+        n = ProbeCount._number(n)
+        return NotImplemented if n is None else self.value() != n
+
+    def __bool__(self):
+        # Sans constante, « non nul » veut dire « au moins 1 » (poids positifs).
+        return self.at_least(1) if self.const == 0 else self.value() != 0
+
+    # Calculs lineaires : restent symboliques.
+    def __add__(self, o):
+        if isinstance(o, ProbeCount):
+            return ProbeSum(self.parts + [(o, 1)], self.const)
+        if isinstance(o, ProbeSum):
+            return ProbeSum(self.parts + o.parts, self.const + o.const)
+        if _is_int(o):
+            return ProbeSum(self.parts, self.const + int(o))
+        return self.value() + o
+
+    __radd__ = __add__
+
+    def __sub__(self, o):
+        if _is_int(o):
+            return ProbeSum(self.parts, self.const - int(o))
+        return self.value() - o
+
+    def __rsub__(self, o):
+        return o - self.value()
+
+    def __mul__(self, o):
+        if _is_int(o) and o >= 0:
+            return ProbeSum([(pc, w * int(o)) for pc, w in self.parts], self.const * int(o))
+        if isinstance(o, (ProbeCount, ProbeSum)):
+            return self.value() * o.value()
+        return self.value() * o
+
+    __rmul__ = __mul__
+
+    # Le reste : valeur exacte.
+    def __int__(self):
+        return self.value()
+
+    __index__ = __int__
+
+    def __float__(self):
+        return float(self.value())
+
+    def __truediv__(self, o):
+        return self.value() / o
+
+    def __rtruediv__(self, o):
+        return o / self.value()
+
+    def __floordiv__(self, o):
+        return self.value() // o
+
+    def __rfloordiv__(self, o):
+        return o // self.value()
+
+    def __mod__(self, o):
+        return self.value() % o
+
+    def __pow__(self, o):
+        return self.value() ** o
+
+    def __neg__(self):
+        return -self.value()
+
+    def __hash__(self):
+        return hash(self.value())
+
+    def __getattr__(self, name):
+        raise Refused("calcul sur une somme de compteurs (%s)" % name)
 
 
 class ProbePlayerItems:
@@ -371,17 +541,18 @@ class ProbeState:
         return self.ask(("has_from_list_unique", player, self._group(item_name_group, player), int(count)))
 
     def count(self, item, player):
-        return ProbeCount(self, lambda n: ("has", player, item, n), self._cap(player, [item]))
+        return ProbeCount(self, lambda n: ("has", player, item, n), self._cap(player, [item]),
+                          player, [(item, False)])
 
     def count_from_list(self, items, player):
         items = tuple(items)
         return ProbeCount(self, lambda n: ("has_from_list", player, items, n),
-                          self._cap(player, items))
+                          self._cap(player, items), player, [(i, False) for i in items])
 
     def count_from_list_unique(self, items, player):
         items = tuple(items)
         return ProbeCount(self, lambda n: ("has_from_list_unique", player, items, n),
-                          self._cap_unique(player, items))
+                          self._cap_unique(player, items), player, [(i, True) for i in items])
 
     def count_group(self, item_name_group, player):
         return self.count_from_list(self._group(item_name_group, player), player)
@@ -423,6 +594,9 @@ def _atom_json(q):
         return {"t": kind, "player": player, "items": [[k, v] for k, v in q[2]]}
     if kind in ("has_from_list", "has_from_list_unique"):
         return {"t": kind, "player": player, "items": list(q[2]), "count": q[3]}
+    if kind == "sum":
+        return {"t": "sum", "player": player, "terms": [[i, w, u] for i, w, u in q[2]],
+                "count": q[3]}
     field = kind[len("can_reach_"):]
     return {"t": kind, "player": player, field: q[2]}
 
@@ -439,7 +613,7 @@ def _run(rule, state):
         raise Refused("%s: %s" % (type(exc).__name__, exc))
 
 
-COUNTED = ("has", "has_from_list", "has_from_list_unique")  # questions « au moins n »
+COUNTED = ("has", "has_from_list", "has_from_list_unique", "sum")  # questions « au moins n »
 MAX_EXPAND = 1000  # au-dela, « au moins n » n'est pas deplie (on reste prudent)
 
 

@@ -529,3 +529,166 @@ fn format_3_refuse_un_objet_d_evenement_pose_dans_un_lieu() {
     let e = parse_world(&text).unwrap_err();
     assert!(e.to_string().contains("inconnu"), "{e}");
 }
+
+/// Format 4 (ADR 0055) : sommes de compteurs.
+const STARS: &str = r#"
+format_version = 4
+
+[game]
+name = "Stars"
+goal = 'count(Star) + count("Bonus Star") >= 3'
+
+[[options]]
+name = "need"
+type = "range"
+min = 0
+max = 10
+default = 2
+
+[[items]]
+name = "Star"
+id = 1
+classification = "progression"
+
+[[items]]
+name = "Bonus Star"
+id = 2
+classification = "progression"
+
+[[items]]
+name = "Gem"
+id = 3
+classification = "progression"
+
+[[item_groups]]
+name = "Stars"
+items = ["Star", "Bonus Star"]
+
+[[regions]]
+name = "Menu"
+
+[[locations]]
+name = "A"
+id = 1
+region = "Menu"
+
+[[locations]]
+name = "B"
+id = 2
+region = "Menu"
+rule = '2 * count(Gem) + count(Star) > 4'
+
+[[locations]]
+name = "C"
+id = 3
+region = "Menu"
+rule = 'count_unique(Star, Gem, Gem) >= option(need)'
+
+[[locations]]
+name = "D"
+id = 4
+region = "Menu"
+rule = 'count_group(Stars) + count_from_list(Gem, Gem) >= 1'
+
+[[locations]]
+name = "E"
+id = 5
+region = "Menu"
+rule = 'count(Gem) >= 2 and has(Star)'
+
+[filler]
+item = "Gem"
+"#;
+
+#[test]
+fn format_4_sommes_de_compteurs() {
+    use logic::SumTerm;
+    let world = parse_world(STARS).unwrap();
+    let (w, _) = build(&world, &[]);
+    let slot = w.slot_ids().next().unwrap();
+    let id = |name: &str| w.item_named(slot, name).unwrap();
+    let (star, bonus, gem) = (id("Star"), id("Bonus Star"), id("Gem"));
+    let term = |item, weight, unique| SumTerm {
+        item,
+        weight,
+        unique,
+    };
+    assert_eq!(
+        w.slots()[0].goal,
+        Rule::Sum {
+            terms: vec![term(star, 1, false), term(bonus, 1, false)],
+            at_least: 3
+        }
+    );
+    // `> 4` devient « au moins 5 ».
+    assert_eq!(
+        rule_of(&w, "B"),
+        Rule::Sum {
+            terms: vec![term(gem, 2, false), term(star, 1, false)],
+            at_least: 5
+        }
+    );
+    // Gem cité deux fois : comme en Python, il compte deux fois (au plus 1 à chaque fois).
+    assert_eq!(
+        rule_of(&w, "C"),
+        Rule::Sum {
+            terms: vec![term(star, 1, true), term(gem, 2, true)],
+            at_least: 2
+        }
+    );
+    assert_eq!(
+        rule_of(&w, "D"),
+        Rule::Sum {
+            terms: vec![
+                term(star, 1, false),
+                term(bonus, 1, false),
+                term(gem, 2, false)
+            ],
+            at_least: 1
+        }
+    );
+    // Un seul `count` de poids 1 : un simple `Has`.
+    assert_eq!(
+        rule_of(&w, "E"),
+        Rule::And(vec![Rule::has_count(gem, 2), Rule::has(star)])
+    );
+    // Seuil tiré d'une option, nul : toujours vrai.
+    let (w, _) = build(&world, &[("need", 0)]);
+    assert_eq!(rule_of(&w, "C"), Rule::True);
+}
+
+#[test]
+fn format_3_refuse_les_sommes() {
+    let e = parse_world(&STARS.replace("format_version = 4", "format_version = 3")).unwrap_err();
+    assert!(e.to_string().contains("format_version = 4"), "{e}");
+}
+
+#[test]
+fn sommes_mal_ecrites_refusees() {
+    let with_goal = |goal: &str| {
+        STARS.replace(
+            "goal = 'count(Star) + count(\"Bonus Star\") >= 3'",
+            &format!("goal = '{goal}'"),
+        )
+    };
+    for (goal, message) in [
+        ("count(Star) <= 3", "seuls « >= » et « > »"),
+        ("count(Star) == 3", "seuls « >= » et « > »"),
+        ("count(Star) + count(Gem)", "se compare"),
+        ("0 * count(Star) >= 1", "poids 0 hors bornes"),
+        ("1001 * count(Star) >= 1", "poids 1001 hors bornes"),
+        ("2 * has(Star) >= 1", "compteur attendu"),
+        ("count(Star, Gem) >= 1", "count attend un seul objet"),
+        ("count_group(Nope) >= 1", "groupe d'objets « Nope » inconnu"),
+        ("count_from_list() >= 1", "au moins un objet"),
+        ("count(Star) >= option(nope)", "option « nope » inconnue"),
+        ("count(Star) >= -1", "hors bornes"),
+        ("not count(Star) >= 1", "« not » ne s'applique"),
+    ] {
+        let e = parse_world(&with_goal(goal)).unwrap_err();
+        assert!(e.to_string().contains(message), "{goal} : {e}");
+    }
+    let many = vec!["Star"; 257].join(", ");
+    let e = parse_world(&with_goal(&format!("count_from_list({many}) >= 1"))).unwrap_err();
+    assert!(e.to_string().contains("plus de 256 objets"), "{e}");
+}

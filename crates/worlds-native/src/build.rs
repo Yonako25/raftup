@@ -12,7 +12,8 @@ use serde_json::{Map, Value};
 
 use crate::error::BuildError;
 use crate::model::{
-    Choice, Count, Expr, ItemRef, LocationRef, NativeWorld, OptionKind, SlotDataValue,
+    Choice, Count, Counter, Expr, ItemRef, LocationRef, NativeWorld, OptionKind, SlotDataValue,
+    SumTerm,
 };
 use crate::MAX_ELEMENTS;
 
@@ -95,6 +96,8 @@ struct Ids<'a> {
     items: Vec<ItemKindId>,
     event_items: Vec<ItemKindId>,
     groups: Vec<ItemGroupId>,
+    /// Les membres de chaque groupe (pour `count_group` dans une somme).
+    group_members: Vec<Vec<ItemKindId>>,
     regions: Vec<Option<RegionId>>,
     entrances: Vec<Option<EntranceId>>,
     locations: Vec<Option<LocationId>>,
@@ -156,6 +159,11 @@ impl Ids<'_> {
                     count,
                 },
             },
+            Expr::Sum {
+                terms,
+                strict,
+                value,
+            } => self.lower_sum(terms, *strict, *value)?,
             Expr::CanReachRegion(r) => match self.regions.get(*r as usize).copied().flatten() {
                 Some(region) => Rule::CanReachRegion(region),
                 None => Rule::False,
@@ -196,6 +204,66 @@ impl Ids<'_> {
                 }
                 simplify(kept, Rule::False, Rule::Or)
             }
+        })
+    }
+
+    /// Une somme devient une `Rule::Sum` dont chaque terme est un seul objet : les
+    /// groupes et les listes sont dépliés, et un objet cité plusieurs fois voit ses
+    /// poids additionnés (même résultat, arbre plus court).
+    fn lower_sum(&self, terms: &[SumTerm], strict: bool, value: Count) -> Result<Rule, BuildError> {
+        // `> n` revient à `>= n + 1` (les compteurs sont entiers).
+        let at_least = self.count(value)?.saturating_add(u32::from(strict));
+        if at_least == 0 {
+            return Ok(Rule::True);
+        }
+        let mut flat: Vec<logic::SumTerm> = Vec::new();
+        let mut add = |item: ItemKindId, weight: u32, unique: bool| match flat
+            .iter_mut()
+            .find(|t| t.item == item && t.unique == unique)
+        {
+            Some(term) => term.weight = term.weight.saturating_add(weight),
+            None => flat.push(logic::SumTerm {
+                item,
+                weight,
+                unique,
+            }),
+        };
+        for term in terms {
+            match &term.counter {
+                Counter::Item(item) => add(self.item(*item)?, term.weight, false),
+                Counter::Group(group) => {
+                    let members = self
+                        .group_members
+                        .get(*group as usize)
+                        .ok_or_else(|| missing("groupe"))?;
+                    for member in members {
+                        add(*member, term.weight, false);
+                    }
+                }
+                Counter::List(items) => {
+                    for item in items {
+                        add(self.item(*item)?, term.weight, false);
+                    }
+                }
+                Counter::Unique(items) => {
+                    // Comme `count_from_list_unique` en Python, qui parcourt la liste :
+                    // un objet cité deux fois compte deux fois (au plus 1 à chaque fois).
+                    for item in items {
+                        add(self.item(*item)?, term.weight, true);
+                    }
+                }
+            }
+        }
+        Ok(match flat.as_slice() {
+            [] => Rule::False,
+            [only] if only.weight == 1 && !only.unique => Rule::Has {
+                item: only.item,
+                count: at_least,
+            },
+            _ => Rule::Sum {
+                terms: flat,
+                at_least,
+            },
         })
     }
 
@@ -424,6 +492,7 @@ impl NativeWorld {
             event_items.push(id);
         }
         let mut groups = Vec::new();
+        let mut group_members = Vec::new();
         for group in &self.item_groups {
             let mut members = Vec::new();
             for member in &group.members {
@@ -436,7 +505,8 @@ impl NativeWorld {
                     );
                 }
             }
-            groups.push(w.add_item_group(slot, group.name.clone(), members)?);
+            groups.push(w.add_item_group(slot, group.name.clone(), members.clone())?);
+            group_members.push(members);
         }
 
         // Régions présentes.
@@ -552,6 +622,7 @@ impl NativeWorld {
             items,
             event_items,
             groups,
+            group_members,
             regions,
             entrances,
             locations,

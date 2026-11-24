@@ -484,11 +484,45 @@ class TestSondageLot2(unittest.TestCase):
                          {"t": "and", "of": [_has("Gem", 3)]})
 
     def test_somme_de_compteurs(self):
-        # Overcooked! 2 : etoiles + etoiles bonus >= 3, avec 2 exemplaires de chaque.
+        # Overcooked! 2 : etoiles + etoiles bonus >= 3 : UNE question « somme » (ADR 0055).
         copies = {(1, "Star"): 2, (1, "Bonus"): 2}
         r = self.sonde(lambda s: s.count("Star", 1) + s.count("Bonus", 1) >= 3, copies)
-        termes = sorted(sorted((a["item"], a["count"]) for a in t["of"]) for t in r["of"])
-        self.assertEqual(termes, [[("Bonus", 1), ("Star", 2)], [("Bonus", 2), ("Star", 1)]])
+        self.assertEqual(r, {"t": "and", "of": [
+            {"t": "sum", "player": 1, "terms": [["Bonus", 1, False], ["Star", 1, False]],
+             "count": 3}]})
+
+    def test_somme_ponderee(self):
+        copies = {(1, "Gem"): 9, (1, "Coin"): 9, (1, "A"): 1, (1, "B"): 1, (1, "C"): 1}
+        # Poids, ordre libre, `>` et constante : 2 * Gem + Coin + 1 > 5 <=> ... >= 5.
+        r = self.sonde(lambda s: 1 + s.count("Coin", 1) + s.count("Gem", 1) * 2 > 5, copies)
+        self.assertEqual(r["of"][0], {"t": "sum", "player": 1, "count": 5,
+                                      "terms": [["Coin", 1, False], ["Gem", 2, False]]})
+        # `sum(...)` de Python, sur des listes et des objets differents.
+        r = self.sonde(lambda s: sum([s.count_from_list(["A", "B"], 1),
+                                      s.count_from_list_unique(["B", "C"], 1)]) >= 2, copies)
+        self.assertEqual(r["of"][0]["terms"],
+                         [["A", 1, False], ["B", 1, False], ["B", 1, True], ["C", 1, True]])
+        # Un seul objet : une question « has » ordinaire (seuil arrondi vers le haut).
+        self.assertEqual(self.sonde(lambda s: 3 * s.count("Gem", 1) >= 7, copies),
+                         {"t": "and", "of": [_has("Gem", 3)]})
+        self.assertEqual(self.sonde(lambda s: s.count("Gem", 1) + 1 >= 3, copies),
+                         {"t": "and", "of": [_has("Gem", 2)]})
+        # Plus que ce qui existe : faux, sans question.
+        self.assertEqual(self.sonde(lambda s: s.count("A", 1) + s.count("B", 1) >= 3, copies),
+                         {"t": "false"})
+
+    def test_somme_hors_lineaire(self):
+        copies = {(1, "Gem"): 2, (1, "Coin"): 2}
+        # Difference de deux compteurs : valeur exacte, puis regle non monotone.
+        self.refus(lambda s: s.count("Gem", 1) - s.count("Coin", 1) >= 1, "non monotone",
+                   copies)
+        # Poids flottant : valeur exacte (enumeration), resultat juste.
+        r = self.sonde(lambda s: s.count("Gem", 1) * 1.5 >= 3, copies)
+        self.assertEqual(r, {"t": "and", "of": [_has("Gem", 2)]})
+        # Deux joueurs dans une meme somme : valeur exacte de chaque compteur.
+        r = self.sonde(lambda s: s.count("Gem", 1) + s.count("Gem", 2) >= 1,
+                       {(1, "Gem"): 1, (2, "Gem"): 1})
+        self.assertEqual(sorted(t["of"][0]["player"] for t in r["of"]), [1, 2])
 
     def test_range_et_produit(self):
         # shapez : `for _ in range(count)` et `count * 10`.
@@ -533,9 +567,13 @@ class TestSondageLot2(unittest.TestCase):
             {"t": "has_from_list_unique", "player": 1, "items": ["A", "B", "C"], "count": 2}]})
         r = self.sonde(lambda s: s.count_from_list(["A", "B"], 1) >= 4)
         self.assertEqual(r["of"][0]["t"], "has_from_list")
-        # En calcul, le plafond est le nombre d'objets differents qui existent.
+        # En calcul lineaire : une somme ou chaque objet compte au plus 1 (ADR 0055).
         copies = {(1, "A"): 5, (1, "B"): 1}
         r = self.sonde(lambda s: s.count_from_list_unique(["A", "B", "C"], 1) * 2 >= 3, copies)
+        self.assertEqual(r["of"][0], {"t": "sum", "player": 1, "count": 3, "terms": [
+            ["A", 2, True], ["B", 2, True], ["C", 2, True]]})
+        # Hors lineaire, le plafond est le nombre d'objets differents qui existent.
+        r = self.sonde(lambda s: s.count_from_list_unique(["A", "B", "C"], 1) ** 2 >= 3, copies)
         self.assertEqual(r["of"][0]["count"], 2)
 
     def test_multiworld_en_lecture(self):

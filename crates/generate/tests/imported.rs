@@ -313,6 +313,34 @@ fn liste_somme_et_objets_differents() {
     assert!(reaches(2, 3));
 }
 
+/// Règle `sum` (export version 3, ADR 0055) : `2 * count(Key) + count(Gem) >= 5`.
+#[test]
+fn somme_ponderee() {
+    let mut v = with_deep_rule(json!({"t": "sum", "player": 1,
+        "terms": [["Key", 2, false], ["Gem", 1, false]], "count": 5}));
+    v["format_version"] = json!(3);
+    let imported = import(&v).unwrap();
+    let w = &imported.world;
+    let alice = w.slot_ids().next().unwrap();
+    let key = w.item_named(alice, "Key").unwrap();
+    let gem = w.item_named(alice, "Gem").unwrap();
+    let deep = w.location_named(alice, "Deep").unwrap();
+    assert!(matches!(
+        w.location(deep).unwrap().rule,
+        Rule::Sum { at_least: 5, .. }
+    ));
+    let reaches = |k: u32, g: u32| {
+        let mut s = imported.start.clone();
+        s.add(key, k);
+        s.add(gem, g);
+        Reachability::compute(w, &s).location(deep)
+    };
+    assert!(!reaches(2, 0), "2 * 2 = 4");
+    assert!(reaches(2, 1), "2 * 2 + 1 = 5");
+    assert!(reaches(1, 3), "2 + 3 = 5");
+    assert!(!reaches(1, 2));
+}
+
 #[test]
 fn au_moins_n_parmi() {
     let v = with_deep_rule(json!({"t": "at_least", "count": 2, "of": [
@@ -393,8 +421,8 @@ fn exports_incoherents_refuses() {
 #[test]
 fn format_taille_et_imbrication() {
     let mut v = base();
-    v["format_version"] = json!(3);
-    assert!(matches!(import(&v), Err(ImportError::Format(3))));
+    v["format_version"] = json!(4);
+    assert!(matches!(import(&v), Err(ImportError::Format(4))));
     let big = vec![b' '; MAX_EXPORT_BYTES + 1];
     assert!(matches!(read_export(&big), Err(ImportError::TooLarge(_))));
     // Une règle imbriquée sur 10 000 niveaux : refusée par serde_json, sans débordement.

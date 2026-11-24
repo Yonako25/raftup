@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 use indexmap::IndexMap;
 use logic::{
     Accessibility, Classification, EntranceId, ItemKindId, ItemRule, ItemRuleId, LocationId,
-    LogicError, MultiWorld, Progress, Reachability, RegionId, Rule, SlotId, State,
+    LogicError, MultiWorld, Progress, Reachability, RegionId, Rule, SlotId, State, SumTerm,
 };
 use multidata::GamePackage;
 use serde::Deserialize;
@@ -33,9 +33,11 @@ use thiserror::Error;
 
 use crate::datapackage::{game_package, PackageSource};
 
-/// Version du format d'export comprise ici (2 : règles d'objet, objets à placer tôt,
-/// accessibilité, ADR 0029).
-pub const FORMAT_VERSION: u32 = 2;
+/// Version du format d'export écrite par `raftup_export.py` (2 : règles d'objet, objets à
+/// placer tôt, accessibilité, ADR 0029 ; 3 : règle `sum`, ADR 0055).
+pub const FORMAT_VERSION: u32 = 3;
+/// Plus ancienne version encore lue : un export de version 2 n'a simplement pas de `sum`.
+pub const MIN_FORMAT_VERSION: u32 = 2;
 /// Taille maximale du fichier d'export (comme une seed, NF08).
 pub const MAX_EXPORT_BYTES: usize = 64 * 1024 * 1024;
 /// Nombre maximal d'éléments (régions, entrées, lieux, objets) dans un export.
@@ -50,7 +52,7 @@ pub enum ImportError {
     TooLarge(usize),
     #[error("export illisible : {0}")]
     Json(#[from] serde_json::Error),
-    #[error("format d'export {0} inconnu (attendu : {FORMAT_VERSION})")]
+    #[error("format d'export {0} inconnu (attendu : {MIN_FORMAT_VERSION} à {FORMAT_VERSION})")]
     Format(u32),
     #[error("export incohérent : {0}")]
     Invalid(String),
@@ -309,6 +311,13 @@ pub enum RuleExport {
         items: Vec<String>,
         count: u32,
     },
+    /// Somme pondérée ≥ `count` (export version 3, ADR 0055). Chaque terme est
+    /// `(objet, poids, unique)` ; `unique` : l'objet compte au plus 1.
+    Sum {
+        player: u32,
+        terms: Vec<(String, u32, bool)>,
+        count: u32,
+    },
     CanReachLocation {
         player: u32,
         location: String,
@@ -349,6 +358,9 @@ impl RuleExport {
             | RuleExport::HasAnyCount { player, items } => {
                 out.extend(items.iter().map(|(i, _)| (*player, i.clone())));
             }
+            RuleExport::Sum { player, terms, .. } => {
+                out.extend(terms.iter().map(|(i, _, _)| (*player, i.clone())));
+            }
             RuleExport::And { of } | RuleExport::Or { of } | RuleExport::AtLeast { of, .. } => {
                 for rule in of {
                     rule.items(out);
@@ -367,7 +379,7 @@ pub fn read_export(bytes: &[u8]) -> Result<Export, ImportError> {
     // `serde_json` refuse une imbrication de plus de 128 niveaux : pas de débordement de
     // pile possible sur une règle construite pour nuire.
     let export: Export = serde_json::from_slice(bytes)?;
-    if export.format_version != FORMAT_VERSION {
+    if !(MIN_FORMAT_VERSION..=FORMAT_VERSION).contains(&export.format_version) {
         return Err(ImportError::Format(export.format_version));
     }
     let elements = export.pool.len()
@@ -423,8 +435,6 @@ struct Names {
     regions: BTreeMap<(u32, String), RegionId>,
     entrances: BTreeMap<(u32, String), EntranceId>,
     locations: BTreeMap<(u32, String), LocationId>,
-    /// Compteur des groupes créés pour `has_from_list`, par joueur.
-    lists: BTreeMap<u32, u32>,
 }
 
 impl Names {
@@ -527,7 +537,6 @@ pub fn build_world(export: &Export) -> Result<Imported, ImportError> {
         regions: BTreeMap::new(),
         entrances: BTreeMap::new(),
         locations: BTreeMap::new(),
-        lists: BTreeMap::new(),
     };
 
     // Joueurs : numérotés 1, 2, 3… dans l'ordre.
@@ -937,37 +946,38 @@ fn convert(
                 .map(|(name, count)| Ok(Rule::has_count(names.item(*player, name)?, *count)))
                 .collect::<Result<Vec<_>, ImportError>>()?,
         ),
+        // Somme des exemplaires de la liste, ou nombre d'objets différents : une somme
+        // de poids 1 (ADR 0055). Comme en Python, un objet cité deux fois compte deux fois.
         RuleExport::HasFromList {
             player,
             items,
             count,
-        } => {
-            if *count == 0 {
-                Rule::True
-            } else {
-                // Somme des exemplaires = règle de groupe : on crée un groupe anonyme.
-                let members = item_ids(*player, items, names)?;
-                let number = names.lists.entry(*player).or_insert(0);
-                *number += 1;
-                let group_name = format!("raftup:liste {number}");
-                let group = world.add_item_group(names.slot(*player)?, group_name, members)?;
-                Rule::HasGroup {
-                    group,
-                    count: *count,
-                }
-            }
-        }
+        } => sum_rule(
+            *player,
+            items.iter().map(|i| (i.as_str(), 1, false)),
+            *count,
+            names,
+        )?,
         RuleExport::HasFromListUnique {
             player,
             items,
             count,
-        } => {
-            // Objets différents : au moins `count` des règles « a cet objet ».
-            let mut distinct = item_ids(*player, items, names)?;
-            distinct.sort();
-            distinct.dedup();
-            at_least(*count, distinct.into_iter().map(Rule::has).collect())?
-        }
+        } => sum_rule(
+            *player,
+            items.iter().map(|i| (i.as_str(), 1, true)),
+            *count,
+            names,
+        )?,
+        RuleExport::Sum {
+            player,
+            terms,
+            count,
+        } => sum_rule(
+            *player,
+            terms.iter().map(|(i, w, u)| (i.as_str(), *w, *u)),
+            *count,
+            names,
+        )?,
         RuleExport::CanReachLocation { player, location } => Rule::CanReachLocation(
             names
                 .locations
@@ -994,6 +1004,46 @@ fn convert_all(
     names: &mut Names,
 ) -> Result<Vec<Rule>, ImportError> {
     rules.iter().map(|r| convert(r, world, names)).collect()
+}
+
+/// Une somme pondérée en règle `logic` : les termes du même objet sont fusionnés (poids
+/// additionnés) ; une somme d'un seul objet de poids 1 devient un simple `Has`.
+///
+/// `impl Iterator<Item = …>` : n'importe quelle suite de termes, sans construire de liste
+/// intermédiaire chez l'appelant.
+fn sum_rule<'a>(
+    player: u32,
+    terms: impl Iterator<Item = (&'a str, u32, bool)>,
+    count: u32,
+    names: &Names,
+) -> Result<Rule, ImportError> {
+    if count == 0 {
+        return Ok(Rule::True);
+    }
+    let mut merged: Vec<SumTerm> = Vec::new();
+    for (name, weight, unique) in terms {
+        let item = names.item(player, name)?;
+        match merged
+            .iter_mut()
+            .find(|t| t.item == item && t.unique == unique)
+        {
+            Some(term) => term.weight = term.weight.saturating_add(weight),
+            None => merged.push(SumTerm {
+                item,
+                weight,
+                unique,
+            }),
+        }
+    }
+    merged.retain(|t| t.weight > 0);
+    Ok(match merged.as_slice() {
+        [] => Rule::False,
+        [only] if only.weight == 1 && !only.unique => Rule::has_count(only.item, count),
+        _ => Rule::Sum {
+            terms: merged,
+            at_least: count,
+        },
+    })
 }
 
 fn item_ids(player: u32, items: &[String], names: &Names) -> Result<Vec<ItemKindId>, ImportError> {

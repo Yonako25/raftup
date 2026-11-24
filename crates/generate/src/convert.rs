@@ -13,6 +13,7 @@
 //! Le texte produit est relu par [`worlds_native::parse_world`] avant d'être rendu : on ne
 //! rend jamais un fichier que Raftup refuserait.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
@@ -231,19 +232,12 @@ pub fn convert(
         player,
         groups: &groups,
         known: &known,
+        used_sum: Cell::new(false),
     };
 
+    // L'en-tête (qui dit la version) est écrit à la fin : on sait alors si une somme de
+    // compteurs (version 4) apparaît dans les règles.
     let mut out = String::new();
-    // La plus petite version qui suffit : lue par plus de versions de Raftup.
-    let format_version = if placed > 0 || numbered_events {
-        3
-    } else if shared_events {
-        2
-    } else {
-        1
-    };
-    header(&mut out, p, format_version);
-    let head_len = out.len();
 
     // ---- Entrées (on garde celles qui mènent quelque part) ----
     let mut entrances = Vec::new();
@@ -490,10 +484,20 @@ pub fn convert(
         notes.push("slot_data recopié en valeurs littérales : à relier aux options".into());
     }
 
+    // La plus petite version qui suffit : lue par plus de versions de Raftup.
+    let format_version = if rules.used_sum.get() {
+        4
+    } else if placed > 0 || numbered_events {
+        3
+    } else if shared_events {
+        2
+    } else {
+        1
+    };
     // Les points à vérifier vont en tête, juste après l'en-tête.
     let mut toml = String::new();
-    let (head, body) = out.split_at(head_len);
-    toml.push_str(head);
+    header(&mut toml, p, format_version);
+    let body = out.as_str();
     if !notes.is_empty() {
         toml.push_str("# À vérifier :\n");
         for note in &notes {
@@ -753,6 +757,11 @@ struct Rules<'a> {
     groups: &'a [(&'a str, BTreeSet<&'a str>)],
     /// Objets déclarés par le monde ; un autre nom vaut « jamais possédé ».
     known: &'a BTreeSet<&'a str>,
+    /// Vrai dès qu'une règle écrite est une somme de compteurs (format version 4).
+    ///
+    /// `Cell` : `tree` ne reçoit que `&self` (lecture seule) ; une `Cell` permet quand
+    /// même de changer ce petit drapeau, sans rendre toute la structure modifiable.
+    used_sum: Cell<bool>,
 }
 
 impl Rules<'_> {
@@ -872,11 +881,8 @@ impl Rules<'_> {
                         known if known.is_empty() => atom("false".into()),
                         known => atom(call("has_any", known.into_iter())),
                     },
-                    _ => Err(unsupported(format!(
-                        "somme d'exemplaires sur une liste qui n'est pas un groupe déclaré \
-                         ({count} parmi {})",
-                        items.join(", ")
-                    ))),
+                    // Liste qui n'est pas un groupe déclaré : une somme (ADR 0055).
+                    _ => self.sum(items.iter().map(|i| (i.as_str(), 1, false)), *count),
                 }
             }
             RuleExport::HasFromListUnique {
@@ -885,8 +891,29 @@ impl Rules<'_> {
                 count,
             } => {
                 self.same_player(*player)?;
-                let parts = items.iter().map(|i| Text::Atom(has(i, 1))).collect();
-                at_least(*count as usize, parts)
+                let known = self.known_of(items);
+                match *count as usize {
+                    0 => atom("true".into()),
+                    1 if known.is_empty() => atom("false".into()),
+                    1 => atom(call("has_any", known.into_iter())),
+                    // Tous les objets de la liste (un objet cité deux fois aussi).
+                    n if n == items.len() => {
+                        if known.len() < items.len() {
+                            return atom("false".into());
+                        }
+                        let distinct: BTreeSet<&str> = known.into_iter().collect();
+                        atom(call("has_all", distinct.into_iter()))
+                    }
+                    _ => self.sum(items.iter().map(|i| (i.as_str(), 1, true)), *count),
+                }
+            }
+            RuleExport::Sum {
+                player,
+                terms,
+                count,
+            } => {
+                self.same_player(*player)?;
+                self.sum(terms.iter().map(|(i, w, u)| (i.as_str(), *w, *u)), *count)
             }
             RuleExport::CanReachLocation { player, location } => {
                 self.same_player(*player)?;
@@ -901,6 +928,81 @@ impl Rules<'_> {
                 atom(format!("can_reach_entrance({})", name(entrance)))
             }
         }
+    }
+
+    /// Une somme de compteurs `count(a) + 2 * count(b) … >= n` (format version 4).
+    ///
+    /// Les termes du même objet sont fusionnés ; un objet jamais créé compte 0 et
+    /// disparaît. Les cas simples restent en version 1 : un seul objet de poids 1 devient
+    /// `has(objet, n)`.
+    fn sum<'b>(
+        &self,
+        terms: impl Iterator<Item = (&'b str, u32, bool)>,
+        count: u32,
+    ) -> Result<Text, ConvertError> {
+        if count == 0 {
+            return Ok(Text::Atom("true".into()));
+        }
+        // (objet, unique) -> poids, dans l'ordre d'apparition.
+        let mut merged: Vec<(&str, bool, u32)> = Vec::new();
+        for (item, weight, unique) in terms {
+            if weight == 0 || !self.known.contains(item) {
+                continue;
+            }
+            match merged
+                .iter_mut()
+                .find(|(i, u, _)| *i == item && *u == unique)
+            {
+                Some((_, _, w)) => *w = w.saturating_add(weight),
+                None => merged.push((item, unique, weight)),
+            }
+        }
+        match merged.as_slice() {
+            [] => return Ok(Text::Atom("false".into())),
+            [(item, false, 1)] => return Ok(Text::Atom(has(item, count))),
+            // `poids * [a l'objet] >= n`
+            [(item, true, weight)] => {
+                return Ok(Text::Atom(if count <= *weight {
+                    has(item, 1)
+                } else {
+                    "false".into()
+                }))
+            }
+            _ => {}
+        }
+        if merged.len() > worlds_native::MAX_SUM_ITEMS {
+            return Err(unsupported(format!(
+                "somme de plus de {} objets",
+                worlds_native::MAX_SUM_ITEMS
+            )));
+        }
+        self.used_sum.set(true);
+        // Tous de poids 1 et du même genre : la liste, comme en Python.
+        let unique = merged[0].1;
+        if merged.iter().all(|(_, u, w)| *u == unique && *w == 1) {
+            let function = if unique {
+                "count_unique"
+            } else {
+                "count_from_list"
+            };
+            let list = call(function, merged.iter().map(|(i, _, _)| *i));
+            return Ok(Text::Atom(format!("{list} >= {count}")));
+        }
+        let mut parts = Vec::new();
+        for (item, unique, weight) in &merged {
+            if *weight > worlds_native::MAX_WEIGHT {
+                return Err(unsupported(format!(
+                    "poids {weight} dans une somme (au plus {})",
+                    worlds_native::MAX_WEIGHT
+                )));
+            }
+            let counter = if *unique { "count_unique" } else { "count" };
+            parts.push(match weight {
+                1 => format!("{counter}({})", name(item)),
+                w => format!("{w} * {counter}({})", name(item)),
+            });
+        }
+        Ok(Text::Atom(format!("{} >= {count}", parts.join(" + "))))
     }
 
     fn all(&self, rules: &[RuleExport]) -> Result<Vec<Text>, ConvertError> {

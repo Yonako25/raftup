@@ -560,7 +560,10 @@ impl Loader<'_> {
         }
         self.check_name(&raw.game.name, "jeu")?;
 
-        let mut names = Names::default();
+        let mut names = Names {
+            format_version: raw.format_version,
+            ..Names::default()
+        };
         let options = self.options(&raw.options)?;
         for (i, option) in options.iter().enumerate() {
             names.options.insert(option.name.clone(), index(i));

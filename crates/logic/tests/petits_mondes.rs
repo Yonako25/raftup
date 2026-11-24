@@ -375,3 +375,69 @@ fn regles_d_objet_et_accessibilite() {
     );
     assert!(w.validate().is_ok());
 }
+
+/// Somme pondérée (ADR 0055) : `2 * count(Gem) + count(Coin) >= 5`, et le nombre
+/// d'objets différents (`unique`).
+#[test]
+fn somme_ponderee_de_compteurs() {
+    use logic::SumTerm;
+    let mut w = MultiWorld::new();
+    let p = w.add_slot("Alice", "Test").unwrap();
+    let gem = w.add_item_kind(p, "Gem", Some(1), PROG).unwrap();
+    let coin = w.add_item_kind(p, "Coin", Some(2), PROG).unwrap();
+    let menu = w.add_region(p, "Menu").unwrap();
+    let a = w.add_location(menu, "A", Some(1), Rule::True).unwrap();
+    w.place(a, gem).unwrap();
+    let term = |item, weight, unique| SumTerm {
+        item,
+        weight,
+        unique,
+    };
+    let weighted = Rule::Sum {
+        terms: vec![term(gem, 2, false), term(coin, 1, false)],
+        at_least: 5,
+    };
+    let distinct = Rule::Sum {
+        terms: vec![term(gem, 1, true), term(coin, 1, true)],
+        at_least: 2,
+    };
+    w.validate().unwrap();
+    let eval = |w: &MultiWorld, s: &State, rule: &Rule| {
+        let r = Reachability::compute(w, s);
+        rule.eval(w, s, &r)
+    };
+
+    let mut s = State::new(&w);
+    assert!(eval(
+        &w,
+        &s,
+        &Rule::Sum {
+            terms: vec![],
+            at_least: 0
+        }
+    ));
+    assert!(!eval(&w, &s, &weighted));
+    s.collect(&w, gem);
+    s.collect(&w, gem);
+    assert!(!eval(&w, &s, &weighted), "2 * 2 + 0 = 4");
+    assert!(!eval(&w, &s, &distinct), "une seule sorte d'objet");
+    s.collect(&w, coin);
+    assert!(eval(&w, &s, &weighted), "2 * 2 + 1 = 5");
+    assert!(eval(&w, &s, &distinct));
+
+    // Un objet inconnu dans un terme est refusé par la validation.
+    let mut bad = MultiWorld::new();
+    let q = bad.add_slot("Bob", "Test").unwrap();
+    let r = bad.add_region(q, "Menu").unwrap();
+    bad.add_location(
+        r,
+        "B",
+        Some(1),
+        Rule::Sum {
+            terms: vec![term(gem, 1, false)],
+            at_least: 1,
+        },
+    )
+    .unwrap();
+    assert!(matches!(bad.validate(), Err(LogicError::UnknownItem(_))));
+}

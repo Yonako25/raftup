@@ -70,6 +70,28 @@ impl CompareOp {
     }
 }
 
+/// Un compteur d'une somme (ADR 0055).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Counter {
+    /// `count(objet)` : exemplaires de l'objet.
+    Item(ItemRef),
+    /// `count_group(groupe)` : exemplaires de tous les membres du groupe.
+    Group(u32),
+    /// `count_from_list(a, b, …)` : exemplaires de chaque objet de la liste (un objet
+    /// cité deux fois compte deux fois, comme en Python).
+    List(Vec<ItemRef>),
+    /// `count_unique(a, b, …)` : nombre d'objets différents de la liste possédés.
+    Unique(Vec<ItemRef>),
+}
+
+/// Un terme d'une somme : `poids * compteur`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SumTerm {
+    /// Entre 1 et [`crate::MAX_WEIGHT`].
+    pub weight: u32,
+    pub counter: Counter,
+}
+
 /// Une expression du mini-langage, noms déjà résolus.
 ///
 /// `Box<Expr>` pour `Not` : une enum ne peut pas se contenir elle-même directement (sa
@@ -91,6 +113,13 @@ pub enum Expr {
     CanReachRegion(u32),
     CanReachLocation(LocationRef),
     CanReachEntrance(u32),
+    /// `terme + terme … >= valeur` (ou `>`), à partir de `format_version = 4`.
+    Sum {
+        terms: Vec<SumTerm>,
+        /// `true` pour `>`, `false` pour `>=`.
+        strict: bool,
+        value: Count,
+    },
     /// `option(nom)` d'une option `toggle`.
     Toggle(u32),
     /// `option(nom) <op> valeur`.
@@ -248,7 +277,7 @@ pub struct SlotDataDef {
 /// Un monde natif lu et vérifié.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeWorld {
-    /// `format_version` écrit dans le fichier (1 à 3), affiché par la Bibliothèque.
+    /// `format_version` écrit dans le fichier (1 à 4), affiché par la Bibliothèque.
     pub format_version: i64,
     pub game: String,
     /// Région de départ ; `None` : la première région présente.

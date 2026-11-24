@@ -29,6 +29,11 @@ pub enum Rule {
     HasAllCounts(Vec<(ItemKindId, u32)>),
     /// Au moins `count` objets du groupe, tous membres confondus.
     HasGroup { group: ItemGroupId, count: u32 },
+    /// Somme pondérée de compteurs au moins égale à `at_least` (ADR 0055).
+    ///
+    /// Écrit en Python `state.count(a) + 2 * state.count(b) >= n`. Vraie si
+    /// `at_least` vaut 0.
+    Sum { terms: Vec<SumTerm>, at_least: u32 },
     /// La région est atteignable.
     CanReachRegion(RegionId),
     /// Le lieu est atteignable.
@@ -39,6 +44,27 @@ pub enum Rule {
     And(Vec<Rule>),
     /// Au moins une sous-règle (fausse si la liste est vide, comme `any` en Python).
     Or(Vec<Rule>),
+}
+
+/// Un terme d'une [`Rule::Sum`] : le compteur d'un objet, multiplié par un poids.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SumTerm {
+    /// L'objet compté.
+    pub item: ItemKindId,
+    /// Le poids (1 pour une somme simple).
+    pub weight: u32,
+    /// Si vrai, l'objet compte au plus 1 (« nombre d'objets différents »,
+    /// `count_from_list_unique` en Python).
+    pub unique: bool,
+}
+
+impl SumTerm {
+    /// Ce que vaut le terme pour cet inventaire.
+    pub fn value(&self, state: &State) -> u32 {
+        let count = state.count(self.item);
+        let count = if self.unique { count.min(1) } else { count };
+        count.saturating_mul(self.weight)
+    }
 }
 
 impl Rule {
@@ -81,6 +107,13 @@ impl Rule {
                 }
                 None => false,
             },
+            Rule::Sum { terms, at_least } => {
+                // `saturating_add` : on plafonne au lieu de déborder, comme `HasGroup`.
+                let total = terms
+                    .iter()
+                    .fold(0u32, |sum, term| sum.saturating_add(term.value(state)));
+                total >= *at_least
+            }
             Rule::CanReachRegion(region) => reach.region(*region),
             Rule::CanReachLocation(location) => reach.location(*location),
             Rule::CanReachEntrance(entrance) => reach.entrance(*entrance),

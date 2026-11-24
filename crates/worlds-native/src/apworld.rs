@@ -21,7 +21,8 @@ use logic::Classification;
 use thiserror::Error;
 
 use crate::model::{
-    Choice, Count, Expr, ItemRef, LocationRef, NativeWorld, OptionKind, SlotDataValue,
+    Choice, Count, Counter, Expr, ItemRef, LocationRef, NativeWorld, OptionKind, SlotDataValue,
+    SumTerm,
 };
 
 /// Réglages de l'apworld produit.
@@ -669,6 +670,16 @@ impl Writer<'_> {
                     self.count(*count)?
                 )
             }
+            Expr::Sum {
+                terms,
+                strict,
+                value,
+            } => {
+                let parts: Result<Vec<String>, ApworldError> =
+                    terms.iter().map(|t| self.sum_term(t)).collect();
+                let op = if *strict { ">" } else { ">=" };
+                format!("({} {op} {})", parts?.join(" + "), self.count(*value)?)
+            }
             Expr::CanReachRegion(r) => {
                 format!("_region(state, w, {})", py_str(self.region_name(*r)?))
             }
@@ -695,6 +706,42 @@ impl Writer<'_> {
             Expr::Not(inner) => format!("(not {})", self.expr(inner)?),
             Expr::And(parts) => self.join(parts, " and ")?,
             Expr::Or(parts) => self.join(parts, " or ")?,
+        })
+    }
+
+    /// Un terme de somme en Python : `2 * state.count("Gem", w.player)`.
+    fn sum_term(&self, term: &SumTerm) -> Result<String, ApworldError> {
+        let counter = match &term.counter {
+            Counter::Item(item) => {
+                format!("state.count({}, w.player)", py_str(self.item_ref(*item)?))
+            }
+            Counter::Group(group) => {
+                // Comme `has_group` : la somme des exemplaires des membres.
+                let members = &self
+                    .world
+                    .item_groups
+                    .get(*group as usize)
+                    .ok_or_else(|| ApworldError::Invalid(format!("groupe n° {group}")))?
+                    .members;
+                format!(
+                    "state.count_from_list({}, w.player)",
+                    self.item_tuple(members)?
+                )
+            }
+            Counter::List(items) => {
+                format!(
+                    "state.count_from_list({}, w.player)",
+                    self.item_tuple(items)?
+                )
+            }
+            Counter::Unique(items) => format!(
+                "state.count_from_list_unique({}, w.player)",
+                self.item_tuple(items)?
+            ),
+        };
+        Ok(match term.weight {
+            1 => counter,
+            weight => format!("{weight} * {counter}"),
         })
     }
 
