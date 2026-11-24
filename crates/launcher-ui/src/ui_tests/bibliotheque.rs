@@ -95,6 +95,12 @@ fn la_carte_et_la_fiche_du_jeu_s_affichent() {
     assert!(!shows(&harness, "Profil du catalogue de Raftup"));
     assert!(shows(&harness, "Lancer le jeu"));
     assert!(shows(&harness, "Détecté via Steam"));
+    // La sorte de monde : badge sur la jaquette, badge et phrase dans la fiche.
+    assert!(count(&harness, "Archipelago") >= 1);
+    assert!(shows(
+        &harness,
+        "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+    ));
     // « Réinstaller » d'un jeu prêt : petit bouton à côté de « Désinstaller ».
     assert!(shows(&harness, "Réinstaller"));
     assert!(shows(&harness, "Désinstaller le mod"));

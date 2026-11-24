@@ -800,7 +800,7 @@ untime2`.
 - **Suite** : causes du convertisseur révélées (Yu-Gi-Oh! 2006, Super Mario Land 2, shapez), dans une nouvelle session.
 
 ### 2026-11-24 · Revue d'ergonomie du launcher
-- **Fait** : revue écrite (`docs/revue-ergonomie-launcher.md`, 18 changements, tous acceptés) et codée en six étapes (ce555d8, 35dd8ec, 10835aa, 6ae0526, bccd397, 41519a0) : tutoiement et sans jargon, parties nommées d'après leurs jeux, salon allégé, écran Rafthub avec « Gérer la partie » replié, « Nouvelle partie » dans le menu, badge « Archipelago » retiré, Rejoindre sans clic ; captures de référence mises à jour et regardées, 4 écrans ajoutés à `cargo captures`. fmt, clippy `-D warnings` et `cargo test --workspace` passent.
-- **Pas vérifié** : rendu dans la vraie fenêtre (captures sans fenêtre seulement) ; écran « Amis » une fois connecté ; branche `ergonomie-launcher` ni poussée ni fusionnée.
+- **Fait** : revue écrite (`docs/revue-ergonomie-launcher.md`, 18 changements, tous acceptés) et codée en six étapes (ce555d8, 35dd8ec, 10835aa, 6ae0526, bccd397, 41519a0) : tutoiement et sans jargon, parties nommées d'après leurs jeux, salon allégé, écran Rafthub avec « Gérer la partie » replié, « Nouvelle partie » dans le menu, badge de monde (Natif, Converti, Archipelago) gardé sur chaque jaquette et expliqué dans la fiche, Rejoindre sans clic ; captures de référence mises à jour et regardées, 4 écrans ajoutés à `cargo captures`. fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : rendu dans la vraie fenêtre regardé une fois par l'utilisatrice (badge de monde rétabli ensuite) ; écran « Amis » une fois connecté ; branche `ergonomie-launcher` ni poussée ni fusionnée.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub`.
 - **Suite** : regarder le launcher dans la vraie fenêtre, puis fusionner `ergonomie-launcher`.

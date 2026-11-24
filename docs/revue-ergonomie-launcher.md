@@ -6,7 +6,7 @@
 
 - point 9 : la phrase « Sans invitation, le jeu démarre sans se connecter » est retirée, sans infobulle (le bouton dessiné à la main n'en a pas) ;
 - point 11 : « Nom chez Archipelago » reste en clair dans la fiche du Catalogue (non replié) ;
-- point 8 : le mot « Archipelago » n'est pas ajouté à la fiche ; l'étape « Règles Archipelago » de la liste des mods le dit déjà ;
+- point 8 : annulé après essai dans la vraie fenêtre (il manquait l'indicateur d'origine du monde) ; chaque jaquette garde son badge « Natif », « Converti » ou « Archipelago », et la fiche du jeu le reprend avec une phrase d'explication ;
 - en plus : « Indique ton pseudo. » au lieu de « Ton pseudo : Indique un pseudo. », bouton « Ouvrir » à largeur minimale, ligne d'une partie Rafthub sans « sur Rafthub » en double.
 
 ## Constat général

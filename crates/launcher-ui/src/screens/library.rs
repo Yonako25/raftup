@@ -306,14 +306,17 @@ impl LibraryState {
     }
 
     /// Badge d'un jeu du catalogue : celui de son monde natif s'il y en a un d'installé
-    /// (par le nom du jeu chez Archipelago). Sinon aucun badge : le monde d'Archipelago est
-    /// le cas normal, l'écrire sur chaque jaquette ne distinguait rien.
+    /// (par le nom du jeu chez Archipelago), sinon « Archipelago » (son apworld ou le
+    /// monde intégré au générateur officiel). Toujours un badge : le joueur voit d'un coup
+    /// d'œil d'où vient le monde de chaque jeu.
     pub fn pin_for(&self, ap_game: &str) -> Option<WorldPin> {
-        self.native
+        let native = self
+            .native
             .worlds()
             .iter()
             .find(|world| world.game == ap_game)
-            .map(world_pin)
+            .map(world_pin);
+        Some(native.unwrap_or(WorldPin::Archipelago))
     }
 
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
@@ -1543,7 +1546,7 @@ pub(super) struct CardLook<'a> {
     /// Jaquette du jeu (ADR 0051) ; `None` : l'aplat coloré avec le titre.
     pub(super) cover: Option<egui::TextureHandle>,
     /// Badge en haut à gauche de la jaquette : sorte de monde (« Natif »,
-    /// « Converti »), voir [`WorldPin`]. `None` : pas de badge (monde d'Archipelago).
+    /// « Converti », « Archipelago »), voir [`WorldPin`]. `None` : pas de badge.
     pub(super) pin: Option<WorldPin>,
 }
 
@@ -1554,6 +1557,8 @@ pub enum WorldPin {
     Native,
     /// Monde natif obtenu en convertissant un apworld (ADR 0042).
     Converted,
+    /// Monde d'Archipelago (apworld, ou monde intégré au générateur officiel).
+    Archipelago,
 }
 
 impl WorldPin {
@@ -1561,6 +1566,20 @@ impl WorldPin {
         match self {
             WorldPin::Native => "Natif",
             WorldPin::Converted => "Converti",
+            WorldPin::Archipelago => "Archipelago",
+        }
+    }
+
+    /// Phrase de la fiche du jeu : d'où vient le monde, et ce que ça change pour le joueur.
+    pub fn description(self) -> &'static str {
+        match self {
+            WorldPin::Native => "Monde natif : écrit pour Raftup, généré sans Python.",
+            WorldPin::Converted => {
+                "Monde converti depuis Archipelago : généré par Raftup, avec les mêmes règles."
+            }
+            WorldPin::Archipelago => {
+                "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+            }
         }
     }
 
@@ -1569,6 +1588,7 @@ impl WorldPin {
         match self {
             WorldPin::Native => (theme::GREEN, theme::GREEN_BG),
             WorldPin::Converted => (theme::ACCENT, theme::ACCENT_BG),
+            WorldPin::Archipelago => (theme::TEXT_DIM, theme::FIELD),
         }
     }
 }
@@ -1815,6 +1835,16 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 }
             });
         });
+        // Sorte de monde (Natif, Converti ou Archipelago) : le même badge que sur la
+        // jaquette, avec une phrase qui dit ce qu'il veut dire.
+        if let Some(pin) = state.pin_for(&profile.game.ap_game) {
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                let (fg, bg) = pin.colors();
+                widgets::pill(ui, pin.label(), fg, bg);
+                ui.label(widgets::dim(pin.description()).size(12.0));
+            });
+        }
         if is_untested(&profile) {
             ui.add_space(6.0);
             ui.label(RichText::new(UNTESTED_NOTE).size(13.0).color(theme::AMBER));
@@ -2568,9 +2598,9 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let shown = draw(&ctx, &mut state);
         assert!(shown.iter().any(|t| t == "NATIF"), "{shown:?}");
         assert!(!shown.iter().any(|t| t == "CONVERTI"), "{shown:?}");
-        // Un jeu sans monde natif tourne avec le monde d'Archipelago : pas de badge.
+        // Un jeu sans monde natif tourne avec le monde d'Archipelago.
         let pin = state.pin_for("Un jeu sans monde natif");
-        assert_eq!(pin, None);
+        assert_eq!(pin, Some(WorldPin::Archipelago));
         assert_eq!(state.pin_for("APQuest"), Some(WorldPin::Native));
 
         let temp = tempfile::tempdir().unwrap();
