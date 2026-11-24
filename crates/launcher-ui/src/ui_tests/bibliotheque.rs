@@ -85,7 +85,7 @@ fn address_field_shown(harness: &Harness<'_, Bibliotheque>) -> bool {
 
 #[test]
 fn la_carte_et_la_fiche_du_jeu_s_affichent() {
-    let harness = bibliotheque();
+    let mut harness = bibliotheque();
     assert!(shows(&harness, "Bibliothèque"));
     assert!(shows(&harness, "1 jeu · 1 prêt"));
     // Le nom du jeu : sous la jaquette de la carte, et en titre de la fiche.
@@ -95,8 +95,13 @@ fn la_carte_et_la_fiche_du_jeu_s_affichent() {
     assert!(!shows(&harness, "Profil du catalogue de Raftup"));
     assert!(shows(&harness, "Lancer le jeu"));
     assert!(shows(&harness, "Détecté via Steam"));
-    assert!(shows(&harness, "MelonLoader"));
+    // « Réinstaller » d'un jeu prêt : petit bouton à côté de « Désinstaller ».
+    assert!(shows(&harness, "Réinstaller"));
     assert!(shows(&harness, "Désinstaller le mod"));
+    // Les étapes du profil sont repliées : un clic les montre.
+    assert!(!shows(&harness, "MelonLoader"));
+    click(&mut harness, "Ce que Raftup installe");
+    assert!(shows(&harness, "MelonLoader"));
 }
 
 #[test]
@@ -247,8 +252,8 @@ fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
         }
     }
     // La fiche du jeu choisi est à l'écran.
-    assert!(shows(&harness, "CE QUE RAFTUP INSTALLE"));
-    let profile = harness.get_by_label("CE QUE RAFTUP INSTALLE").rect();
+    assert!(shows(&harness, "Ce que Raftup installe"));
+    let profile = harness.get_by_label("Ce que Raftup installe").rect();
     assert!(
         profile.right() <= right_edge,
         "fiche hors de l'écran : {profile:?}"

@@ -68,8 +68,8 @@ pub fn featured(games: &[GameSummary], in_library: impl Fn(&str) -> bool) -> Opt
 const SHOWCASE_HEIGHT: f32 = 280.0;
 
 /// Textes et page du prochain pas : (titre, explication, bouton, page).
-fn step_texts(step: &NextStep) -> (String, &'static str, &'static str, Page) {
-    match step {
+fn step_texts(step: &NextStep) -> (String, String, &'static str, Page) {
+    let (heading, text, button, page) = match step {
         NextStep::OpenHosted => (
             "Une partie tourne sur ce PC".to_string(),
             "Tes amis peuvent la rejoindre avec l'adresse de la partie.",
@@ -85,7 +85,7 @@ fn step_texts(step: &NextStep) -> (String, &'static str, &'static str, Page) {
         NextStep::CreateLobby(name) => (
             format!("{name} est prêt"),
             "Crée un salon, invite tes amis, puis lance la partie.",
-            "Créer un salon",
+            "Nouvelle partie",
             Page::Create,
         ),
         NextStep::InstallGame => (
@@ -94,7 +94,8 @@ fn step_texts(step: &NextStep) -> (String, &'static str, &'static str, Page) {
             "Ouvrir la Bibliothèque",
             Page::Library,
         ),
-    }
+    };
+    (heading, text.to_string(), button, page)
 }
 
 pub fn show(
@@ -117,8 +118,28 @@ pub fn show(
 
     super::page(ui, |ui| {
         // Vitrine : grande image du jeu mis en avant, le prochain pas par-dessus.
-        let (heading, text, button, page) = step_texts(&step);
-        if showcase(ui, hero.as_ref(), hero_art.as_ref(), &heading, text, button) {
+        let (mut heading, mut text, button, page) = step_texts(&step);
+        // Une partie tourne : la vitrine dit laquelle et où elle en est (plus de panneau
+        // « Parties en cours » en dessous qui répète la même chose).
+        if let (NextStep::OpenHosted, Some(status)) = (&step, &shared.status) {
+            let players: Vec<_> = status.server.slots.iter().filter(|s| !s.is_group).collect();
+            let checked: usize = players.iter().map(|s| s.checked).sum();
+            let total: usize = players.iter().map(|s| s.total).sum();
+            heading = format::party_title(&status.server.slots);
+            text = format!(
+                "Une partie tourne sur ce PC · {} · démarrée il y a {}",
+                matches::progress(checked, total),
+                format::short_duration(format::now() - status.started_at)
+            );
+        }
+        if showcase(
+            ui,
+            hero.as_ref(),
+            hero_art.as_ref(),
+            &heading,
+            &text,
+            button,
+        ) {
             goto = Some(page);
         }
         ui.add_space(18.0);
@@ -160,36 +181,8 @@ pub fn show(
         }
         ui.add_space(18.0);
 
-        // Parties en cours.
-        widgets::panel(ui, "Parties en cours", |ui| match &shared.status {
-            Some(status) => {
-                let players: Vec<_> = status.server.slots.iter().filter(|s| !s.is_group).collect();
-                let checked: usize = players.iter().map(|s| s.checked).sum();
-                let total: usize = players.iter().map(|s| s.total).sum();
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(format::party_title(&status.server.slots))
-                            .strong()
-                            .color(theme::TEXT),
-                    );
-                    ui.label(widgets::dim(format!(
-                        "sur ce PC · démarrée il y a {}",
-                        format::short_duration(format::now() - status.started_at)
-                    )));
-                });
-                ui.horizontal(|ui| {
-                    widgets::bar(ui, 200.0, matches::fraction(checked, total), theme::ACCENT);
-                    ui.label(widgets::dim(matches::progress(checked, total)).size(12.0));
-                });
-                if widgets::ghost_button(ui, "Voir les parties") {
-                    goto = Some(Page::InProgress);
-                }
-            }
-            None => {
-                ui.label(widgets::dim("Aucune partie en cours."));
-            }
-        });
-        ui.add_space(12.0);
+        // Pas de panneau « Parties en cours » : quand une partie tourne, la vitrine
+        // l'annonce déjà (avec son nom et son avancement), et « En cours » la détaille.
 
         // Invitation reçue.
         if let Some(game) = invite {

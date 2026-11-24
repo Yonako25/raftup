@@ -142,9 +142,10 @@ fn accueil_jeu_pret_propose_un_salon() {
     // Vitrine : le prochain pas par-dessus l'image du jeu mis en avant.
     assert!(shows(&harness, "PROCHAIN PAS"));
     assert!(shows(&harness, "Slime Rancher est prêt"));
-    assert!(shows(&harness, "Aucune partie en cours."));
+    // Plus de panneau « Parties en cours » sur l'Accueil.
+    assert!(!shows(&harness, "Parties en cours"));
     assert!(shows(&harness, "Ta bibliothèque"));
-    click(&mut harness, "Créer un salon");
+    click(&mut harness, "Nouvelle partie");
     assert_eq!(harness.state().asked, Some(Page::Create));
 
     // La carte de Slime Rancher sélectionne le jeu et ouvre la Bibliothèque.
@@ -184,9 +185,12 @@ fn accueil_partie_hebergee_et_invitation() {
     );
     let mut harness = accueil(scan(true), shared, join);
     // La partie passe avant l'invitation.
-    assert!(shows(&harness, "Une partie tourne sur ce PC"));
+    // La vitrine nomme la partie et dit où elle en est.
     assert!(shows(&harness, "Partie Slime Rancher et A Short Hike"));
-    assert!(shows(&harness, "10 / 80 lieux"));
+    assert!(shows_part(
+        &harness,
+        "Une partie tourne sur ce PC · 10 / 80 lieux"
+    ));
     assert!(shows(&harness, "Invitation reçue"));
     assert!(shows(&harness, "Une partie de Slime Rancher t'attend."));
     click(&mut harness, "Ouvrir la partie");

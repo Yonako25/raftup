@@ -324,9 +324,7 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
     if public_host.is_empty() {
-        return Err(
-            "Indique l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into(),
-        );
+        return Err("Indique l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into());
     }
     let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());

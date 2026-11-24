@@ -61,7 +61,10 @@ pub(super) fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
 #[test]
 fn sans_rafthub_seul_le_pc() {
     let harness = salon(None);
-    assert!(shows(&harness, "La partie tourne sur ton PC : il doit rester allumé pendant la partie."));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
     assert!(!shows(&harness, "Sur Rafthub"));
     assert!(!shows(&harness, "Sur mon PC"));
 }
@@ -72,15 +75,24 @@ fn le_choix_rafthub_remplace_les_reglages_du_serveur() {
     // Par défaut : sur ce PC, comme avant.
     assert!(shows(&harness, "Sur mon PC"));
     assert!(shows(&harness, "Sur Rafthub"));
-    assert!(shows(&harness, "La partie tourne sur ton PC : il doit rester allumé pendant la partie."));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
     assert_eq!(harness.state().form.host_mode(), HostMode::ThisPc);
 
     click(&mut harness, "Sur Rafthub");
     assert_eq!(harness.state().form.host_mode(), HostMode::Rafthub);
     assert!(harness.state().form.on_rafthub());
-    assert!(shows_part(&harness, "La partie tourne sur Rafthub (127.0.0.1:1)"));
+    assert!(shows_part(
+        &harness,
+        "La partie tourne sur Rafthub (127.0.0.1:1)"
+    ));
     assert!(shows(&harness, "Nom de la partie (facultatif)"));
-    assert!(!shows(&harness, "La partie tourne sur ton PC : il doit rester allumé pendant la partie."));
+    assert!(!shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 
     // Avec un pseudo, plus rien ne bloque : ni port, ni adresse, ni certificat à fournir.
     type_into(
@@ -95,7 +107,10 @@ fn le_choix_rafthub_remplace_les_reglages_du_serveur() {
     click(&mut harness, "Sur mon PC");
     assert_eq!(harness.state().form.host_mode(), HostMode::ThisPc);
     assert!(create::check_form(&harness.state().form).is_err());
-    assert!(shows(&harness, "La partie tourne sur ton PC : il doit rester allumé pendant la partie."));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 }
 
 /// Le hub n'est plus proposé (déconnexion) : la partie repart sur ce PC, même si le
@@ -107,7 +122,10 @@ fn rafthub_choisi_puis_deconnecte() {
     harness.state_mut().access = None;
     harness.run();
     assert!(!harness.state().form.on_rafthub());
-    assert!(shows(&harness, "La partie tourne sur ton PC : il doit rester allumé pendant la partie."));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 }
 
 impl Salon {
@@ -412,7 +430,7 @@ fn en_cours_liste_la_partie_hebergee() {
     assert!(shows(&harness, "En ligne sur Rafthub"));
     // Une partie sur le hub : pas de « Aucune partie en cours ».
     assert!(!shows(&harness, "Aucune partie en cours"));
-    click(&mut harness, "   Ouvrir   ");
+    click(&mut harness, "Ouvrir");
     assert_eq!(harness.state().asked, Some(Page::HubGame));
 }
 
@@ -444,6 +462,10 @@ fn en_cours_mene_au_salon() {
         );
         harness.run();
         click(&mut harness, label);
-        assert_eq!(harness.state().asked, Some(Page::Create), "clic sur {label}");
+        assert_eq!(
+            harness.state().asked,
+            Some(Page::Create),
+            "clic sur {label}"
+        );
     }
 }

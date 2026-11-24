@@ -567,8 +567,8 @@ fn crew_row(
             if let Some(link) =
                 format::player_link(&status.address, status.fingerprint.as_deref(), slot)
             {
-                let button = egui::Button::new(widgets::dim("Copier l'invitation").size(12.0))
-                    .frame(false);
+                let button =
+                    egui::Button::new(widgets::dim("Copier l'invitation").size(12.0)).frame(false);
                 if ui.add(button).clicked() {
                     *copy = Some(link);
                 }
@@ -595,8 +595,7 @@ fn crew_row(
                     ui.spacing_mut().item_spacing.y = 6.0;
                     widgets::bar(ui, width, format::progress(slot.checked, slot.total), color);
                     ui.label(
-                        widgets::dim(format!("{} / {} lieux", slot.checked, slot.total))
-                            .size(12.0),
+                        widgets::dim(format!("{} / {} lieux", slot.checked, slot.total)).size(12.0),
                     );
                 },
             );

@@ -306,16 +306,14 @@ impl LibraryState {
     }
 
     /// Badge d'un jeu du catalogue : celui de son monde natif s'il y en a un d'installé
-    /// (par le nom du jeu chez Archipelago), sinon « Archipelago » (son apworld ou le
-    /// monde intégré au générateur officiel).
+    /// (par le nom du jeu chez Archipelago). Sinon aucun badge : le monde d'Archipelago est
+    /// le cas normal, l'écrire sur chaque jaquette ne distinguait rien.
     pub fn pin_for(&self, ap_game: &str) -> Option<WorldPin> {
-        let native = self
-            .native
+        self.native
             .worlds()
             .iter()
             .find(|world| world.game == ap_game)
-            .map(world_pin);
-        Some(native.unwrap_or(WorldPin::Archipelago))
+            .map(world_pin)
     }
 
     /// Une ligne par jeu du catalogue, dans l'ordre du catalogue : ce que l'Accueil et
@@ -1545,7 +1543,7 @@ pub(super) struct CardLook<'a> {
     /// Jaquette du jeu (ADR 0051) ; `None` : l'aplat coloré avec le titre.
     pub(super) cover: Option<egui::TextureHandle>,
     /// Badge en haut à gauche de la jaquette : sorte de monde (« Natif »,
-    /// « Converti », « Archipelago »), voir [`WorldPin`]. `None` : pas de badge.
+    /// « Converti »), voir [`WorldPin`]. `None` : pas de badge (monde d'Archipelago).
     pub(super) pin: Option<WorldPin>,
 }
 
@@ -1556,8 +1554,6 @@ pub enum WorldPin {
     Native,
     /// Monde natif obtenu en convertissant un apworld (ADR 0042).
     Converted,
-    /// Monde d'Archipelago (apworld, ou monde intégré au générateur officiel).
-    Archipelago,
 }
 
 impl WorldPin {
@@ -1565,7 +1561,6 @@ impl WorldPin {
         match self {
             WorldPin::Native => "Natif",
             WorldPin::Converted => "Converti",
-            WorldPin::Archipelago => "Archipelago",
         }
     }
 
@@ -1574,7 +1569,6 @@ impl WorldPin {
         match self {
             WorldPin::Native => (theme::GREEN, theme::GREEN_BG),
             WorldPin::Converted => (theme::ACCENT, theme::ACCENT_BG),
-            WorldPin::Archipelago => (theme::TEXT_DIM, theme::FIELD),
         }
     }
 }
@@ -1829,39 +1823,40 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
 
         // Boutons d'action : « Lancer » en bleu quand le jeu est prêt ; sinon c'est
         // l'installation qui devient l'action principale.
+        // « Réinstaller » d'un jeu déjà prêt n'est pas une action de tous les jours : il
+        // descend en petit bouton à côté de « Désinstaller ». « Mettre à jour » et
+        // « Réparer » restent en grand, à côté de « Lancer le jeu ».
+        let small_reinstall = view.can_launch && view.install_label == "Réinstaller";
+        let mut install_clicked = false;
         ui.horizontal(|ui| {
             let half = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
+            let full = ui.available_width();
             if let (true, Some(game)) = (view.can_launch, &found) {
                 let ready = launch_mode(&state.form) != LaunchMode::Incomplete;
-                if big_button(ui, "Lancer le jeu", true, ready && !busy, half) {
+                let width = if view.can_install && !small_reinstall {
+                    half
+                } else {
+                    full
+                };
+                let response = big_button(ui, "Lancer le jeu", true, ready && !busy, width);
+                if response {
                     let dir = game.install_dir.clone();
                     state.start_launch(ctx, &profile, &dir);
                 }
             }
-            if let (true, Some(game)) = (view.can_install, &found) {
+            if view.can_install && !small_reinstall {
                 let primary = !view.can_launch;
-                let clicked = big_button(ui, view.install_label, primary, !busy, half);
-                let auto = std::mem::take(&mut state.dev_auto_install);
-                if (clicked || auto) && !busy {
-                    let dir = game.install_dir.clone();
-                    let force = matches!(status, Some(Ok(InstallStatus::InProgress)));
-                    state.start_install(ctx, &profile, dir, force);
-                }
+                let width = if view.can_launch { half } else { full };
+                install_clicked = big_button(ui, view.install_label, primary, !busy, width);
             }
         });
-        if view.can_launch {
-            let hint = match launch_mode(&state.form) {
-                LaunchMode::Connect(_) => None,
-                LaunchMode::Offline => {
-                    Some("Sans invitation, le jeu démarre sans se connecter à une partie.")
-                }
-                LaunchMode::Incomplete => Some(
+        if view.can_launch && launch_mode(&state.form) == LaunchMode::Incomplete {
+            ui.label(
+                widgets::dim(
                     "Pour te connecter, indique l'adresse et ton nom de joueur sous « Se connecter à la main ».",
-                ),
-            };
-            if let Some(hint) = hint {
-                ui.label(widgets::dim(hint).size(12.0));
-            }
+                )
+                .size(12.0),
+            );
         }
         if let Some(task) = &state.task {
             ui.add_space(6.0);
@@ -1902,18 +1897,23 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             }
         }
 
-        // Profil d'installation.
-        ui.add_space(12.0);
-        ui.horizontal(|ui| {
-            ui.label(widgets::caps("Ce que Raftup installe"));
-        });
+        // Profil d'installation : replié, c'est un détail (le joueur voit déjà « Prêt »).
         let installed = matches!(
             status,
             Some(Ok(InstallStatus::Installed | InstallStatus::UpdateAvailable))
         );
-        for step in &profile.steps {
-            step_row(ui, step, installed);
-        }
+        let mut open_now = false;
+        widgets::advanced(
+            ui,
+            "library_steps",
+            "Ce que Raftup installe",
+            &mut open_now,
+            |ui| {
+                for step in &profile.steps {
+                    step_row(ui, step, installed);
+                }
+            },
+        );
 
         // Connexion : d'habitude remplie par une invitation (écran « Rejoindre ») ; la
         // saisie à la main est repliée.
@@ -1933,10 +1933,24 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             state.form.open_now = open_now;
         }
 
-        // Désinstallation, en deux clics.
-        if view.can_uninstall {
+        // Réinstallation (en petit) et désinstallation, en deux clics.
+        if view.can_uninstall || small_reinstall {
             ui.add_space(12.0);
             ui.separator();
+        }
+        if small_reinstall && !state.confirm_uninstall {
+            install_clicked |= widgets::ghost_button(ui, "Réinstaller");
+        }
+        // L'installation part d'ici, quel que soit le bouton (grand ou petit).
+        if let (true, Some(game)) = (view.can_install, &found) {
+            let auto = std::mem::take(&mut state.dev_auto_install);
+            if (install_clicked || auto) && !busy {
+                let dir = game.install_dir.clone();
+                let force = matches!(status, Some(Ok(InstallStatus::InProgress)));
+                state.start_install(ctx, &profile, dir, force);
+            }
+        }
+        if view.can_uninstall {
             if state.confirm_uninstall {
                 ui.label(widgets::dim(
                     "Les fichiers posés par Raftup seront retirés et les originaux restaurés.",
@@ -2554,9 +2568,9 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let shown = draw(&ctx, &mut state);
         assert!(shown.iter().any(|t| t == "NATIF"), "{shown:?}");
         assert!(!shown.iter().any(|t| t == "CONVERTI"), "{shown:?}");
-        // Un jeu sans monde natif tourne avec le monde d'Archipelago.
+        // Un jeu sans monde natif tourne avec le monde d'Archipelago : pas de badge.
         let pin = state.pin_for("Un jeu sans monde natif");
-        assert_eq!(pin, Some(WorldPin::Archipelago));
+        assert_eq!(pin, None);
         assert_eq!(state.pin_for("APQuest"), Some(WorldPin::Native));
 
         let temp = tempfile::tempdir().unwrap();

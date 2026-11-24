@@ -1140,8 +1140,7 @@ fn error_text(error: &HubClientError) -> String {
         HubClientError::Api {
             code: ErrorCode::UsernameChangeTooSoon,
             ..
-        } => "Tu as déjà changé de pseudo il y a moins de 24 heures : réessaie demain."
-            .to_string(),
+        } => "Tu as déjà changé de pseudo il y a moins de 24 heures : réessaie demain.".to_string(),
         // Connexion Discord : nos propres phrases aussi.
         HubClientError::Api { code, .. } if discord_text(code).is_some() => {
             discord_text(code).unwrap_or_default().to_string()

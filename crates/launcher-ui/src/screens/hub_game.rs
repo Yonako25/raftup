@@ -804,15 +804,21 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
         // Les fermetures (closures) de Rust 2021 n'empruntent que les champs dont elles se
         // servent : `tracked` (lecture de `state.current`) et `state.resume` (écriture)
         // peuvent donc vivre en même temps.
-        widgets::advanced(ui, "hub_game_manage", "Gérer la partie", &mut open_now, |ui| {
-            if let Some(password) = &tracked.admin_password {
-                admin_panel(ui, password, &mut state.show_admin, &mut copy);
-                ui.add_space(14.0);
-                resume_with = resume_panel(ui, &mut state.resume);
-                ui.add_space(14.0);
-            }
-            delete = delete_panel(ui, &mut state.confirm_delete, busy);
-        });
+        widgets::advanced(
+            ui,
+            "hub_game_manage",
+            "Gérer la partie",
+            &mut open_now,
+            |ui| {
+                if let Some(password) = &tracked.admin_password {
+                    admin_panel(ui, password, &mut state.show_admin, &mut copy);
+                    ui.add_space(14.0);
+                    resume_with = resume_panel(ui, &mut state.resume);
+                    ui.add_space(14.0);
+                }
+                delete = delete_panel(ui, &mut state.confirm_delete, busy);
+            },
+        );
     });
     if wake {
         if let Some(id) = state.current.as_ref().map(|t| t.game.id.clone()) {
@@ -879,7 +885,8 @@ fn address_panel(ui: &mut Ui, game: &HostedGame, busy: bool, copy: &mut Option<S
             }
         });
         ui.label(
-            widgets::dim("Chiffrée par Rafthub · elle continue quand ton PC est éteint.").size(13.0),
+            widgets::dim("Chiffrée par Rafthub · elle continue quand ton PC est éteint.")
+                .size(13.0),
         )
         .on_hover_text(
             "Le mod du jeu reçoit cette adresse (il essaie wss puis ws) ; les liens \
@@ -1144,15 +1151,12 @@ pub fn row(ui: &mut Ui, game: &HostedGame) -> bool {
             ui.label(RichText::new(line).color(color));
             let players = game.players as usize;
             ui.label(
-                widgets::dim(format!(
-                    "{} · sur Rafthub",
-                    widgets::plural(players, "joueur", "joueurs"),
-                ))
-                .size(13.0),
+                // « sur Rafthub » est déjà dans la ligne d'état juste au-dessus.
+                widgets::dim(widgets::plural(players, "joueur", "joueurs")).size(13.0),
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            open = widgets::primary_button(ui, "   Ouvrir   ", true);
+            open = widgets::primary_button_min(ui, "Ouvrir", 90.0);
         });
     });
     open

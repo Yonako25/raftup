@@ -549,10 +549,7 @@ fn captures_interface() {
     // Partie hébergée par Rafthub : en ligne, puis en veille.
     {
         use crate::screens::hub_game::HubGames;
-        let games = HubGames::with_game(
-            super::rafthub::created(),
-            Some(super::rafthub::status()),
-        );
+        let games = HubGames::with_game(super::rafthub::created(), Some(super::rafthub::status()));
         let mut harness = super::rafthub::game_screen_with(games);
         tall(&mut harness);
         harness.run_steps(3);

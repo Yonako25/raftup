@@ -2,11 +2,11 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
+use crate::format;
 use crate::screens::{
     catalog, create, friends, home, hub_game, join, library, matches, running, settings, setup,
     soon, welcome,
 };
-use crate::format;
 use crate::theme;
 use crate::widgets;
 use crate::worker::{Command, Worker};
@@ -558,8 +558,7 @@ pub(crate) fn sidebar(
     }
     // La carte du serveur ne sert que quand une partie tourne (sinon elle répète
     // « En cours »).
-    if (shared.status.is_some() || shared.starting) && side_card(ui, |ui| server_card(ui, shared))
-    {
+    if (shared.status.is_some() || shared.starting) && side_card(ui, |ui| server_card(ui, shared)) {
         goto = Some(Page::Hosted);
     }
     ui.horizontal(|ui| {
@@ -678,9 +677,12 @@ fn profile_card(ui: &mut Ui, friends: &friends::Summary) {
                 }
                 (Some(_), n) => {
                     ui.label(
-                        RichText::new(format!("● {n} ami{} en ligne", if n > 1 { "s" } else { "" }))
-                            .size(12.0)
-                            .color(theme::GREEN),
+                        RichText::new(format!(
+                            "● {n} ami{} en ligne",
+                            if n > 1 { "s" } else { "" }
+                        ))
+                        .size(12.0)
+                        .color(theme::GREEN),
                     );
                 }
             }

@@ -336,8 +336,11 @@ impl CreateForm {
                 ap_game,
             });
         }
-        let my_name =
-            crew::check_name(&self.my_name, &members).map_err(|e| format!("Ton pseudo : {e}"))?;
+        // Pseudo vide : « Indique ton pseudo. » plutôt que « Ton pseudo : Indique un pseudo. ».
+        let my_name = crew::check_name(&self.my_name, &members).map_err(|e| match e {
+            crew::NameError::Empty => "Indique ton pseudo.".to_string(),
+            other => format!("Ton pseudo : {other}"),
+        })?;
         // `insert(0, …)` : l'hôte passe en tête, il aura le slot 1.
         members.insert(
             0,
@@ -830,10 +833,8 @@ fn crew_panel(ui: &mut Ui, form: &mut CreateForm) {
             ui.label(RichText::new(message).color(theme::AMBER).size(13.0));
         }
         ui.label(
-            widgets::dim(
-                "Chaque joueur reçoit son lien d'invitation une fois la partie hébergée.",
-            )
-            .size(12.0),
+            widgets::dim("Chaque joueur reçoit son lien d'invitation une fois la partie hébergée.")
+                .size(12.0),
         );
     });
 }
@@ -1693,10 +1694,7 @@ game: Slime Rancher
         // Pseudo de l'hôte vide : refus clair, jeu choisi.
         form.my_game = Some("sr".into());
         form.my_name.clear();
-        assert_eq!(
-            build_request(&form).unwrap_err(),
-            "Ton pseudo : Indique un pseudo."
-        );
+        assert_eq!(build_request(&form).unwrap_err(), "Indique ton pseudo.");
     }
 
     #[test]

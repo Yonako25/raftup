@@ -19,10 +19,13 @@ fn with_friends(show: fn(&mut egui::Ui, &mut FriendsState)) -> Harness<'static, 
 
 #[test]
 fn parametres_montre_l_adresse_du_rafthub() {
-    let harness = with_friends(|ui, state| {
+    let mut harness = with_friends(|ui, state| {
         settings::show(ui, state, None);
     });
     assert!(shows(&harness, "Paramètres"));
+    // Réglage d'expert, replié : un clic l'ouvre.
+    assert!(!shows(&harness, "Enregistrer"));
+    click(&mut harness, "Serveur Rafthub");
     assert!(shows(&harness, "Rafthub"));
     assert!(shows_part(&harness, "Le serveur des comptes et des amis"));
     assert!(shows(&harness, "Enregistrer"));
@@ -90,6 +93,19 @@ fn rejoindre_attend_un_lien() {
     assert!(shows(&harness, "Lire le lien"));
     // Rien n'est lu tant qu'aucun lien n'est collé.
     assert!(!shows(&harness, "Vérifie avant de continuer"));
+}
+
+/// Un lien complet collé est lu tout de suite, sans cliquer « Lire le lien ».
+#[test]
+fn rejoindre_lit_un_lien_colle() {
+    let mut harness = rejoindre();
+    type_into(
+        &mut harness,
+        "raftup://join?v=1&addr=…",
+        "raftup://join?v=1&addr=wss://partie.exemple.fr:38281&slot=Bob&game=Slime%20Rancher",
+    );
+    assert!(shows(&harness, "Vérifie avant de continuer"));
+    assert!(shows(&harness, "partie.exemple.fr:38281"));
 }
 
 #[test]

@@ -93,14 +93,25 @@ pub fn advanced<R>(
 
 /// Bouton principal bleu. Renvoie vrai au clic.
 pub fn primary_button(ui: &mut Ui, text: &str, enabled: bool) -> bool {
-    let button = egui::Button::new(
+    ui.add_enabled(enabled, primary(text, 0.0)).clicked()
+}
+
+/// Bouton principal bleu d'au moins `min_width` points de large (« Ouvrir » des listes :
+/// les boutons de plusieurs lignes ont la même largeur). Renvoie vrai au clic.
+pub fn primary_button_min(ui: &mut Ui, text: &str, min_width: f32) -> bool {
+    ui.add(primary(text, min_width)).clicked()
+}
+
+/// Le bouton bleu lui-même, partagé par les deux fonctions du dessus.
+fn primary(text: &str, min_width: f32) -> egui::Button<'_> {
+    egui::Button::new(
         RichText::new(text)
             .color(Color32::from_rgb(0x08, 0x12, 0x22))
             .strong()
             .family(theme::bold_family()),
     )
-    .fill(theme::ACCENT);
-    ui.add_enabled(enabled, button).clicked()
+    .fill(theme::ACCENT)
+    .min_size(egui::vec2(min_width, 0.0))
 }
 
 /// Un bouton d'un sélecteur à segments (« Rapide | Standard | Long ») : bordure grise,

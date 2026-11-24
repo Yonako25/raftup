@@ -109,7 +109,7 @@ fn lancer_la_partie_annonce_le_refus_reel() {
     let mut harness = salon();
     // Sans pseudo : c'est le pseudo qui manque.
     let first = refusal(&harness);
-    assert!(first.starts_with("Ton pseudo"), "{first}");
+    assert_eq!(first, "Indique ton pseudo.");
     assert!(shows(&harness, &first), "refus attendu : {first}");
 
     // Avec un pseudo : plus rien ne bloque. Le chiffrement par défaut ne demande

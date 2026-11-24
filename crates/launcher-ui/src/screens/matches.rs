@@ -134,7 +134,7 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            open = widgets::primary_button(ui, "   Ouvrir   ", true);
+            open = widgets::primary_button_min(ui, "Ouvrir", 90.0);
         });
     });
     // La progression de chacun, sous la ligne de la partie.

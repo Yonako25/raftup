@@ -160,6 +160,13 @@ fn read_link(state: &mut JoinState) {
     }
 }
 
+/// Vrai pour un lien qui a l'air entier (`raftup://…` avec une adresse) : c'est ce
+/// qu'on obtient en collant une invitation, pas en la tapant lettre par lettre.
+fn looks_complete(link: &str) -> bool {
+    let link = link.trim().to_ascii_lowercase();
+    link.starts_with("raftup://") && link.contains("addr=")
+}
+
 /// « hôte:port », en clair.
 fn host_text(invite: &Invite) -> String {
     format!("{}:{}", invite.address.host, invite.address.port)
@@ -193,6 +200,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                 state.invite = None;
                 state.instructions = None;
                 state.from_clipboard = false;
+                // Un lien complet collé est lu tout de suite : pas besoin de cliquer
+                // « Lire le lien » (le bouton reste pour un lien tapé à la main).
+                if looks_complete(&state.link) {
+                    read_link(state);
+                }
             }
             if state.from_clipboard {
                 ui.label(widgets::dim("Lien trouvé dans le presse-papiers.").size(12.0));
@@ -218,9 +230,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .color(theme::TEXT),
             );
             if invite.fingerprint.is_some() {
-                ui.label(widgets::dim(
-                    "Partie chiffrée par Raftup : les outils de Raftup vérifient le certificat du lien ; le mod du jeu se connecte en clair.",
-                ).size(13.0));
+                ui.label(widgets::dim("Partie chiffrée par Raftup.").size(13.0))
+                    .on_hover_text(
+                        "Les outils de Raftup vérifient le certificat du lien ; le mod du jeu \
+                         se connecte en clair.",
+                    );
             } else if !invite.address.secure {
                 ui.label(
                     RichText::new(
