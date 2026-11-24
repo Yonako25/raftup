@@ -94,7 +94,10 @@ impl App {
             create: create::CreateForm::with_prefs(saved),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
-            join: join::JoinState::default(),
+            // Les invitations reçues et pas encore suivies sont gardées dans `config.toml`.
+            join: launcher_core::Paths::from_os()
+                .map(|paths| join::JoinState::with_saved(paths.config_file()))
+                .unwrap_or_default(),
             friends: friends::FriendsState::new(),
             hub_games: hub_game::HubGames::default(),
             past_games: past_games::PastGames::new(launcher_core::Paths::from_os().ok()),

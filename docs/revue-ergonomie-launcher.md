@@ -76,6 +76,10 @@ Les points marqués **(à valider)** retirent quelque chose de l'écran ou chang
 
 21. **« En cours » montre aussi les parties à reprendre (demande du 24 novembre 2026, faite)** : en plus de la partie de ce PC et des parties sur Rafthub (en ligne ou en veille, déjà là), une section « À reprendre sur ce PC » liste les parties générées dans `generations/` (la plus récente d'abord), avec leurs jeux, la date de la dernière sauvegarde (`.raftup` à côté de la seed) ou « jamais lancée ». « Reprendre » relance tout de suite (choix de l'utilisatrice), avec les réglages du serveur de « Héberger un fichier » et **sans mot de passe de salle** (il n'est enregistré nulle part) ; la sauvegarde est reprise d'office ; bouton grisé quand une partie tourne déjà sur ce PC. Lecture du dossier dans `launcher-core`, hors du fil de l'interface.
 
+22. **« Rejoindre » : coller un lien, ou choisir une invitation reçue (demande du 24 novembre 2026 ; partie launcher faite, partie Rafthub à venir)**. Deux morceaux :
+    - *dans le launcher seul* : chaque lien `raftup://` reçu (clic dans le navigateur, presse-papiers, lien collé) est gardé dans une liste « Invitations reçues » (jeu, serveur, nom de joueur, reçue il y a…) tant qu'il n'est ni accepté ni ignoré ; « Rejoindre » l'ouvre, « Ignorer » le retire ; gardée dans `config.toml` pour survivre à un redémarrage. Aujourd'hui, un seul lien est gardé et un nouveau remplace l'ancien.
+    - *par Rafthub* : un ami t'invite à sa partie depuis son launcher, tu la vois dans la liste sans lien à coller. Rafthub ne connaît pas encore d'invitation à une partie (seulement les amis et les parties de chacun) : il faut une nouvelle API du hub, donc un ADR. Ça recoupe la proposition « salon par le Rafthub » (`cloud/adr-salon-rafthub`) : à traiter avec elle, pas ici.
+
 ### Impact faible
 
 13. **Défauts de mise en page** : chevauchement des colonnes de « Héberger un fichier » (6 px) ; colonne droite du salon qui dépasse la marge (9 px) ; bouton « Ouvrir » élargi par des espaces (`"   Ouvrir   "`) au lieu d'une largeur minimale.

@@ -83,6 +83,64 @@ fn rejoindre() -> Harness<'static, Rejoindre> {
     harness
 }
 
+/// Deux liens reçus : les deux restent dans « Invitations reçues » (et dans
+/// `config.toml`) ; « Rejoindre » rouvre le premier, « Ignorer » l'oublie.
+#[test]
+fn invitations_recues_gardees() {
+    let root = tempfile::tempdir().unwrap();
+    let config_file = root.path().join("config.toml");
+    let first = "raftup://join?v=1&addr=wss://un.exemple.fr:38281&slot=Bob&game=Slime%20Rancher";
+    let second = "raftup://join?v=1&addr=wss://deux.exemple.fr:38281&slot=Ana&game=Hollow%20Knight";
+    let mut join_state = JoinState::saved_without_clipboard(config_file.clone());
+    join::receive(&mut join_state, first);
+    join::receive(&mut join_state, second);
+    let state = Rejoindre {
+        join: join_state,
+        library: LibraryState::for_tests(
+            demo_catalog(),
+            Paths::under(root.path()),
+            Scan::default(),
+        ),
+        _root: root,
+    };
+    let mut harness = builder().build_ui_state(
+        |ui, s: &mut Rejoindre| {
+            join::show(ui, &mut s.join, &mut s.library);
+        },
+        state,
+    );
+    harness.run();
+    assert!(shows(&harness, "Invitations reçues"));
+    assert!(shows(&harness, "Slime Rancher"));
+    assert!(shows(&harness, "Hollow Knight"));
+    assert!(shows_part(
+        &harness,
+        "un.exemple.fr:38281 · joueur Bob · reçue"
+    ));
+    // Gardées sur le disque : un nouveau launcher les retrouve.
+    let reloaded = JoinState::saved_without_clipboard(config_file.clone());
+    assert_eq!(reloaded.received().len(), 2);
+
+    // Le second est ouvert dessous : seul le premier a « Rejoindre ».
+    assert_eq!(count(&harness, "Rejoindre"), 1);
+    click(&mut harness, "Rejoindre");
+    assert!(shows(&harness, "un.exemple.fr:38281"));
+    assert!(shows(&harness, "Bob"));
+
+    // « Ignorer » sur la première ligne (Slime Rancher) l'oublie, à l'écran et sur le disque.
+    use egui_kittest::kittest::Queryable;
+    harness
+        .query_all_by_label("Ignorer")
+        .next()
+        .expect("bouton Ignorer")
+        .click();
+    harness.run();
+    assert_eq!(harness.state().join.received().len(), 1);
+    let reloaded = JoinState::saved_without_clipboard(config_file);
+    assert_eq!(reloaded.received().len(), 1);
+    assert!(reloaded.received()[0].link.contains("deux.exemple.fr"));
+}
+
 #[test]
 fn rejoindre_attend_un_lien() {
     let harness = rejoindre();

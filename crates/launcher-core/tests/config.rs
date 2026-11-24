@@ -20,6 +20,45 @@ fn sample() -> UserConfig {
     config
 }
 
+/// Invitations reçues (écran « Rejoindre ») : la plus récente d'abord, sans doublon,
+/// bornées, et elles font l'aller-retour par le fichier.
+#[test]
+fn invitations_recues_gardees_dans_l_ordre() {
+    let mut config = UserConfig::default();
+    assert!(config.add_pending_invite(" raftup://join?a ", 10));
+    assert!(config.add_pending_invite("raftup://join?b", 20));
+    // Déjà en tête : rien ne change.
+    assert!(!config.add_pending_invite("raftup://join?b", 30));
+    // Reçu de nouveau : remonte en tête, avec sa nouvelle date.
+    assert!(config.add_pending_invite("raftup://join?a", 40));
+    let links: Vec<_> = config
+        .pending_invites
+        .iter()
+        .map(|i| i.link.as_str())
+        .collect();
+    assert_eq!(links, ["raftup://join?a", "raftup://join?b"]);
+    assert_eq!(config.pending_invites[0].received_at, 40);
+    assert!(!config.add_pending_invite("   ", 50));
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("config.toml");
+    config.save(&path).unwrap();
+    assert_eq!(load(&path).unwrap().config, config);
+
+    assert!(config.remove_pending_invite("raftup://join?a"));
+    assert!(!config.remove_pending_invite("raftup://join?a"));
+    assert_eq!(config.pending_invites.len(), 1);
+
+    for n in 0..30 {
+        config.add_pending_invite(&format!("raftup://join?n={n}"), n);
+    }
+    assert_eq!(
+        config.pending_invites.len(),
+        launcher_core::config::MAX_PENDING_INVITES
+    );
+    assert_eq!(config.pending_invites[0].link, "raftup://join?n=29");
+}
+
 #[test]
 fn fichier_absent_donne_les_defauts() {
     let tmp = tempfile::tempdir().unwrap();
