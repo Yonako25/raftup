@@ -459,6 +459,7 @@ fn captures_interface() {
             |ui, s: &mut Accueil| {
                 s.library.background(ui.ctx());
                 home::show(ui, &s.shared, &mut s.library, &s.join);
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );

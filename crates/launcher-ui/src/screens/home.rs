@@ -117,6 +117,12 @@ pub fn show(
         .and_then(|(id, _)| library.art_for(&ctx, id, ArtKind::Hero));
 
     super::page(ui, |ui| {
+        // Ligne de titre, comme les autres écrans : les boutons de fenêtre s'y posent au
+        // lieu de flotter sur l'image de la vitrine, et elle sert à déplacer la fenêtre.
+        crate::titlebar::title_row(ui, |ui| {
+            ui.label(widgets::title("Accueil", 28.0));
+        });
+        ui.add_space(12.0);
         // Vitrine : grande image du jeu mis en avant, le prochain pas par-dessus.
         let (mut heading, mut text, button, page) = step_texts(&step);
         // Une partie tourne : la vitrine dit laquelle et où elle en est (plus de panneau
