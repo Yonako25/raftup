@@ -217,15 +217,20 @@ fn info_panel(
         ui.add_space(10.0);
         info_line(ui, "Nom chez Archipelago", &profile.game.ap_game);
         info_line(ui, "Auteurs des mods", &profile.credits.authors.join(", "));
-        info_line(ui, "Licence", &profile.credits.license);
+        // « unlicensed » (pas de licence publiée par l'auteur) se dit en français.
+        let license = match profile.credits.license.as_str() {
+            "unlicensed" => "non précisée",
+            other => other,
+        };
+        info_line(ui, "Licence", license);
         ui.add_space(10.0);
         ui.label(widgets::caps("Ce que Raftup installe"));
         ui.add_space(4.0);
         for step in &profile.steps {
             let kind = match step.kind {
-                StepKind::ModLoader => "Mod loader",
-                StepKind::Mod => "Mod client",
-                StepKind::Apworld => "World",
+                StepKind::ModLoader => "Chargeur de mods",
+                StepKind::Mod => "Mod du jeu",
+                StepKind::Apworld => "Règles Archipelago",
             };
             ui.label(
                 egui::RichText::new(format!("{} · {kind} · {}", step.name, step.version))

@@ -219,7 +219,7 @@ pub fn show(
         }
         ui.add_space(14.0);
         ui.horizontal(|ui| {
-            if widgets::ghost_button(ui, "Passer") {
+            if widgets::ghost_button(ui, "Passer l'assistant") {
                 finish = true;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

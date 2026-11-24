@@ -69,8 +69,8 @@ pub enum Started {
 }
 
 /// Avertissement obligatoire avant d'ajouter un apworld (contrat, « Avertissements »).
-pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur votre PC, sans bac \
-     à sable. N'ajoutez que ceux que vous jugez sûrs.";
+pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur ton PC, sans bac \
+     à sable. N'ajoute que ceux que tu juges sûrs.";
 
 /// Boîte de dialogue à ouvrir après le dessin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1466,7 +1466,7 @@ fn build_generation(form: &CreateForm) -> Result<GenerateRequest, String> {
         form.crew_members()?;
     }
     if !form.apworlds.is_empty() && !form.apworld_ack {
-        return Err(format!("Cochez « J'ai compris » : {APWORLD_WARNING}"));
+        return Err(format!("Coche « J'ai compris » : {APWORLD_WARNING}"));
     }
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
@@ -1516,7 +1516,7 @@ pub(crate) fn build_request(
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
     if public_host.is_empty() {
-        return Err("Indiquez l'adresse que les autres joueurs utiliseront.".into());
+        return Err("Indique l'adresse que les autres joueurs utiliseront.".into());
     }
     let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
@@ -1751,7 +1751,7 @@ game: Slime Rancher
         form.public_host = "   ".into();
         assert_eq!(
             build_request(&form).unwrap_err(),
-            "Indiquez l'adresse que les autres joueurs utiliseront."
+            "Indique l'adresse que les autres joueurs utiliseront."
         );
     }
 

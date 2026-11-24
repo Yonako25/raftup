@@ -335,7 +335,7 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
                 let plural = if count > 1 { "s" } else { "" };
                 ui.label(
                     RichText::new(format!(
-                        "Seed {} générée pour {count} joueur{plural}.",
+                        "Partie {} générée pour {count} joueur{plural}.",
                         output.seed_name
                     ))
                     .color(theme::GREEN),
@@ -452,7 +452,7 @@ fn failure(error: &GenerationError) -> Failure {
             .unwrap_or_else(|| path.display().to_string())
     };
     let message = match error {
-        GenerationError::NoPlayers => "Ajoutez au moins un fichier YAML.".into(),
+        GenerationError::NoPlayers => "Ajoute au moins un fichier YAML.".into(),
         GenerationError::InvalidPlayerFile { path, reason } => {
             format!("Le fichier {} n'est pas utilisable : {reason}.", name(path))
         }
@@ -463,8 +463,8 @@ fn failure(error: &GenerationError) -> Failure {
         } => {
             let message = match missing_rom(kind, message) {
                 Some(file) => format!(
-                    "Un des jeux demande votre copie de sa ROM ({file}), introuvable. \
-                     Raftup ne fournit aucune ROM : ajoutez votre copie, ou retirez ce joueur."
+                    "Un des jeux demande ta copie de sa ROM ({file}), introuvable. \
+                     Raftup ne fournit aucune ROM : ajoute ta copie, ou retire ce joueur."
                 ),
                 None => format!("Archipelago n'a pas pu générer la partie : {message}."),
             };
@@ -569,7 +569,7 @@ mod tests {
         );
         assert_eq!(
             failure(&GenerationError::NoPlayers).message,
-            "Ajoutez au moins un fichier YAML."
+            "Ajoute au moins un fichier YAML."
         );
         let invalid = GenerationError::InvalidPlayerFile {
             path: PathBuf::from("joueurs").join("meta.yaml"),

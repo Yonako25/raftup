@@ -414,7 +414,7 @@ fn error_message(error: &GenerationError) -> String {
         GenerationError::Cancelled => "Installation annulée.".into(),
         GenerationError::Busy => "Une génération est déjà en cours.".into(),
         GenerationError::Download(e) => {
-            format!("Le téléchargement a échoué ({e}). Vérifiez votre connexion.")
+            format!("Le téléchargement a échoué ({e}). Vérifie ta connexion.")
         }
         other => format!("L'installation du générateur a échoué : {other}."),
     }
@@ -524,7 +524,7 @@ max_bytes = 3000000
         });
         let text = error_message(&download);
         assert!(text.starts_with("Le téléchargement a échoué ("), "{text}");
-        assert!(text.ends_with("Vérifiez votre connexion."), "{text}");
+        assert!(text.ends_with("Vérifie ta connexion."), "{text}");
     }
 
     #[test]

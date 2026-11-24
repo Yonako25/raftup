@@ -105,10 +105,10 @@ pub fn error_text(error: &HubClientError) -> String {
     }
     match error {
         HubClientError::TooLarge { .. } => {
-            format!("La seed est trop grosse pour Rafthub (32 Mio au plus). {ON_PC}")
+            format!("La partie est trop grosse pour Rafthub (32 Mio au plus). {ON_PC}")
         }
         HubClientError::File { detail, .. } => {
-            format!("Impossible de lire la seed sur ce PC : {detail}")
+            format!("Impossible de lire la partie sur ce PC : {detail}")
         }
         HubClientError::Network(detail) => {
             format!("Rafthub est injoignable ({detail}). Vérifie ta connexion, puis réessaie.")
@@ -124,7 +124,7 @@ pub fn error_text(error: &HubClientError) -> String {
                 "Trop de joueurs pour une partie hébergée par Rafthub (16 au plus). {ON_PC}"
             ),
             ErrorCode::SeedTooLarge => {
-                format!("La seed est trop grosse pour Rafthub (32 Mio au plus). {ON_PC}")
+                format!("La partie est trop grosse pour Rafthub (32 Mio au plus). {ON_PC}")
             }
             ErrorCode::HostingDisabled => {
                 format!("Ce Rafthub n'héberge pas de parties pour le moment. {ON_PC}")
@@ -133,7 +133,7 @@ pub fn error_text(error: &HubClientError) -> String {
                 "Rafthub n'a plus de place (aucun port libre) pour une nouvelle partie. \
                  Réessaie plus tard. {ON_PC}"
             ),
-            ErrorCode::InvalidSeed => format!("Rafthub n'a pas pu lire la seed : {message}"),
+            ErrorCode::InvalidSeed => format!("Rafthub n'a pas pu lire la partie : {message}"),
             ErrorCode::InvalidSave => {
                 format!("Rafthub a refusé la sauvegarde : {message}")
             }
@@ -236,7 +236,7 @@ pub fn show_upload(ui: &mut Ui, upload: &mut Upload) -> bool {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     ui.label(format!(
-                        "Envoi de la seed {} à Rafthub, qui démarre la partie…",
+                        "Envoi de la partie {} à Rafthub, qui démarre la partie…",
                         output.seed_name
                     ));
                 });
@@ -247,7 +247,7 @@ pub fn show_upload(ui: &mut Ui, upload: &mut Upload) -> bool {
                 ui.label(RichText::new(message.as_str()).color(theme::RED_TEXT));
                 ui.label(
                     widgets::dim(format!(
-                        "La seed {} est gardée : réessaie, ou choisis « Héberger sur mon PC » \
+                        "La partie {} est gardée : réessaie, ou choisis « Héberger sur mon PC » \
                          puis « Réessayer », sans régénérer.",
                         output.seed_name
                     ))
@@ -627,7 +627,7 @@ fn start_resume(state: &mut HubGames, ctx: &egui::Context, form: ResumeForm) {
     let built = format::parse_port(&form.port).and_then(|port| {
         let public_host = form.public_host.trim().to_string();
         if public_host.is_empty() {
-            return Err("Indiquez l'adresse que les autres joueurs utiliseront.".to_string());
+            return Err("Indique l'adresse que les autres joueurs utiliseront.".to_string());
         }
         let paths =
             load_paths().map_err(|e| format!("Dossiers de Raftup introuvables sur ce PC : {e}"))?;
@@ -809,7 +809,7 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
         }
         widgets::panel(ui, "Supprimer la partie", |ui| {
             ui.label(widgets::dim(
-                "Arrête le serveur sur Rafthub et efface la seed et la sauvegarde du hub. \
+                "Arrête le serveur sur Rafthub et efface la partie et sa sauvegarde du hub. \
                  Les joueurs ne pourront plus se connecter.",
             ));
             ui.add_space(6.0);
@@ -936,7 +936,7 @@ fn resume_panel(ui: &mut Ui, resume: &mut Resume) -> Option<ResumeForm> {
     let mut cancel = false;
     widgets::panel(ui, "Continuer sans Rafthub", |ui| {
         ui.label(widgets::dim(
-            "Télécharge la seed et la sauvegarde depuis Rafthub, puis relance la partie sur \
+            "Télécharge la partie et sa sauvegarde depuis Rafthub, puis relance la partie sur \
              ce PC. L'adresse change : les joueurs devront recevoir une nouvelle invitation.",
         ));
         ui.add_space(6.0);

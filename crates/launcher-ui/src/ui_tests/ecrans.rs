@@ -40,7 +40,7 @@ fn amis_non_connecte_propose_de_se_connecter() {
     assert!(shows(&harness, "Communauté"));
     assert!(shows_part(
         &harness,
-        "Un compte Rafthub sert à retrouver vos amis"
+        "Un compte Rafthub sert à retrouver tes amis"
     ));
     // « Se connecter » : le titre du panneau et le bouton (grisé tant que c'est vide).
     assert!(count(&harness, "Se connecter") >= 2);
@@ -84,12 +84,12 @@ fn rejoindre() -> Harness<'static, Rejoindre> {
 fn rejoindre_attend_un_lien() {
     let harness = rejoindre();
     assert!(shows(&harness, "Rejoindre une partie"));
-    assert!(shows(&harness, "Parties › Invitations"));
+    assert!(shows(&harness, "Parties › Rejoindre"));
     assert!(shows(&harness, "Lien d'invitation"));
-    assert!(shows(&harness, "Collez le lien d'invitation"));
+    assert!(shows(&harness, "Colle le lien d'invitation"));
     assert!(shows(&harness, "Lire le lien"));
     // Rien n'est lu tant qu'aucun lien n'est collé.
-    assert!(!shows(&harness, "Vérifiez avant de continuer"));
+    assert!(!shows(&harness, "Vérifie avant de continuer"));
 }
 
 #[test]

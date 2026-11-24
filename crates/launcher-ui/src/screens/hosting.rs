@@ -80,7 +80,7 @@ fn host_options(
 fn party_error_message(error: &PartyError) -> String {
     match error {
         PartyError::EmptyPublicHost => {
-            "Indiquez l'adresse que les autres joueurs utiliseront.".into()
+            "Indique l'adresse que les autres joueurs utiliseront.".into()
         }
         PartyError::AlreadyRunning => ALREADY_HOSTING.into(),
         other => start_failed(&other.to_string()),
@@ -103,7 +103,7 @@ fn readable_reason(reason: &str, port: u16) -> String {
         .any(|code| reason.contains(code))
         || reason.contains("Address already in use");
     if in_use {
-        format!("le port {port} est déjà utilisé par un autre programme, choisissez-en un autre")
+        format!("le port {port} est déjà utilisé par un autre programme, choisis-en un autre")
     } else {
         reason.to_string()
     }
@@ -174,7 +174,7 @@ pub fn show(ui: &mut Ui, hosting: &mut Hosting) -> bool {
                 ui.horizontal(|ui| {
                     ui.spinner();
                     ui.label(format!(
-                        "Démarrage du serveur sur le port {port} (seed {})…",
+                        "Démarrage du serveur sur le port {port} (partie {})…",
                         output.seed_name
                     ));
                 });
@@ -188,7 +188,7 @@ pub fn show(ui: &mut Ui, hosting: &mut Hosting) -> bool {
                 ui.label(RichText::new(message.as_str()).color(theme::RED_TEXT));
                 ui.label(
                     widgets::dim(format!(
-                        "La seed {} est gardée : corrigez les réglages du serveur (port…) \
+                        "La partie {} est gardée : corrige les réglages du serveur (port…) \
                          puis réessayez, sans régénérer.",
                         output.seed_name
                     ))
@@ -272,7 +272,7 @@ mod tests {
         options.public_host = " ".into();
         assert_eq!(
             host_options(&output(), options, false).unwrap_err(),
-            "Indiquez l'adresse que les autres joueurs utiliseront."
+            "Indique l'adresse que les autres joueurs utiliseront."
         );
     }
 
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(
             start_failed(&readable_reason(windows, 38296)),
             "Impossible de démarrer le serveur : le port 38296 est déjà utilisé par un autre \
-             programme, choisissez-en un autre."
+             programme, choisis-en un autre."
         );
         let linux = "serveur : erreur réseau : Address already in use (os error 98)";
         assert!(readable_reason(linux, 1).contains("le port 1 est déjà utilisé"));

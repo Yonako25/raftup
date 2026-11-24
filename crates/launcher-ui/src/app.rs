@@ -514,8 +514,8 @@ pub(crate) fn sidebar(
             vec![
                 ("En cours", hosted, Page::InProgress),
                 ("Salons", 0, Page::Soon("Salons")),
-                // « Invitations » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
-                ("Invitations", 0, Page::Join),
+                // « Rejoindre » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
+                ("Rejoindre", 0, Page::Join),
             ],
         ),
         ("RÉGLAGES", vec![("Paramètres", 0, Page::Settings)]),

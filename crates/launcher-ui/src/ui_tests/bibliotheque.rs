@@ -19,7 +19,7 @@ use crate::worker::Shared;
 /// Identifiant du jeu du catalogue de démonstration.
 const GAME: &str = "slime-rancher";
 /// Texte d'aide du champ « Adresse » de « Se connecter à la main ».
-const ADDRESS_HINT: &str = "ws://hote:38281";
+const ADDRESS_HINT: &str = "adresse:38281";
 
 pub struct Bibliotheque {
     pub library: LibraryState,
@@ -91,7 +91,8 @@ fn la_carte_et_la_fiche_du_jeu_s_affichent() {
     // Le nom du jeu : sous la jaquette de la carte, et en titre de la fiche.
     assert!(count(&harness, "Slime Rancher") >= 2);
     // La fiche : origine du profil, bouton principal, emplacement, étapes.
-    assert!(shows(&harness, "Profil du catalogue de Raftup"));
+    // Le cas normal (catalogue de Raftup) ne dit pas son origine.
+    assert!(!shows(&harness, "Profil du catalogue de Raftup"));
     assert!(shows(&harness, "Lancer le jeu"));
     assert!(shows(&harness, "Détecté via Steam"));
     assert!(shows(&harness, "MelonLoader"));
@@ -246,8 +247,8 @@ fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
         }
     }
     // La fiche du jeu choisi est à l'écran.
-    assert!(shows(&harness, "PROFIL D'INSTALLATION"));
-    let profile = harness.get_by_label("PROFIL D'INSTALLATION").rect();
+    assert!(shows(&harness, "CE QUE RAFTUP INSTALLE"));
+    let profile = harness.get_by_label("CE QUE RAFTUP INSTALLE").rect();
     assert!(
         profile.right() <= right_edge,
         "fiche hors de l'écran : {profile:?}"

@@ -372,7 +372,7 @@ fn captures_interface() {
     // Partie en cours : onglet Équipage, puis onglet Salon.
     for (tab, name) in [
         (None, "08-partie-en-cours"),
-        (Some("Salon"), "09-partie-salon"),
+        (Some("Vérifier les joueurs"), "09-partie-salon"),
     ] {
         // La Bibliothèque donne les jaquettes et l'image du bandeau (faux hub).
         let root = tempfile::tempdir().unwrap();
@@ -538,6 +538,49 @@ fn captures_interface() {
         );
         harness.run();
         save(&mut harness, "15-assistant");
+    }
+    // Salon avec le choix « Héberger sur Rafthub » (connecté à un hub qui héberge).
+    {
+        let mut harness = super::rafthub::salon(Some(super::rafthub::access()));
+        click(&mut harness, "Héberger sur Rafthub");
+        tall(&mut harness);
+        save(&mut harness, "16-salon-rafthub");
+    }
+    // Partie hébergée par Rafthub : en ligne, puis en veille.
+    {
+        use crate::screens::hub_game::HubGames;
+        let games = HubGames::with_game(
+            super::rafthub::created(),
+            Some(super::rafthub::status()),
+        );
+        let mut harness = super::rafthub::game_screen_with(games);
+        tall(&mut harness);
+        harness.run_steps(3);
+        save(&mut harness, "17-partie-rafthub");
+        let mut harness = super::rafthub::game_screen_with(super::rafthub::sleeping());
+        tall(&mut harness);
+        harness.run_steps(3);
+        save(&mut harness, "17b-partie-rafthub-veille");
+    }
+    // « En cours » : la partie de ce PC et une partie sur Rafthub.
+    {
+        use crate::screens::hub_game::HubGames;
+        struct EnCours {
+            shared: Shared,
+            games: HubGames,
+        }
+        let state = EnCours {
+            shared: demo_party(),
+            games: HubGames::with_game(super::rafthub::created(), None),
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut EnCours| {
+                crate::screens::matches::show(ui, &s.shared, None, &mut s.games);
+            },
+            state,
+        );
+        harness.run_steps(3);
+        save(&mut harness, "18-en-cours");
     }
     // Le dossier contient bien une image par écran.
     let count = std::fs::read_dir(output_dir())

@@ -354,7 +354,7 @@ fn conversion_contents(ui: &mut Ui, state: &mut NativeState, paths: &Paths, worl
     if apworlds.is_empty() {
         ui.label(
             widgets::dim(format!(
-                "Aucun apworld installé dans {} : installez-en un depuis « Mondes du registre » \
+                "Aucun apworld installé dans {} : installes-en un depuis « Mondes du registre » \
                  ou avec le profil d'un jeu.",
                 worlds_dir.display()
             ))
@@ -454,7 +454,7 @@ fn request_conversion(ctx: &egui::Context, conv: &mut Conversion, paths: &Paths)
 pub fn check_form(game: &str) -> Result<(), String> {
     if game.trim().is_empty() {
         return Err(
-            "Indiquez le nom du jeu (celui des YAML d'Archipelago) : cet apworld ne le donne pas."
+            "Indique le nom du jeu (celui des YAML d'Archipelago) : cet apworld ne le donne pas."
                 .to_string(),
         );
     }

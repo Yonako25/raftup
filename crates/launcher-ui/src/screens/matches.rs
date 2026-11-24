@@ -172,7 +172,7 @@ fn empty_state(ui: &mut Ui, starting: bool) -> bool {
     let mut clicked = false;
     widgets::panel(ui, "Aucune partie en cours", |ui| {
         ui.label(widgets::dim(
-            "Hébergez une seed générée par Archipelago : vos amis la rejoignent avec l'adresse que Raftup vous donne.",
+            "Prépare une partie avec tes amis : Raftup la génère, l'héberge et te donne leurs invitations.",
         ));
         ui.add_space(8.0);
         let text = if starting {

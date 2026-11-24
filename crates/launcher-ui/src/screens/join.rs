@@ -170,7 +170,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
     let ctx = ui.ctx().clone();
     check_clipboard(state);
     super::page(ui, |ui| {
-        super::header(ui, "Parties › Invitations", "Rejoindre une partie", |ui| {
+        super::header(ui, "Parties › Rejoindre", "Rejoindre une partie", |ui| {
             if widgets::ghost_button(ui, "Retour") {
                 goto = Some(Page::Hosted);
             }
@@ -181,7 +181,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
         }
 
         widgets::panel(ui, "Lien d'invitation", |ui| {
-            ui.label(widgets::dim("Collez le lien d'invitation").size(13.0));
+            ui.label(widgets::dim("Colle le lien d'invitation").size(13.0));
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut state.link)
                     .hint_text("raftup://join?v=1&addr=…")
@@ -207,7 +207,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             return;
         };
         ui.add_space(12.0);
-        widgets::panel(ui, "Vérifiez avant de continuer", |ui| {
+        widgets::panel(ui, "Vérifie avant de continuer", |ui| {
             ui.label(widgets::dim("Serveur").size(13.0));
             // L'hôte est montré en clair et en grand : c'est lui que le joueur doit reconnaître.
             ui.label(
@@ -238,7 +238,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .color(theme::TEXT),
             );
             ui.add_space(8.0);
-            ui.label(widgets::dim("Slot").size(13.0));
+            ui.label(widgets::dim("Joueur").size(13.0));
             if invite.slot.is_some() {
                 ui.label(
                     RichText::new(&state.slot)
@@ -249,7 +249,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             } else {
                 ui.add(
                     egui::TextEdit::singleline(&mut state.slot)
-                        .hint_text("Votre nom de slot")
+                        .hint_text("Ton nom de joueur")
                         .char_limit(SLOT_MAX)
                         .desired_width(220.0),
                 );
@@ -280,7 +280,7 @@ fn continue_to(
 ) {
     let slot = state.slot.trim().to_string();
     if slot.is_empty() {
-        state.error = Some("Saisissez le nom de votre slot.".to_string());
+        state.error = Some("Indique ton nom de joueur.".to_string());
         return;
     }
     state.error = None;
@@ -300,8 +300,8 @@ fn continue_to(
             // Même format que le lancement manuel : adresse, retour à la ligne, slot.
             ctx.copy_text(format!("{url}\n{slot}"));
             state.instructions = Some(
-                "Ouvrez votre jeu et saisissez l'adresse et le slot copiés. \
-                 (Adresse et slot copiés dans le presse-papiers.)"
+                "Ouvre ton jeu et saisis l'adresse et le nom de joueur copiés. \
+                 (Adresse et nom de joueur copiés dans le presse-papiers.)"
                     .to_string(),
             );
         }

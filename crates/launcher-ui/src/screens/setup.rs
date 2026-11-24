@@ -155,11 +155,11 @@ fn config_panel(
             form.pending_pick = Some(Pick::Seed);
         }
         if form.seed_loading {
-            ui.label(widgets::dim("Lecture de la seed…").size(13.0));
+            ui.label(widgets::dim("Lecture de la partie…").size(13.0));
         } else if let Some(seed) = &form.seed {
             ui.label(
                 RichText::new(format!(
-                    "Seed {} · générée avec Archipelago {} · {} joueur{}",
+                    "Partie {} · générée avec Archipelago {} · {} joueur{}",
                     seed.seed_name,
                     seed.generator_version,
                     seed.players,
@@ -335,13 +335,13 @@ fn pick_pem(name: &str, extensions: &[&str]) -> Option<PathBuf> {
 fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     let seed = match (&form.seed_path, &form.seed) {
         (Some(path), Some(_)) => path.clone(),
-        _ => return Err("Choisissez d'abord un fichier de partie (.archipelago) valide.".into()),
+        _ => return Err("Choisis d'abord un fichier de partie (.archipelago) valide.".into()),
     };
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
     if public_host.is_empty() {
         return Err(
-            "Indiquez l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into(),
+            "Indique l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into(),
         );
     }
     let encryption = security::encryption(form.security, &form.cert, &form.key)?;
@@ -362,7 +362,7 @@ fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
     widgets::panel(ui, "Dans cette partie", |ui| {
         let Some(seed) = seed else {
             ui.label(widgets::dim(
-                "Choisissez un fichier de partie pour voir ses slots.",
+                "Choisis un fichier de partie pour voir ses joueurs.",
             ));
             return;
         };

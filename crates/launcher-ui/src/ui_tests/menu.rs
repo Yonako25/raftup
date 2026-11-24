@@ -49,7 +49,7 @@ fn le_menu_ne_montre_aucune_entree_bientot() {
         "Accueil",
         "Bibliothèque",
         "En cours",
-        "Invitations",
+        "Rejoindre",
         "Paramètres",
         "Parcourir",
         "CATALOGUE",

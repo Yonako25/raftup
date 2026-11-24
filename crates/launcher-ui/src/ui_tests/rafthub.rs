@@ -17,7 +17,7 @@ use crate::screens::hub_game::{self, HubAccess, HubGames, Resume};
 use crate::screens::matches;
 use crate::worker::{Shared, Worker};
 
-fn access() -> HubAccess {
+pub(super) fn access() -> HubAccess {
     HubAccess {
         url: HubUrl::parse("http://127.0.0.1:1").unwrap(),
         token: SessionToken::new("jeton"),
@@ -25,7 +25,7 @@ fn access() -> HubAccess {
 }
 
 /// Le salon, avec ou sans accès au hub pour héberger.
-struct Salon {
+pub(super) struct Salon {
     form: CreateForm,
     error: Option<String>,
     worker: Worker,
@@ -33,7 +33,7 @@ struct Salon {
     access: Option<HubAccess>,
 }
 
-fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
+pub(super) fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
     let state = Salon {
         form: CreateForm::for_tests(&demo_catalog()),
         error: None,
@@ -146,7 +146,7 @@ fn hosted() -> HostedGame {
     }
 }
 
-fn created() -> CreatedGame {
+pub(super) fn created() -> CreatedGame {
     serde_json::from_value(serde_json::json!({
         "id": "0123456789abcdef0123456789abcdef",
         "name": "Partie de Mimi",
@@ -165,7 +165,7 @@ fn created() -> CreatedGame {
     .unwrap()
 }
 
-fn status() -> GameStatus {
+pub(super) fn status() -> GameStatus {
     let slot = SlotStatus {
         team: 0,
         slot: 1,
@@ -203,7 +203,7 @@ fn game_screen(status: Option<GameStatus>) -> Harness<'static, HubGames> {
     game_screen_with(HubGames::with_game(created(), status))
 }
 
-fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
+pub(super) fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
     let mut harness = builder().build_ui_state(
         |ui, games: &mut HubGames| {
             hub_game::show(ui, games);
@@ -269,7 +269,7 @@ fn supprimer_demande_une_confirmation() {
 }
 
 /// Une partie en veille : « En veille », « Réveiller », et pas d'équipage à montrer.
-fn sleeping() -> HubGames {
+pub(super) fn sleeping() -> HubGames {
     let mut json = serde_json::to_value(hosted_view()).unwrap();
     json["state"] = "sleeping".into();
     json["admin_password"] = "ADMINPASS1234567".into();

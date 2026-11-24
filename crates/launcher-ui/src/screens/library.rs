@@ -623,7 +623,7 @@ pub fn view(
 
     let (label, tone) = match (found, status) {
         (_, Some(Err(e))) => (format!("Reçu illisible : {e}"), Tone::Warning),
-        (None, _) => ("Jeu non trouvé".to_string(), Tone::Dim),
+        (None, _) => ("Pas sur ce PC".to_string(), Tone::Dim),
         (Some(g), _) if g.state == GameState::Updating => {
             ("Mise à jour du jeu en cours".to_string(), Tone::Warning)
         }
@@ -806,7 +806,7 @@ impl LibraryState {
                                 // Connexion à la main : on copie l'adresse et le slot.
                                 ctx.copy_text(format!("{}\n{}", self.form.address, self.form.slot));
                                 Notice::Info(format!(
-                                    "Jeu lancé. {instructions} (adresse et slot copiés dans le presse-papiers)"
+                                    "Jeu lancé. {instructions} (adresse et nom de joueur copiés dans le presse-papiers)"
                                 ))
                             }
                             Ok(None) => Notice::Info("Jeu lancé.".into()),
@@ -1814,12 +1814,11 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             ui.vertical(|ui| {
                 ui.label(widgets::title(&profile.game.name, 26.0));
                 ui.label(RichText::new(&view.label).color(tone_color(view.tone)));
-                let origin = if state.registry.is_from_registry(&id) {
-                    "Profil du registre signé"
-                } else {
-                    "Profil du catalogue de Raftup"
-                };
-                ui.label(widgets::dim(origin).size(12.0));
+                // L'origine ne se dit que pour un jeu ajouté par le registre : le cas
+                // normal (catalogue de Raftup) n'a pas besoin d'être annoncé.
+                if state.registry.is_from_registry(&id) {
+                    ui.label(widgets::dim("Ajouté par le registre signé").size(12.0));
+                }
             });
         });
         if is_untested(&profile) {
@@ -1854,10 +1853,10 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             let hint = match launch_mode(&state.form) {
                 LaunchMode::Connect(_) => None,
                 LaunchMode::Offline => {
-                    Some("Sans adresse ni slot, le jeu démarre sans se connecter à une partie.")
+                    Some("Sans invitation, le jeu démarre sans se connecter à une partie.")
                 }
                 LaunchMode::Incomplete => Some(
-                    "Pour vous connecter, renseignez l'adresse et le slot sous « Se connecter à la main ».",
+                    "Pour te connecter, indique l'adresse et ton nom de joueur sous « Se connecter à la main ».",
                 ),
             };
             if let Some(hint) = hint {
@@ -1906,10 +1905,7 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
         // Profil d'installation.
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            ui.label(widgets::caps("Profil d'installation"));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(widgets::dim("versions épinglées").size(12.0));
-            });
+            ui.label(widgets::caps("Ce que Raftup installe"));
         });
         let installed = matches!(
             status,
@@ -1964,9 +1960,9 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
 fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
     use launcher_core::profile::StepKind;
     let kind = match step.kind {
-        StepKind::ModLoader => "Mod loader",
-        StepKind::Mod => "Mod client",
-        StepKind::Apworld => "World",
+        StepKind::ModLoader => "Chargeur de mods",
+        StepKind::Mod => "Mod du jeu",
+        StepKind::Apworld => "Règles Archipelago",
     };
     Frame::new()
         .fill(theme::FIELD)
@@ -1988,7 +1984,7 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let text = if installed {
-                        "Installé · hash vérifié"
+                        "Installé · vérifié"
                     } else {
                         "À installer"
                     };
@@ -2003,10 +1999,10 @@ fn connection_summary(form: &LaunchForm) -> String {
     match launch_mode(form) {
         LaunchMode::Connect(c) => format!("Slot {} sur {}", c.slot, c.address),
         LaunchMode::Offline => {
-            "Aucune partie choisie : ouvrez un lien d'invitation (« Invitations »).".to_string()
+            "Aucune partie choisie : ouvre un lien d'invitation (« Rejoindre »).".to_string()
         }
         LaunchMode::Incomplete => {
-            "Connexion incomplète : il manque l'adresse ou le slot.".to_string()
+            "Connexion incomplète : il manque l'adresse ou le nom de joueur.".to_string()
         }
     }
 }
@@ -2018,10 +2014,10 @@ fn connection_form(ui: &mut Ui, form: &mut LaunchForm, profile: &Profile, shared
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
             ui.label(widgets::dim("Adresse"));
-            ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("ws://hote:38281"));
+            ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("adresse:38281"));
             ui.end_row();
 
-            ui.label(widgets::dim("Slot"));
+            ui.label(widgets::dim("Joueur"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut form.slot).desired_width(140.0));
                 // Les slots de ce jeu dans la partie hébergée, pour ne pas taper le nom.
@@ -2054,7 +2050,7 @@ fn connection_form(ui: &mut Ui, form: &mut LaunchForm, profile: &Profile, shared
         });
     if let launcher_core::profile::ConnectMethod::Manual { .. } = profile.launch.connect {
         ui.label(widgets::dim(
-            "Saisie dans le jeu : Raftup copie l'adresse et le slot dans le presse-papiers.",
+            "Saisie dans le jeu : Raftup copie l'adresse et le nom de joueur dans le presse-papiers.",
         ));
     }
 }
@@ -2238,7 +2234,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let catalog = catalog();
         let p = catalog.get("demo").unwrap();
         let v = view(p, None, Some(&Ok(InstallStatus::NotInstalled)));
-        assert_eq!(v.label, "Jeu non trouvé");
+        assert_eq!(v.label, "Pas sur ce PC");
         assert!(!v.can_install && !v.can_launch && !v.can_uninstall);
     }
 

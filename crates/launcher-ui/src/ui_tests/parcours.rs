@@ -388,7 +388,7 @@ fn assistant_en_trois_pas_jusqu_au_salon() {
 #[test]
 fn assistant_passe_se_ferme() {
     let mut harness = bienvenue(scan(false));
-    click(&mut harness, "Passer");
+    click(&mut harness, "Passer l'assistant");
     assert!(!harness.state().welcome.is_open());
     assert!(!shows(&harness, "Ton compte Rafthub"));
     assert_eq!(harness.state().outcome, welcome::Outcome::default());
@@ -441,7 +441,7 @@ fn partie(status: HostStatus) -> Harness<'static, Partie> {
 fn lancer_et_connecter_apres_le_choix_du_slot() {
     let mut harness = partie(hosted(true));
     assert!(shows(&harness, "Je joue :"));
-    assert!(shows_part(&harness, "Choisis ton slot"));
+    assert!(shows_part(&harness, "Choisis ton joueur"));
     // Deux joueurs : pas de choix d'office, le bouton ne fait rien.
     click(&mut harness, "Lancer et connecter");
     assert_eq!(
@@ -451,7 +451,7 @@ fn lancer_et_connecter_apres_le_choix_du_slot() {
 
     // La liste déroulante n'a pas de libellé : on la trouve par le texte affiché.
     harness
-        .get_by(|node| node.data().value() == Some("choisir mon slot"))
+        .get_by(|node| node.data().value() == Some("choisis ton joueur"))
         .click();
     harness.run();
     click(&mut harness, "Ioka · Slime Rancher");

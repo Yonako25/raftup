@@ -346,7 +346,7 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new(
-                        "Cette adresse ne marche que sur ce PC : indiquez votre adresse publique pour inviter des amis.",
+                        "Cette adresse ne marche que sur ce PC : indique ton adresse publique pour inviter des amis.",
                     )
                     .size(13.0)
                     .color(theme::AMBER),
@@ -411,7 +411,7 @@ fn my_place(
             ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 ui.label("Je joue :");
-                let shown = chosen.map_or("choisir mon slot".to_string(), |slot| {
+                let shown = chosen.map_or("choisis ton joueur".to_string(), |slot| {
                     format!("{} · {}", slot.name, slot.game)
                 });
                 egui::ComboBox::from_id_salt("mon_slot")
@@ -442,7 +442,7 @@ fn my_place(
             if chosen.is_none() {
                 ui.label(
                     widgets::dim(
-                        "Choisis ton slot : Raftup lance ton jeu et le connecte à la partie.",
+                        "Choisis ton joueur : Raftup lance ton jeu et le connecte à la partie.",
                     )
                     .size(13.0),
                 );
@@ -493,7 +493,7 @@ fn main_area(
             ("Équipage", Some(players)),
             ("Chat", Some(chats)),
             ("Journal", None),
-            ("Salon", None),
+            ("Vérifier les joueurs", None),
         ],
         &mut state.tab,
     );
@@ -601,7 +601,7 @@ fn crew_row(
                     ui.spacing_mut().item_spacing.y = 6.0;
                     widgets::bar(ui, width, format::progress(slot.checked, slot.total), color);
                     ui.label(
-                        widgets::dim(format!("{} / {} emplacements", slot.checked, slot.total))
+                        widgets::dim(format!("{} / {} lieux", slot.checked, slot.total))
                             .size(12.0),
                     );
                 },
@@ -768,7 +768,7 @@ fn side_area(ui: &mut Ui, shared: &Shared, status: &HostStatus, now: f64) {
             &format!("{} / {}", t.checked, t.locations),
             30.0,
         ));
-        ui.label(widgets::dim("emplacements trouvés").size(13.0));
+        ui.label(widgets::dim("lieux trouvés").size(13.0));
         ui.add_space(4.0);
         widgets::bar(
             ui,
@@ -922,7 +922,7 @@ fn salon_tab(
         ui.add_space(4.0);
         ui.label(
             widgets::dim(
-                "« Tester » ouvre une vraie connexion sur le slot, puis la referme : elle \
+                "« Tester » ouvre une vraie connexion pour ce joueur, puis la referme : elle \
                  apparaît brièvement dans le journal du serveur.",
             )
             .size(12.0),
