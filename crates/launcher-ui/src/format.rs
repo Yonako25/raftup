@@ -93,11 +93,22 @@ pub fn join_names(names: &[String]) -> String {
 /// « Partie Slime Rancher et A Short Hike », « Partie Slime Rancher, A Short Hike +2 ».
 /// Le numéro de seed ne parle pas aux joueurs : il reste dans l'infobulle et le journal.
 pub fn party_title(slots: &[SlotStatus]) -> String {
+    games_title(
+        slots
+            .iter()
+            .filter(|s| !s.is_group)
+            .map(|s| s.game.as_str()),
+    )
+}
+
+/// Le même nom, à partir des jeux des joueurs (dans leur ordre, doublons compris) : sert
+/// aussi pour une partie arrêtée, lue dans sa seed.
+pub fn games_title<'a>(player_games: impl IntoIterator<Item = &'a str>) -> String {
     // Les jeux sans doublon, dans l'ordre des joueurs (un `Vec` garde l'ordre).
     let mut games: Vec<String> = Vec::new();
-    for slot in slots.iter().filter(|s| !s.is_group) {
-        if !games.contains(&slot.game) {
-            games.push(slot.game.clone());
+    for game in player_games {
+        if !games.iter().any(|g| g == game) {
+            games.push(game.to_string());
         }
     }
     match games.len() {

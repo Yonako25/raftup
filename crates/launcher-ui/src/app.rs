@@ -4,8 +4,8 @@ use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke
 
 use crate::format;
 use crate::screens::{
-    catalog, create, friends, home, hub_game, join, library, matches, running, settings, setup,
-    soon, welcome,
+    catalog, create, friends, home, hub_game, join, library, matches, past_games, running,
+    settings, setup, soon, welcome,
 };
 use crate::theme;
 use crate::widgets;
@@ -53,6 +53,8 @@ pub struct App {
     friends: friends::FriendsState,
     /// Parties hébergées sur Rafthub (ADR 0052).
     hub_games: hub_game::HubGames,
+    /// Parties arrêtées de ce PC, à reprendre depuis « En cours ».
+    past_games: past_games::PastGames,
     /// Filtre de l'écran « Catalogue ».
     catalog: catalog::CatalogState,
     /// Assistant du premier lancement (plan de l'interface, étape 5).
@@ -95,6 +97,7 @@ impl App {
             join: join::JoinState::default(),
             friends: friends::FriendsState::new(),
             hub_games: hub_game::HubGames::default(),
+            past_games: past_games::PastGames::new(launcher_core::Paths::from_os().ok()),
             catalog: catalog::CatalogState::default(),
             welcome: welcome::load(),
             update: crate::update_ui::UpdateState::new(),
@@ -335,9 +338,13 @@ impl eframe::App for App {
                     None
                 }
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
-                Page::InProgress => {
-                    matches::show(ui, &shared, self.error.as_deref(), &mut self.hub_games)
-                }
+                Page::InProgress => matches::show(
+                    ui,
+                    &shared,
+                    self.error.as_deref(),
+                    &mut self.hub_games,
+                    &mut self.past_games,
+                ),
                 Page::HubGame => hub_game::show(ui, &mut self.hub_games),
                 Page::Library => {
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
@@ -370,6 +377,18 @@ impl eframe::App for App {
                 goto = next;
             }
         });
+        // « Reprendre » d'une partie arrêtée : relance tout de suite, avec les réglages du
+        // serveur de « Héberger un fichier » et sans mot de passe de salle.
+        if let Some(seed) = self.past_games.take_resume() {
+            match setup::relaunch_options(&self.setup, seed) {
+                Ok(options) => {
+                    self.error = None;
+                    self.worker.send(Command::Start(options));
+                    goto = Some(Page::Hosted);
+                }
+                Err(message) => self.error = Some(message),
+            }
+        }
         // Boutons de fenêtre par-dessus tout le reste (premier plan).
         crate::titlebar::show(ui.ctx());
 

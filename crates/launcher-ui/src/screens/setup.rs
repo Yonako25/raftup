@@ -340,6 +340,28 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     })
 }
 
+/// Réglages pour reprendre `seed` d'un clic (« Reprendre » de l'écran « En cours ») : ceux
+/// du serveur de cet écran (port, adresse, chiffrement, webhook), sans mot de passe de
+/// salle (il n'est enregistré nulle part). La sauvegarde à côté de la seed est reprise.
+pub fn relaunch_options(form: &SetupForm, seed: PathBuf) -> Result<HostOptions, String> {
+    let port = format::parse_port(&form.port)?;
+    let public_host = match form.public_host.trim() {
+        "" => "localhost".to_string(),
+        host => host.to_string(),
+    };
+    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
+    let webhook = format::parse_webhook(&form.webhook)?;
+    Ok(HostOptions {
+        seed,
+        port,
+        password: None,
+        encryption,
+        public_host,
+        disable_save: false,
+        webhook,
+    })
+}
+
 fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
     widgets::panel(ui, "Dans cette partie", |ui| {
         let Some(seed) = seed else {

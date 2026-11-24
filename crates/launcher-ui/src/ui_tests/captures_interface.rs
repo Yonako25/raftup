@@ -561,20 +561,26 @@ fn captures_interface() {
         harness.run_steps(3);
         save(&mut harness, "17b-partie-rafthub-veille");
     }
-    // « En cours » : la partie de ce PC et une partie sur Rafthub.
+    // « En cours » : la partie de ce PC, une partie sur Rafthub et deux parties à reprendre.
     {
         use crate::screens::hub_game::HubGames;
+        use crate::screens::past_games::PastGames;
         struct EnCours {
             shared: Shared,
             games: HubGames,
+            past: PastGames,
         }
         let state = EnCours {
             shared: demo_party(),
             games: HubGames::with_game(super::rafthub::created(), None),
+            past: PastGames::with_games(vec![
+                super::reprise::game("111", &["Hollow Knight", "Stardew Valley"], true),
+                super::reprise::game("222", &["A Short Hike"], false),
+            ]),
         };
         let mut harness = builder().build_ui_state(
             |ui, s: &mut EnCours| {
-                crate::screens::matches::show(ui, &s.shared, None, &mut s.games);
+                crate::screens::matches::show(ui, &s.shared, None, &mut s.games, &mut s.past);
                 crate::titlebar::show(ui.ctx());
             },
             state,

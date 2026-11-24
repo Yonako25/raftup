@@ -74,6 +74,8 @@ Les points marqués **(à valider)** retirent quelque chose de l'écran ou chang
 
 20. **Boutons de fenêtre intégrés (demande du 24 novembre 2026, « améliore l'intégration », faite)** : les trois boutons se posent sur la ligne de titre de chaque écran (`titlebar::title_row`), alignés sur le bord droit des panneaux ; les actions de la page se rangent à leur gauche avec un espace net ; style du thème (40 × 32, icône grise, fond de champ au survol, rouge pour fermer, angles de 2 px) ; la ligne de titre se glisse pour déplacer la fenêtre, double-clic pour l'agrandir. L'Accueil, sans ligne de titre, les garde dans le coin haut.
 
+21. **« En cours » montre aussi les parties à reprendre (demande du 24 novembre 2026, faite)** : en plus de la partie de ce PC et des parties sur Rafthub (en ligne ou en veille, déjà là), une section « À reprendre sur ce PC » liste les parties générées dans `generations/` (la plus récente d'abord), avec leurs jeux, la date de la dernière sauvegarde (`.raftup` à côté de la seed) ou « jamais lancée ». « Reprendre » relance tout de suite (choix de l'utilisatrice), avec les réglages du serveur de « Héberger un fichier » et **sans mot de passe de salle** (il n'est enregistré nulle part) ; la sauvegarde est reprise d'office ; bouton grisé quand une partie tourne déjà sur ce PC. Lecture du dossier dans `launcher-core`, hors du fil de l'interface.
+
 ### Impact faible
 
 13. **Défauts de mise en page** : chevauchement des colonnes de « Héberger un fichier » (6 px) ; colonne droite du salon qui dépasse la marge (9 px) ; bouton « Ouvrir » élargi par des espaces (`"   Ouvrir   "`) au lieu d'une largeur minimale.

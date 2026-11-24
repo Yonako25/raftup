@@ -421,7 +421,13 @@ fn en_cours_liste_la_partie_hebergee() {
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut State| {
-            if let Some(page) = matches::show(ui, &s.shared, None, &mut s.games) {
+            if let Some(page) = matches::show(
+                ui,
+                &s.shared,
+                None,
+                &mut s.games,
+                &mut crate::screens::past_games::PastGames::default(),
+            ) {
                 s.asked = Some(page);
             }
         },
@@ -456,7 +462,13 @@ fn en_cours_mene_au_salon() {
         };
         let mut harness = builder().build_ui_state(
             |ui, s: &mut State| {
-                if let Some(page) = matches::show(ui, &s.shared, None, &mut s.games) {
+                if let Some(page) = matches::show(
+                    ui,
+                    &s.shared,
+                    None,
+                    &mut s.games,
+                    &mut crate::screens::past_games::PastGames::default(),
+                ) {
                     s.asked = Some(page);
                 }
             },

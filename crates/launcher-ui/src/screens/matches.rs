@@ -6,11 +6,13 @@
 //! son serveur (question laissée ouverte, voir la PR de l'étape 3).
 //!
 //! En dessous, les parties hébergées sur Rafthub par le compte connecté (ADR 0052) :
-//! « Ouvrir » mène à leur écran (`hub_game`).
+//! « Ouvrir » mène à leur écran (`hub_game`). Puis les parties arrêtées de ce PC, à
+//! reprendre (`past_games`).
 
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 
 use super::hub_game::{self, HubGames};
+use super::past_games::{self, PastGames};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -18,7 +20,13 @@ use crate::widgets;
 use crate::worker::Shared;
 
 /// `error` : erreur du worker à montrer (« La partie s'est arrêtée d'elle-même »…).
-pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGames) -> Option<Page> {
+pub fn show(
+    ui: &mut Ui,
+    shared: &Shared,
+    error: Option<&str>,
+    hub: &mut HubGames,
+    past: &mut PastGames,
+) -> Option<Page> {
     let mut goto = None;
     super::page(ui, |ui| {
         // Titre et sous-titre sur la même ligne, comme sur la maquette.
@@ -43,8 +51,8 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
                     goto = Some(Page::Hosted);
                 }
             });
-        } else if hub.count() == 0 && empty_state(ui, shared.starting) {
-            // Rien sur ce PC ni sur Rafthub : le panneau mène au salon.
+        } else if hub.count() == 0 && past.count(shared) == 0 && empty_state(ui, shared.starting) {
+            // Rien sur ce PC ni sur Rafthub, rien à reprendre : le panneau mène au salon.
             goto = Some(Page::Create);
         }
         // Parties hébergées sur Rafthub : `open` garde l'identifiant cliqué, la
@@ -70,12 +78,15 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
             hub_game::select(hub, &id);
             goto = Some(Page::HubGame);
         }
+        // Les parties arrêtées de ce PC. « Reprendre » est traité par `App`, qui a le
+        // worker et les réglages du serveur.
+        past_games::show(ui, past, shared);
     });
     goto
 }
 
 /// Cadre de la liste : les lignes sont collées, séparées par un trait fin.
-fn list_frame(ui: &mut Ui, add_rows: impl FnOnce(&mut Ui)) {
+pub(super) fn list_frame(ui: &mut Ui, add_rows: impl FnOnce(&mut Ui)) {
     Frame::new()
         .fill(theme::panel_fill())
         .stroke(Stroke::new(1.0, theme::BORDER))
