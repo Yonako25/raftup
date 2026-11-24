@@ -37,11 +37,15 @@ pub fn folders(paths: &Paths) -> [(&'static str, &'static str, String); 3] {
 pub fn show(ui: &mut Ui, friends_state: &mut FriendsState, paths: Option<&Paths>) -> Option<Page> {
     super::page(ui, |ui| {
         super::header(ui, "Raftup", "Paramètres", |_| {});
-        friends::hub_panel(ui, friends_state);
         if let Some(paths) = paths {
-            ui.add_space(12.0);
             folders_panel(ui, paths);
+            ui.add_space(6.0);
         }
+        // L'adresse du Rafthub est un réglage d'expert : repliée, sous les dossiers.
+        let mut open_now = false;
+        widgets::advanced(ui, "settings_hub", "Serveur Rafthub", &mut open_now, |ui| {
+            friends::hub_panel(ui, friends_state);
+        });
     });
     None
 }

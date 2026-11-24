@@ -6,11 +6,13 @@
 //! son serveur (question laissée ouverte, voir la PR de l'étape 3).
 //!
 //! En dessous, les parties hébergées sur Rafthub par le compte connecté (ADR 0052) :
-//! « Ouvrir » mène à leur écran (`hub_game`).
+//! « Ouvrir » mène à leur écran (`hub_game`). Puis les parties arrêtées de ce PC, à
+//! reprendre (`past_games`).
 
 use egui::{CornerRadius, Frame, Margin, RichText, Stroke, Ui};
 
 use super::hub_game::{self, HubGames};
+use super::past_games::{self, PastGames};
 use crate::app::Page;
 use crate::format;
 use crate::theme;
@@ -18,13 +20,24 @@ use crate::widgets;
 use crate::worker::Shared;
 
 /// `error` : erreur du worker à montrer (« La partie s'est arrêtée d'elle-même »…).
-pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGames) -> Option<Page> {
+pub fn show(
+    ui: &mut Ui,
+    shared: &Shared,
+    error: Option<&str>,
+    hub: &mut HubGames,
+    past: &mut PastGames,
+) -> Option<Page> {
     let mut goto = None;
     super::page(ui, |ui| {
         // Titre et sous-titre sur la même ligne, comme sur la maquette.
-        ui.horizontal(|ui| {
+        crate::titlebar::title_row(ui, |ui| {
             ui.label(widgets::title("En cours", 28.0));
             ui.label(widgets::dim("Les parties lancées").size(14.0));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::primary_button(ui, "Nouvelle partie", true) {
+                    goto = Some(Page::Create);
+                }
+            });
         });
         ui.add_space(14.0);
         if let Some(message) = error {
@@ -38,9 +51,9 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
                     goto = Some(Page::Hosted);
                 }
             });
-        } else if hub.count() == 0 && empty_state(ui, shared.starting) {
-            // Rien sur ce PC ni sur Rafthub : le panneau propose d'héberger.
-            goto = Some(Page::Hosted);
+        } else if hub.count() == 0 && past.count(shared) == 0 && empty_state(ui, shared.starting) {
+            // Rien sur ce PC ni sur Rafthub, rien à reprendre : le panneau mène au salon.
+            goto = Some(Page::Create);
         }
         // Parties hébergées sur Rafthub : `open` garde l'identifiant cliqué, la
         // sélection se fait après la boucle (on ne modifie pas `hub` en le parcourant).
@@ -65,12 +78,15 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
             hub_game::select(hub, &id);
             goto = Some(Page::HubGame);
         }
+        // Les parties arrêtées de ce PC. « Reprendre » est traité par `App`, qui a le
+        // worker et les réglages du serveur.
+        past_games::show(ui, past, shared);
     });
     goto
 }
 
 /// Cadre de la liste : les lignes sont collées, séparées par un trait fin.
-fn list_frame(ui: &mut Ui, add_rows: impl FnOnce(&mut Ui)) {
+pub(super) fn list_frame(ui: &mut Ui, add_rows: impl FnOnce(&mut Ui)) {
     Frame::new()
         .fill(theme::panel_fill())
         .stroke(Stroke::new(1.0, theme::BORDER))
@@ -106,7 +122,7 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 3.0;
             ui.label(
-                RichText::new(format!("seed {}", status.seed.seed_name))
+                RichText::new(format::party_title(&status.server.slots))
                     .size(17.0)
                     .strong()
                     .family(theme::bold_family())
@@ -129,7 +145,7 @@ fn hosted_row(ui: &mut Ui, shared: &Shared) -> bool {
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            open = widgets::primary_button(ui, "   Ouvrir   ", true);
+            open = widgets::primary_button_min(ui, "Ouvrir", 90.0);
         });
     });
     // La progression de chacun, sous la ligne de la partie.
@@ -172,13 +188,13 @@ fn empty_state(ui: &mut Ui, starting: bool) -> bool {
     let mut clicked = false;
     widgets::panel(ui, "Aucune partie en cours", |ui| {
         ui.label(widgets::dim(
-            "Hébergez une seed générée par Archipelago : vos amis la rejoignent avec l'adresse que Raftup vous donne.",
+            "Prépare une partie avec tes amis : Raftup la génère, l'héberge et te donne leurs invitations.",
         ));
         ui.add_space(8.0);
         let text = if starting {
             "Démarrage…"
         } else {
-            "Héberger une partie"
+            "Préparer une partie"
         };
         clicked = widgets::primary_button(ui, text, true);
     });

@@ -86,13 +86,11 @@ pub fn show(
         super::header(
             ui,
             "Parties › Nouvelle partie",
-            "Héberger une partie",
+            "Héberger un fichier de partie",
             |ui| {
-                if widgets::ghost_button(ui, "Créer depuis des YAML") {
+                // Le chemin normal est le salon : cet écran n'en est qu'une variante.
+                if widgets::ghost_button(ui, "Retour au salon") {
                     goto = Some(Page::Create);
-                }
-                if widgets::ghost_button(ui, "Rejoindre par lien") {
-                    goto = Some(Page::Join);
                 }
             },
         );
@@ -155,11 +153,11 @@ fn config_panel(
             form.pending_pick = Some(Pick::Seed);
         }
         if form.seed_loading {
-            ui.label(widgets::dim("Lecture de la seed…").size(13.0));
+            ui.label(widgets::dim("Lecture de la partie…").size(13.0));
         } else if let Some(seed) = &form.seed {
             ui.label(
                 RichText::new(format!(
-                    "Seed {} · générée avec Archipelago {} · {} joueur{}",
+                    "Partie {} · générée avec Archipelago {} · {} joueur{}",
                     seed.seed_name,
                     seed.generator_version,
                     seed.players,
@@ -179,14 +177,7 @@ fn config_panel(
 
         // Réglages d'expert repliés, avec un résumé d'une ligne de ce qui sera utilisé.
         ui.add_space(4.0);
-        ui.label(
-            widgets::dim(format::server_summary(
-                &form.port,
-                &form.public_host,
-                form.security.summary(),
-            ))
-            .size(12.0),
-        );
+        super::create::address_line(ui, &form.port, &form.public_host);
         // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
         let mut open_now = form.open_advanced;
         widgets::advanced(
@@ -216,13 +207,6 @@ fn config_panel(
                     }
                 }
             }
-            let scheme = form.security.scheme();
-            ui.label(
-                widgets::dim(format!(
-                    "Les joueurs se connecteront à {scheme}://hôte:port"
-                ))
-                .size(13.0),
-            );
         });
         if shared.starting {
             ui.label(widgets::dim("Démarrage…"));
@@ -335,14 +319,12 @@ fn pick_pem(name: &str, extensions: &[&str]) -> Option<PathBuf> {
 fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     let seed = match (&form.seed_path, &form.seed) {
         (Some(path), Some(_)) => path.clone(),
-        _ => return Err("Choisissez d'abord un fichier de partie (.archipelago) valide.".into()),
+        _ => return Err("Choisis d'abord un fichier de partie (.archipelago) valide.".into()),
     };
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
     if public_host.is_empty() {
-        return Err(
-            "Indiquez l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into(),
-        );
+        return Err("Indique l'adresse publique (nom de domaine ou IP) donnée aux joueurs.".into());
     }
     let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
@@ -358,11 +340,33 @@ fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     })
 }
 
+/// Réglages pour reprendre `seed` d'un clic (« Reprendre » de l'écran « En cours ») : ceux
+/// du serveur de cet écran (port, adresse, chiffrement, webhook), sans mot de passe de
+/// salle (il n'est enregistré nulle part). La sauvegarde à côté de la seed est reprise.
+pub fn relaunch_options(form: &SetupForm, seed: PathBuf) -> Result<HostOptions, String> {
+    let port = format::parse_port(&form.port)?;
+    let public_host = match form.public_host.trim() {
+        "" => "localhost".to_string(),
+        host => host.to_string(),
+    };
+    let encryption = security::encryption(form.security, &form.cert, &form.key)?;
+    let webhook = format::parse_webhook(&form.webhook)?;
+    Ok(HostOptions {
+        seed,
+        port,
+        password: None,
+        encryption,
+        public_host,
+        disable_save: false,
+        webhook,
+    })
+}
+
 fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
     widgets::panel(ui, "Dans cette partie", |ui| {
         let Some(seed) = seed else {
             ui.label(widgets::dim(
-                "Choisissez un fichier de partie pour voir ses slots.",
+                "Choisis un fichier de partie pour voir ses joueurs.",
             ));
             return;
         };

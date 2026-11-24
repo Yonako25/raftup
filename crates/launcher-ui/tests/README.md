@@ -64,7 +64,7 @@ cargo captures
 ```
 
 Cet alias (`.cargo/config.toml`) dessine chaque écran du launcher avec des données de démonstration et écrit un PNG par écran dans `target/captures/` :
-menu, Bibliothèque (sans hub et avec un faux hub), fiche d'un jeu, Salon, Rejoindre, Héberger, Partie en cours (Équipage et Salon), Amis, Paramètres, Accueil, Catalogue, Mon profil, assistant du premier lancement.
+menu, Bibliothèque (sans hub et avec un faux hub), fiche d'un jeu, Salon (sur ce PC et sur Rafthub), Rejoindre, Héberger un fichier, Partie en cours (Équipage et « Vérifier les joueurs »), partie sur Rafthub (en ligne et en veille), En cours, Amis, Paramètres, Accueil, Catalogue, Mon profil, assistant du premier lancement.
 Aucun réseau, aucun port, aucun fichier du joueur ; les illustrations sont fabriquées par le test.
 
 - Sous Linux sans carte graphique, il faut le pilote Vulkan logiciel de Mesa : `sudo apt-get install mesa-vulkan-drivers`.

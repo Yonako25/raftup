@@ -34,6 +34,8 @@ pub fn salon() -> Harness<'static, Salon> {
         |ui, s: &mut Salon| {
             // Champs distincts de `s` : Rust permet de les emprunter en même temps.
             create::show(ui, &mut s.form, &mut s.error, &s.worker, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );
@@ -57,7 +59,9 @@ fn le_salon_s_affiche() {
     assert!(shows(&harness, "Ton monde"));
     assert!(shows(&harness, "Équipage"));
     assert!(shows(&harness, "AJOUTER UN JOUEUR"));
-    assert!(shows(&harness, "PROFIL DE SESSION"));
+    // Les versions figées tiennent en une ligne (le panneau « Profil de session » est retiré).
+    assert!(!shows(&harness, "PROFIL DE SESSION"));
+    assert!(shows_part(&harness, "Archipelago 0.6.8 · Raftup "));
     assert!(shows(&harness, "LANCER LA PARTIE"));
     assert!(shows(&harness, "Générer et héberger"));
     // L'hôte sans pseudo s'appelle « Toi » ; son jeu, seul au catalogue, est déjà choisi.
@@ -107,7 +111,7 @@ fn lancer_la_partie_annonce_le_refus_reel() {
     let mut harness = salon();
     // Sans pseudo : c'est le pseudo qui manque.
     let first = refusal(&harness);
-    assert!(first.starts_with("Ton pseudo"), "{first}");
+    assert_eq!(first, "Indique ton pseudo.");
     assert!(shows(&harness, &first), "refus attendu : {first}");
 
     // Avec un pseudo : plus rien ne bloque. Le chiffrement par défaut ne demande

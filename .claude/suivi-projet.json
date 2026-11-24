@@ -605,6 +605,11 @@
       "date": "2026-11-24",
       "summary": "Lot 2 du convertisseur : sondeur élargi et sommes de compteurs (format de monde v4, ADR 0055) ; 36 mondes d'Archipelago convertis sur 81.",
       "tasks": []
+    },
+    {
+      "date": "2026-11-24",
+      "summary": "Revue d'ergonomie du launcher : 18 changements codés en six étapes (tutoiement, sans jargon, parties nommées, « Nouvelle partie » dans le menu, salon et écran Rafthub allégés) ; branche ergonomie-launcher, à regarder dans la vraie fenêtre.",
+      "tasks": []
     }
   ]
 }

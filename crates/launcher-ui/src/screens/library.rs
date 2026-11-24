@@ -307,7 +307,8 @@ impl LibraryState {
 
     /// Badge d'un jeu du catalogue : celui de son monde natif s'il y en a un d'installé
     /// (par le nom du jeu chez Archipelago), sinon « Archipelago » (son apworld ou le
-    /// monde intégré au générateur officiel).
+    /// monde intégré au générateur officiel). Toujours un badge : le joueur voit d'un coup
+    /// d'œil d'où vient le monde de chaque jeu.
     pub fn pin_for(&self, ap_game: &str) -> Option<WorldPin> {
         let native = self
             .native
@@ -623,7 +624,7 @@ pub fn view(
 
     let (label, tone) = match (found, status) {
         (_, Some(Err(e))) => (format!("Reçu illisible : {e}"), Tone::Warning),
-        (None, _) => ("Jeu non trouvé".to_string(), Tone::Dim),
+        (None, _) => ("Pas sur ce PC".to_string(), Tone::Dim),
         (Some(g), _) if g.state == GameState::Updating => {
             ("Mise à jour du jeu en cours".to_string(), Tone::Warning)
         }
@@ -806,7 +807,7 @@ impl LibraryState {
                                 // Connexion à la main : on copie l'adresse et le slot.
                                 ctx.copy_text(format!("{}\n{}", self.form.address, self.form.slot));
                                 Notice::Info(format!(
-                                    "Jeu lancé. {instructions} (adresse et slot copiés dans le presse-papiers)"
+                                    "Jeu lancé. {instructions} (adresse et nom de joueur copiés dans le presse-papiers)"
                                 ))
                             }
                             Ok(None) => Notice::Info("Jeu lancé.".into()),
@@ -1223,7 +1224,7 @@ fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
     let scanning = state.scanning.is_some();
     let mut refresh = false;
     let mut add_dir = false;
-    let row = ui.horizontal(|ui| {
+    let row = crate::titlebar::title_row(ui, |ui| {
         ui.label(widgets::title("Bibliothèque", 28.0));
         ui.label(widgets::dim(summary).size(14.0));
         // De droite à gauche : le premier bouton ajouté est le plus à droite.
@@ -1569,6 +1570,19 @@ impl WorldPin {
         }
     }
 
+    /// Phrase de la fiche du jeu : d'où vient le monde, et ce que ça change pour le joueur.
+    pub fn description(self) -> &'static str {
+        match self {
+            WorldPin::Native => "Monde natif : écrit pour Raftup, généré sans Python.",
+            WorldPin::Converted => {
+                "Monde converti depuis Archipelago : généré par Raftup, avec les mêmes règles."
+            }
+            WorldPin::Archipelago => {
+                "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+            }
+        }
+    }
+
     /// Couleur du texte et du fond du badge.
     fn colors(self) -> (Color32, Color32) {
         match self {
@@ -1814,14 +1828,23 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             ui.vertical(|ui| {
                 ui.label(widgets::title(&profile.game.name, 26.0));
                 ui.label(RichText::new(&view.label).color(tone_color(view.tone)));
-                let origin = if state.registry.is_from_registry(&id) {
-                    "Profil du registre signé"
-                } else {
-                    "Profil du catalogue de Raftup"
-                };
-                ui.label(widgets::dim(origin).size(12.0));
+                // L'origine ne se dit que pour un jeu ajouté par le registre : le cas
+                // normal (catalogue de Raftup) n'a pas besoin d'être annoncé.
+                if state.registry.is_from_registry(&id) {
+                    ui.label(widgets::dim("Ajouté par le registre signé").size(12.0));
+                }
             });
         });
+        // Sorte de monde (Natif, Converti ou Archipelago) : le même badge que sur la
+        // jaquette, avec une phrase qui dit ce qu'il veut dire.
+        if let Some(pin) = state.pin_for(&profile.game.ap_game) {
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                let (fg, bg) = pin.colors();
+                widgets::pill(ui, pin.label(), fg, bg);
+                ui.label(widgets::dim(pin.description()).size(12.0));
+            });
+        }
         if is_untested(&profile) {
             ui.add_space(6.0);
             ui.label(RichText::new(UNTESTED_NOTE).size(13.0).color(theme::AMBER));
@@ -1830,39 +1853,40 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
 
         // Boutons d'action : « Lancer » en bleu quand le jeu est prêt ; sinon c'est
         // l'installation qui devient l'action principale.
+        // « Réinstaller » d'un jeu déjà prêt n'est pas une action de tous les jours : il
+        // descend en petit bouton à côté de « Désinstaller ». « Mettre à jour » et
+        // « Réparer » restent en grand, à côté de « Lancer le jeu ».
+        let small_reinstall = view.can_launch && view.install_label == "Réinstaller";
+        let mut install_clicked = false;
         ui.horizontal(|ui| {
             let half = (ui.available_width() - ui.spacing().item_spacing.x) / 2.0;
+            let full = ui.available_width();
             if let (true, Some(game)) = (view.can_launch, &found) {
                 let ready = launch_mode(&state.form) != LaunchMode::Incomplete;
-                if big_button(ui, "Lancer le jeu", true, ready && !busy, half) {
+                let width = if view.can_install && !small_reinstall {
+                    half
+                } else {
+                    full
+                };
+                let response = big_button(ui, "Lancer le jeu", true, ready && !busy, width);
+                if response {
                     let dir = game.install_dir.clone();
                     state.start_launch(ctx, &profile, &dir);
                 }
             }
-            if let (true, Some(game)) = (view.can_install, &found) {
+            if view.can_install && !small_reinstall {
                 let primary = !view.can_launch;
-                let clicked = big_button(ui, view.install_label, primary, !busy, half);
-                let auto = std::mem::take(&mut state.dev_auto_install);
-                if (clicked || auto) && !busy {
-                    let dir = game.install_dir.clone();
-                    let force = matches!(status, Some(Ok(InstallStatus::InProgress)));
-                    state.start_install(ctx, &profile, dir, force);
-                }
+                let width = if view.can_launch { half } else { full };
+                install_clicked = big_button(ui, view.install_label, primary, !busy, width);
             }
         });
-        if view.can_launch {
-            let hint = match launch_mode(&state.form) {
-                LaunchMode::Connect(_) => None,
-                LaunchMode::Offline => {
-                    Some("Sans adresse ni slot, le jeu démarre sans se connecter à une partie.")
-                }
-                LaunchMode::Incomplete => Some(
-                    "Pour vous connecter, renseignez l'adresse et le slot sous « Se connecter à la main ».",
-                ),
-            };
-            if let Some(hint) = hint {
-                ui.label(widgets::dim(hint).size(12.0));
-            }
+        if view.can_launch && launch_mode(&state.form) == LaunchMode::Incomplete {
+            ui.label(
+                widgets::dim(
+                    "Pour te connecter, indique l'adresse et ton nom de joueur sous « Se connecter à la main ».",
+                )
+                .size(12.0),
+            );
         }
         if let Some(task) = &state.task {
             ui.add_space(6.0);
@@ -1903,21 +1927,23 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             }
         }
 
-        // Profil d'installation.
-        ui.add_space(12.0);
-        ui.horizontal(|ui| {
-            ui.label(widgets::caps("Profil d'installation"));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(widgets::dim("versions épinglées").size(12.0));
-            });
-        });
+        // Profil d'installation : replié, c'est un détail (le joueur voit déjà « Prêt »).
         let installed = matches!(
             status,
             Some(Ok(InstallStatus::Installed | InstallStatus::UpdateAvailable))
         );
-        for step in &profile.steps {
-            step_row(ui, step, installed);
-        }
+        let mut open_now = false;
+        widgets::advanced(
+            ui,
+            "library_steps",
+            "Ce que Raftup installe",
+            &mut open_now,
+            |ui| {
+                for step in &profile.steps {
+                    step_row(ui, step, installed);
+                }
+            },
+        );
 
         // Connexion : d'habitude remplie par une invitation (écran « Rejoindre ») ; la
         // saisie à la main est repliée.
@@ -1937,10 +1963,24 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
             state.form.open_now = open_now;
         }
 
-        // Désinstallation, en deux clics.
-        if view.can_uninstall {
+        // Réinstallation (en petit) et désinstallation, en deux clics.
+        if view.can_uninstall || small_reinstall {
             ui.add_space(12.0);
             ui.separator();
+        }
+        if small_reinstall && !state.confirm_uninstall {
+            install_clicked |= widgets::ghost_button(ui, "Réinstaller");
+        }
+        // L'installation part d'ici, quel que soit le bouton (grand ou petit).
+        if let (true, Some(game)) = (view.can_install, &found) {
+            let auto = std::mem::take(&mut state.dev_auto_install);
+            if (install_clicked || auto) && !busy {
+                let dir = game.install_dir.clone();
+                let force = matches!(status, Some(Ok(InstallStatus::InProgress)));
+                state.start_install(ctx, &profile, dir, force);
+            }
+        }
+        if view.can_uninstall {
             if state.confirm_uninstall {
                 ui.label(widgets::dim(
                     "Les fichiers posés par Raftup seront retirés et les originaux restaurés.",
@@ -1964,9 +2004,9 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
 fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
     use launcher_core::profile::StepKind;
     let kind = match step.kind {
-        StepKind::ModLoader => "Mod loader",
-        StepKind::Mod => "Mod client",
-        StepKind::Apworld => "World",
+        StepKind::ModLoader => "Chargeur de mods",
+        StepKind::Mod => "Mod du jeu",
+        StepKind::Apworld => "Règles Archipelago",
     };
     Frame::new()
         .fill(theme::FIELD)
@@ -1988,7 +2028,7 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let text = if installed {
-                        "Installé · hash vérifié"
+                        "Installé · vérifié"
                     } else {
                         "À installer"
                     };
@@ -2003,10 +2043,10 @@ fn connection_summary(form: &LaunchForm) -> String {
     match launch_mode(form) {
         LaunchMode::Connect(c) => format!("Slot {} sur {}", c.slot, c.address),
         LaunchMode::Offline => {
-            "Aucune partie choisie : ouvrez un lien d'invitation (« Invitations »).".to_string()
+            "Aucune partie choisie : ouvre un lien d'invitation (« Rejoindre »).".to_string()
         }
         LaunchMode::Incomplete => {
-            "Connexion incomplète : il manque l'adresse ou le slot.".to_string()
+            "Connexion incomplète : il manque l'adresse ou le nom de joueur.".to_string()
         }
     }
 }
@@ -2018,10 +2058,10 @@ fn connection_form(ui: &mut Ui, form: &mut LaunchForm, profile: &Profile, shared
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
             ui.label(widgets::dim("Adresse"));
-            ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("ws://hote:38281"));
+            ui.add(egui::TextEdit::singleline(&mut form.address).hint_text("adresse:38281"));
             ui.end_row();
 
-            ui.label(widgets::dim("Slot"));
+            ui.label(widgets::dim("Joueur"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(&mut form.slot).desired_width(140.0));
                 // Les slots de ce jeu dans la partie hébergée, pour ne pas taper le nom.
@@ -2054,7 +2094,7 @@ fn connection_form(ui: &mut Ui, form: &mut LaunchForm, profile: &Profile, shared
         });
     if let launcher_core::profile::ConnectMethod::Manual { .. } = profile.launch.connect {
         ui.label(widgets::dim(
-            "Saisie dans le jeu : Raftup copie l'adresse et le slot dans le presse-papiers.",
+            "Saisie dans le jeu : Raftup copie l'adresse et le nom de joueur dans le presse-papiers.",
         ));
     }
 }
@@ -2238,7 +2278,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let catalog = catalog();
         let p = catalog.get("demo").unwrap();
         let v = view(p, None, Some(&Ok(InstallStatus::NotInstalled)));
-        assert_eq!(v.label, "Jeu non trouvé");
+        assert_eq!(v.label, "Pas sur ce PC");
         assert!(!v.can_install && !v.can_launch && !v.can_uninstall);
     }
 

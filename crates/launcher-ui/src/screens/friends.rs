@@ -512,7 +512,7 @@ impl FriendsState {
             }
             Ok(Done::Renamed { username, lists }) => {
                 self.notice = Some(Notice::Info(format!(
-                    "Votre pseudo est maintenant {username}."
+                    "Ton pseudo est maintenant {username}."
                 )));
                 self.username = Some(username);
                 self.lists = lists;
@@ -638,7 +638,7 @@ impl FriendsState {
         if self.url.as_ref().ok() == Some(&url) {
             self.pending_switch = None;
             self.notice = Some(Notice::Info(format!(
-                "Vous êtes déjà sur le Rafthub {}.",
+                "Tu es déjà sur le Rafthub {}.",
                 url.host()
             )));
             return;
@@ -667,7 +667,7 @@ impl FriendsState {
         }
         self.pending_switch = None;
         self.notice = Some(Notice::Info(format!(
-            "Vous êtes maintenant sur le Rafthub {}.",
+            "Tu es maintenant sur le Rafthub {}.",
             url.host()
         )));
         true
@@ -902,7 +902,7 @@ fn run(client: HubClient, env: &Env<'_>, action: Action) -> Outcome {
                     client,
                     result: Ok(Done::DiscordLinkChanged {
                         linked: true,
-                        message: "Compte Discord lié : vous pourrez aussi vous connecter \
+                        message: "Compte Discord lié : tu pourras aussi te connecter \
                                   avec Discord."
                             .to_string(),
                     }),
@@ -935,7 +935,7 @@ fn run(client: HubClient, env: &Env<'_>, action: Action) -> Outcome {
                 Some(match outcome {
                     RequestOutcome::Pending => format!("Demande envoyée à {}.", name.trim()),
                     RequestOutcome::Accepted => {
-                        format!("{} vous avait déjà demandé : vous êtes amis.", name.trim())
+                        format!("{} t'avait déjà demandé : vous êtes amis.", name.trim())
                     }
                 })
             });
@@ -944,7 +944,7 @@ fn run(client: HubClient, env: &Env<'_>, action: Action) -> Outcome {
         Action::Accept(name) => {
             let result = client
                 .accept_request(&name)
-                .map(|()| Some(format!("{name} est maintenant votre ami.")));
+                .map(|()| Some(format!("{name} est maintenant ton ami.")));
             after(client, env, result)
         }
         Action::Decline(name) => {
@@ -962,7 +962,7 @@ fn run(client: HubClient, env: &Env<'_>, action: Action) -> Outcome {
         Action::Remove(name) => {
             let result = client
                 .remove_friend(&name)
-                .map(|()| Some(format!("{name} n'est plus dans vos amis.")));
+                .map(|()| Some(format!("{name} n'est plus dans tes amis.")));
             after(client, env, result)
         }
         Action::Rename(name) => match client.change_username(&name) {
@@ -1074,7 +1074,7 @@ fn after(
             Outcome {
                 client: HubClient::new(url),
                 result: Ok(Done::LoggedOut {
-                    message: Some("Session expirée : reconnectez-vous.".to_string()),
+                    message: Some("Session expirée : reconnecte-toi.".to_string()),
                 }),
             }
         }
@@ -1115,13 +1115,13 @@ fn sort_friends(friends: &mut [Friend]) {
 fn error_text(error: &HubClientError) -> String {
     match error {
         HubClientError::Network(_) => {
-            "Rafthub ne répond pas : vérifiez son adresse (en bas de l'écran) ou votre connexion."
+            "Rafthub ne répond pas : vérifie son adresse (dans les Paramètres) ou ta connexion."
                 .to_string()
         }
         HubClientError::Api {
             code: ErrorCode::Internal,
             ..
-        } => "Rafthub a rencontré une erreur. Réessayez plus tard.".to_string(),
+        } => "Rafthub a rencontré une erreur. Réessaie plus tard.".to_string(),
         // Inscription sur un hub fermé ou sur invitation (ADR 0036) : nos propres
         // phrases, qui disent quoi faire dans le formulaire.
         HubClientError::Api {
@@ -1140,8 +1140,7 @@ fn error_text(error: &HubClientError) -> String {
         HubClientError::Api {
             code: ErrorCode::UsernameChangeTooSoon,
             ..
-        } => "Vous avez déjà changé de pseudo il y a moins de 24 heures : réessayez demain."
-            .to_string(),
+        } => "Tu as déjà changé de pseudo il y a moins de 24 heures : réessaie demain.".to_string(),
         // Connexion Discord : nos propres phrases aussi.
         HubClientError::Api { code, .. } if discord_text(code).is_some() => {
             discord_text(code).unwrap_or_default().to_string()
@@ -1164,16 +1163,16 @@ fn discord_text(code: &ErrorCode) -> Option<&'static str> {
     Some(match code {
         ErrorCode::DiscordDisabled => "Ce Rafthub ne propose pas la connexion Discord.",
         ErrorCode::DiscordRefused => "Connexion refusée chez Discord.",
-        ErrorCode::DiscordUnavailable => "Discord ne répond pas : réessayez dans un moment.",
+        ErrorCode::DiscordUnavailable => "Discord ne répond pas : réessaie dans un moment.",
         ErrorCode::DiscordTaken => {
-            "Ce compte Discord est déjà lié à un autre compte Rafthub : connectez-vous avec \
-             Discord pour l'utiliser, ou déliez-le de l'autre compte d'abord."
+            "Ce compte Discord est déjà lié à un autre compte Rafthub : connecte-toi avec \
+             Discord pour l'utiliser, ou délie-le de l'autre compte d'abord."
         }
         ErrorCode::AlreadyLinked => {
             "Un autre compte Discord est déjà lié à ce compte : déliez-le d'abord."
         }
         ErrorCode::LastIdentity => {
-            "Discord est le seul moyen de vous connecter à ce compte : impossible de le délier."
+            "Discord est le seul moyen de te connecter à ce compte : impossible de le délier."
         }
         ErrorCode::InvalidToken => "Connexion Discord expirée : recommencez.",
         ErrorCode::AccountSuspended => "Ce compte est suspendu.",
@@ -1238,8 +1237,15 @@ pub fn show(ui: &mut Ui, state: &mut FriendsState) -> Option<Page> {
     let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
         let logged_in = state.username.is_some();
-        // Copie de l'hôte : la fermeture ci-dessous emprunte `state` en écriture.
-        let host = state.host().map(str::to_string);
+        // Copie de l'hôte, montré seulement si ce n'est pas le Rafthub par défaut (le
+        // joueur n'a pas à savoir où il est s'il n'a rien changé). Copie : la fermeture
+        // ci-dessous emprunte `state` en écriture.
+        let host = state
+            .url
+            .as_ref()
+            .ok()
+            .filter(|url| url.as_str() != DEFAULT_HUB_URL)
+            .map(|url| url.host().to_string());
         super::header(ui, "Communauté", "Amis", |ui| {
             if let Some(host) = &host {
                 ui.label(widgets::dim(format!("Rafthub · {host}")).size(12.0));
@@ -1360,7 +1366,7 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     };
     widgets::panel(ui, heading, |ui| {
         ui.label(widgets::dim(
-            "Un compte Rafthub sert à retrouver vos amis et à voir qui joue. \
+            "Un compte Rafthub sert à retrouver tes amis et à voir qui joue. \
              Le launcher marche aussi sans compte.",
         ));
         ui.add_space(8.0);
@@ -1392,9 +1398,9 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
                 ui.add(
                     egui::TextEdit::singleline(&mut state.email)
                         .hint_text(if state.mode == Mode::Register {
-                            "vous@exemple.org"
+                            "toi@exemple.org"
                         } else {
-                            "vous@exemple.org ou votre pseudo"
+                            "toi@exemple.org ou ton pseudo"
                         })
                         .desired_width(280.0),
                 );
@@ -1469,7 +1475,7 @@ fn account_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
             }
             ui.label(
                 widgets::dim(
-                    "Ouvre votre navigateur sur Discord. Un nouveau joueur choisit \
+                    "Ouvre ton navigateur sur Discord. Un nouveau joueur choisit \
                      ensuite son pseudo.",
                 )
                 .size(12.0),
@@ -1483,11 +1489,11 @@ fn discord_waiting_panel(ui: &mut Ui, state: &mut FriendsState, authorize_url: &
     widgets::panel(ui, "Connexion avec Discord", |ui| {
         ui.horizontal(|ui| {
             ui.spinner();
-            ui.label(RichText::new("En attente de votre réponse sur Discord…").color(theme::TEXT));
+            ui.label(RichText::new("En attente de ta réponse sur Discord…").color(theme::TEXT));
         });
         ui.add_space(6.0);
         ui.label(widgets::dim(
-            "Votre navigateur s'est ouvert sur la page de Discord. Acceptez, puis revenez \
+            "Ton navigateur s'est ouvert sur la page de Discord. Accepte, puis reviens \
              ici : la connexion se termine toute seule.",
         ));
         ui.add_space(10.0);
@@ -1496,7 +1502,7 @@ fn discord_waiting_panel(ui: &mut Ui, state: &mut FriendsState, authorize_url: &
                 // Si le navigateur ne s'est pas ouvert, le joueur colle le lien lui-même.
                 ui.ctx().copy_text(authorize_url.to_string());
                 state.notice = Some(Notice::Info(
-                    "Lien copié : collez-le dans votre navigateur.".to_string(),
+                    "Lien copié : colle-le dans ton navigateur.".to_string(),
                 ));
             }
             if widgets::ghost_button(ui, "Annuler") {
@@ -1516,7 +1522,7 @@ fn discord_name_panel(
 ) {
     widgets::panel(ui, "Choisir un pseudo", |ui| {
         ui.label(widgets::dim(
-            "Discord a confirmé votre identité. Choisissez le pseudo que vos amis \
+            "Discord a confirmé ton identité. Choisis le pseudo que tes amis \
              verront sur ce Rafthub.",
         ));
         ui.add_space(10.0);
@@ -1574,7 +1580,7 @@ fn friends_panel(ui: &mut Ui, state: &mut FriendsState, ctx: &egui::Context) {
     widgets::panel(ui, &heading, |ui| {
         if state.lists.friends.is_empty() {
             ui.label(widgets::dim(
-                "Aucun ami pour l'instant. Ajoutez-en un par son pseudo.",
+                "Aucun ami pour l'instant. Ajoutes-en un par son pseudo.",
             ));
         }
         for friend in &state.lists.friends {
@@ -1655,11 +1661,11 @@ fn discord_link_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<A
     if let DiscordStep::Waiting { authorize_url, .. } = state.discord.clone() {
         ui.horizontal(|ui| {
             ui.spinner();
-            ui.label(RichText::new("En attente de votre réponse sur Discord…").color(theme::TEXT));
+            ui.label(RichText::new("En attente de ta réponse sur Discord…").color(theme::TEXT));
         });
         ui.label(
             widgets::dim(
-                "Votre navigateur s'est ouvert sur Discord. Acceptez, puis revenez ici : la \
+                "Ton navigateur s'est ouvert sur Discord. Accepte, puis reviens ici : la \
                  liaison se termine toute seule.",
             )
             .size(12.0),
@@ -1668,7 +1674,7 @@ fn discord_link_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<A
             if widgets::ghost_button(ui, "Copier le lien") {
                 ui.ctx().copy_text(authorize_url);
                 state.notice = Some(Notice::Info(
-                    "Lien copié : collez-le dans votre navigateur.".to_string(),
+                    "Lien copié : colle-le dans ton navigateur.".to_string(),
                 ));
             }
             if widgets::ghost_button(ui, "Annuler") {
@@ -1704,9 +1710,9 @@ fn discord_link_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<A
         });
     });
     let hint = if state.discord_linked {
-        "Vous pouvez vous connecter avec Discord ou avec votre e-mail ou pseudo."
+        "Tu peux te connecter avec Discord ou avec ton e-mail ou pseudo."
     } else {
-        "Lier Discord permet de vous connecter avec lui sur ce Rafthub, en plus de votre \
+        "Lier Discord permet de te connecter avec lui sur ce Rafthub, en plus de ton \
          mot de passe."
     };
     ui.label(widgets::dim(hint).size(12.0));
@@ -1723,7 +1729,7 @@ fn rename_row(ui: &mut Ui, state: &mut FriendsState, action: &mut Option<Action>
         return;
     }
     ui.label(widgets::dim(
-        "3 à 24 caractères : lettres, chiffres, _, - et . ; vos amis verront le nouveau \
+        "3 à 24 caractères : lettres, chiffres, _, - et . ; tes amis verront le nouveau \
          pseudo. Un seul changement par jour.",
     ));
     let mut submit = false;

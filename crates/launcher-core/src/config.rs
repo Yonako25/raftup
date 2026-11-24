@@ -79,7 +79,25 @@ pub struct UserConfig {
     /// changer `format_version` ; écrit seulement quand il vaut vrai.
     #[serde(default, skip_serializing_if = "is_false")]
     pub welcome_done: bool,
+    /// Invitations reçues (liens `raftup://`), ni acceptées ni ignorées : l'écran
+    /// « Rejoindre » les liste (revue d'ergonomie du launcher, point 22). La plus récente
+    /// d'abord. Un lien d'invitation ne contient pas de mot de passe (ADR 0020). Champ
+    /// facultatif, sans changer `format_version` ; écrit seulement s'il n'est pas vide.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_invites: Vec<PendingInvite>,
 }
+
+/// Une invitation reçue et gardée en attendant que le joueur la suive ou l'ignore.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingInvite {
+    /// Le lien `raftup://join?…` tel quel.
+    pub link: String,
+    /// Arrivée du lien, en secondes depuis 1970.
+    pub received_at: i64,
+}
+
+/// Nombre d'invitations gardées au plus : les plus anciennes partent au-delà.
+pub const MAX_PENDING_INVITES: usize = 20;
 
 /// Pour `skip_serializing_if` : serde passe le champ par référence, d'où `&bool`.
 fn is_false(value: &bool) -> bool {
@@ -102,6 +120,7 @@ impl Default for UserConfig {
             hub_url: None,
             rafthub_file_adopted: false,
             welcome_done: false,
+            pending_invites: Vec::new(),
         }
     }
 }
@@ -214,6 +233,38 @@ fn free_set_aside_name(path: &Path) -> PathBuf {
 }
 
 impl UserConfig {
+    /// Garde une invitation reçue, en tête de liste. Le même lien déjà gardé remonte en
+    /// tête avec sa nouvelle date (pas de doublon) ; au-delà de `MAX_PENDING_INVITES`, les
+    /// plus anciennes sont oubliées. Rend vrai si la configuration a changé.
+    pub fn add_pending_invite(&mut self, link: &str, received_at: i64) -> bool {
+        let link = link.trim();
+        if link.is_empty() {
+            return false;
+        }
+        if self.pending_invites.first().is_some_and(|i| i.link == link) {
+            return false;
+        }
+        // `retain` garde les invitations pour lesquelles la fonction rend vrai.
+        self.pending_invites.retain(|invite| invite.link != link);
+        self.pending_invites.insert(
+            0,
+            PendingInvite {
+                link: link.to_string(),
+                received_at,
+            },
+        );
+        self.pending_invites.truncate(MAX_PENDING_INVITES);
+        true
+    }
+
+    /// Oublie une invitation (suivie ou ignorée). Rend vrai si elle était gardée.
+    pub fn remove_pending_invite(&mut self, link: &str) -> bool {
+        let before = self.pending_invites.len();
+        self.pending_invites
+            .retain(|invite| invite.link != link.trim());
+        self.pending_invites.len() != before
+    }
+
     /// Écrit la configuration de façon atomique : `.tmp` puis renommage.
     /// Une coupure en plein milieu laisse l'ancien fichier intact.
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
@@ -252,6 +303,7 @@ impl std::fmt::Debug for UserConfig {
             .field("hub_url", &self.hub_url)
             .field("rafthub_file_adopted", &self.rafthub_file_adopted)
             .field("welcome_done", &self.welcome_done)
+            .field("pending_invites", &self.pending_invites)
             .finish()
     }
 }

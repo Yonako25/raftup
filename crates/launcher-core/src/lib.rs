@@ -44,6 +44,7 @@ pub mod lockfile;
 pub mod logs;
 pub mod native_worlds;
 pub mod party;
+pub mod past_games;
 pub mod paths;
 pub mod profile;
 pub mod rafthub;

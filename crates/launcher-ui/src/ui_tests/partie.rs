@@ -103,7 +103,7 @@ fn le_sous_titre_ne_passe_pas_sous_les_boutons() {
         .next()
         .unwrap()
         .rect();
-    for label in ["● En ligne", "Copier l'invitation", "■ Arrêter"] {
+    for label in ["● En ligne", "Copier les invitations", "■ Arrêter"] {
         let other = harness.get_by_label(label).rect();
         assert!(
             !subtitle.intersects(other),

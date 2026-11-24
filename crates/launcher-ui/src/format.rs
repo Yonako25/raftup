@@ -89,6 +89,35 @@ pub fn join_names(names: &[String]) -> String {
     }
 }
 
+/// Nom lisible d'une partie de ce PC, d'après ses jeux : « Partie Slime Rancher »,
+/// « Partie Slime Rancher et A Short Hike », « Partie Slime Rancher, A Short Hike +2 ».
+/// Le numéro de seed ne parle pas aux joueurs : il reste dans l'infobulle et le journal.
+pub fn party_title(slots: &[SlotStatus]) -> String {
+    games_title(
+        slots
+            .iter()
+            .filter(|s| !s.is_group)
+            .map(|s| s.game.as_str()),
+    )
+}
+
+/// Le même nom, à partir des jeux des joueurs (dans leur ordre, doublons compris) : sert
+/// aussi pour une partie arrêtée, lue dans sa seed.
+pub fn games_title<'a>(player_games: impl IntoIterator<Item = &'a str>) -> String {
+    // Les jeux sans doublon, dans l'ordre des joueurs (un `Vec` garde l'ordre).
+    let mut games: Vec<String> = Vec::new();
+    for game in player_games {
+        if !games.iter().any(|g| g == game) {
+            games.push(game.to_string());
+        }
+    }
+    match games.len() {
+        0 => "Partie sur ce PC".to_string(),
+        1 | 2 => format!("Partie {}", join_names(&games)),
+        n => format!("Partie {}, {} +{}", games[0], games[1], n - 2),
+    }
+}
+
 /// « 1 lieu », « 25 lieux ».
 pub fn locations_count(n: usize) -> String {
     if n > 1 {
@@ -141,13 +170,19 @@ fn mode_text(mode: &str) -> &'static str {
 /// l'hôte voit ce qui sera utilisé sans l'ouvrir.
 /// `security` : la fin du résumé, donnée par le choix du chiffrement
 /// (`Security::summary`).
-pub fn server_summary(port: &str, public_host: &str, security: &str) -> String {
-    let scheme = security;
+pub fn server_summary(port: &str, public_host: &str) -> String {
     format!(
-        "Port {} · adresse {} · {scheme}",
-        port.trim(),
-        public_host.trim()
+        "Tes amis se connecteront à {}:{}.",
+        public_host.trim(),
+        port.trim()
     )
+}
+
+/// Vrai pour un nom d'hôte seul (sans schéma ni port) qui ne marche que sur ce PC :
+/// l'écran prévient alors que les amis ne pourront pas se connecter. Même règle que
+/// `is_local_host`, qui lit une adresse complète.
+pub fn is_local_address(host: &str) -> bool {
+    is_local_host(&format!("ws://{}:1", host.trim()))
 }
 
 /// « Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %. »
@@ -485,17 +520,12 @@ mod tests {
     #[test]
     fn resume_des_options_avancees() {
         assert_eq!(
-            server_summary(
-                " 38281 ",
-                "localhost",
-                "chiffré par Raftup (wss, sans fichier)"
-            ),
-            "Port 38281 · adresse localhost · chiffré par Raftup (wss, sans fichier)"
+            server_summary(" 38281 ", "exemple.fr"),
+            "Tes amis se connecteront à exemple.fr:38281."
         );
-        assert_eq!(
-            server_summary("40000", "exemple.fr", "en clair (ws)"),
-            "Port 40000 · adresse exemple.fr · en clair (ws)"
-        );
+        assert!(is_local_address(" LocalHost "));
+        assert!(is_local_address("127.0.0.1"));
+        assert!(!is_local_address("exemple.fr"));
     }
 
     #[test]
@@ -535,6 +565,30 @@ mod tests {
             away: None,
             release_votes: 0,
         }
+    }
+
+    #[test]
+    fn nom_de_partie_d_apres_les_jeux() {
+        let game = |name: &str, game: &str| SlotStatus {
+            game: game.to_string(),
+            ..slot(name, 0, 0)
+        };
+        assert_eq!(party_title(&[]), "Partie sur ce PC");
+        let one = [game("A", "Slime Rancher"), game("B", "Slime Rancher")];
+        assert_eq!(party_title(&one), "Partie Slime Rancher");
+        let two = [game("A", "Slime Rancher"), game("B", "A Short Hike")];
+        assert_eq!(party_title(&two), "Partie Slime Rancher et A Short Hike");
+        let mut four = two.to_vec();
+        four.push(game("C", "Hollow Knight"));
+        four.push(game("D", "Risk of Rain 2"));
+        assert_eq!(party_title(&four), "Partie Slime Rancher, A Short Hike +2");
+        // Un groupe d'objets n'est pas un jeu joué.
+        let mut group = game("G", "Groupe");
+        group.is_group = true;
+        assert_eq!(
+            party_title(&[game("A", "Slime Rancher"), group]),
+            "Partie Slime Rancher"
+        );
     }
 
     #[test]

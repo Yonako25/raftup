@@ -3,13 +3,21 @@
 //!
 //! Rien ne se connecte et rien ne se lance tout seul : l'écran montre l'hôte en clair,
 //! et c'est le joueur qui clique sur « Continuer ».
+//!
+//! Chaque lien lu est gardé dans « Invitations reçues » (et dans `config.toml`) tant qu'il
+//! n'est ni suivi (« Continuer ») ni ignoré : un nouveau lien ne fait plus oublier le
+//! précédent (revue d'ergonomie du launcher, point 22).
+
+use std::path::PathBuf;
 
 use egui::{RichText, Ui};
+use launcher_core::config::{self, PendingInvite, UserConfig};
 use launcher_core::invite::{parse_invite, Invite};
 use launcher_core::{Catalog, InstallStatus};
 
 use super::library::{self, LibraryState, Scan};
 use crate::app::Page;
+use crate::format;
 use crate::theme;
 use crate::widgets;
 
@@ -33,9 +41,45 @@ pub struct JoinState {
     clipboard_checked: bool,
     /// Le lien du champ vient du presse-papiers (on le dit au joueur).
     from_clipboard: bool,
+    /// Invitations reçues, ni suivies ni ignorées, la plus récente d'abord.
+    received: Vec<PendingInvite>,
+    /// `config.toml` où elles sont gardées ; `None` (tests) : rien n'est lu ni écrit.
+    config_file: Option<PathBuf>,
 }
 
 impl JoinState {
+    /// L'état de départ du launcher : les invitations gardées dans `config_file`.
+    pub fn with_saved(config_file: PathBuf) -> JoinState {
+        let received = match config::load(&config_file) {
+            Ok(loaded) => loaded.config.pending_invites,
+            Err(e) => {
+                tracing::warn!("invitations reçues non lues : {e}");
+                Vec::new()
+            }
+        };
+        JoinState {
+            received,
+            config_file: Some(config_file),
+            ..JoinState::default()
+        }
+    }
+
+    /// Tests : invitations gardées dans `config_file` (un dossier temporaire), sans lire
+    /// le presse-papiers du système.
+    #[cfg(test)]
+    pub(crate) fn saved_without_clipboard(config_file: PathBuf) -> JoinState {
+        JoinState {
+            clipboard_checked: true,
+            ..JoinState::with_saved(config_file)
+        }
+    }
+
+    /// Les invitations reçues, la plus récente d'abord (tests).
+    #[cfg(test)]
+    pub fn received(&self) -> &[PendingInvite] {
+        &self.received
+    }
+
     /// Une invitation lue et pas encore suivie ? Rend le jeu du lien (`None` dedans :
     /// le lien ne dit pas le jeu). L'Accueil la rappelle au joueur.
     pub fn pending_invite(&self) -> Option<Option<&str>> {
@@ -144,7 +188,35 @@ fn check_clipboard(state: &mut JoinState) {
     }
 }
 
+/// Change la liste des invitations reçues avec `change` (une méthode de `UserConfig`),
+/// à l'écran puis dans `config.toml`. Une erreur d'écriture est notée au journal : la
+/// liste à l'écran reste juste pour cette session.
+fn update_received(state: &mut JoinState, change: impl Fn(&mut UserConfig) -> bool) {
+    // La liste passe par une configuration en mémoire pour réutiliser les règles de
+    // `UserConfig` (ordre, doublons, limite). `mem::take` la sort de `state` sans copie.
+    let mut memory = UserConfig {
+        pending_invites: std::mem::take(&mut state.received),
+        ..UserConfig::default()
+    };
+    let changed = change(&mut memory);
+    state.received = memory.pending_invites;
+    let (true, Some(file)) = (changed, &state.config_file) else {
+        return;
+    };
+    let result = config::load(file).and_then(|loaded| {
+        let mut on_disk = loaded.config;
+        if change(&mut on_disk) {
+            on_disk.save(file)?;
+        }
+        Ok(())
+    });
+    if let Err(e) = result {
+        tracing::warn!("invitations reçues non enregistrées : {e}");
+    }
+}
+
 /// Analyse le texte du champ. Les erreurs de `InviteError` sont montrées telles quelles.
+/// Un lien valide est gardé dans « Invitations reçues ».
 fn read_link(state: &mut JoinState) {
     state.instructions = None;
     match parse_invite(state.link.trim()) {
@@ -152,12 +224,22 @@ fn read_link(state: &mut JoinState) {
             state.slot = invite.slot.clone().unwrap_or_default();
             state.invite = Some(invite);
             state.error = None;
+            let link = state.link.trim().to_string();
+            let now = format::now() as i64;
+            update_received(state, |c| c.add_pending_invite(&link, now));
         }
         Err(e) => {
             state.invite = None;
             state.error = Some(e.to_string());
         }
     }
+}
+
+/// Vrai pour un lien qui a l'air entier (`raftup://…` avec une adresse) : c'est ce
+/// qu'on obtient en collant une invitation, pas en la tapant lettre par lettre.
+fn looks_complete(link: &str) -> bool {
+    let link = link.trim().to_ascii_lowercase();
+    link.starts_with("raftup://") && link.contains("addr=")
 }
 
 /// « hôte:port », en clair.
@@ -170,7 +252,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
     let ctx = ui.ctx().clone();
     check_clipboard(state);
     super::page(ui, |ui| {
-        super::header(ui, "Parties › Invitations", "Rejoindre une partie", |ui| {
+        super::header(ui, "Parties › Rejoindre", "Rejoindre une partie", |ui| {
             if widgets::ghost_button(ui, "Retour") {
                 goto = Some(Page::Hosted);
             }
@@ -180,8 +262,10 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             ui.add_space(10.0);
         }
 
+        received_panel(ui, state);
+
         widgets::panel(ui, "Lien d'invitation", |ui| {
-            ui.label(widgets::dim("Collez le lien d'invitation").size(13.0));
+            ui.label(widgets::dim("Colle le lien d'invitation").size(13.0));
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut state.link)
                     .hint_text("raftup://join?v=1&addr=…")
@@ -193,6 +277,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                 state.invite = None;
                 state.instructions = None;
                 state.from_clipboard = false;
+                // Un lien complet collé est lu tout de suite : pas besoin de cliquer
+                // « Lire le lien » (le bouton reste pour un lien tapé à la main).
+                if looks_complete(&state.link) {
+                    read_link(state);
+                }
             }
             if state.from_clipboard {
                 ui.label(widgets::dim("Lien trouvé dans le presse-papiers.").size(12.0));
@@ -207,7 +296,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             return;
         };
         ui.add_space(12.0);
-        widgets::panel(ui, "Vérifiez avant de continuer", |ui| {
+        widgets::panel(ui, "Vérifie avant de continuer", |ui| {
             ui.label(widgets::dim("Serveur").size(13.0));
             // L'hôte est montré en clair et en grand : c'est lui que le joueur doit reconnaître.
             ui.label(
@@ -218,9 +307,11 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .color(theme::TEXT),
             );
             if invite.fingerprint.is_some() {
-                ui.label(widgets::dim(
-                    "Partie chiffrée par Raftup : les outils de Raftup vérifient le certificat du lien ; le mod du jeu se connecte en clair.",
-                ).size(13.0));
+                ui.label(widgets::dim("Partie chiffrée par Raftup.").size(13.0))
+                    .on_hover_text(
+                        "Les outils de Raftup vérifient le certificat du lien ; le mod du jeu \
+                         se connecte en clair.",
+                    );
             } else if !invite.address.secure {
                 ui.label(
                     RichText::new(
@@ -238,7 +329,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
                     .color(theme::TEXT),
             );
             ui.add_space(8.0);
-            ui.label(widgets::dim("Slot").size(13.0));
+            ui.label(widgets::dim("Joueur").size(13.0));
             if invite.slot.is_some() {
                 ui.label(
                     RichText::new(&state.slot)
@@ -249,7 +340,7 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
             } else {
                 ui.add(
                     egui::TextEdit::singleline(&mut state.slot)
-                        .hint_text("Votre nom de slot")
+                        .hint_text("Ton nom de joueur")
                         .char_limit(SLOT_MAX)
                         .desired_width(220.0),
                 );
@@ -270,6 +361,81 @@ pub fn show(ui: &mut Ui, state: &mut JoinState, library: &mut LibraryState) -> O
     goto
 }
 
+/// Panneau « Invitations reçues » (rien s'il n'y en a pas) : jeu, serveur, joueur, date ;
+/// « Rejoindre » l'ouvre dans « Vérifie avant de continuer », « Ignorer » l'oublie.
+fn received_panel(ui: &mut Ui, state: &mut JoinState) {
+    if state.received.is_empty() {
+        return;
+    }
+    let current = state.link.trim().to_string();
+    let mut open: Option<String> = None;
+    let mut ignore: Option<String> = None;
+    widgets::panel(ui, "Invitations reçues", |ui| {
+        let now = format::now();
+        for (index, pending) in state.received.iter().enumerate() {
+            if index > 0 {
+                ui.separator();
+            }
+            // `push_id` : chaque ligne a ses boutons « Rejoindre » et « Ignorer ».
+            ui.push_id(index, |ui| {
+                let parsed = parse_invite(&pending.link).ok();
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 2.0;
+                        let game = parsed
+                            .as_ref()
+                            .and_then(|i| i.game.clone())
+                            .unwrap_or_else(|| "Jeu non précisé".to_string());
+                        ui.label(
+                            RichText::new(game)
+                                .strong()
+                                .family(theme::bold_family())
+                                .color(theme::TEXT),
+                        );
+                        let mut detail = Vec::new();
+                        if let Some(invite) = &parsed {
+                            detail.push(host_text(invite));
+                            if let Some(slot) = &invite.slot {
+                                detail.push(format!("joueur {slot}"));
+                            }
+                        }
+                        detail.push(format!(
+                            "reçue {}",
+                            format::ago(now, Some(pending.received_at as f64))
+                        ));
+                        ui.label(widgets::dim(detail.join(" · ")).size(13.0));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if widgets::ghost_button(ui, "Ignorer") {
+                            ignore = Some(pending.link.clone());
+                        }
+                        // L'invitation déjà ouverte dessous n'a pas besoin du bouton.
+                        if pending.link != current
+                            && widgets::primary_button_min(ui, "Rejoindre", 90.0)
+                        {
+                            open = Some(pending.link.clone());
+                        }
+                    });
+                });
+            });
+        }
+    });
+    ui.add_space(12.0);
+    if let Some(link) = ignore {
+        if state.link.trim() == link {
+            state.link.clear();
+            state.invite = None;
+            state.instructions = None;
+        }
+        update_received(state, |c| c.remove_pending_invite(&link));
+    }
+    if let Some(link) = open {
+        state.link = link;
+        state.from_clipboard = false;
+        read_link(state);
+    }
+}
+
 /// Clic sur « Continuer » : Bibliothèque pré-remplie, ou copie dans le presse-papiers.
 fn continue_to(
     state: &mut JoinState,
@@ -280,10 +446,13 @@ fn continue_to(
 ) {
     let slot = state.slot.trim().to_string();
     if slot.is_empty() {
-        state.error = Some("Saisissez le nom de votre slot.".to_string());
+        state.error = Some("Indique ton nom de joueur.".to_string());
         return;
     }
     state.error = None;
+    // L'invitation est suivie : elle quitte « Invitations reçues ».
+    let link = state.link.trim().to_string();
+    update_received(state, |c| c.remove_pending_invite(&link));
     // Adresse donnée au mod du jeu : sans schéma pour un certificat généré par Raftup
     // (le mod essaie wss puis retombe sur ws, ADR 0043).
     let url = invite.address_for_game();
@@ -300,8 +469,8 @@ fn continue_to(
             // Même format que le lancement manuel : adresse, retour à la ligne, slot.
             ctx.copy_text(format!("{url}\n{slot}"));
             state.instructions = Some(
-                "Ouvrez votre jeu et saisissez l'adresse et le slot copiés. \
-                 (Adresse et slot copiés dans le presse-papiers.)"
+                "Ouvre ton jeu et saisis l'adresse et le nom de joueur copiés. \
+                 (Adresse et nom de joueur copiés dans le presse-papiers.)"
                     .to_string(),
             );
         }

@@ -2,9 +2,10 @@
 
 use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke, Ui};
 
+use crate::format;
 use crate::screens::{
-    catalog, create, friends, home, hub_game, join, library, matches, running, settings, setup,
-    soon, welcome,
+    catalog, create, friends, home, hub_game, join, library, matches, past_games, running,
+    settings, setup, soon, welcome,
 };
 use crate::theme;
 use crate::widgets;
@@ -52,6 +53,8 @@ pub struct App {
     friends: friends::FriendsState,
     /// Parties hébergées sur Rafthub (ADR 0052).
     hub_games: hub_game::HubGames,
+    /// Parties arrêtées de ce PC, à reprendre depuis « En cours ».
+    past_games: past_games::PastGames,
     /// Filtre de l'écran « Catalogue ».
     catalog: catalog::CatalogState,
     /// Assistant du premier lancement (plan de l'interface, étape 5).
@@ -91,9 +94,13 @@ impl App {
             create: create::CreateForm::with_prefs(saved),
             running: running::RunningState::default(),
             library: library::LibraryState::new(),
-            join: join::JoinState::default(),
+            // Les invitations reçues et pas encore suivies sont gardées dans `config.toml`.
+            join: launcher_core::Paths::from_os()
+                .map(|paths| join::JoinState::with_saved(paths.config_file()))
+                .unwrap_or_default(),
             friends: friends::FriendsState::new(),
             hub_games: hub_game::HubGames::default(),
+            past_games: past_games::PastGames::new(launcher_core::Paths::from_os().ok()),
             catalog: catalog::CatalogState::default(),
             welcome: welcome::load(),
             update: crate::update_ui::UpdateState::new(),
@@ -290,12 +297,8 @@ impl eframe::App for App {
         if !hosting {
             self.running = running::RunningState::default();
         }
-        // La barre de titre est déclarée avant la barre latérale : elle prend toute la largeur.
-        egui::Panel::top("titlebar")
-            .exact_size(crate::titlebar::HEIGHT)
-            .resizable(false)
-            .frame(Frame::new().fill(theme::sidebar_fill()))
-            .show(ui, crate::titlebar::show);
+        // Plus de bande de titre : les boutons de fenêtre flottent en haut à droite, dessinés
+        // après les panneaux (voir plus bas, `titlebar::show`).
         crate::update_ui::banner(ui, &mut self.update);
         egui::Panel::left("sidebar")
             .exact_size(220.0)
@@ -338,9 +341,13 @@ impl eframe::App for App {
                     None
                 }
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
-                Page::InProgress => {
-                    matches::show(ui, &shared, self.error.as_deref(), &mut self.hub_games)
-                }
+                Page::InProgress => matches::show(
+                    ui,
+                    &shared,
+                    self.error.as_deref(),
+                    &mut self.hub_games,
+                    &mut self.past_games,
+                ),
                 Page::HubGame => hub_game::show(ui, &mut self.hub_games),
                 Page::Library => {
                     library::show(ui, &mut self.library, &shared, self.error.as_deref())
@@ -373,6 +380,20 @@ impl eframe::App for App {
                 goto = next;
             }
         });
+        // « Reprendre » d'une partie arrêtée : relance tout de suite, avec les réglages du
+        // serveur de « Héberger un fichier » et sans mot de passe de salle.
+        if let Some(seed) = self.past_games.take_resume() {
+            match setup::relaunch_options(&self.setup, seed) {
+                Ok(options) => {
+                    self.error = None;
+                    self.worker.send(Command::Start(options));
+                    goto = Some(Page::Hosted);
+                }
+                Err(message) => self.error = Some(message),
+            }
+        }
+        // Boutons de fenêtre par-dessus tout le reste (premier plan).
+        crate::titlebar::show(ui.ctx());
 
         // « Lancer et connecter » de la partie hébergée (ici ou sur Rafthub) : la
         // Bibliothèque lance le jeu.
@@ -480,50 +501,50 @@ pub(crate) fn sidebar(
     ui.set_width(SIDEBAR_WIDTH);
     ui.spacing_mut().item_spacing.y = 2.0;
 
-    // Logo + nom.
-    ui.horizontal(|ui| {
-        ui.add_space(18.0);
-        logo(ui, 34.0);
-        ui.add_space(2.0);
-        ui.label(
-            RichText::new("RAFTUP")
-                .font(egui::FontId::new(22.0, theme::title_bold_family()))
-                .extra_letter_spacing(2.0)
-                .color(theme::TEXT),
-        );
-    });
+    // Logo + nom. La ligne sert aussi de poignée pour déplacer la fenêtre (il n'y a plus
+    // de bande de titre).
+    let logo_row = ui
+        .horizontal(|ui| {
+            ui.add_space(18.0);
+            logo(ui, 34.0);
+            ui.add_space(2.0);
+            ui.label(
+                RichText::new("RAFTUP")
+                    .font(egui::FontId::new(22.0, theme::title_bold_family()))
+                    .extra_letter_spacing(2.0)
+                    .color(theme::TEXT),
+            );
+        })
+        .response
+        .rect;
+    crate::titlebar::grip(ui, logo_row, ui.scope_id().with("logo_grip"));
     ui.add_space(10.0);
 
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).
     let hosted = usize::from(shared.status.is_some()) + hub_games;
-    let in_progress = matches!(
-        current,
-        Page::InProgress | Page::Hosted | Page::HubGame | Page::Create
-    );
-    let sections: [(&str, Vec<NavLink>); 4] = [
+    let in_progress = matches!(current, Page::InProgress | Page::Hosted | Page::HubGame);
+    // Deux sections seulement : les jeux, puis les parties, avec le parcours principal
+    // (« Nouvelle partie ») en premier.
+    let sections: [(&str, Vec<NavLink>); 2] = [
         (
             "JEUX",
             vec![
                 ("Accueil", 0, Page::Home),
                 ("Bibliothèque", games, Page::Library),
+                ("Catalogue", 0, Page::Catalog),
                 ("Téléchargements", 0, Page::Soon("Téléchargements")),
+                ("Mises à jour", 0, Page::Soon("Mises à jour")),
             ],
         ),
         (
             "PARTIES",
             vec![
+                // Le salon de préparation (ADR 0044) : générer puis héberger.
+                ("Nouvelle partie", 0, Page::Create),
                 ("En cours", hosted, Page::InProgress),
+                // « Rejoindre » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
+                ("Rejoindre", 0, Page::Join),
                 ("Salons", 0, Page::Soon("Salons")),
-                // « Invitations » ouvre l'écran où l'on colle un lien reçu (ADR 0020).
-                ("Invitations", 0, Page::Join),
-            ],
-        ),
-        ("RÉGLAGES", vec![("Paramètres", 0, Page::Settings)]),
-        (
-            "CATALOGUE",
-            vec![
-                ("Parcourir", 0, Page::Catalog),
-                ("Mises à jour", 0, Page::Soon("Mises à jour")),
             ],
         ),
     ];
@@ -536,6 +557,10 @@ pub(crate) fn sidebar(
                 goto = Some(page);
             }
         }
+    }
+    ui.add_space(10.0);
+    if nav_link(ui, "Paramètres", 0, *current == Page::Settings) {
+        goto = Some(Page::Settings);
     }
 
     // Le bas de la barre : amis, profil, serveur, mention de compatibilité.
@@ -552,13 +577,13 @@ pub(crate) fn sidebar(
     }
     let top = ui.cursor().top();
     ui.spacing_mut().item_spacing.y = 10.0;
-    if side_card(ui, |ui| friends_card(ui, friends)) {
+    // Une seule carte pour le compte et les amis : l'écran « Amis » montre aussi le profil.
+    if side_card(ui, |ui| profile_card(ui, friends)) {
         goto = Some(Page::Friends);
     }
-    if side_card(ui, |ui| profile_card(ui, friends.username.as_deref())) {
-        goto = Some(Page::Profile);
-    }
-    if side_card(ui, |ui| server_card(ui, shared)) {
+    // La carte du serveur ne sert que quand une partie tourne (sinon elle répète
+    // « En cours »).
+    if (shared.status.is_some() || shared.starting) && side_card(ui, |ui| server_card(ui, shared)) {
         goto = Some(Page::Hosted);
     }
     ui.horizontal(|ui| {
@@ -640,38 +665,10 @@ fn side_card(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui)) -> bool {
     clicked
 }
 
-/// Carte « Amis » : nombre d'amis présents, ou invitation à se connecter.
-fn friends_card(ui: &mut Ui, friends: &friends::Summary) {
-    ui.horizontal(|ui| {
-        ui.label(
-            RichText::new("Amis")
-                .strong()
-                .family(theme::bold_family())
-                .color(theme::TEXT),
-        );
-        ui.with_layout(
-            egui::Layout::right_to_left(egui::Align::Center),
-            |ui| match (&friends.username, friends.online) {
-                (None, _) => {
-                    ui.label(widgets::dim("se connecter").size(12.0));
-                }
-                (Some(_), 0) => {
-                    ui.label(widgets::dim("personne en ligne").size(12.0));
-                }
-                (Some(_), n) => {
-                    ui.label(
-                        RichText::new(format!("● {n} en ligne"))
-                            .size(12.0)
-                            .color(theme::GREEN),
-                    );
-                }
-            },
-        );
-    });
-}
-
-/// Carte du profil : le pseudo du compte du hub, ou « Joueur » sans compte.
-fn profile_card(ui: &mut Ui, username: Option<&str>) {
+/// Carte du compte : pseudo du hub (ou « Joueur ») et, dessous, les amis en ligne (ou
+/// l'invitation à se connecter).
+fn profile_card(ui: &mut Ui, friends: &friends::Summary) {
+    let username = friends.username.as_deref();
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(30.0, 30.0), Sense::hover());
         ui.painter()
@@ -696,12 +693,24 @@ fn profile_card(ui: &mut Ui, username: Option<&str>) {
                     .family(theme::bold_family())
                     .color(theme::TEXT),
             );
-            let subtitle = if username.is_some() {
-                "Compte Raftup"
-            } else {
-                "Sans compte"
-            };
-            ui.label(widgets::dim(subtitle).size(12.0));
+            match (username, friends.online) {
+                (None, _) => {
+                    ui.label(widgets::dim("Se connecter pour voir ses amis").size(12.0));
+                }
+                (Some(_), 0) => {
+                    ui.label(widgets::dim("Amis : personne en ligne").size(12.0));
+                }
+                (Some(_), n) => {
+                    ui.label(
+                        RichText::new(format!(
+                            "● {n} ami{} en ligne",
+                            if n > 1 { "s" } else { "" }
+                        ))
+                        .size(12.0)
+                        .color(theme::GREEN),
+                    );
+                }
+            }
         });
     });
 }
@@ -720,14 +729,8 @@ fn server_card(ui: &mut Ui, shared: &crate::worker::Shared) {
     });
     match &shared.status {
         Some(status) => {
-            let name: String = status.seed.seed_name.chars().take(8).collect();
-            let dots = if status.seed.seed_name.chars().count() > 8 {
-                "…"
-            } else {
-                ""
-            };
             ui.label(RichText::new("● En ligne").color(theme::GREEN));
-            ui.label(widgets::dim(format!("seed {name}{dots}")).size(12.0));
+            ui.label(widgets::dim(format::party_title(&status.server.slots)).size(12.0));
             let connected = status
                 .server
                 .slots

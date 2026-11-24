@@ -30,25 +30,6 @@ pub enum PemFile {
     Key,
 }
 
-impl Security {
-    /// Fin du résumé « Port … · adresse … · … » des options avancées.
-    pub fn summary(self) -> &'static str {
-        match self {
-            Security::Raftup => "chiffré par Raftup (wss, sans fichier)",
-            Security::Pem => "chiffré (wss, certificat PEM demandé)",
-            Security::Plain => "en clair (ws)",
-        }
-    }
-
-    /// Le schéma que verront les joueurs Raftup.
-    pub fn scheme(self) -> &'static str {
-        match self {
-            Security::Plain => "ws",
-            Security::Raftup | Security::Pem => "wss",
-        }
-    }
-}
-
 /// Le réglage de chiffrement du serveur, ou le message à montrer.
 pub fn encryption(
     security: Security,
@@ -170,7 +151,5 @@ mod tests {
                 key: PathBuf::from("k.pem")
             })
         );
-        assert_eq!(Security::Raftup.scheme(), "wss");
-        assert_eq!(Security::Plain.scheme(), "ws");
     }
 }

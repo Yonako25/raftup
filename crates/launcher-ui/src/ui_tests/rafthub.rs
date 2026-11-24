@@ -17,7 +17,7 @@ use crate::screens::hub_game::{self, HubAccess, HubGames, Resume};
 use crate::screens::matches;
 use crate::worker::{Shared, Worker};
 
-fn access() -> HubAccess {
+pub(super) fn access() -> HubAccess {
     HubAccess {
         url: HubUrl::parse("http://127.0.0.1:1").unwrap(),
         token: SessionToken::new("jeton"),
@@ -25,7 +25,7 @@ fn access() -> HubAccess {
 }
 
 /// Le salon, avec ou sans accès au hub pour héberger.
-struct Salon {
+pub(super) struct Salon {
     form: CreateForm,
     error: Option<String>,
     worker: Worker,
@@ -33,7 +33,7 @@ struct Salon {
     access: Option<HubAccess>,
 }
 
-fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
+pub(super) fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
     let state = Salon {
         form: CreateForm::for_tests(&demo_catalog()),
         error: None,
@@ -61,27 +61,38 @@ fn salon(access: Option<HubAccess>) -> Harness<'static, Salon> {
 #[test]
 fn sans_rafthub_seul_le_pc() {
     let harness = salon(None);
-    assert!(shows(&harness, "Sur ce PC"));
-    assert!(!shows(&harness, "Héberger sur Rafthub"));
-    assert!(!shows(&harness, "Héberger sur mon PC"));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
+    assert!(!shows(&harness, "Sur Rafthub"));
+    assert!(!shows(&harness, "Sur mon PC"));
 }
 
 #[test]
 fn le_choix_rafthub_remplace_les_reglages_du_serveur() {
     let mut harness = salon(Some(access()));
     // Par défaut : sur ce PC, comme avant.
-    assert!(shows(&harness, "Héberger sur mon PC"));
-    assert!(shows(&harness, "Héberger sur Rafthub"));
-    assert!(shows(&harness, "Sur ce PC"));
+    assert!(shows(&harness, "Sur mon PC"));
+    assert!(shows(&harness, "Sur Rafthub"));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
     assert_eq!(harness.state().form.host_mode(), HostMode::ThisPc);
 
-    click(&mut harness, "Héberger sur Rafthub");
+    click(&mut harness, "Sur Rafthub");
     assert_eq!(harness.state().form.host_mode(), HostMode::Rafthub);
     assert!(harness.state().form.on_rafthub());
-    assert!(shows(&harness, "Sur Rafthub · 127.0.0.1:1"));
+    assert!(shows_part(
+        &harness,
+        "La partie tourne sur Rafthub (127.0.0.1:1)"
+    ));
     assert!(shows(&harness, "Nom de la partie (facultatif)"));
-    assert!(!shows(&harness, "Sur ce PC"));
-    assert!(shows_part(&harness, "puis envoyée à Rafthub"));
+    assert!(!shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 
     // Avec un pseudo, plus rien ne bloque : ni port, ni adresse, ni certificat à fournir.
     type_into(
@@ -93,10 +104,13 @@ fn le_choix_rafthub_remplace_les_reglages_du_serveur() {
     harness.run();
     assert!(create::check_form(&harness.state().form).is_ok());
     // Le même formulaire, sur ce PC, est refusé faute d'adresse.
-    click(&mut harness, "Héberger sur mon PC");
+    click(&mut harness, "Sur mon PC");
     assert_eq!(harness.state().form.host_mode(), HostMode::ThisPc);
     assert!(create::check_form(&harness.state().form).is_err());
-    assert!(shows(&harness, "Sur ce PC"));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 }
 
 /// Le hub n'est plus proposé (déconnexion) : la partie repart sur ce PC, même si le
@@ -104,11 +118,14 @@ fn le_choix_rafthub_remplace_les_reglages_du_serveur() {
 #[test]
 fn rafthub_choisi_puis_deconnecte() {
     let mut harness = salon(Some(access()));
-    click(&mut harness, "Héberger sur Rafthub");
+    click(&mut harness, "Sur Rafthub");
     harness.state_mut().access = None;
     harness.run();
     assert!(!harness.state().form.on_rafthub());
-    assert!(shows(&harness, "Sur ce PC"));
+    assert!(shows(
+        &harness,
+        "La partie tourne sur ton PC : il doit rester allumé pendant la partie."
+    ));
 }
 
 impl Salon {
@@ -146,7 +163,7 @@ fn hosted() -> HostedGame {
     }
 }
 
-fn created() -> CreatedGame {
+pub(super) fn created() -> CreatedGame {
     serde_json::from_value(serde_json::json!({
         "id": "0123456789abcdef0123456789abcdef",
         "name": "Partie de Mimi",
@@ -165,7 +182,7 @@ fn created() -> CreatedGame {
     .unwrap()
 }
 
-fn status() -> GameStatus {
+pub(super) fn status() -> GameStatus {
     let slot = SlotStatus {
         team: 0,
         slot: 1,
@@ -203,10 +220,12 @@ fn game_screen(status: Option<GameStatus>) -> Harness<'static, HubGames> {
     game_screen_with(HubGames::with_game(created(), status))
 }
 
-fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
+pub(super) fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
     let mut harness = builder().build_ui_state(
         |ui, games: &mut HubGames| {
             hub_game::show(ui, games);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         games,
     );
@@ -217,21 +236,26 @@ fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
 
 #[test]
 fn la_partie_hebergee_s_affiche() {
-    let harness = game_screen(Some(status()));
+    let mut harness = game_screen(Some(status()));
     assert!(shows(&harness, "Partie de Mimi"));
     assert!(shows(&harness, "hub.example.org:38281"));
-    assert!(shows(&harness, "Sur Rafthub"));
+    assert!(shows(&harness, "En cours · sur Rafthub"));
     assert!(shows(&harness, "Mimi"));
     assert!(shows(&harness, "3 / 10 lieux"));
     assert!(shows(&harness, "Copier l'invitation"));
+    // Les outils de l'hôte sont repliés dans « Gérer la partie ».
+    assert!(!shows(&harness, "MOT DE PASSE D'ADMIN"));
+    assert!(!shows(&harness, "Supprimer la partie du hub"));
+    click(&mut harness, "Gérer la partie");
     // Le mot de passe d'admin est masqué tant qu'on ne clique pas « Afficher ».
-    assert!(shows(&harness, "Mot de passe d'admin"));
+    assert!(shows(&harness, "MOT DE PASSE D'ADMIN"));
     assert!(!shows(&harness, "ADMINPASS1234567"));
 }
 
 #[test]
 fn afficher_le_mot_de_passe_d_admin() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Afficher");
     assert!(shows(&harness, "ADMINPASS1234567"));
     click(&mut harness, "Masquer");
@@ -262,6 +286,7 @@ fn lancer_et_connecter_donne_l_adresse_sans_schema() {
 #[test]
 fn supprimer_demande_une_confirmation() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Supprimer la partie du hub");
     assert!(shows(&harness, "Confirmer la suppression"));
     click(&mut harness, "Annuler");
@@ -269,7 +294,7 @@ fn supprimer_demande_une_confirmation() {
 }
 
 /// Une partie en veille : « En veille », « Réveiller », et pas d'équipage à montrer.
-fn sleeping() -> HubGames {
+pub(super) fn sleeping() -> HubGames {
     let mut json = serde_json::to_value(hosted_view()).unwrap();
     json["state"] = "sleeping".into();
     json["admin_password"] = "ADMINPASS1234567".into();
@@ -296,6 +321,7 @@ fn partie_en_veille() {
 #[test]
 fn reprendre_sur_mon_pc_demande_une_confirmation() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Reprendre sur mon PC");
     assert!(matches!(harness.state().resume(), Resume::Confirm(form) if form.delete_from_hub));
     assert!(shows(
@@ -395,7 +421,13 @@ fn en_cours_liste_la_partie_hebergee() {
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut State| {
-            if let Some(page) = matches::show(ui, &s.shared, None, &mut s.games) {
+            if let Some(page) = matches::show(
+                ui,
+                &s.shared,
+                None,
+                &mut s.games,
+                &mut crate::screens::past_games::PastGames::default(),
+            ) {
                 s.asked = Some(page);
             }
         },
@@ -406,6 +438,48 @@ fn en_cours_liste_la_partie_hebergee() {
     assert!(shows(&harness, "En ligne sur Rafthub"));
     // Une partie sur le hub : pas de « Aucune partie en cours ».
     assert!(!shows(&harness, "Aucune partie en cours"));
-    click(&mut harness, "   Ouvrir   ");
+    click(&mut harness, "Ouvrir");
     assert_eq!(harness.state().asked, Some(Page::HubGame));
+}
+
+/// « En cours » mène toujours au salon : par le bouton du haut, et par l'état vide.
+#[test]
+fn en_cours_mene_au_salon() {
+    struct State {
+        shared: Shared,
+        games: HubGames,
+        asked: Option<Page>,
+    }
+    for (games, label) in [
+        (HubGames::default(), "Préparer une partie"),
+        (HubGames::with_game(created(), None), "Nouvelle partie"),
+        (HubGames::default(), "Nouvelle partie"),
+    ] {
+        let state = State {
+            shared: Shared::default(),
+            games,
+            asked: None,
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut State| {
+                if let Some(page) = matches::show(
+                    ui,
+                    &s.shared,
+                    None,
+                    &mut s.games,
+                    &mut crate::screens::past_games::PastGames::default(),
+                ) {
+                    s.asked = Some(page);
+                }
+            },
+            state,
+        );
+        harness.run();
+        click(&mut harness, label);
+        assert_eq!(
+            harness.state().asked,
+            Some(Page::Create),
+            "clic sur {label}"
+        );
+    }
 }

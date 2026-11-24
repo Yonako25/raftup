@@ -372,7 +372,7 @@ fn captures_interface() {
     // Partie en cours : onglet Équipage, puis onglet Salon.
     for (tab, name) in [
         (None, "08-partie-en-cours"),
-        (Some("Salon"), "09-partie-salon"),
+        (Some("Vérifier les joueurs"), "09-partie-salon"),
     ] {
         // La Bibliothèque donne les jaquettes et l'image du bandeau (faux hub).
         let root = tempfile::tempdir().unwrap();
@@ -402,6 +402,7 @@ fn captures_interface() {
                     &s.shared,
                     &mut s.library,
                 );
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );
@@ -458,6 +459,7 @@ fn captures_interface() {
             |ui, s: &mut Accueil| {
                 s.library.background(ui.ctx());
                 home::show(ui, &s.shared, &mut s.library, &s.join);
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );
@@ -490,6 +492,7 @@ fn captures_interface() {
             |ui, s: &mut Catalogue| {
                 s.library.background(ui.ctx());
                 catalog::show(ui, &mut s.state, &mut s.library);
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );
@@ -538,6 +541,53 @@ fn captures_interface() {
         );
         harness.run();
         save(&mut harness, "15-assistant");
+    }
+    // Salon avec le choix « Sur Rafthub » (connecté à un hub qui héberge).
+    {
+        let mut harness = super::rafthub::salon(Some(super::rafthub::access()));
+        click(&mut harness, "Sur Rafthub");
+        tall(&mut harness);
+        save(&mut harness, "16-salon-rafthub");
+    }
+    // Partie hébergée par Rafthub : en ligne, puis en veille.
+    {
+        use crate::screens::hub_game::HubGames;
+        let games = HubGames::with_game(super::rafthub::created(), Some(super::rafthub::status()));
+        let mut harness = super::rafthub::game_screen_with(games);
+        tall(&mut harness);
+        harness.run_steps(3);
+        save(&mut harness, "17-partie-rafthub");
+        let mut harness = super::rafthub::game_screen_with(super::rafthub::sleeping());
+        tall(&mut harness);
+        harness.run_steps(3);
+        save(&mut harness, "17b-partie-rafthub-veille");
+    }
+    // « En cours » : la partie de ce PC, une partie sur Rafthub et deux parties à reprendre.
+    {
+        use crate::screens::hub_game::HubGames;
+        use crate::screens::past_games::PastGames;
+        struct EnCours {
+            shared: Shared,
+            games: HubGames,
+            past: PastGames,
+        }
+        let state = EnCours {
+            shared: demo_party(),
+            games: HubGames::with_game(super::rafthub::created(), None),
+            past: PastGames::with_games(vec![
+                super::reprise::game("111", &["Hollow Knight", "Stardew Valley"], true),
+                super::reprise::game("222", &["A Short Hike"], false),
+            ]),
+        };
+        let mut harness = builder().build_ui_state(
+            |ui, s: &mut EnCours| {
+                crate::screens::matches::show(ui, &s.shared, None, &mut s.games, &mut s.past);
+                crate::titlebar::show(ui.ctx());
+            },
+            state,
+        );
+        harness.run_steps(3);
+        save(&mut harness, "18-en-cours");
     }
     // Le dossier contient bien une image par écran.
     let count = std::fs::read_dir(output_dir())

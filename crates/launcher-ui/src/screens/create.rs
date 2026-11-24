@@ -69,8 +69,8 @@ pub enum Started {
 }
 
 /// Avertissement obligatoire avant d'ajouter un apworld (contrat, « Avertissements »).
-pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur votre PC, sans bac \
-     à sable. N'ajoutez que ceux que vous jugez sûrs.";
+pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur ton PC, sans bac \
+     à sable. N'ajoute que ceux que tu juges sûrs.";
 
 /// Boîte de dialogue à ouvrir après le dessin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +90,7 @@ struct GameChoice {
     name: String,
     /// Nom du jeu côté Archipelago, écrit dans le YAML.
     ap_game: String,
-    /// Version de l'apworld du profil, pour le panneau « Profil de session ».
+    /// Version de l'apworld du profil, pour la ligne des versions (au survol).
     world_version: Option<String>,
 }
 
@@ -336,8 +336,11 @@ impl CreateForm {
                 ap_game,
             });
         }
-        let my_name =
-            crew::check_name(&self.my_name, &members).map_err(|e| format!("Ton pseudo : {e}"))?;
+        // Pseudo vide : « Indique ton pseudo. » plutôt que « Ton pseudo : Indique un pseudo. ».
+        let my_name = crew::check_name(&self.my_name, &members).map_err(|e| match e {
+            crew::NameError::Empty => "Indique ton pseudo.".to_string(),
+            other => format!("Ton pseudo : {other}"),
+        })?;
         // `insert(0, …)` : l'hôte passe en tête, il aura le slot 1.
         members.insert(
             0,
@@ -426,7 +429,7 @@ fn upload(
 }
 
 /// `rafthub` : accès au hub pour y héberger la partie, si le joueur y est connecté et
-/// que le hub le propose (sinon, seul « Héberger sur mon PC » existe).
+/// que le hub le propose (sinon, seul « Sur mon PC » existe).
 pub fn show(
     ui: &mut Ui,
     form: &mut CreateForm,
@@ -475,7 +478,10 @@ pub fn show(
         if ui.available_width() >= super::WIDE {
             let gap = 16.0;
             let right = (ui.available_width() * 0.34).max(300.0);
-            let left = ui.available_width() - right - gap;
+            // egui ajoute son propre espacement entre deux éléments d'une rangée : on le
+            // retire de la colonne de gauche, sinon celle de droite dépasse la marge.
+            let spacing = ui.spacing().item_spacing.x;
+            let left = ui.available_width() - right - gap - spacing;
             ui.horizontal_top(|ui| {
                 column(ui, left, |ui| {
                     world_panel(ui, form);
@@ -484,8 +490,6 @@ pub fn show(
                 });
                 ui.add_space(gap);
                 column(ui, right, |ui| {
-                    session_panel(ui, form);
-                    ui.add_space(gap);
                     hosting_panel(ui, form);
                     ui.add_space(gap);
                     launch_panel(ui, form, error);
@@ -495,8 +499,6 @@ pub fn show(
             world_panel(ui, form);
             ui.add_space(12.0);
             crew_panel(ui, form);
-            ui.add_space(12.0);
-            session_panel(ui, form);
             ui.add_space(12.0);
             hosting_panel(ui, form);
             ui.add_space(12.0);
@@ -831,57 +833,60 @@ fn crew_panel(ui: &mut Ui, form: &mut CreateForm) {
             ui.label(RichText::new(message).color(theme::AMBER).size(13.0));
         }
         ui.label(
-            widgets::dim(
-                "Chaque joueur reçoit son lien d'invitation une fois la partie hébergée ; \
-                 l'onglet « Salon » de la partie vérifie qu'il est prêt.",
-            )
-            .size(12.0),
+            widgets::dim("Chaque joueur reçoit son lien d'invitation une fois la partie hébergée.")
+                .size(12.0),
         );
     });
 }
 
-/// Une ligne « nom … valeur » du panneau « Profil de session ».
-fn version_row(ui: &mut Ui, label: &str, value: &str) {
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(label).color(theme::TEXT));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(widgets::mono(value, 13.0).color(theme::TEXT));
-        });
-    });
+/// Versions figées pour toute la partie, en une ligne discrète : « Archipelago 0.6.8 ·
+/// Raftup 0.1.0 ». Le détail (version du monde de chaque jeu) est au survol.
+fn versions_line(ui: &mut Ui, form: &CreateForm) {
+    let mut details = vec![
+        format!("Archipelago (générateur) {AP_VERSION}"),
+        format!("Raftup {}", env!("CARGO_PKG_VERSION")),
+    ];
+    // Un monde par jeu de l'équipage, sans doublon, dans l'ordre de l'équipage.
+    let mut ids: Vec<&str> = form.my_game.as_deref().into_iter().collect();
+    for mate in &form.mates {
+        if !ids.contains(&mate.game_id.as_str()) {
+            ids.push(&mate.game_id);
+        }
+    }
+    for id in ids {
+        if let Some(game) = form.game(id) {
+            let version = game.world_version.as_deref().unwrap_or("—");
+            details.push(format!("Monde {} {version}", game.name));
+        }
+    }
+    ui.label(
+        widgets::dim(format!(
+            "Archipelago {AP_VERSION} · Raftup {}",
+            env!("CARGO_PKG_VERSION")
+        ))
+        .size(12.0),
+    )
+    .on_hover_text(format!(
+        "Versions figées pour toute l'équipe :\n{}",
+        details.join("\n")
+    ));
 }
 
-/// Panneau « Profil de session » : les versions figées pour toute la partie.
-fn session_panel(ui: &mut Ui, form: &CreateForm) {
-    caps_panel(ui, "Profil de session", |ui| {
+/// « Tes amis se connecteront à exemple.fr:38281. », ou un avertissement si l'adresse ne
+/// marche que sur ce PC. Partagé avec « Héberger un fichier ».
+pub fn address_line(ui: &mut Ui, port: &str, public_host: &str) {
+    if format::is_local_address(public_host) || public_host.trim().is_empty() {
         ui.label(
             RichText::new(
-                "Toutes les versions sont figées pour l'équipage. Chaque joueur installe \
-                 exactement les mêmes.",
+                "Adresse locale : seuls les joueurs de ce PC pourront se connecter. \
+                 Indique ton adresse publique dans les options avancées.",
             )
-            .color(theme::TEXT),
+            .color(theme::AMBER)
+            .size(12.0),
         );
-        ui.add_space(6.0);
-        version_row(ui, "Archipelago (générateur)", AP_VERSION);
-        version_row(ui, "Raftup", env!("CARGO_PKG_VERSION"));
-        // Un monde par jeu de l'équipage, sans doublon, dans l'ordre de l'équipage.
-        let mut ids: Vec<&str> = form.my_game.as_deref().into_iter().collect();
-        for mate in &form.mates {
-            if !ids.contains(&mate.game_id.as_str()) {
-                ids.push(&mate.game_id);
-            }
-        }
-        for id in ids {
-            if let Some(game) = form.game(id) {
-                let version = game
-                    .world_version
-                    .as_deref()
-                    .map(|v| format!("v{v}"))
-                    .unwrap_or_else(|| "—".to_string());
-                version_row(ui, &format!("Monde {}", game.name), &version);
-            }
-        }
-    });
+    } else {
+        ui.label(widgets::dim(format::server_summary(port, public_host)).size(12.0));
+    }
 }
 
 /// Panneau à petit titre en capitales (« HÉBERGEMENT »), comme la colonne de droite
@@ -899,12 +904,14 @@ fn caps_panel(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui)) {
 fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
     caps_panel(ui, "Hébergement", |ui| {
         if let Some(hub) = form.rafthub.as_ref().map(|a| a.host().to_string()) {
-            ui.horizontal_wrapped(|ui| {
+            // Sélecteur à segments sur une ligne (libellés courts pour tenir dans la colonne).
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
                 let here = form.host_mode == HostMode::ThisPc;
-                if widgets::segment(ui, "Héberger sur mon PC", here) {
+                if widgets::segment(ui, "Sur mon PC", here) {
                     form.host_mode = HostMode::ThisPc;
                 }
-                if widgets::segment(ui, "Héberger sur Rafthub", !here) {
+                if widgets::segment(ui, "Sur Rafthub", !here) {
                     form.host_mode = HostMode::Rafthub;
                 }
             });
@@ -914,30 +921,17 @@ fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
                 return;
             }
         }
-        widgets::pill(ui, "Sur ce PC", theme::TEXT, theme::ACCENT_BG);
-        ui.add_space(6.0);
         ui.label(
-            widgets::dim(
-                "Serveur Raftup intégré, protocole Archipelago. Ton PC doit rester allumé \
-                 pendant la partie.",
-            )
-            .size(13.0),
+            widgets::dim("La partie tourne sur ton PC : il doit rester allumé pendant la partie.")
+                .size(13.0),
         );
-        ui.add_space(6.0);
         labelled(ui, "Mot de passe de la salle (facultatif)");
         ui.add(
             egui::TextEdit::singleline(&mut form.password)
                 .password(true)
                 .desired_width(f32::INFINITY),
         );
-        ui.label(
-            widgets::dim(format::server_summary(
-                &form.port,
-                &form.public_host,
-                form.security.summary(),
-            ))
-            .size(12.0),
-        );
+        address_line(ui, &form.port, &form.public_host);
         // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
         let mut open_now = form.open_advanced;
         widgets::advanced(
@@ -954,19 +948,10 @@ fn hosting_panel(ui: &mut Ui, form: &mut CreateForm) {
 /// Réglages d'une partie hébergée par Rafthub : nom et mot de passe, sans port ni
 /// certificat (le hub les choisit).
 fn rafthub_panel(ui: &mut Ui, form: &mut CreateForm, hub: &str) {
-    widgets::pill(
-        ui,
-        &format!("Sur Rafthub · {hub}"),
-        theme::TEXT,
-        theme::ACCENT_BG,
-    );
-    ui.add_space(6.0);
     ui.label(
-        widgets::dim(
-            "La seed est générée sur ce PC, puis envoyée à Rafthub qui fait tourner le \
-             serveur : la partie continue quand ton PC est éteint. Rafthub garde la seed \
-             et la sauvegarde.",
-        )
+        widgets::dim(format!(
+            "La partie tourne sur Rafthub ({hub}) : elle continue quand ton PC est éteint."
+        ))
         .size(13.0),
     );
     ui.add_space(6.0);
@@ -1023,14 +1008,7 @@ fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
             on_generate(ui.ctx(), form, error);
         }
         ui.add_space(8.0);
-        let note = if form.on_rafthub() {
-            "La seed est créée sur ce PC par le générateur officiel d'Archipelago, puis \
-             envoyée à Rafthub."
-        } else {
-            "La seed est créée par le générateur officiel d'Archipelago, dans un process \
-             séparé sur ce PC."
-        };
-        ui.label(widgets::dim(note).size(12.0));
+        versions_line(ui, form);
     });
 }
 
@@ -1466,7 +1444,7 @@ fn build_generation(form: &CreateForm) -> Result<GenerateRequest, String> {
         form.crew_members()?;
     }
     if !form.apworlds.is_empty() && !form.apworld_ack {
-        return Err(format!("Cochez « J'ai compris » : {APWORLD_WARNING}"));
+        return Err(format!("Coche « J'ai compris » : {APWORLD_WARNING}"));
     }
     // `..GenerateRequest::default()` : les autres champs (seed, spoiler, délai)
     // gardent leur valeur par défaut, comme un constructeur avec valeurs par défaut.
@@ -1516,7 +1494,7 @@ pub(crate) fn build_request(
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
     if public_host.is_empty() {
-        return Err("Indiquez l'adresse que les autres joueurs utiliseront.".into());
+        return Err("Indique l'adresse que les autres joueurs utiliseront.".into());
     }
     let encryption = security::encryption(form.security, &form.cert, &form.key)?;
     let password = Some(form.password.clone()).filter(|p| !p.is_empty());
@@ -1716,10 +1694,7 @@ game: Slime Rancher
         // Pseudo de l'hôte vide : refus clair, jeu choisi.
         form.my_game = Some("sr".into());
         form.my_name.clear();
-        assert_eq!(
-            build_request(&form).unwrap_err(),
-            "Ton pseudo : Indique un pseudo."
-        );
+        assert_eq!(build_request(&form).unwrap_err(), "Indique ton pseudo.");
     }
 
     #[test]
@@ -1751,7 +1726,7 @@ game: Slime Rancher
         form.public_host = "   ".into();
         assert_eq!(
             build_request(&form).unwrap_err(),
-            "Indiquez l'adresse que les autres joueurs utiliseront."
+            "Indique l'adresse que les autres joueurs utiliseront."
         );
     }
 

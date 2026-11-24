@@ -14,6 +14,7 @@ pub mod join;
 pub mod library;
 pub mod matches;
 pub mod native_panel;
+pub mod past_games;
 pub mod prefs;
 pub mod presets;
 pub mod registry_panel;
@@ -47,7 +48,8 @@ pub fn page<R>(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui) -> R) -> R {
 
 /// En-tête d'écran : fil d'Ariane, titre, et boutons alignés à droite (ajoutés par `buttons`).
 pub fn header(ui: &mut Ui, breadcrumb: &str, heading: &str, buttons: impl FnOnce(&mut Ui)) {
-    ui.horizontal(|ui| {
+    // Ligne de titre partagée : place des boutons de fenêtre, glisser pour déplacer.
+    crate::titlebar::title_row(ui, |ui| {
         ui.vertical(|ui| {
             ui.label(crate::widgets::dim(breadcrumb).size(13.0));
             ui.label(crate::widgets::title(heading, 28.0));

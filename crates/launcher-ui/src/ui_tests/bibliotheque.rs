@@ -19,7 +19,7 @@ use crate::worker::Shared;
 /// Identifiant du jeu du catalogue de démonstration.
 const GAME: &str = "slime-rancher";
 /// Texte d'aide du champ « Adresse » de « Se connecter à la main ».
-const ADDRESS_HINT: &str = "ws://hote:38281";
+const ADDRESS_HINT: &str = "adresse:38281";
 
 pub struct Bibliotheque {
     pub library: LibraryState,
@@ -69,6 +69,8 @@ pub(super) fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Biblio
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Bibliotheque| {
             library::show(ui, &mut s.library, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );
@@ -85,17 +87,29 @@ fn address_field_shown(harness: &Harness<'_, Bibliotheque>) -> bool {
 
 #[test]
 fn la_carte_et_la_fiche_du_jeu_s_affichent() {
-    let harness = bibliotheque();
+    let mut harness = bibliotheque();
     assert!(shows(&harness, "Bibliothèque"));
     assert!(shows(&harness, "1 jeu · 1 prêt"));
     // Le nom du jeu : sous la jaquette de la carte, et en titre de la fiche.
     assert!(count(&harness, "Slime Rancher") >= 2);
     // La fiche : origine du profil, bouton principal, emplacement, étapes.
-    assert!(shows(&harness, "Profil du catalogue de Raftup"));
+    // Le cas normal (catalogue de Raftup) ne dit pas son origine.
+    assert!(!shows(&harness, "Profil du catalogue de Raftup"));
     assert!(shows(&harness, "Lancer le jeu"));
     assert!(shows(&harness, "Détecté via Steam"));
-    assert!(shows(&harness, "MelonLoader"));
+    // La sorte de monde : badge sur la jaquette, badge et phrase dans la fiche.
+    assert!(count(&harness, "Archipelago") >= 1);
+    assert!(shows(
+        &harness,
+        "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+    ));
+    // « Réinstaller » d'un jeu prêt : petit bouton à côté de « Désinstaller ».
+    assert!(shows(&harness, "Réinstaller"));
     assert!(shows(&harness, "Désinstaller le mod"));
+    // Les étapes du profil sont repliées : un clic les montre.
+    assert!(!shows(&harness, "MelonLoader"));
+    click(&mut harness, "Ce que Raftup installe");
+    assert!(shows(&harness, "MelonLoader"));
 }
 
 #[test]
@@ -231,6 +245,8 @@ fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Bibliotheque| {
             library::show(ui, &mut s.library, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );
@@ -246,8 +262,8 @@ fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
         }
     }
     // La fiche du jeu choisi est à l'écran.
-    assert!(shows(&harness, "PROFIL D'INSTALLATION"));
-    let profile = harness.get_by_label("PROFIL D'INSTALLATION").rect();
+    assert!(shows(&harness, "Ce que Raftup installe"));
+    let profile = harness.get_by_label("Ce que Raftup installe").rect();
     assert!(
         profile.right() <= right_edge,
         "fiche hors de l'écran : {profile:?}"
