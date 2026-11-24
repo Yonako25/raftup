@@ -69,6 +69,8 @@ pub(super) fn bibliotheque_with(art: Option<Artwork>) -> Harness<'static, Biblio
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Bibliotheque| {
             library::show(ui, &mut s.library, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );
@@ -243,6 +245,8 @@ fn plusieurs_jeux_la_grille_passe_a_la_ligne() {
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Bibliotheque| {
             library::show(ui, &mut s.library, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );

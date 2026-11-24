@@ -34,6 +34,8 @@ pub fn salon() -> Harness<'static, Salon> {
         |ui, s: &mut Salon| {
             // Champs distincts de `s` : Rust permet de les emprunter en même temps.
             create::show(ui, &mut s.form, &mut s.error, &s.worker, &s.shared, None);
+            // Les boutons de fenêtre, comme dans `App` (après l'écran).
+            crate::titlebar::show(ui.ctx());
         },
         state,
     );

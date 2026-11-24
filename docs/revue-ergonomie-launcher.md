@@ -72,6 +72,8 @@ Les points marqués **(à valider)** retirent quelque chose de l'écran ou chang
 
 19. **Plus de barre de titre (demande du 24 novembre 2026, acceptée et faite)** : la bande de 34 px en haut de la fenêtre, vide à part les trois boutons, disparaît. Réduire, agrandir et fermer flottent dans le coin haut droit, au-dessus de la page. On déplace la fenêtre en glissant le haut de la barre latérale (logo) ou la marge vide en haut de la page ; un double-clic au même endroit agrandit. Rien d'autre ne bouge : les boutons des en-têtes de page sont plus bas que les trois boutons.
 
+20. **Boutons de fenêtre intégrés (demande du 24 novembre 2026, « améliore l'intégration », faite)** : les trois boutons se posent sur la ligne de titre de chaque écran (`titlebar::title_row`), alignés sur le bord droit des panneaux ; les actions de la page se rangent à leur gauche avec un espace net ; style du thème (40 × 32, icône grise, fond de champ au survol, rouge pour fermer, angles de 2 px) ; la ligne de titre se glisse pour déplacer la fenêtre, double-clic pour l'agrandir. L'Accueil, sans ligne de titre, les garde dans le coin haut.
+
 ### Impact faible
 
 13. **Défauts de mise en page** : chevauchement des colonnes de « Héberger un fichier » (6 px) ; colonne droite du salon qui dépasse la marge (9 px) ; bouton « Ouvrir » élargi par des espaces (`"   Ouvrir   "`) au lieu d'une largeur minimale.

@@ -1224,7 +1224,7 @@ fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
     let scanning = state.scanning.is_some();
     let mut refresh = false;
     let mut add_dir = false;
-    let row = ui.horizontal(|ui| {
+    let row = crate::titlebar::title_row(ui, |ui| {
         ui.label(widgets::title("Bibliothèque", 28.0));
         ui.label(widgets::dim(summary).size(14.0));
         // De droite à gauche : le premier bouton ajouté est le plus à droite.

@@ -87,23 +87,53 @@ fn les_liens_ouvrent_leur_ecran() {
     }
 }
 
-/// Plus de bande de titre : les trois boutons de fenêtre flottent dans le coin haut droit,
-/// collés au bord, « Fermer » le plus à droite.
+/// Plus de bande de titre : les trois boutons de fenêtre sont sur la ligne de titre de
+/// l'écran, dans le coin droit, et les actions de la page se rangent à leur gauche.
 #[test]
-fn boutons_de_fenetre_dans_le_coin_haut_droit() {
-    let mut harness =
-        builder().build_ui_state(|ui, _: &mut ()| crate::titlebar::show(ui.ctx()), ());
+fn boutons_de_fenetre_sur_la_ligne_de_titre() {
+    let mut harness = builder().build_ui_state(
+        |ui, _: &mut ()| {
+            crate::screens::page(ui, |ui| {
+                crate::screens::header(ui, "Parties", "Un écran", |ui| {
+                    crate::widgets::primary_button(ui, "Action de la page", true);
+                });
+            });
+            crate::titlebar::show(ui.ctx());
+        },
+        (),
+    );
     harness.run();
     let screen = harness.ctx.content_rect();
     let close = harness.get_by_label("Fermer").rect();
     let maximize = harness.get_by_label("Agrandir").rect();
     let minimize = harness.get_by_label("Réduire").rect();
-    assert!((close.right() - screen.right()).abs() < 1.0, "{close:?}");
-    assert!((close.top() - screen.top()).abs() < 2.0, "{close:?}");
+    let action = harness.get_by_label("Action de la page").rect();
+    // « Fermer » le plus à droite, près du bord ; les trois dans l'ordre, sans chevauchement.
+    assert!(screen.right() - close.right() < 32.0, "{close:?}");
     assert!(minimize.right() <= maximize.left() + 0.5);
     assert!(maximize.right() <= close.left() + 0.5);
-    // Ils ne descendent pas jusqu'aux boutons des en-têtes de page (marge de 22 px).
-    assert!(close.height() <= crate::titlebar::HEIGHT + 0.5);
+    assert!((close.height() - crate::titlebar::HEIGHT).abs() < 0.5);
+    // Même ligne que l'action de la page (milieux alignés), avec un espace net entre eux.
+    assert!(
+        (close.center().y - action.center().y).abs() < 2.0,
+        "{close:?} / {action:?}"
+    );
+    assert!(
+        minimize.left() - action.right() >= 12.0,
+        "{action:?} / {minimize:?}"
+    );
+}
+
+/// Un écran sans ligne de titre (l'Accueil) : les boutons restent dans le coin, en haut.
+#[test]
+fn boutons_de_fenetre_sans_ligne_de_titre() {
+    let mut harness =
+        builder().build_ui_state(|ui, _: &mut ()| crate::titlebar::show(ui.ctx()), ());
+    harness.run();
+    let screen = harness.ctx.content_rect();
+    let close = harness.get_by_label("Fermer").rect();
+    assert!(screen.right() - close.right() < 32.0, "{close:?}");
+    assert!(close.top() - screen.top() < 30.0, "{close:?}");
 }
 
 #[test]

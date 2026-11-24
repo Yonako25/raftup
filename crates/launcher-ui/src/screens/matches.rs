@@ -22,7 +22,7 @@ pub fn show(ui: &mut Ui, shared: &Shared, error: Option<&str>, hub: &mut HubGame
     let mut goto = None;
     super::page(ui, |ui| {
         // Titre et sous-titre sur la même ligne, comme sur la maquette.
-        ui.horizontal(|ui| {
+        crate::titlebar::title_row(ui, |ui| {
             ui.label(widgets::title("En cours", 28.0));
             ui.label(widgets::dim("Les parties lancées").size(14.0));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

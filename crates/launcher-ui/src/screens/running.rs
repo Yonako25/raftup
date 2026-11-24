@@ -261,7 +261,9 @@ fn hero(
             if banner.is_some() {
                 ui.set_min_height(120.0);
             }
-            ui.horizontal(|ui| {
+            // Ligne de titre partagée : les boutons de fenêtre se posent à sa droite, dans
+            // le bandeau.
+            crate::titlebar::title_row(ui, |ui| {
                 back = widgets::ghost_button(ui, "‹");
                 ui.add_space(6.0);
                 ui.vertical(|ui| {

@@ -402,6 +402,7 @@ fn captures_interface() {
                     &s.shared,
                     &mut s.library,
                 );
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );
@@ -490,6 +491,7 @@ fn captures_interface() {
             |ui, s: &mut Catalogue| {
                 s.library.background(ui.ctx());
                 catalog::show(ui, &mut s.state, &mut s.library);
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );
@@ -573,6 +575,7 @@ fn captures_interface() {
         let mut harness = builder().build_ui_state(
             |ui, s: &mut EnCours| {
                 crate::screens::matches::show(ui, &s.shared, None, &mut s.games);
+                crate::titlebar::show(ui.ctx());
             },
             state,
         );

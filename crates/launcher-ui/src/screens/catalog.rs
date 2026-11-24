@@ -54,7 +54,7 @@ pub fn show(ui: &mut Ui, state: &mut CatalogState, library: &mut LibraryState) {
     let games = library.summaries();
     let ctx = ui.ctx().clone();
     super::page(ui, |ui| {
-        ui.horizontal(|ui| {
+        crate::titlebar::title_row(ui, |ui| {
             ui.label(widgets::title("Catalogue", 28.0));
             ui.label(widgets::dim("Les jeux compatibles avec Raftup").size(14.0));
         });
