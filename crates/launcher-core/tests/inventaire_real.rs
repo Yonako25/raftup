@@ -12,7 +12,10 @@
 //! - `RAFTUP_INVENTAIRE_ALLER_RETOUR` (facultatif) : jeux, séparés par `|`, dont le
 //!   monde converti est réexporté en apworld puis repasse le contrôle croisé ;
 //! - `RAFTUP_INVENTAIRE_NATIFS` (facultatif) : dossier où écrire les `world.toml`
-//!   produits (hors du dépôt : ce sont des œuvres dérivées des apworlds).
+//!   produits (hors du dépôt : ce sont des œuvres dérivées des apworlds) ;
+//! - `RAFTUP_INVENTAIRE_EXPORTS` (facultatif) : dossier où garder les exports bruts ;
+//! - `RAFTUP_INVENTAIRE_PLAFONDS` (facultatif) : plafonds du sondeur, `chemins,questions`
+//!   (par défaut ceux de `ProbeLimits::default()`).
 //!
 //! `cargo test -p launcher-core --test inventaire_real -- --ignored --nocapture --test-threads=1`
 
@@ -25,7 +28,8 @@ use std::time::{Duration, Instant};
 use launcher_core::generation::{pins, runtime_status, Runtime, RuntimeStatus};
 use launcher_core::Paths;
 use py_bridge::{
-    BridgeOptions, CancelToken, ExportParams, GenerateParams, PyBridge, EXPORTER_SCRIPT,
+    exporter_script, BridgeOptions, CancelToken, ExportParams, GenerateParams, ProbeLimits,
+    PyBridge,
 };
 use serde_json::{json, Value};
 
@@ -59,6 +63,22 @@ fn default_yaml(game: &str) -> String {
     format!("name: P1\ngame: {quoted}\n{quoted}: {{}}\n")
 }
 
+/// Plafonds du sondeur : `RAFTUP_INVENTAIRE_PLAFONDS=chemins,questions`, sinon ceux
+/// par défaut.
+fn probe_limits() -> ProbeLimits {
+    let mut limits = ProbeLimits::default();
+    if let Ok(text) = std::env::var("RAFTUP_INVENTAIRE_PLAFONDS") {
+        let mut parts = text.split(',').map(|p| p.trim().parse::<u32>());
+        if let (Some(Ok(paths)), Some(Ok(questions))) = (parts.next(), parts.next()) {
+            limits = ProbeLimits {
+                max_paths: paths,
+                max_questions: questions,
+            };
+        }
+    }
+    limits
+}
+
 /// Lance `export_worlds` dans un worker neuf ; rend les octets du JSON et le nombre de
 /// règles sondées, ou le message d'erreur.
 fn export(runtime: &Runtime, work: &Path, yaml: &str, seed: u64) -> Result<(Vec<u8>, u64), String> {
@@ -79,7 +99,7 @@ fn export(runtime: &Runtime, work: &Path, yaml: &str, seed: u64) -> Result<(Vec<
             race: false,
         },
         export_path: path.clone(),
-        exporter: EXPORTER_SCRIPT.to_string(),
+        exporter: exporter_script(probe_limits()),
     };
     let mut bridge = bridge(runtime)?;
     let result =
@@ -326,7 +346,9 @@ fn inventaire_conversion() {
     let games: Vec<String> = std::fs::read_to_string(list)
         .unwrap()
         .lines()
-        .map(str::trim)
+        // Un fichier écrit par PowerShell 5.1 (`Set-Content -Encoding utf8`) commence par
+        // un BOM, que `trim` ne retire pas.
+        .map(|l| l.trim_start_matches('\u{feff}').trim())
         .filter(|l| !l.is_empty())
         .map(String::from)
         .collect();

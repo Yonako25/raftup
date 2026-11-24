@@ -431,14 +431,15 @@ class TestSondage(unittest.TestCase):
 
     def test_refus(self):
         self.refus(lambda s: not s.has("A", 1), "non monotone")
-        self.refus(lambda s: s.prog_items[1]["A"] > 0, "state.prog_items")
-        self.refus(lambda s: s.count("A", 1) + s.count("B", 1) >= 2, "TypeError")
-        self.refus(lambda s: "oui", "resultat")
-        # Un entier (valeur d'option) ou None se lisent comme vrai / faux, comme en Python.
+        self.refus(lambda s: s.prog_items[1].items(), "prog_items")
+        self.refus(lambda s: s.stale_cache, "state.stale_cache")
+        # Un entier (valeur d'option), None ou un objet se lisent comme vrai / faux,
+        # comme Archipelago le fait (`if rule(state)`).
         self.assertEqual(self.sonde(lambda s: s.has("A", 1) or 0),
                          {"t": "and", "of": [{"t": "has", "player": 1, "item": "A", "count": 1}]})
         self.assertEqual(self.sonde(lambda s: 1), {"t": "true"})
         self.assertEqual(self.sonde(lambda s: None), {"t": "false"})
+        self.assertEqual(self.sonde(lambda s: "oui"), {"t": "true"})
         compteur = [0]
 
         def instable(s):
@@ -449,6 +450,197 @@ class TestSondage(unittest.TestCase):
 
     def test_trop_de_chemins(self):
         self.refus(lambda s: sum(s.has(str(i), 1) for i in range(13)) >= 13, "chemins")
+
+
+def _has(item, count, player=1):
+    return {"t": "has", "player": player, "item": item, "count": count}
+
+
+class TestSondageLot2(unittest.TestCase):
+    """Lot 2 de l'inventaire de conversion : calculs sur les compteurs, prog_items,
+    multiworld, reachable_regions, methodes de LogicMixin, plafonds."""
+
+    def setUp(self):
+        # Un namespace neuf par test : certains changent les plafonds (globales).
+        with open(os.path.join(ICI, "raftup_export.py"), encoding="utf-8") as f:
+            self.ns = {"__name__": "raftup_export"}
+            exec(compile(f.read(), "raftup_export.py", "exec"), self.ns)
+
+    def sonde(self, rule, copies=None, mw=None):
+        return self.ns["probe"](mw, rule, copies)
+
+    def refus(self, rule, mot, copies=None, mw=None):
+        with self.assertRaises(self.ns["Refused"]) as ctx:
+            self.sonde(rule, copies, mw)
+        self.assertIn(mot, str(ctx.exception))
+
+    def test_seuil_flottant(self):
+        # `count >= 1.5` veut dire « au moins 2 » (avant : tronque a 1, faux).
+        self.assertEqual(self.sonde(lambda s: s.count("Gem", 1) >= 1.5),
+                         {"t": "and", "of": [_has("Gem", 2)]})
+        self.assertEqual(self.sonde(lambda s: s.count("Gem", 1) > 1.5),
+                         {"t": "and", "of": [_has("Gem", 2)]})
+        self.assertEqual(self.sonde(lambda s: not s.count("Gem", 1) < 2.5),
+                         {"t": "and", "of": [_has("Gem", 3)]})
+
+    def test_somme_de_compteurs(self):
+        # Overcooked! 2 : etoiles + etoiles bonus >= 3 : UNE question « somme » (ADR 0055).
+        copies = {(1, "Star"): 2, (1, "Bonus"): 2}
+        r = self.sonde(lambda s: s.count("Star", 1) + s.count("Bonus", 1) >= 3, copies)
+        self.assertEqual(r, {"t": "and", "of": [
+            {"t": "sum", "player": 1, "terms": [["Bonus", 1, False], ["Star", 1, False]],
+             "count": 3}]})
+
+    def test_somme_ponderee(self):
+        copies = {(1, "Gem"): 9, (1, "Coin"): 9, (1, "A"): 1, (1, "B"): 1, (1, "C"): 1}
+        # Poids, ordre libre, `>` et constante : 2 * Gem + Coin + 1 > 5 <=> ... >= 5.
+        r = self.sonde(lambda s: 1 + s.count("Coin", 1) + s.count("Gem", 1) * 2 > 5, copies)
+        self.assertEqual(r["of"][0], {"t": "sum", "player": 1, "count": 5,
+                                      "terms": [["Coin", 1, False], ["Gem", 2, False]]})
+        # `sum(...)` de Python, sur des listes et des objets differents.
+        r = self.sonde(lambda s: sum([s.count_from_list(["A", "B"], 1),
+                                      s.count_from_list_unique(["B", "C"], 1)]) >= 2, copies)
+        self.assertEqual(r["of"][0]["terms"],
+                         [["A", 1, False], ["B", 1, False], ["B", 1, True], ["C", 1, True]])
+        # Un seul objet : une question « has » ordinaire (seuil arrondi vers le haut).
+        self.assertEqual(self.sonde(lambda s: 3 * s.count("Gem", 1) >= 7, copies),
+                         {"t": "and", "of": [_has("Gem", 3)]})
+        self.assertEqual(self.sonde(lambda s: s.count("Gem", 1) + 1 >= 3, copies),
+                         {"t": "and", "of": [_has("Gem", 2)]})
+        # Plus que ce qui existe : faux, sans question.
+        self.assertEqual(self.sonde(lambda s: s.count("A", 1) + s.count("B", 1) >= 3, copies),
+                         {"t": "false"})
+
+    def test_somme_hors_lineaire(self):
+        copies = {(1, "Gem"): 2, (1, "Coin"): 2}
+        # Difference de deux compteurs : valeur exacte, puis regle non monotone.
+        self.refus(lambda s: s.count("Gem", 1) - s.count("Coin", 1) >= 1, "non monotone",
+                   copies)
+        # Poids flottant : valeur exacte (enumeration), resultat juste.
+        r = self.sonde(lambda s: s.count("Gem", 1) * 1.5 >= 3, copies)
+        self.assertEqual(r, {"t": "and", "of": [_has("Gem", 2)]})
+        # Deux joueurs dans une meme somme : valeur exacte de chaque compteur.
+        r = self.sonde(lambda s: s.count("Gem", 1) + s.count("Gem", 2) >= 1,
+                       {(1, "Gem"): 1, (2, "Gem"): 1})
+        self.assertEqual(sorted(t["of"][0]["player"] for t in r["of"]), [1, 2])
+
+    def test_range_et_produit(self):
+        # shapez : `for _ in range(count)` et `count * 10`.
+        copies = {(1, "Up"): 3}
+
+        def regle(s):
+            m = 1
+            for _ in range(s.count("Up", 1)):
+                m *= 2
+            return m >= 4
+
+        self.assertEqual(self.sonde(regle, copies), {"t": "and", "of": [_has("Up", 2)]})
+        self.assertEqual(self.sonde(lambda s: s.count("Up", 1) * 10 >= 25, copies),
+                         {"t": "and", "of": [_has("Up", 3)]})
+        # Objet absent de la partie : le compteur vaut 0 sans question.
+        self.assertEqual(self.sonde(lambda s: s.count("Absent", 1) * 2 >= 1, copies),
+                         {"t": "false"})
+
+    def test_compteur_cle_de_cache(self):
+        # Zillion : un compteur passe a une fonction en cache (cle de dictionnaire).
+        copies = {(1, "Gun"): 3}
+        cache = {}
+
+        def niveau(n):
+            return cache.setdefault(n, int(n) >= 2)
+
+        self.assertEqual(self.sonde(lambda s: niveau(s.count("Gun", 1)), copies),
+                         {"t": "and", "of": [_has("Gun", 2)]})
+
+    def test_prog_items(self):
+        r = self.sonde(lambda s: s.prog_items[1]["A"] > 0)
+        self.assertEqual(r, {"t": "and", "of": [_has("A", 1)]})
+        r = self.sonde(lambda s: s.prog_items[1].get("A", 0) >= 3)
+        self.assertEqual(r, {"t": "and", "of": [_has("A", 3)]})
+        self.refus(lambda s: s.prog_items[1].__setitem__("A", 3), "ecriture")
+        self.refus(lambda s: list(s.prog_items[1]), "parcours")
+
+    def test_count_from_list_unique(self):
+        # Yu-Gi-Oh! 2006 : nombre d'objets differents d'une liste.
+        r = self.sonde(lambda s: s.count_from_list_unique(["A", "B", "C"], 1) >= 2)
+        self.assertEqual(r, {"t": "and", "of": [
+            {"t": "has_from_list_unique", "player": 1, "items": ["A", "B", "C"], "count": 2}]})
+        r = self.sonde(lambda s: s.count_from_list(["A", "B"], 1) >= 4)
+        self.assertEqual(r["of"][0]["t"], "has_from_list")
+        # En calcul lineaire : une somme ou chaque objet compte au plus 1 (ADR 0055).
+        copies = {(1, "A"): 5, (1, "B"): 1}
+        r = self.sonde(lambda s: s.count_from_list_unique(["A", "B", "C"], 1) * 2 >= 3, copies)
+        self.assertEqual(r["of"][0], {"t": "sum", "player": 1, "count": 3, "terms": [
+            ["A", 2, True], ["B", 2, True], ["C", 2, True]]})
+        # Hors lineaire, le plafond est le nombre d'objets differents qui existent.
+        r = self.sonde(lambda s: s.count_from_list_unique(["A", "B", "C"], 1) ** 2 >= 3, copies)
+        self.assertEqual(r["of"][0]["count"], 2)
+
+    def test_multiworld_en_lecture(self):
+        class Options:
+            goal = 3
+
+        class MW:
+            options = Options()
+
+        r = self.sonde(lambda s: s.has("A", 1, s.multiworld.options.goal), mw=MW())
+        self.assertEqual(r, {"t": "and", "of": [_has("A", 3)]})
+
+        def ecrit(s):
+            s.multiworld.seed = 1
+            return True
+
+        self.refus(ecrit, "ecriture dans state.multiworld", mw=MW())
+
+    def test_regions_atteintes(self):
+        # Region.can_reach d'Archipelago : `stale` puis `region in reachable_regions`.
+        class Region:
+            name, player = "Cave", 1
+
+            def can_reach(self, state):
+                if state.stale[self.player]:
+                    state.update_reachable_regions(self.player)
+                return self in state.reachable_regions[self.player]
+
+        r = self.sonde(lambda s: Region().can_reach(s))
+        self.assertEqual(r, {"t": "and", "of": [
+            {"t": "can_reach_region", "player": 1, "region": "Cave"}]})
+        self.refus(lambda s: len(list(s.reachable_regions[1])) > 3, "parcours")
+
+    def test_methode_logic_mixin(self):
+        # Wargroove : methode ajoutee a CollectionState par un LogicMixin.
+        import types
+        base = types.ModuleType("BaseClasses")
+
+        class CollectionState:
+            def collect(self, item):  # methode d'Archipelago : refusee
+                raise AssertionError
+
+        def _wargroove_has_item(self, player, item):
+            return self.has(item, player)
+
+        _wargroove_has_item.__module__ = "worlds.wargroove.Rules"
+        CollectionState._wargroove_has_item = _wargroove_has_item
+        CollectionState.collect.__module__ = "BaseClasses"
+        CollectionState._cache = {}  # attribut de donnees : refuse
+        base.CollectionState = CollectionState
+        sys.modules["BaseClasses"] = base
+        try:
+            r = self.sonde(lambda s: s._wargroove_has_item(1, "Mage"))
+            self.assertEqual(r, {"t": "and", "of": [_has("Mage", 1)]})
+            self.refus(lambda s: s.collect(None), "state.collect")
+            self.refus(lambda s: s._cache, "state._cache")
+        finally:
+            del sys.modules["BaseClasses"]
+
+    def test_plafonds_reglables(self):
+        regle = lambda s: sum(s.has(str(i), 1) for i in range(13)) >= 13  # noqa: E731
+        self.refus(regle, "chemins")
+        self.ns["MAX_PATHS"] = 10000
+        r = self.sonde(regle)
+        self.assertEqual(len(r["of"]), 13)  # un seul « et » de 13 objets
+        self.ns["MAX_QUESTIONS"] = 5
+        self.refus(regle, "plus de 5 questions")
 
 
 class TestReglesObjet(unittest.TestCase):

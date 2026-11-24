@@ -172,3 +172,59 @@ item = "Shells"
         "{regions}"
     );
 }
+
+/// Format 4 (ADR 0055) : une somme s'écrit en Python avec `state.count…`.
+#[test]
+fn sommes_en_python() {
+    let toml = r#"
+format_version = 4
+
+[game]
+name = "Stars"
+goal = '2 * count(Star) + count_from_list(Gem, Star) + count_unique(Gem) > 3'
+
+[[items]]
+name = "Star"
+id = 1
+classification = "progression"
+
+[[items]]
+name = "Gem"
+id = 2
+classification = "progression"
+
+[[item_groups]]
+name = "All"
+items = ["Star", "Gem"]
+
+[[regions]]
+name = "Menu"
+
+[[locations]]
+name = "A"
+id = 1
+region = "Menu"
+rule = 'count_group(All) >= 2'
+
+[[locations]]
+name = "B"
+id = 2
+region = "Menu"
+
+[filler]
+item = "Gem"
+"#;
+    let f = files(toml);
+    let rules = file(&f, "rules.py");
+    assert!(
+        rules.contains(
+            "(2 * state.count(\"Star\", w.player) + state.count_from_list((\"Gem\", \"Star\"), \
+             w.player) + state.count_from_list_unique((\"Gem\",), w.player) > 3)"
+        ),
+        "{rules}"
+    );
+    assert!(
+        rules.contains("(state.count_from_list((\"Star\", \"Gem\"), w.player) >= 2)"),
+        "{rules}"
+    );
+}

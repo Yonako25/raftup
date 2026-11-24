@@ -190,11 +190,6 @@ fn refus_clairs() {
             serde_json::json!({"t": "has", "player": 2, "item": "Key", "count": 1})
     });
     assert!(why.contains("joueur 2"), "{why}");
-    let why = refuse(&|v| {
-        v["players"][0]["locations"][0]["rule"] = serde_json::json!(
-            {"t": "has_from_list", "player": 1, "items": ["Key", "Sword"], "count": 2})
-    });
-    assert!(why.contains("groupe"), "{why}");
     // Un lieu à numéro qui porte l'objet d'un autre joueur, ou un objet sans numéro.
     let why = refuse(&|v| {
         v["players"][0]["locations"][0]["item"] =
@@ -407,4 +402,46 @@ fn objet_jamais_cree_vaut_false() {
         "{:?}",
         c.notes
     );
+}
+
+/// Sommes de compteurs (ADR 0055) : une liste qui n'est pas un groupe, « au moins k parmi
+/// n » et une somme pondérée s'écrivent en version 4 ; un cas simple reste en version 1.
+#[test]
+fn sommes_de_compteurs_en_version_4() {
+    let base: Value = serde_json::from_slice(EXPORT).unwrap();
+    let with_rule = |rule: Value| -> String {
+        let mut v = base.clone();
+        v["players"][0]["locations"][0]["rule"] = rule;
+        let export = read_export(&serde_json::to_vec(&v).unwrap()).unwrap();
+        convert(&export, 1, None).unwrap().toml
+    };
+    let toml = with_rule(serde_json::json!(
+        {"t": "has_from_list", "player": 1, "items": ["Key", "Sword"], "count": 2}));
+    assert!(
+        toml.contains(
+            "
+format_version = 4
+"
+        ),
+        "{toml}"
+    );
+    assert!(toml.contains("count_from_list(Key, Sword) >= 2"), "{toml}");
+    let toml = with_rule(serde_json::json!(
+        {"t": "has_from_list_unique", "player": 1, "items": ["Key", "Sword", "Shield"], "count": 2}));
+    assert!(
+        toml.contains("count_unique(Key, Sword, Shield) >= 2"),
+        "{toml}"
+    );
+    let toml = with_rule(serde_json::json!(
+        {"t": "sum", "player": 1, "terms": [["Sword", 2, false], ["Key", 1, false], ["Nope", 5, false]],
+         "count": 3}));
+    assert!(
+        toml.contains("2 * count(Sword) + count(Key) >= 3"),
+        "{toml}"
+    );
+    // Un seul objet de poids 1 : `has`, et la version ne monte pas.
+    let toml = with_rule(serde_json::json!(
+        {"t": "sum", "player": 1, "terms": [["Key", 1, false]], "count": 2}));
+    assert!(toml.contains("has(Key, 2)"), "{toml}");
+    assert!(!toml.contains("format_version = 4"), "{toml}");
 }

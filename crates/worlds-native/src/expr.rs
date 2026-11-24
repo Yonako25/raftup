@@ -7,8 +7,14 @@
 //! or         = and { "or" and }
 //! and        = unary { "and" unary }
 //! unary      = "not" unary | comparison
-//! comparison = primary [ op value ]
+//! comparison = sum ( ">=" | ">" ) count_value      (format_version 4, ADR 0055)
+//!            | primary [ op value ]
 //! primary    = "true" | "false" | "(" expr ")" | call
+//! sum        = term { "+" term }
+//! term       = [ number "*" ] counter
+//! counter    = "count" "(" objet ")" | "count_group" "(" groupe ")"
+//!            | "count_from_list" "(" objet { "," objet } ")"
+//!            | "count_unique" "(" objet { "," objet } ")"
 //! ```
 //!
 //! L'analyse est une « descente récursive » : une fonction par ligne de la grammaire, qui
@@ -17,8 +23,10 @@
 
 use std::collections::BTreeMap;
 
-use crate::model::{CompareOp, Count, Expr, ItemRef, LocationRef, OptionDef, OptionKind};
-use crate::MAX_DEPTH;
+use crate::model::{
+    CompareOp, Count, Counter, Expr, ItemRef, LocationRef, OptionDef, OptionKind, SumTerm,
+};
+use crate::{MAX_DEPTH, MAX_SUM_ITEMS, MAX_WEIGHT, SUM_FORMAT_VERSION};
 
 /// Erreur dans une expression : `offset` est l'octet fautif dans le texte de l'expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +52,12 @@ pub(crate) struct Names {
     pub regions: BTreeMap<String, u32>,
     pub locations: BTreeMap<String, LocationRef>,
     pub entrances: BTreeMap<String, u32>,
+    /// `format_version` du fichier : les sommes demandent la version 4.
+    pub format_version: i64,
 }
+
+/// Les fonctions qui commencent une somme.
+const COUNTERS: [&str; 4] = ["count", "count_group", "count_from_list", "count_unique"];
 
 // ---- Jetons ----
 
@@ -56,6 +69,8 @@ enum Tok {
     LParen,
     RParen,
     Comma,
+    Plus,
+    Star,
     Op(CompareOp),
     End,
 }
@@ -88,6 +103,14 @@ fn lex(text: &str) -> Result<Vec<Token>, ExprError> {
             ',' => {
                 chars.next();
                 Tok::Comma
+            }
+            '+' => {
+                chars.next();
+                Tok::Plus
+            }
+            '*' => {
+                chars.next();
+                Tok::Star
             }
             '=' | '!' | '<' | '>' => {
                 chars.next();
@@ -296,7 +319,158 @@ impl Parser<'_> {
         Ok(Expr::Not(Box::new(inner)))
     }
 
+    /// Vrai si le jeton courant commence une somme : `count…(` ou `nombre *`.
+    fn starts_sum(&self) -> bool {
+        let next_is = |tok: Tok| matches!(self.tokens.get(self.at + 1), Some(t) if t.tok == tok);
+        match &self.peek().tok {
+            Tok::Ident(w) => COUNTERS.contains(&w.as_str()) && next_is(Tok::LParen),
+            Tok::Int(_) => next_is(Tok::Star),
+            _ => false,
+        }
+    }
+
+    /// `terme + terme … >= valeur` (ou `>`).
+    fn sum(&mut self) -> Result<Expr, ExprError> {
+        let start = self.peek().offset;
+        if self.names.format_version < SUM_FORMAT_VERSION {
+            return fail(
+                start,
+                format!(
+                    "une somme de compteurs (count, count_from_list…) est permise à partir \
+                     de format_version = {SUM_FORMAT_VERSION}"
+                ),
+            );
+        }
+        let mut terms = vec![self.sum_term()?];
+        while self.peek().tok == Tok::Plus {
+            self.next();
+            terms.push(self.sum_term()?);
+        }
+        let cited: usize = terms
+            .iter()
+            .map(|t| match &t.counter {
+                Counter::List(items) | Counter::Unique(items) => items.len(),
+                Counter::Item(_) | Counter::Group(_) => 1,
+            })
+            .sum();
+        if cited > MAX_SUM_ITEMS {
+            return fail(
+                start,
+                format!("somme de plus de {MAX_SUM_ITEMS} objets cités"),
+            );
+        }
+        let token = self.next();
+        let strict = match token.tok {
+            Tok::Op(CompareOp::Ge) => false,
+            Tok::Op(CompareOp::Gt) => true,
+            Tok::Op(op) => {
+                return fail(
+                    token.offset,
+                    format!(
+                        "« {} » sur une somme : seuls « >= » et « > » sont permis (avoir un \
+                         objet de plus ne doit jamais rendre la règle fausse)",
+                        op.symbol()
+                    ),
+                )
+            }
+            _ => {
+                return fail(
+                    token.offset,
+                    "une somme de compteurs se compare : count(objet) >= nombre",
+                )
+            }
+        };
+        let token = self.next();
+        let arg = match token.tok {
+            Tok::Int(n) => Arg::Int(n),
+            Tok::Ident(w) if w == "option" => Arg::Option(self.option_call()?),
+            _ => {
+                return fail(
+                    token.offset,
+                    "nombre ou option(nom) attendu après la comparaison",
+                )
+            }
+        };
+        let value = self.count((arg, token.offset))?;
+        Ok(Expr::Sum {
+            terms,
+            strict,
+            value,
+        })
+    }
+
+    /// `[ nombre * ] compteur`.
+    fn sum_term(&mut self) -> Result<SumTerm, ExprError> {
+        let token = self.next();
+        let (weight, token) = match token.tok {
+            Tok::Int(n) => {
+                // `u32::try_from` échoue sur un nombre négatif ou trop grand.
+                let weight = match u32::try_from(n) {
+                    Ok(w) if (1..=MAX_WEIGHT).contains(&w) => w,
+                    _ => {
+                        return fail(
+                            token.offset,
+                            format!("poids {n} hors bornes (1 à {MAX_WEIGHT})"),
+                        )
+                    }
+                };
+                self.expect(Tok::Star, "« * »")?;
+                (weight, self.next())
+            }
+            _ => (1, token),
+        };
+        let function = match token.tok {
+            Tok::Ident(w) if COUNTERS.contains(&w.as_str()) => w,
+            _ => {
+                return fail(
+                    token.offset,
+                    "compteur attendu (count, count_group, count_from_list, count_unique)",
+                )
+            }
+        };
+        let offset = token.offset;
+        self.enter(offset)?;
+        let args = self.args()?;
+        self.depth -= 1;
+        let counter = match function.as_str() {
+            "count" => {
+                if args.len() != 1 {
+                    return fail(offset, "count attend un seul objet");
+                }
+                Counter::Item(self.item(args.into_iter().next())?)
+            }
+            "count_group" => {
+                if args.len() != 1 {
+                    return fail(offset, "count_group attend un seul groupe");
+                }
+                let (name, at) = self.name(args.into_iter().next(), offset)?;
+                let Some(&group) = self.names.groups.get(&name) else {
+                    return fail(at, format!("groupe d'objets « {name} » inconnu"));
+                };
+                Counter::Group(group)
+            }
+            _ => {
+                if args.is_empty() {
+                    return fail(offset, format!("{function} attend au moins un objet"));
+                }
+                let items = args
+                    .into_iter()
+                    .map(|arg| self.item(Some(arg)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if function == "count_unique" {
+                    Counter::Unique(items)
+                } else {
+                    Counter::List(items)
+                }
+            }
+        };
+        Ok(SumTerm { weight, counter })
+    }
+
     fn comparison(&mut self) -> Result<Expr, ExprError> {
+        if self.starts_sum() {
+            return self.sum();
+        }
         let start = self.peek().offset;
         let is_option_call = self.is_word("option")
             && matches!(self.tokens.get(self.at + 1), Some(t) if t.tok == Tok::LParen);
@@ -547,7 +721,8 @@ impl Parser<'_> {
                 format!(
                     "fonction « {function} » inconnue (has, has_count, has_all, has_any, \
                      has_group, can_reach, can_reach_region, can_reach_location, \
-                     can_reach_entrance, option)"
+                     can_reach_entrance, option ; dans une somme : count, count_group, \
+                     count_from_list, count_unique)"
                 ),
             ),
         }

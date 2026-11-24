@@ -157,6 +157,19 @@ pub(crate) fn describe(world: &MultiWorld, rule: &Rule) -> String {
                 .unwrap_or_else(|| format!("groupe n° {}", group.raw()));
             format!("HasGroup(\"{name}\", {count})")
         }
+        Rule::Sum { terms, at_least } => {
+            let parts: Vec<String> = terms
+                .iter()
+                .map(|t| {
+                    let counter = if t.unique { "CountUnique" } else { "Count" };
+                    match t.weight {
+                        1 => format!("{counter}({})", item(t.item)),
+                        w => format!("{w} * {counter}({})", item(t.item)),
+                    }
+                })
+                .collect();
+            format!("Sum({} >= {at_least})", parts.join(" + "))
+        }
         Rule::CanReachRegion(id) => {
             let name = world.region(*id).map(|r| r.name.as_str()).unwrap_or("?");
             format!("CanReachRegion(\"{name}\")")

@@ -1,4 +1,4 @@
-# Format de monde natif — versions 1 et 2
+# Format de monde natif — versions 1 à 4
 
 Un **monde natif** décrit un jeu pour un randomizer multiworld compatible avec Archipelago : ses objets, ses lieux, ses régions, ses règles et ses options, dans un fichier TOML, **sans code**. Raftup le lit, le vérifie et le compile vers son moteur de génération.
 
@@ -20,7 +20,7 @@ Décision et raisons : ADR 0041 du dépôt Raftup.
 ## Structure du fichier
 
 ```toml
-format_version = 1          # obligatoire : 1, 2 ou 3 (voir « Versions »)
+format_version = 1          # obligatoire : 1 à 4 (voir « Versions »)
 
 [game]                      # obligatoire
 [[options]]                 # options du joueur (YAML)
@@ -148,8 +148,15 @@ expr       = or
 or         = and { "or" and }
 and        = unary { "and" unary }
 unary      = "not" unary | comparison
-comparison = primary [ ("==" | "!=" | "<" | "<=" | ">" | ">=") value ]
+comparison = sum (">=" | ">") count_value                 (version 4)
+           | primary [ ("==" | "!=" | "<" | "<=" | ">" | ">=") value ]
 primary    = "true" | "false" | "(" expr ")" | call
+sum        = term { "+" term }
+term       = [ number "*" ] counter
+counter    = "count" "(" name ")" | "count_group" "(" name ")"
+           | "count_from_list" "(" name { "," name } ")"
+           | "count_unique" "(" name { "," name } ")"
+count_value = number | "option" "(" name ")"
 call       = ident "(" [ arg { "," arg } ] ")"
 arg        = name | number | call
 name       = ident | string
@@ -174,6 +181,29 @@ Les mots `and`, `or`, `not`, `true`, `false` sont réservés : un objet qui s'ap
 | `can_reach_region(nom)`, `can_reach_location(nom)`, `can_reach_entrance(nom)` | Sans ambiguïté. |
 | `option(nom)` | Option `toggle` activée (statique). |
 | `option(nom) == valeur` | Comparaison d'une option (statique) ; pour un `choice`, la valeur est un nom de choix. |
+
+### Sommes de compteurs (version 4)
+
+Une **somme** additionne des compteurs, chacun éventuellement multiplié par un poids entier, puis se compare à un nombre (ou à `option(nom)` d'une option `range`) :
+
+```toml
+rule = 'count("Star") + count("Bonus Star") >= 30'
+rule = '2 * count("Big Gem") + count("Small Gem") > 9'
+rule = 'count_from_list("Map Width", "Map Height", "Map Bombs") >= 4'
+rule = 'count_unique("Aqua Spirit", "Rock Spirit", "Inferno") >= option(cards)'
+```
+
+| Compteur | Vaut |
+| --- | --- |
+| `count(objet)` | Le nombre d'exemplaires de l'objet. |
+| `count_group(groupe)` | Le nombre d'exemplaires de tous les membres du groupe (comme `has_group`). |
+| `count_from_list(a, b, …)` | La somme des exemplaires de chaque objet de la liste. |
+| `count_unique(a, b, …)` | Le nombre d'objets de la liste dont on a au moins un exemplaire. |
+
+- Seuls `>=` et `>` sont permis : la règle reste vraie quand l'inventaire grandit. `<`, `<=`, `==`, `!=` sur une somme sont des erreurs, comme `not`.
+- Un compteur ne s'utilise que dans une somme comparée ; `count(x) >= n` seul est permis (il vaut `has(x, n)`).
+- Poids de 1 à 1 000 ; 256 objets cités au plus par somme (un groupe compte pour un).
+- Comme en Python, un objet cité deux fois dans une liste compte deux fois.
 
 ### Types
 
@@ -207,8 +237,9 @@ Fichier de 4 Mio au plus ; 100 000 éléments par liste ; règle de 16 Kio ; 64 
 | 1 | Première version. |
 | 2 | Plusieurs `[[events]]` peuvent donner le même objet d'événement. |
 | 3 | Objets posés d'avance : `item` sur un `[[locations]]`, et un `[[events]]` qui donne un objet de `[[items]]` (ADR 0054). |
+| 4 | Sommes de compteurs : `count(a) + 2 * count(b) >= n`, `count_from_list`, `count_unique`, `count_group` (ADR 0055). |
 
-Un lecteur de la version 3 lit aussi les versions 1 et 2, sans rien y changer. Écrire la plus petite version qui suffit : le fichier reste lisible par plus d'outils.
+Un lecteur de la version 4 lit aussi les versions 1 à 3, sans rien y changer. Écrire la plus petite version qui suffit : le fichier reste lisible par plus d'outils.
 
 ## Ce que le format ne sait pas encore faire
 

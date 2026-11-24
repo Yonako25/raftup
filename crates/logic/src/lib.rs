@@ -25,7 +25,7 @@ mod world;
 
 pub use ids::{EntranceId, ItemGroupId, ItemKindId, ItemRuleId, LocationId, RegionId, SlotId};
 pub use item_rule::{Accessibility, ItemRule};
-pub use rule::Rule;
+pub use rule::{Rule, SumTerm};
 pub use state::State;
 pub use sweep::{sweep, Reachability, SweepResult};
 pub use world::{

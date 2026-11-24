@@ -530,6 +530,10 @@
     {
       "date": "2026-11-23",
       "title": "ADR 0054 : objets posés d'avance (format version 3)"
+    },
+    {
+      "date": "2026-11-24",
+      "decision": "ADR 0055 : sommes de compteurs écrites comme en Python, format de monde en version 4"
     }
   ],
   "log": [
@@ -595,6 +599,11 @@
     {
       "date": "2026-11-24",
       "summary": "Parties hébergées par Rafthub, étape 3 (ADR 0052) : veille après 2 h avec port gardé, réveil à la connexion, « Reprendre sur mon PC », test de bout en bout du client du launcher contre le vrai hub.",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-24",
+      "summary": "Lot 2 du convertisseur : sondeur élargi et sommes de compteurs (format de monde v4, ADR 0055) ; 36 mondes d'Archipelago convertis sur 81.",
       "tasks": []
     }
   ]
