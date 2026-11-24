@@ -167,13 +167,11 @@ pub fn server_summary(port: &str, public_host: &str) -> String {
     )
 }
 
-/// Vrai pour une adresse qui ne marche que sur ce PC (`localhost`, `127.0.0.1`, `::1`) :
-/// l'écran prévient alors que les amis ne pourront pas se connecter.
+/// Vrai pour un nom d'hôte seul (sans schéma ni port) qui ne marche que sur ce PC :
+/// l'écran prévient alors que les amis ne pourront pas se connecter. Même règle que
+/// `is_local_host`, qui lit une adresse complète.
 pub fn is_local_address(host: &str) -> bool {
-    matches!(
-        host.trim().to_ascii_lowercase().as_str(),
-        "localhost" | "127.0.0.1" | "::1" | "[::1]"
-    )
+    is_local_host(&format!("ws://{}:1", host.trim()))
 }
 
 /// « Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %. »

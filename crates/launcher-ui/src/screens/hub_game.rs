@@ -781,7 +781,7 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
             return;
         };
         let game = &tracked.game;
-        super::header(ui, "En cours · hébergée sur Rafthub", &game.name, |ui| {
+        super::header(ui, "En cours · sur Rafthub", &game.name, |ui| {
             if widgets::ghost_button(ui, "Toutes les parties") {
                 goto = Some(Page::InProgress);
             }
@@ -793,39 +793,25 @@ pub fn show(ui: &mut Ui, state: &mut HubGames) -> Option<Page> {
         let busy = state.job.is_some();
         wake = address_panel(ui, game, busy, &mut copy);
         ui.add_space(12.0);
-        let is_host = tracked.admin_password.is_some();
-        if let Some(password) = &tracked.admin_password {
-            admin_panel(ui, password, &mut state.show_admin, &mut copy);
-            ui.add_space(12.0);
-        }
         let request = crew_panel(ui, game, tracked.status.as_ref(), &mut copy);
         if request.is_some() {
             state.launch_request = request;
         }
-        ui.add_space(12.0);
-        if is_host {
-            resume_with = resume_panel(ui, &mut state.resume);
-            ui.add_space(12.0);
-        }
-        widgets::panel(ui, "Supprimer la partie", |ui| {
-            ui.label(widgets::dim(
-                "Arrête le serveur sur Rafthub et efface la partie et sa sauvegarde du hub. \
-                 Les joueurs ne pourront plus se connecter.",
-            ));
-            ui.add_space(6.0);
-            let busy = state.job.is_some();
-            if state.confirm_delete {
-                ui.horizontal(|ui| {
-                    if !busy && widgets::danger_button(ui, "Confirmer la suppression") {
-                        delete = true;
-                    }
-                    if widgets::ghost_button(ui, "Annuler") {
-                        state.confirm_delete = false;
-                    }
-                });
-            } else if widgets::danger_button(ui, "Supprimer la partie du hub") {
-                state.confirm_delete = true;
+        ui.add_space(4.0);
+        // Outils de l'hôte et suppression, repliés : l'adresse et l'équipage restent seuls
+        // en vue. Le bloc s'ouvre d'office pendant une reprise ou une confirmation.
+        let mut open_now = !matches!(state.resume, Resume::Idle) || state.confirm_delete;
+        // Les fermetures (closures) de Rust 2021 n'empruntent que les champs dont elles se
+        // servent : `tracked` (lecture de `state.current`) et `state.resume` (écriture)
+        // peuvent donc vivre en même temps.
+        widgets::advanced(ui, "hub_game_manage", "Gérer la partie", &mut open_now, |ui| {
+            if let Some(password) = &tracked.admin_password {
+                admin_panel(ui, password, &mut state.show_admin, &mut copy);
+                ui.add_space(14.0);
+                resume_with = resume_panel(ui, &mut state.resume);
+                ui.add_space(14.0);
             }
+            delete = delete_panel(ui, &mut state.confirm_delete, busy);
         });
     });
     if wake {
@@ -868,7 +854,6 @@ fn address_panel(ui: &mut Ui, game: &HostedGame, busy: bool, copy: &mut Option<S
     let mut wake = false;
     widgets::panel(ui, "Adresse de la partie", |ui| {
         ui.horizontal(|ui| {
-            widgets::pill(ui, "Sur Rafthub", theme::TEXT, theme::ACCENT_BG);
             if game.is_active() {
                 widgets::pill(ui, "● En ligne", theme::GREEN, theme::ACCENT_BG);
             } else if game.is_sleeping() {
@@ -894,12 +879,11 @@ fn address_panel(ui: &mut Ui, game: &HostedGame, busy: bool, copy: &mut Option<S
             }
         });
         ui.label(
-            widgets::dim(
-                "Partie chiffrée par Rafthub : le mod du jeu reçoit cette adresse (il essaie \
-                 wss puis ws) ; les liens d'invitation vérifient le certificat du hub. La \
-                 partie continue quand ton PC est éteint.",
-            )
-            .size(13.0),
+            widgets::dim("Chiffrée par Rafthub · elle continue quand ton PC est éteint.").size(13.0),
+        )
+        .on_hover_text(
+            "Le mod du jeu reçoit cette adresse (il essaie wss puis ws) ; les liens \
+             d'invitation vérifient le certificat du hub.",
         );
         let password = if game.has_password {
             "Mot de passe de la salle : celui que tu as choisi."
@@ -934,7 +918,7 @@ fn address_panel(ui: &mut Ui, game: &HostedGame, busy: bool, copy: &mut Option<S
 fn resume_panel(ui: &mut Ui, resume: &mut Resume) -> Option<ResumeForm> {
     let mut launch = None;
     let mut cancel = false;
-    widgets::panel(ui, "Continuer sans Rafthub", |ui| {
+    section(ui, "Continuer sans Rafthub", |ui| {
         ui.label(widgets::dim(
             "Télécharge la partie et sa sauvegarde depuis Rafthub, puis relance la partie sur \
              ce PC. L'adresse change : les joueurs devront recevoir une nouvelle invitation.",
@@ -1014,9 +998,42 @@ fn resume_panel(ui: &mut Ui, resume: &mut Resume) -> Option<ResumeForm> {
     launch
 }
 
+/// Une partie du bloc « Gérer la partie » : petit titre en capitales, puis le contenu
+/// (pas de panneau dans le panneau).
+fn section(ui: &mut Ui, heading: &str, add_contents: impl FnOnce(&mut Ui)) {
+    ui.label(widgets::caps(heading));
+    ui.add_space(4.0);
+    add_contents(ui);
+}
+
+/// « Supprimer la partie du hub », avec confirmation. Rend vrai au clic sur « Confirmer ».
+fn delete_panel(ui: &mut Ui, confirm: &mut bool, busy: bool) -> bool {
+    let mut delete = false;
+    section(ui, "Supprimer la partie", |ui| {
+        ui.label(widgets::dim(
+            "Arrête le serveur sur Rafthub et efface la partie et sa sauvegarde du hub. \
+             Les joueurs ne pourront plus se connecter.",
+        ));
+        ui.add_space(6.0);
+        if *confirm {
+            ui.horizontal(|ui| {
+                if !busy && widgets::danger_button(ui, "Confirmer la suppression") {
+                    delete = true;
+                }
+                if widgets::ghost_button(ui, "Annuler") {
+                    *confirm = false;
+                }
+            });
+        } else if widgets::danger_button(ui, "Supprimer la partie du hub") {
+            *confirm = true;
+        }
+    });
+    delete
+}
+
 /// Mot de passe d'admin, masqué par défaut.
 fn admin_panel(ui: &mut Ui, password: &str, shown: &mut bool, copy: &mut Option<String>) {
-    widgets::panel(ui, "Mot de passe d'admin", |ui| {
+    section(ui, "Mot de passe d'admin", |ui| {
         ui.label(
             widgets::dim("Pour les commandes « !admin » du serveur. Il n'est montré qu'à toi.")
                 .size(13.0),

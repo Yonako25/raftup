@@ -284,7 +284,9 @@ fn hero(
                     if widgets::danger_button(ui, "■ Arrêter") {
                         *confirm_stop = true;
                     }
-                    if widgets::primary_button(ui, "Copier l'invitation", true) {
+                    // Toutes les invitations d'un coup (une ligne par joueur), à coller
+                    // dans le salon Discord de l'équipe.
+                    if widgets::primary_button(ui, "Copier les invitations", true) {
                         *copy = Some(format::invitation(
                             &status.address,
                             status.fingerprint.as_deref(),
@@ -334,16 +336,6 @@ fn address_bar(ui: &mut Ui, status: &HostStatus, copy: &mut Option<String>) {
                     }
                 });
             });
-            if status.fingerprint.is_some() {
-                ui.add_space(4.0);
-                ui.label(
-                    widgets::dim(
-                        "Chiffré pour les joueurs qui passent par Raftup (liens d'invitation) ; \
-                         un mod de jeu qui se connecte avec cette adresse passe en clair.",
-                    )
-                    .size(13.0),
-                );
-            }
             if format::is_local_host(&status.address) {
                 ui.add_space(4.0);
                 ui.label(
@@ -503,7 +495,7 @@ fn main_area(
     match state.tab {
         TAB_CHAT => chat_tab(ui, state, worker, shared),
         TAB_JOURNAL => journal_tab(ui, state, shared),
-        TAB_SALON => salon_tab(ui, state, status, worker, shared, copy, covers),
+        TAB_SALON => salon_tab(ui, state, status, worker, shared, covers),
         // L'onglet 0 (« Équipage ») et toute valeur inattendue montrent l'équipage.
         _ => crew_tab(ui, status, now, copy, covers),
     }
@@ -575,8 +567,8 @@ fn crew_row(
             if let Some(link) =
                 format::player_link(&status.address, status.fingerprint.as_deref(), slot)
             {
-                let button =
-                    egui::Button::new(widgets::dim("Copier le lien").size(12.0)).frame(false);
+                let button = egui::Button::new(widgets::dim("Copier l'invitation").size(12.0))
+                    .frame(false);
                 if ui.add(button).clicked() {
                     *copy = Some(link);
                 }
@@ -856,7 +848,6 @@ fn salon_tab(
     status: &HostStatus,
     worker: &Worker,
     shared: &Shared,
-    copy: &mut Option<String>,
     covers: &Covers,
 ) {
     let check = |slot: &SlotStatus, password: &str| {
@@ -944,15 +935,6 @@ fn salon_tab(
                             .color(theme::TEXT),
                     );
                     ui.label(widgets::dim(format::game_with_tags(slot)).size(12.0));
-                    if let Some(link) =
-                        format::player_link(&status.address, status.fingerprint.as_deref(), slot)
-                    {
-                        let button = egui::Button::new(widgets::dim("Copier le lien").size(12.0))
-                            .frame(false);
-                        if ui.add(button).clicked() {
-                            *copy = Some(link);
-                        }
-                    }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let state_of = shared.readiness.get(&slot.name);

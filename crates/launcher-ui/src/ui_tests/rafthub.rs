@@ -216,21 +216,26 @@ pub(super) fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
 
 #[test]
 fn la_partie_hebergee_s_affiche() {
-    let harness = game_screen(Some(status()));
+    let mut harness = game_screen(Some(status()));
     assert!(shows(&harness, "Partie de Mimi"));
     assert!(shows(&harness, "hub.example.org:38281"));
-    assert!(shows(&harness, "Sur Rafthub"));
+    assert!(shows(&harness, "En cours · sur Rafthub"));
     assert!(shows(&harness, "Mimi"));
     assert!(shows(&harness, "3 / 10 lieux"));
     assert!(shows(&harness, "Copier l'invitation"));
+    // Les outils de l'hôte sont repliés dans « Gérer la partie ».
+    assert!(!shows(&harness, "MOT DE PASSE D'ADMIN"));
+    assert!(!shows(&harness, "Supprimer la partie du hub"));
+    click(&mut harness, "Gérer la partie");
     // Le mot de passe d'admin est masqué tant qu'on ne clique pas « Afficher ».
-    assert!(shows(&harness, "Mot de passe d'admin"));
+    assert!(shows(&harness, "MOT DE PASSE D'ADMIN"));
     assert!(!shows(&harness, "ADMINPASS1234567"));
 }
 
 #[test]
 fn afficher_le_mot_de_passe_d_admin() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Afficher");
     assert!(shows(&harness, "ADMINPASS1234567"));
     click(&mut harness, "Masquer");
@@ -261,6 +266,7 @@ fn lancer_et_connecter_donne_l_adresse_sans_schema() {
 #[test]
 fn supprimer_demande_une_confirmation() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Supprimer la partie du hub");
     assert!(shows(&harness, "Confirmer la suppression"));
     click(&mut harness, "Annuler");
@@ -295,6 +301,7 @@ fn partie_en_veille() {
 #[test]
 fn reprendre_sur_mon_pc_demande_une_confirmation() {
     let mut harness = game_screen(Some(status()));
+    click(&mut harness, "Gérer la partie");
     click(&mut harness, "Reprendre sur mon PC");
     assert!(matches!(harness.state().resume(), Resume::Confirm(form) if form.delete_from_hub));
     assert!(shows(
