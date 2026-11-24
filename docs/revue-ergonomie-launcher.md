@@ -2,7 +2,12 @@
 
 24 novembre 2026. Revue faite sur les captures sans fenêtre (`cargo captures`, dossier `target/captures/`), avec quatre écrans ajoutés aux captures pour l'occasion : salon avec « Héberger sur Rafthub » (`16`), partie hébergée par Rafthub en ligne et en veille (`17`, `17b`), « En cours » avec une partie de ce PC et une partie du hub (`18`).
 
-**Rien n'est codé** : la liste des changements attend l'accord de l'utilisatrice.
+**Tout a été accepté le 24 novembre 2026, points « à valider » compris, et codé en six étapes** (branche `ergonomie-launcher`, un commit par étape). Écarts avec la liste ci-dessous :
+
+- point 9 : la phrase « Sans invitation, le jeu démarre sans se connecter » est retirée, sans infobulle (le bouton dessiné à la main n'en a pas) ;
+- point 11 : « Nom chez Archipelago » reste en clair dans la fiche du Catalogue (non replié) ;
+- point 8 : le mot « Archipelago » n'est pas ajouté à la fiche ; l'étape « Règles Archipelago » de la liste des mods le dit déjà ;
+- en plus : « Indique ton pseudo. » au lieu de « Ton pseudo : Indique un pseudo. », bouton « Ouvrir » à largeur minimale, ligne d'une partie Rafthub sans « sur Rafthub » en double.
 
 ## Constat général
 
