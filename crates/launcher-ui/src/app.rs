@@ -291,12 +291,8 @@ impl eframe::App for App {
         if !hosting {
             self.running = running::RunningState::default();
         }
-        // La barre de titre est déclarée avant la barre latérale : elle prend toute la largeur.
-        egui::Panel::top("titlebar")
-            .exact_size(crate::titlebar::HEIGHT)
-            .resizable(false)
-            .frame(Frame::new().fill(theme::sidebar_fill()))
-            .show(ui, crate::titlebar::show);
+        // Plus de bande de titre : les boutons de fenêtre flottent en haut à droite, dessinés
+        // après les panneaux (voir plus bas, `titlebar::show`).
         crate::update_ui::banner(ui, &mut self.update);
         egui::Panel::left("sidebar")
             .exact_size(220.0)
@@ -374,6 +370,8 @@ impl eframe::App for App {
                 goto = next;
             }
         });
+        // Boutons de fenêtre par-dessus tout le reste (premier plan).
+        crate::titlebar::show(ui.ctx());
 
         // « Lancer et connecter » de la partie hébergée (ici ou sur Rafthub) : la
         // Bibliothèque lance le jeu.
@@ -481,18 +479,23 @@ pub(crate) fn sidebar(
     ui.set_width(SIDEBAR_WIDTH);
     ui.spacing_mut().item_spacing.y = 2.0;
 
-    // Logo + nom.
-    ui.horizontal(|ui| {
-        ui.add_space(18.0);
-        logo(ui, 34.0);
-        ui.add_space(2.0);
-        ui.label(
-            RichText::new("RAFTUP")
-                .font(egui::FontId::new(22.0, theme::title_bold_family()))
-                .extra_letter_spacing(2.0)
-                .color(theme::TEXT),
-        );
-    });
+    // Logo + nom. La ligne sert aussi de poignée pour déplacer la fenêtre (il n'y a plus
+    // de bande de titre).
+    let logo_row = ui
+        .horizontal(|ui| {
+            ui.add_space(18.0);
+            logo(ui, 34.0);
+            ui.add_space(2.0);
+            ui.label(
+                RichText::new("RAFTUP")
+                    .font(egui::FontId::new(22.0, theme::title_bold_family()))
+                    .extra_letter_spacing(2.0)
+                    .color(theme::TEXT),
+            );
+        })
+        .response
+        .rect;
+    crate::titlebar::grip(ui, logo_row, ui.scope_id().with("logo_grip"));
     ui.add_space(10.0);
 
     // Les compteurs à 0 ne s'affichent pas (jeux du catalogue, partie hébergée).

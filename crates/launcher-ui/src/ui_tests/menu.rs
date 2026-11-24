@@ -1,5 +1,6 @@
 //! Barre latérale : les liens montrés, aucun écran « Bientôt ».
 
+use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 
 use super::{builder, click, shows, shows_part};
@@ -84,6 +85,25 @@ fn les_liens_ouvrent_leur_ecran() {
         click(&mut harness, label);
         assert_eq!(harness.state().asked, Some(page), "clic sur {label}");
     }
+}
+
+/// Plus de bande de titre : les trois boutons de fenêtre flottent dans le coin haut droit,
+/// collés au bord, « Fermer » le plus à droite.
+#[test]
+fn boutons_de_fenetre_dans_le_coin_haut_droit() {
+    let mut harness =
+        builder().build_ui_state(|ui, _: &mut ()| crate::titlebar::show(ui.ctx()), ());
+    harness.run();
+    let screen = harness.ctx.content_rect();
+    let close = harness.get_by_label("Fermer").rect();
+    let maximize = harness.get_by_label("Agrandir").rect();
+    let minimize = harness.get_by_label("Réduire").rect();
+    assert!((close.right() - screen.right()).abs() < 1.0, "{close:?}");
+    assert!((close.top() - screen.top()).abs() < 2.0, "{close:?}");
+    assert!(minimize.right() <= maximize.left() + 0.5);
+    assert!(maximize.right() <= close.left() + 0.5);
+    // Ils ne descendent pas jusqu'aux boutons des en-têtes de page (marge de 22 px).
+    assert!(close.height() <= crate::titlebar::HEIGHT + 0.5);
 }
 
 #[test]

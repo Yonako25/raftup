@@ -70,6 +70,8 @@ Les points marqués **(à valider)** retirent quelque chose de l'écran ou chang
 11. **Catalogue** : « Jeu non trouvé » → « Pas sur ce PC » ; « Licence : unlicensed » → « Licence : non précisée » ; « Nom chez Archipelago » replié avec la liste des mods.
 12. **Barre latérale (à valider)** : sections JEUX (Accueil, Bibliothèque, Catalogue) et PARTIES (Nouvelle partie, En cours, Rejoindre) ; « Paramètres » en bas ; cartes « Amis » et « Joueur » fusionnées en une carte profil (pseudo + amis en ligne) ; carte « Serveur intégré » montrée seulement quand une partie tourne.
 
+19. **Plus de barre de titre (demande du 24 novembre 2026, acceptée et faite)** : la bande de 34 px en haut de la fenêtre, vide à part les trois boutons, disparaît. Réduire, agrandir et fermer flottent dans le coin haut droit, au-dessus de la page. On déplace la fenêtre en glissant le haut de la barre latérale (logo) ou la marge vide en haut de la page ; un double-clic au même endroit agrandit. Rien d'autre ne bouge : les boutons des en-têtes de page sont plus bas que les trois boutons.
+
 ### Impact faible
 
 13. **Défauts de mise en page** : chevauchement des colonnes de « Héberger un fichier » (6 px) ; colonne droite du salon qui dépasse la marge (9 px) ; bouton « Ouvrir » élargi par des espaces (`"   Ouvrir   "`) au lieu d'une largeur minimale.
