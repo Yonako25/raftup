@@ -86,13 +86,11 @@ pub fn show(
         super::header(
             ui,
             "Parties › Nouvelle partie",
-            "Héberger une partie",
+            "Héberger un fichier de partie",
             |ui| {
-                if widgets::ghost_button(ui, "Créer depuis des YAML") {
+                // Le chemin normal est le salon : cet écran n'en est qu'une variante.
+                if widgets::ghost_button(ui, "Retour au salon") {
                     goto = Some(Page::Create);
-                }
-                if widgets::ghost_button(ui, "Rejoindre par lien") {
-                    goto = Some(Page::Join);
                 }
             },
         );
@@ -179,14 +177,7 @@ fn config_panel(
 
         // Réglages d'expert repliés, avec un résumé d'une ligne de ce qui sera utilisé.
         ui.add_space(4.0);
-        ui.label(
-            widgets::dim(format::server_summary(
-                &form.port,
-                &form.public_host,
-                form.security.summary(),
-            ))
-            .size(12.0),
-        );
+        super::create::address_line(ui, &form.port, &form.public_host);
         // `open_advanced` est copié à part : `form` est déjà emprunté par la fermeture.
         let mut open_now = form.open_advanced;
         widgets::advanced(
@@ -216,13 +207,6 @@ fn config_panel(
                     }
                 }
             }
-            let scheme = form.security.scheme();
-            ui.label(
-                widgets::dim(format!(
-                    "Les joueurs se connecteront à {scheme}://hôte:port"
-                ))
-                .size(13.0),
-            );
         });
         if shared.starting {
             ui.label(widgets::dim("Démarrage…"));

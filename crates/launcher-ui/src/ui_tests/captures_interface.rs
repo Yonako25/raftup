@@ -539,10 +539,10 @@ fn captures_interface() {
         harness.run();
         save(&mut harness, "15-assistant");
     }
-    // Salon avec le choix « Héberger sur Rafthub » (connecté à un hub qui héberge).
+    // Salon avec le choix « Sur Rafthub » (connecté à un hub qui héberge).
     {
         let mut harness = super::rafthub::salon(Some(super::rafthub::access()));
-        click(&mut harness, "Héberger sur Rafthub");
+        click(&mut harness, "Sur Rafthub");
         tall(&mut harness);
         save(&mut harness, "16-salon-rafthub");
     }

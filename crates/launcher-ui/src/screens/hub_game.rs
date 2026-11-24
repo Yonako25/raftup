@@ -247,7 +247,7 @@ pub fn show_upload(ui: &mut Ui, upload: &mut Upload) -> bool {
                 ui.label(RichText::new(message.as_str()).color(theme::RED_TEXT));
                 ui.label(
                     widgets::dim(format!(
-                        "La partie {} est gardée : réessaie, ou choisis « Héberger sur mon PC » \
+                        "La partie {} est gardée : réessaie, ou choisis « Sur mon PC » \
                          puis « Réessayer », sans régénérer.",
                         output.seed_name
                     ))

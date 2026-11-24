@@ -159,12 +159,20 @@ fn mode_text(mode: &str) -> &'static str {
 /// l'hôte voit ce qui sera utilisé sans l'ouvrir.
 /// `security` : la fin du résumé, donnée par le choix du chiffrement
 /// (`Security::summary`).
-pub fn server_summary(port: &str, public_host: &str, security: &str) -> String {
-    let scheme = security;
+pub fn server_summary(port: &str, public_host: &str) -> String {
     format!(
-        "Port {} · adresse {} · {scheme}",
-        port.trim(),
-        public_host.trim()
+        "Tes amis se connecteront à {}:{}.",
+        public_host.trim(),
+        port.trim()
+    )
+}
+
+/// Vrai pour une adresse qui ne marche que sur ce PC (`localhost`, `127.0.0.1`, `::1`) :
+/// l'écran prévient alors que les amis ne pourront pas se connecter.
+pub fn is_local_address(host: &str) -> bool {
+    matches!(
+        host.trim().to_ascii_lowercase().as_str(),
+        "localhost" | "127.0.0.1" | "::1" | "[::1]"
     )
 }
 
@@ -503,17 +511,12 @@ mod tests {
     #[test]
     fn resume_des_options_avancees() {
         assert_eq!(
-            server_summary(
-                " 38281 ",
-                "localhost",
-                "chiffré par Raftup (wss, sans fichier)"
-            ),
-            "Port 38281 · adresse localhost · chiffré par Raftup (wss, sans fichier)"
+            server_summary(" 38281 ", "exemple.fr"),
+            "Tes amis se connecteront à exemple.fr:38281."
         );
-        assert_eq!(
-            server_summary("40000", "exemple.fr", "en clair (ws)"),
-            "Port 40000 · adresse exemple.fr · en clair (ws)"
-        );
+        assert!(is_local_address(" LocalHost "));
+        assert!(is_local_address("127.0.0.1"));
+        assert!(!is_local_address("exemple.fr"));
     }
 
     #[test]
