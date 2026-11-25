@@ -1,7 +1,13 @@
-//! Écran « Bibliothèque » : les jeux du catalogue, leur dossier, l'état des mods,
+//! Écran « Catalogue » : **tous** les jeux pris en charge, leur dossier, l'état des mods,
 //! et les boutons Installer / Lancer / Désinstaller (ADR 0015). Les mondes natifs de
 //! `mondes-natifs/` s'y affichent aussi, comme des jeux, avec leur fiche (ADR 0046,
 //! module `native_panel`).
+//!
+//! Les anciens écrans « Bibliothèque » (jeux de ce PC) et « Catalogue » (référentiel en
+//! lecture seule) n'en font plus qu'un (revue d'ergonomie, point 25) : les jeux prêts à
+//! jouer d'abord, puis ceux trouvés sur ce PC sans le mod (jaquette grisée, bouton
+//! « Installer le mod » dessous), puis ceux qui ne sont pas sur ce PC (jaquette grisée).
+//! Le module garde son nom `library` : c'est l'état des jeux du joueur.
 //!
 //! Tout ce qui peut durer (détection des jeux, installation, désinstallation, lancement)
 //! tourne dans un thread à part. La boucle d'affichage ne fait que lire un canal
@@ -125,6 +131,8 @@ pub struct LibraryState {
     pub(crate) art: Artwork,
     /// Vrai une fois toutes les images du catalogue demandées (au démarrage).
     art_preloaded: bool,
+    /// Texte du champ « Chercher un jeu » (nom du jeu ou auteur des mods).
+    search: String,
 }
 
 impl LibraryState {
@@ -156,6 +164,7 @@ impl LibraryState {
             detail_since: (None, std::time::Instant::now()),
             fade: true,
             toasts_out: Vec::new(),
+            search: String::new(),
         }
     }
 
@@ -186,6 +195,7 @@ impl LibraryState {
             // Pas de fondu dans les tests : les images de référence doivent être nettes.
             fade: false,
             toasts_out: Vec::new(),
+            search: String::new(),
         }
     }
 
@@ -199,7 +209,14 @@ impl LibraryState {
         self.running.names()
     }
 
-    /// Nombre de jeux dans la Bibliothèque (compteur de la barre latérale).
+    /// Nombre de jeux prêts à jouer (compteur de « Catalogue » dans la barre latérale).
+    pub fn ready_count(&self) -> usize {
+        self.summaries().iter().filter(|g| g.ready).count()
+    }
+
+    /// Nombre de jeux de ce PC (trouvés, ou avec des mods posés par Raftup). Plus montré
+    /// depuis la réunion des deux écrans ; gardé pour les tests de la détection.
+    #[cfg(test)]
     pub fn game_count(&self) -> usize {
         self.library_ids().len()
     }
@@ -221,7 +238,8 @@ impl LibraryState {
         on_pc
     }
 
-    /// Les jeux de la Bibliothèque, dans l'ordre du catalogue.
+    /// Les jeux de ce PC, dans l'ordre du catalogue.
+    #[cfg(test)]
     pub fn library_ids(&self) -> Vec<String> {
         let Ok(catalog) = &self.catalog else {
             return Vec::new();
@@ -232,6 +250,40 @@ impl LibraryState {
             .filter(|id| self.in_library(id))
             .cloned()
             .collect()
+    }
+
+    /// Place d'un jeu dans la grille du Catalogue : 0 prêt à jouer, 1 sur ce PC mais sans
+    /// le mod (ou à réparer, à mettre à jour), 2 pas sur ce PC.
+    fn rank(&self, profile: &Profile) -> u8 {
+        let id = &profile.game.id;
+        let found = self.scan.as_ref().and_then(|s| s.found.get(id));
+        let status = self.scan.as_ref().and_then(|s| s.status.get(id));
+        if view(profile, found, status).can_launch {
+            0
+        } else if self.in_library(id) {
+            1
+        } else {
+            2
+        }
+    }
+
+    /// Vrai si le jeu est prêt à jouer (trouvé sur ce PC, mod installé).
+    fn ready(&self, game_id: &str) -> bool {
+        self.catalog()
+            .and_then(|c| c.get(game_id))
+            .is_some_and(|profile| self.rank(profile) == 0)
+    }
+
+    /// Tous les jeux du catalogue, dans l'ordre de la grille : prêts à jouer, puis sur ce
+    /// PC sans le mod, puis absents ; dans chaque groupe, l'ordre du catalogue.
+    pub fn catalog_order(&self) -> Vec<String> {
+        let Ok(catalog) = &self.catalog else {
+            return Vec::new();
+        };
+        let mut games: Vec<&Profile> = catalog.games().collect();
+        // `sort_by_key` est stable : à rang égal, l'ordre du catalogue est gardé.
+        games.sort_by_key(|profile| self.rank(profile));
+        games.into_iter().map(|p| p.game.id.clone()).collect()
     }
 
     /// Le catalogue, s'il s'est chargé (l'écran « Rejoindre » y cherche le jeu du lien).
@@ -645,7 +697,7 @@ pub fn view(
         Some(Ok(InstallStatus::UpdateAvailable)) => "Mettre à jour",
         Some(Ok(InstallStatus::InProgress)) => "Réparer",
         Some(Ok(InstallStatus::Installed)) => "Réinstaller",
-        _ => "Installer",
+        _ => "Installer le mod",
     };
     GameView {
         label,
@@ -1064,14 +1116,21 @@ pub fn show(
             None => {}
         }
 
-        if state.game_count() == 0 && state.native.count() == 0 {
-            empty_state(ui, state.scanning.is_some() || state.scan.is_none());
+        if state.catalog_order().is_empty() && state.native.count() == 0 {
+            empty_state(ui);
             return;
         }
-        // Premier jeu sélectionné par défaut (ou le premier monde natif s'il n'y a pas de
-        // jeu au catalogue), sauf si un monde natif est déjà sélectionné.
+        // Première carte de la grille sélectionnée par défaut : le premier jeu prêt à jouer,
+        // sinon le premier monde natif (prêt lui aussi), sinon le premier jeu du catalogue ;
+        // sauf si un monde natif est déjà sélectionné.
         if state.selected.is_none() && state.native.selected.is_none() {
-            state.selected = state.library_ids().into_iter().next();
+            let order = state.catalog_order();
+            let first_ready = order.first().filter(|id| state.ready(id)).cloned();
+            state.selected = match first_ready {
+                Some(id) => Some(id),
+                None if state.native.count() > 0 => None,
+                None => order.into_iter().next(),
+            };
             if state.selected.is_none() {
                 let first = state.native.worlds().first().map(|w| w.key.clone());
                 if let Some(key) = first {
@@ -1085,14 +1144,12 @@ pub fn show(
                 let list_width = ui.available_width() - 400.0;
                 ui.vertical(|ui| {
                     ui.set_width(list_width);
-                    grid(ui, state);
-                    rescan_link(ui, state, &ctx);
+                    games_column(ui, state, &ctx);
                 });
                 ui.vertical(|ui| detail(ui, state, shared, &ctx));
             });
         } else {
-            grid(ui, state);
-            rescan_link(ui, state, &ctx);
+            games_column(ui, state, &ctx);
             ui.add_space(12.0);
             detail(ui, state, shared, &ctx);
         }
@@ -1204,16 +1261,11 @@ fn prefill_address(form: &mut LaunchForm, hosted: &str) {
 }
 
 fn header(ui: &mut Ui, state: &LibraryState) {
-    let total = state.game_count();
-    let ready = state.scan.as_ref().map_or(0, |scan| {
-        scan.status
-            .values()
-            .filter(|s| matches!(s, Ok(InstallStatus::Installed)))
-            .count()
-    });
+    let total = state.catalog_order().len();
+    let ready = state.ready_count();
     let jeux = if total > 1 { "jeux" } else { "jeu" };
     let prets = if ready > 1 { "prêts" } else { "prêt" };
-    let mut summary = format!("{total} {jeux} · {ready} {prets}");
+    let mut summary = format!("{total} {jeux} · {ready} {prets} à jouer");
     let natives = state.native.count();
     if natives > 0 {
         let mondes = if natives > 1 {
@@ -1226,7 +1278,7 @@ fn header(ui: &mut Ui, state: &LibraryState) {
     // Plus de boutons dans l'en-tête (revue, point 24) : la recherche se relance par le lien
     // sous les jeux (`rescan_link`), et le dossier d'un jeu non trouvé s'indique dans sa fiche.
     let row = crate::titlebar::title_row(ui, |ui| {
-        ui.label(widgets::title("Bibliothèque", 28.0));
+        ui.label(widgets::title("Catalogue", 28.0));
         ui.label(widgets::dim(summary).size(14.0));
     });
     // Trait fin sous l'en-tête, sur toute la largeur, comme sur la maquette.
@@ -1291,25 +1343,45 @@ fn big_button(ui: &mut Ui, text: &str, primary: bool, enabled: bool, width: f32)
     ui.add_enabled(enabled, button).clicked()
 }
 
-/// Catalogue vide : aucun profil n'est encore publié.
-fn empty_state(ui: &mut Ui, scanning: bool) {
-    if scanning {
-        widgets::panel(ui, "Recherche de tes jeux…", |ui| {
-            ui.label(widgets::dim(
-                "Raftup cherche les jeux installés via Steam et Epic.",
-            ));
-        });
-        return;
-    }
-    widgets::panel(ui, "Aucun jeu trouvé sur ce PC", |ui| {
+/// Catalogue vide : aucun profil de jeu n'a pu être lu (cas anormal, le catalogue est
+/// embarqué dans le launcher).
+fn empty_state(ui: &mut Ui) {
+    widgets::panel(ui, "Aucun jeu au catalogue", |ui| {
         ui.label(widgets::dim(
-            "Raftup n'a trouvé aucun jeu du catalogue installé via Steam ou Epic.",
-        ));
-        ui.add_space(4.0);
-        ui.label(widgets::dim(
-            "Ouvre « Parcourir » dans le Catalogue pour voir les jeux pris en charge et en ajouter un.",
+            "Raftup n'a trouvé aucun jeu pris en charge. Une mise à jour du launcher en ajoutera.",
         ));
     });
+}
+
+/// Vrai si le jeu passe le champ « Chercher un jeu » : texte cherché dans le nom du jeu
+/// et les auteurs de ses mods, sans tenir compte des majuscules.
+pub fn matches_search(name: &str, authors: &[String], search: &str) -> bool {
+    let wanted = search.trim().to_lowercase();
+    if wanted.is_empty() {
+        return true;
+    }
+    name.to_lowercase().contains(&wanted)
+        || authors.iter().any(|a| a.to_lowercase().contains(&wanted))
+}
+
+/// Colonne de gauche du Catalogue : champ de recherche, grille des jeux, lien pour relancer
+/// la détection, et le rappel que Raftup ne fournit aucun jeu.
+fn games_column(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
+    ui.add(
+        egui::TextEdit::singleline(&mut state.search)
+            .hint_text("Chercher un jeu ou un auteur")
+            .desired_width(320.0),
+    );
+    ui.add_space(14.0);
+    grid(ui, state);
+    rescan_link(ui, state, ctx);
+    ui.add_space(6.0);
+    ui.label(
+        widgets::dim(
+            "Raftup ne fournit aucun jeu : il installe le mod sur ta copie, après vérification de son empreinte.",
+        )
+        .size(12.0),
+    );
 }
 
 /// Les cartes des jeux, en grille qui passe à la ligne.
@@ -1326,47 +1398,78 @@ pub(super) fn cards_per_row(width: f32) -> usize {
     (per_row as usize).max(1)
 }
 
+/// Une carte de la grille, avec ce qui se dessine sous la jaquette.
+struct Card<'a> {
+    look: CardLook<'a>,
+    selected: bool,
+    target: CardTarget,
+    /// Texte du bouton « Installer le mod » sous la carte (jeu trouvé sur ce PC, mod
+    /// absent ou à réparer) ; `None` : pas de bouton.
+    install: Option<&'static str>,
+    /// Niveau de confiance d'un profil venu du registre signé (ADR 0045).
+    trust: Option<launcher_core::registry::Trust>,
+}
+
 fn grid(ui: &mut Ui, state: &mut LibraryState) {
-    let Ok(catalog) = &state.catalog else { return };
+    let order = state.catalog_order();
+    // Les jaquettes d'abord : rt.texture emprunte state en écriture, les cartes
+    // ensuite l'empruntent en lecture seule (les deux ne peuvent pas se croiser).
+    let covers: BTreeMap<String, Option<egui::TextureHandle>> = order
+        .iter()
+        .map(|id| (id.clone(), state.art.texture(ui.ctx(), id, ArtKind::Cover)))
+        .collect();
+    let state_ref: &LibraryState = state;
+    let Ok(catalog) = &state_ref.catalog else {
+        return;
+    };
     let mut clicked = None;
+    let mut install_clicked: Option<String> = None;
+    let busy_any = state_ref.task.is_some();
     // D'abord la liste des cartes, ensuite le dessin rangée par rangée : egui ne sait
     // pas faire passer à la ligne un bloc (`ui.vertical`) dont il ne connaît pas encore
     // la taille, et une seule rangée débordait à droite (vu sur les captures, 9 jeux).
-    let mut cards: Vec<(CardLook<'_>, bool, CardTarget)> = Vec::new();
-    for profile in catalog.games() {
-        let id = &profile.game.id;
-        // Seuls les jeux de ce PC (ou ajoutés depuis le Catalogue) ont leur carte.
-        if !state.in_library(id) {
+    let mut cards: Vec<Card<'_>> = Vec::new();
+    let mut natives_added = false;
+    for id in &order {
+        let Some(profile) = catalog.get(id) else {
+            continue;
+        };
+        if !matches_search(
+            &profile.game.name,
+            &profile.credits.authors,
+            &state_ref.search,
+        ) {
             continue;
         }
-        let found = state.scan.as_ref().and_then(|s| s.found.get(id));
-        let status = state.scan.as_ref().and_then(|s| s.status.get(id));
+        let found = state_ref.scan.as_ref().and_then(|s| s.found.get(id));
+        let status = state_ref.scan.as_ref().and_then(|s| s.status.get(id));
         let view = view(profile, found, status);
-        let selected = state.selected.as_deref() == Some(id.as_str());
-        let busy = state.task.as_ref().filter(|t| &t.game_id == id);
-        let from_registry = state.registry.is_from_registry(id);
+        // Les mondes natifs sont prêts à jouer : ils viennent juste après les jeux prêts.
+        if !view.can_launch && !natives_added {
+            natives_added = true;
+            push_native_cards(&mut cards, state_ref);
+        }
+        let selected = state_ref.selected.as_deref() == Some(id.as_str());
+        let busy = state_ref.task.as_ref().filter(|t| &t.game_id == id);
+        let from_registry = state_ref.registry.is_from_registry(id);
         // Jaquette du créateur ou de Steam si elle est prête, sinon la jaquette dessinée.
-        let cover = state.art.texture(ui.ctx(), id, ArtKind::Cover);
+        let cover = covers.get(id).cloned().flatten();
         let mut look = card_look(profile, &view, busy, from_registry, cover);
-        look.pin = state.pin_for(&profile.game.ap_game);
-        cards.push((look, selected, CardTarget::Game(id.clone())));
+        look.pin = state_ref.pin_for(&profile.game.ap_game);
+        // Pas encore jouable (mod absent, ou jeu pas sur ce PC) : jaquette grisée.
+        look.dimmed = !view.can_launch && busy.is_none();
+        let install =
+            (found.is_some() && view.can_install && !view.can_launch).then_some(view.install_label);
+        cards.push(Card {
+            look,
+            selected,
+            target: CardTarget::Game(id.clone()),
+            install,
+            trust: state_ref.registry.profile_trust(id),
+        });
     }
-    // Les mondes natifs, après les jeux du catalogue (ADR 0046).
-    for world in state.native.worlds() {
-        let selected = state.native.selected.as_deref() == Some(world.key.as_str());
-        let look = CardLook {
-            cover_id: &world.key,
-            name: &world.game,
-            status: native_panel::card_status(world),
-            status_color: theme::TEXT_DIM,
-            // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
-            fraction: 1.0,
-            marker: Some((native_panel::MARKER, theme::ACCENT)),
-            // Un monde natif n'a pas encore d'images : il garde sa jaquette dessinée.
-            cover: None,
-            pin: Some(world_pin(world)),
-        };
-        cards.push((look, selected, CardTarget::Native(world.key.clone())));
+    if !natives_added {
+        push_native_cards(&mut cards, state_ref);
     }
     let per_row = cards_per_row(ui.available_width());
     // `scope` : l'espacement des cartes ne vaut que pour la grille, pas pour les
@@ -1377,17 +1480,33 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
         // être plus courte).
         for row in cards.chunks(per_row) {
             ui.horizontal_top(|ui| {
-                for (look, selected, target) in row {
-                    if cover_card(ui, look, *selected) {
-                        clicked = Some(match target {
-                            CardTarget::Game(id) => CardTarget::Game(id.clone()),
-                            CardTarget::Native(key) => CardTarget::Native(key.clone()),
-                        });
-                    }
+                for card in row {
+                    ui.vertical(|ui| {
+                        ui.set_width(CARD_WIDTH);
+                        if cover_card(ui, &card.look, card.selected) {
+                            clicked = Some(match &card.target {
+                                CardTarget::Game(id) => CardTarget::Game(id.clone()),
+                                CardTarget::Native(key) => CardTarget::Native(key.clone()),
+                            });
+                        }
+                        if let Some(trust) = &card.trust {
+                            registry_panel::trust_badge(ui, trust);
+                        }
+                        if let (Some(text), CardTarget::Game(id)) = (card.install, &card.target) {
+                            ui.spacing_mut().item_spacing.y = 6.0;
+                            if big_button(ui, text, true, !busy_any, CARD_WIDTH) {
+                                install_clicked = Some(id.clone());
+                            }
+                        }
+                    });
                 }
             });
         }
     });
+    if let Some(id) = install_clicked {
+        install_from_grid(state, ui.ctx(), &id);
+        clicked = Some(CardTarget::Game(id));
+    }
     match clicked {
         Some(CardTarget::Game(id)) => {
             if state.selected.as_ref() != Some(&id) {
@@ -1403,6 +1522,61 @@ fn grid(ui: &mut Ui, state: &mut LibraryState) {
         }
         None => {}
     }
+}
+
+/// Ajoute les cartes des mondes natifs (ADR 0046) qui passent le champ de recherche.
+fn push_native_cards<'a>(cards: &mut Vec<Card<'a>>, state: &'a LibraryState) {
+    for world in state.native.worlds() {
+        if !matches_search(&world.game, &[], &state.search) {
+            continue;
+        }
+        let selected = state.native.selected.as_deref() == Some(world.key.as_str());
+        let look = CardLook {
+            cover_id: &world.key,
+            name: &world.game,
+            status: native_panel::card_status(world),
+            status_color: theme::TEXT_DIM,
+            // Un monde natif est prêt dès qu'il est lu : rien à installer dans un jeu.
+            fraction: 1.0,
+            marker: Some((native_panel::MARKER, theme::ACCENT)),
+            // Un monde natif n'a pas encore d'images : il garde sa jaquette dessinée.
+            cover: None,
+            pin: Some(world_pin(world)),
+            dimmed: false,
+        };
+        cards.push(Card {
+            look,
+            selected,
+            target: CardTarget::Native(world.key.clone()),
+            install: None,
+            trust: None,
+        });
+    }
+}
+
+/// « Installer le mod » sous une jaquette : la même installation que le bouton de la
+/// fiche (« Réparer » d'une installation interrompue compris).
+fn install_from_grid(state: &mut LibraryState, ctx: &egui::Context, id: &str) {
+    if state.task.is_some() {
+        return;
+    }
+    // Copies : `start_install` modifie `state`, on ne garde pas d'emprunt sur lui.
+    let Some(profile) = state.catalog().and_then(|c| c.get(id)).cloned() else {
+        return;
+    };
+    let Some(dir) = state
+        .scan
+        .as_ref()
+        .and_then(|s| s.found.get(id))
+        .map(|g| g.install_dir.clone())
+    else {
+        return;
+    };
+    let force = matches!(
+        state.scan.as_ref().and_then(|s| s.status.get(id)),
+        Some(Ok(InstallStatus::InProgress))
+    );
+    state.start_install(ctx, &profile, dir, force);
 }
 
 /// Couleur d'un état.
@@ -1531,6 +1705,7 @@ fn card_look<'a>(
         // Origine : un jeu venu du registre signé le dit (le catalogue embarqué non) ;
         // sinon, un profil jamais essayé avec le vrai jeu est marqué (ADR 0049).
         pin: None,
+        dimmed: false,
         marker: if from_registry {
             Some(("Registre", theme::ITEM))
         } else if is_untested(profile) {
@@ -1558,6 +1733,8 @@ pub(super) struct CardLook<'a> {
     /// Badge en haut à gauche de la jaquette : sorte de monde (« Natif »,
     /// « Converti », « Archipelago »), voir [`WorldPin`]. `None` : pas de badge.
     pub(super) pin: Option<WorldPin>,
+    /// Jaquette grisée : le jeu n'est pas encore jouable (mod absent, ou jeu pas sur ce PC).
+    pub(super) dimmed: bool,
 }
 
 /// Sorte de monde d'un jeu, montrée en badge sur sa jaquette.
@@ -1701,6 +1878,12 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
                     painter.galley(top_left, galley, theme::TEXT);
                 }
             }
+            if look.dimmed {
+                // Voile sombre : la jaquette passe au second plan, mais le titre et le
+                // badge restent lisibles.
+                ui.painter()
+                    .rect_filled(rect, radius, Color32::from_black_alpha(150));
+            }
             if let Some(pin) = look.pin {
                 paint_pin(ui, rect, pin);
             }
@@ -1718,12 +1901,17 @@ pub(super) fn cover_card(ui: &mut Ui, look: &CardLook<'_>, selected: bool) -> bo
                 egui::StrokeKind::Outside,
             );
             widgets::bar(ui, WIDTH, look.fraction, theme::ACCENT);
+            let name_color = if look.dimmed {
+                theme::TEXT_DIM
+            } else {
+                theme::TEXT
+            };
             ui.label(
                 RichText::new(look.name)
                     .strong()
                     .family(theme::bold_family())
                     .size(15.0)
-                    .color(theme::TEXT),
+                    .color(name_color),
             );
             ui.label(
                 RichText::new(&look.status)
@@ -1953,6 +2141,20 @@ fn detail(ui: &mut Ui, state: &mut LibraryState, shared: &Shared, ctx: &egui::Co
                 for step in &profile.steps {
                     step_row(ui, step, installed);
                 }
+                // Auteurs et licence : ce que montrait la fiche de l'ancien « Catalogue ».
+                ui.add_space(4.0);
+                let license = match profile.credits.license.as_str() {
+                    // « unlicensed » : pas de licence publiée par l'auteur.
+                    "unlicensed" => "non précisée",
+                    other => other,
+                };
+                ui.label(
+                    widgets::dim(format!(
+                        "Auteurs des mods : {} · licence : {license}",
+                        profile.credits.authors.join(", ")
+                    ))
+                    .size(12.0),
+                );
             },
         );
 
@@ -2301,7 +2503,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         let v = view(p, Some(&g), Some(&Ok(InstallStatus::NotInstalled)));
         assert_eq!(v.label, "Mod non installé");
         assert!(v.can_install && !v.can_launch && !v.can_uninstall);
-        assert_eq!(v.install_label, "Installer");
+        assert_eq!(v.install_label, "Installer le mod");
     }
 
     #[test]
@@ -2565,8 +2767,8 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
 
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 1);
-        // Le jeu du catalogue n'est pas sur ce PC : il n'est pas dans la Bibliothèque,
-        // et c'est le monde natif qui est sélectionné par défaut.
+        // Le jeu du catalogue n'est pas sur ce PC (carte grisée) : c'est le monde natif,
+        // prêt à jouer, qui est sélectionné par défaut.
         assert_eq!(state.selected, None);
         assert_eq!(state.native.selected.as_deref(), Some("apquest"));
         assert!(shown.iter().any(|t| t == "MONDE NATIF"), "{shown:?}");
@@ -2648,10 +2850,11 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         assert!(message.is_ok());
         state.native.refresh(&native_dir);
         // L'image suivante n'a plus de monde natif ; le jeu du catalogue, absent de ce
-        // PC, ne revient pas dans la Bibliothèque.
+        // PC, reste dans la grille (grisé) et sa fiche s'ouvre à la place.
         let shown = draw(&ctx, &mut state);
         assert_eq!(state.native.count(), 0);
-        assert_eq!(state.selected, None);
+        assert_eq!(state.selected.as_deref(), Some("demo"));
+        assert!(shown.iter().any(|t| t == "Pas sur ce PC"), "{shown:?}");
         assert!(!shown.iter().any(|t| t == "MONDE NATIF"));
         assert!(!native_dir.join("apquest").exists());
     }

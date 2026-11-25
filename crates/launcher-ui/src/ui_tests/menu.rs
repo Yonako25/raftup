@@ -45,11 +45,12 @@ pub fn menu() -> Harness<'static, Menu> {
 #[test]
 fn le_menu_ne_montre_aucune_entree_bientot() {
     let harness = menu();
+    // Plus de « Bibliothèque » : elle est dans le Catalogue.
+    assert!(!shows(&harness, "Bibliothèque"));
     // Les écrans qui existent, en deux sections, et « Paramètres » à part.
     for label in [
         "JEUX",
         "Accueil",
-        "Bibliothèque",
         "Catalogue",
         "PARTIES",
         "Nouvelle partie",
@@ -74,7 +75,8 @@ fn le_menu_ne_montre_aucune_entree_bientot() {
 fn les_liens_ouvrent_leur_ecran() {
     for (label, page) in [
         ("Accueil", Page::Home),
-        ("Catalogue", Page::Catalog),
+        // Un seul écran pour les jeux (revue, point 25).
+        ("Catalogue", Page::Library),
         ("Nouvelle partie", Page::Create),
         ("Rejoindre", Page::Join),
         // La carte du compte, en bas de la barre (« Joueur » sans compte) : l'écran
