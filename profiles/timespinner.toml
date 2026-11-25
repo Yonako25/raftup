@@ -1,0 +1,46 @@
+# Timespinner (TsRandomizer de Jarno458), écrit le 2026-11-25, jamais essayé en vrai
+# (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/timespinner) : pas d'apworld à installer.
+# Guide officiel (worlds/timespinner/docs/setup_en.md, tag 0.6.8) : le zip Windows dans le
+# dossier du jeu, puis lancer TsRandomizer.exe à la place de Timespinner.exe (il charge
+# Timespinner.exe du même dossier et le modifie en mémoire, sans toucher au fichier).
+# Licence : le dépôt n'a pas de licence (API GitHub : license = null, le 2026-11-25). Mod sans
+# licence accepté par la mainteneuse (ADR 0021, étendu par l'ADR 0050) : téléchargé chez son
+# auteur sur le PC du joueur, jamais redistribué.
+# Hash : sha256sum du fichier téléchargé le 2026-11-25, identique au digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "timespinner"
+name = "Timespinner"
+ap_game = "Timespinner"            # vérifié : game = "Timespinner" dans worlds/timespinner/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 368620               # vérifié : lien Steam du guide officiel
+expected_exe = "Timespinner.exe"   # vérifié : guide officiel
+
+[credits]
+authors = ["Jarno458 et contributeurs (TsRandomizer, sans licence)"]
+license = "unlicensed"
+
+[[steps]]
+id = "tsrandomizer"
+kind = "mod"
+name = "TsRandomizer"
+version = "1.38.6"                 # vérifié : dernière release de Jarno458/TsRandomizer (2026-03-21)
+source = { url = "https://github.com/Jarno458/TsRandomizer/releases/download/v1.38.6/Windows.1.38.6.zip" }
+sha256 = "47a0597d48c2c9d2bfbe7fa1b359db6d8518c49a2fb03e520d9c161fe66ef863"
+max_bytes = 5000000                # fichier : 1 058 343 octets
+# Le zip a tout sous Windows/ (vérifié par unzip -l) : TsRandomizer.exe,
+# TsRandomizerItemTracker.exe, Archipelago.MultiClient.Net.dll, Archipelago.Gifting.Net.dll,
+# Newtonsoft.Json.dll, .pdb et .xml.
+# À vérifier : Newtonsoft.Json.dll existe peut-être déjà dans le jeu (il serait alors remplacé,
+# sauvegardé puis restauré à la désinstallation).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "Windows/" }
+
+[launch]
+exe = "{game_dir}/TsRandomizer.exe"
+# Vérifié : guide 0.6.8 (New Game, « << Archipelago >> », champs de connexion, Connect).
+connect = { method = "manual", instructions = "Choisis « New Game », puis passe « << Select Seed >> » sur « << Archipelago >> » avec la flèche gauche et valide. Saisis le serveur {address}, le nom {slot} et le mot de passe s'il y en a un (Ctrl + V marche), puis « Connect » et choisis la difficulté." }

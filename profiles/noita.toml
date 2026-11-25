@@ -1,0 +1,41 @@
+# Noita (mod NoitaArchipelago de DaftBrit et contributeurs), écrit le 2026-11-25, jamais essayé en
+# vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/noita) : pas d'apworld à installer.
+# Guide officiel (worlds/noita/docs/setup_en.md, tag 0.6.8) : le contenu du zip dans
+# <dossier du jeu>/mods/archipelago, puis activer « Unsafe mods » et le mod dans le menu Mods.
+# Hash : sha256sum du fichier téléchargé le 2026-11-25, identique au digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "noita"
+name = "Noita"
+ap_game = "Noita"                  # vérifié : game = "Noita" dans worlds/noita/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 881100               # à vérifier : appid de Noita sur Steam (le guide ne donne pas de lien Steam)
+expected_exe = "noita.exe"         # à vérifier : nom courant de l'exécutable (le mod cite aussi noita_dev.exe)
+
+[credits]
+authors = ["DaftBrit et contributeurs (NoitaArchipelago, MIT)"]
+# Vérifié : licence GitHub du dépôt = MIT. Le zip contient aussi lua-apclientpp (licence dans
+# bin/lua-apclientpp-license.txt) et un logo sous sa propre licence (APLogo-LICENSE.txt).
+license = "MIT"
+
+[[steps]]
+id = "archipelago-noita"
+kind = "mod"
+name = "NoitaArchipelago"
+version = "1.5.0"                  # vérifié : dernière release de DaftBrit/NoitaArchipelago (2026-02-04)
+source = { url = "https://github.com/DaftBrit/NoitaArchipelago/releases/download/1.5.0/archipelago.zip" }
+sha256 = "180b04c301e1ef7d2b9cbbd48b83b3b3e5e0520e3b653666c0f459fad025bcae"
+max_bytes = 10000000               # fichier : 2 191 515 octets
+# Zip à plat (vérifié par unzip -l) : init.lua, mod.xml, settings.lua, compatibility.xml,
+# mod_id.txt, bin/…, data/… → mods/archipelago, comme le demande le guide.
+install = { extract = "zip", into = "{game_dir}/mods/archipelago", strip_prefix = "" }
+
+[launch]
+exe = "{game_dir}/noita.exe"
+# Vérifié : guide 0.6.8 : champs Server, Port, Slot, Password dans Options → Mod Settings.
+connect = { method = "manual", instructions = "Dans le menu Mods, passe « Unsafe mods » sur Allowed puis active le mod Archipelago. Ensuite, Options → Mod Settings → Archipelago : Server {host}, Port {port}, Slot {slot} et Password s'il y en a un. Lance une nouvelle partie : un logo coché en bas à droite montre que la connexion marche." }

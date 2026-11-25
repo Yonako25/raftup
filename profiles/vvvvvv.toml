@@ -1,0 +1,60 @@
+# VVVVVV (V6AP de N00byKing), écrit le 2026-11-25, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/v6) : pas d'apworld à installer.
+# Guide officiel (worlds/v6/docs/setup_en.md, tag 0.6.8) : décompresser le zip de V6AP dans le
+# dossier du jeu ; il remplace VVVVVV.exe (le launcher sauvegarde l'original et le remet à la
+# désinstallation). Le jeu garde ses propres données (data.zip) : Raftup n'en fournit aucune.
+# Les notes de la release AP0.5.1-3 demandent aussi un SDL2 32 bits plus récent (2.32.10) à
+# côté de l'exécutable : ajouté en deuxième étape, téléchargé chez libsdl-org.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-25, identiques aux digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "vvvvvv"
+name = "VVVVVV"
+ap_game = "VVVVVV"                 # vérifié : game: str = "VVVVVV" dans worlds/v6/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 70300                # vérifié : lien Steam du guide officiel
+expected_exe = "VVVVVV.exe"        # vérifié : nom de l'exécutable du zip de V6AP, qui remplace celui du jeu
+
+[credits]
+authors = [
+  "Terry Cavanagh (code source de VVVVVV, licence VVVVVV Source Code License v1.0)",
+  "N00byKing (V6AP)",
+  "équipe SDL (SDL2, Zlib)",
+]
+# Vérifié : LICENSE.md du dépôt N00byKing/VVVVVV : licence maison, pas d'identifiant SPDX
+# (redistribution permise hors usage commercial). Raftup ne redistribue rien : V6AP est
+# téléchargé chez son auteur sur le PC du joueur.
+# À vérifier : que la validation garde bien un identifiant « LicenseRef-… ».
+license = "LicenseRef-VVVVVV-Source-Code-License-1.0 AND Zlib"
+
+[[steps]]
+id = "v6ap"
+kind = "mod"
+name = "V6AP"
+version = "AP0.5.1-3"              # vérifié : dernière release de N00byKing/VVVVVV (2025-11-22, « compatibilité avec les versions récentes d'Archipelago »)
+source = { url = "https://github.com/N00byKing/VVVVVV/releases/download/AP0.5.1-3/V6AP-win.zip" }
+sha256 = "e175fa7be10d7b4c35dca9d088fe2e061023c881711c611aeae991420455c3b7"
+max_bytes = 5000000                # fichier : 1 194 230 octets
+# Zip à plat (vérifié par unzip -l) : VVVVVV.exe, APCpp.dll.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "sdl2"
+kind = "mod_loader"
+name = "SDL2 (32 bits)"
+version = "2.32.10"                # vérifié : version citée par les notes de la release AP0.5.1-3
+source = { url = "https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-2.32.10-win32-x86.zip" }
+sha256 = "d72b0728a315ab25ad43123b89baa2ab6fd7c335a43f737213685d29fd2aa4fe"
+max_bytes = 2000000                # fichier : 530 617 octets
+# Zip à plat (vérifié) : SDL2.dll, README-SDL.txt. Remplace le SDL2.dll du jeu (sauvegardé).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[launch]
+exe = "{game_dir}/VVVVVV.exe"
+# Vérifié : guide 0.6.8 : options -v6ap_name <slot>, -v6ap_ip <serveur:port>, -v6ap_passwd <mot de passe>.
+# À vérifier : qu'un -v6ap_passwd vide marche quand la partie n'a pas de mot de passe.
+connect = { method = "cli_args", args = ["-v6ap_name", "{slot}", "-v6ap_ip", "{address}", "-v6ap_passwd", "{password}"] }

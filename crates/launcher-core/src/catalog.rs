@@ -34,9 +34,30 @@ pub const EMBEDDED: &[(&str, &str)] = &[
         include_str!("../../../profiles/choo-choo-charles.toml"),
     ),
     (
+        "doom-1993.toml",
+        include_str!("../../../profiles/doom-1993.toml"),
+    ),
+    (
+        "doom-ii.toml",
+        include_str!("../../../profiles/doom-ii.toml"),
+    ),
+    (
+        "heretic.toml",
+        include_str!("../../../profiles/heretic.toml"),
+    ),
+    (
         "hollow-knight.toml",
         include_str!("../../../profiles/hollow-knight.toml"),
     ),
+    (
+        "hylics-2.toml",
+        include_str!("../../../profiles/hylics-2.toml"),
+    ),
+    (
+        "muse-dash.toml",
+        include_str!("../../../profiles/muse-dash.toml"),
+    ),
+    ("noita.toml", include_str!("../../../profiles/noita.toml")),
     (
         "risk-of-rain-2.toml",
         include_str!("../../../profiles/risk-of-rain-2.toml"),
@@ -50,9 +71,19 @@ pub const EMBEDDED: &[(&str, &str)] = &[
         include_str!("../../../profiles/stardew-valley.toml"),
     ),
     (
+        "subnautica.toml",
+        include_str!("../../../profiles/subnautica.toml"),
+    ),
+    (
         "the-planet-crafter.toml",
         include_str!("../../../profiles/the-planet-crafter.toml"),
     ),
+    (
+        "timespinner.toml",
+        include_str!("../../../profiles/timespinner.toml"),
+    ),
+    ("tunic.toml", include_str!("../../../profiles/tunic.toml")),
+    ("vvvvvv.toml", include_str!("../../../profiles/vvvvvv.toml")),
 ];
 
 /// L'ensemble des profils, rangés par `game.id` (`BTreeMap` : ordre stable).

@@ -1,0 +1,61 @@
+# Muse Dash (mod ArchipelagoMuseDash de DeamonHunter, chargeur MelonLoader), écrit le 2026-11-25,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/musedash) : pas d'apworld à installer.
+# Guide officiel (worlds/musedash/docs/setup_en.md, tag 0.6.8) : MelonLoader par son
+# installateur, puis le contenu du zip du mod dans le dossier Mods (à plat, sans sous-dossier).
+# Ici, MelonLoader vient de son zip x64 (même contenu que ce que pose l'installateur :
+# version.dll + dossier MelonLoader ; à vérifier en vrai). Version 0.7.2 : celle que les notes
+# de la release 1.5.38 du mod conseillent si la dernière ne marche pas (le guide 0.6.8 dit 0.7.0).
+# Prérequis sur le PC (non installés par Raftup) : .NET Desktop Runtime 6 (guide officiel).
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-25, identiques aux digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "muse-dash"
+name = "Muse Dash"
+ap_game = "Muse Dash"              # vérifié : game = "Muse Dash" dans worlds/musedash/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 774171               # vérifié : lien Steam du guide officiel
+expected_exe = "MuseDash.exe"      # vérifié : guide officiel (« browse to MuseDash.exe »)
+
+[credits]
+authors = ["DeamonHunter (ArchipelagoMuseDash, MIT)", "LavaGang (MelonLoader, Apache-2.0)"]
+# Vérifié : licences GitHub des deux dépôts.
+license = "MIT AND Apache-2.0"
+
+[[steps]]
+id = "melonloader"
+kind = "mod_loader"
+name = "MelonLoader"
+version = "0.7.2"
+source = { url = "https://github.com/LavaGang/MelonLoader/releases/download/v0.7.2/MelonLoader.x64.zip" }
+sha256 = "5cedb66dc5595de19fd4dd6b4c178440da293c6d7f511e14bdf0fea407c9a1f7"
+max_bytes = 40000000               # fichier : 17 710 480 octets
+# Le zip contient version.dll, .git-hash et MelonLoader/… à la racine (vérifié par unzip -l).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "archipelago-musedash"
+kind = "mod"
+name = "ArchipelagoMuseDash"
+version = "1.5.38"                 # vérifié : dernière release de DeamonHunter/ArchipelagoMuseDash (2026-10-30)
+source = { url = "https://github.com/DeamonHunter/ArchipelagoMuseDash/releases/download/v1.5.38/ArchipelagoMuseDash.zip" }
+sha256 = "0689ee2ae39aebd58833aa23d6f4fc1ab4b5562fa8094caa6478cba33f84010c"
+max_bytes = 5000000                # fichier : 1 598 595 octets
+# Zip à plat (vérifié) : ArchipelagoMuseDash.dll, Archipelago.MultiClient.Net.dll,
+# Newtonsoft.Json.dll. Le guide exige qu'ils soient directement dans Mods.
+# À vérifier : la release publie aussi un musedash.apworld ; compatibilité du mod 1.5.38 avec le
+# monde intégré de 0.6.8 non vérifiée.
+install = { extract = "zip", into = "{game_dir}/Mods", strip_prefix = "" }
+
+[cleanup]
+# Créés par MelonLoader au premier lancement (dossiers Il2Cpp générés, journaux) : à vérifier en vrai.
+paths = ["{game_dir}/MelonLoader/Il2CppAssemblies", "{game_dir}/MelonLoader/Latest.log", "{game_dir}/UserData", "{game_dir}/UserLibs", "{game_dir}/Plugins"]
+
+[launch]
+exe = "{game_dir}/MuseDash.exe"
+# Vérifié : guide 0.6.8 : bouton en bas à droite de l'écran titre, adresse avec le port.
+connect = { method = "manual", instructions = "Lance le jeu et passe l'écran d'intro, puis clique sur le bouton en bas à droite. Saisis l'adresse {address}, le nom {slot} et le mot de passe s'il y en a un. Le premier lancement est long : MelonLoader prépare ses fichiers." }

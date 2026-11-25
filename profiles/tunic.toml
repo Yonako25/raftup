@@ -1,0 +1,68 @@
+# TUNIC (TUNIC Randomizer de silent-destroyer, chargeur BepInEx 6.0.0-pre.1 IL2CPP), écrit le
+# 2026-11-25, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/tunic) : pas d'apworld installé.
+# À VÉRIFIER : la release 5.0.2 du mod publie un tunic.apworld plus récent (« the tunic apworld
+# was updated in this version ») ; le mod dit rester compatible avec les parties existantes,
+# mais la compatibilité avec le monde de 0.6.8 n'est pas vérifiée.
+# Guide officiel (worlds/tunic/docs/setup_en.md, tag 0.6.8) : BepInEx 6.0.0-pre.1 IL2CPP x64
+# exactement (ni plus récent, ni BepInEx 5), puis le dossier « Tunic Randomizer » dans
+# BepInEx/plugins.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-25 ; celui du mod est identique au
+# digest de GitHub (la release de BepInEx 6.0.0-pre.1 n'a pas de digest publié).
+
+format_version = 1
+
+[game]
+id = "tunic"
+name = "TUNIC"
+ap_game = "TUNIC"                  # vérifié : game = "TUNIC" dans worlds/tunic/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 553420               # à vérifier : appid de TUNIC sur Steam (le guide ne donne pas de lien Steam)
+expected_exe = "Tunic.exe"         # vérifié : arborescence du dossier du jeu dans le guide officiel
+
+[credits]
+authors = ["silent-destroyer et contributeurs (TUNIC Randomizer, MIT)", "équipe BepInEx (BepInEx, LGPL-2.1)"]
+# Vérifié : licence GitHub du dépôt du mod = MIT ; BepInEx = LGPL-2.1.
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "bepinex"
+kind = "mod_loader"
+name = "BepInEx (Unity IL2CPP x64)"
+version = "6.0.0-pre.1"            # vérifié : version exacte exigée par le guide officiel
+source = { url = "https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.1/BepInEx_UnityIL2CPP_x64_6.0.0-pre.1.zip" }
+sha256 = "b5ac213ee70b029bda1353a82b067d89709ec1a55ec9b775779c2813f3d84212"
+max_bytes = 20000000               # fichier : 10 553 551 octets
+# Le zip contient winhttp.dll, doorstop_config.ini, changelog.txt, BepInEx/… et mono/… à la
+# racine (vérifié par unzip -l), comme l'arborescence du guide.
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "tunic-randomizer"
+kind = "mod"
+name = "TUNIC Randomizer"
+version = "5.0.2"                  # vérifié : dernière release de silent-destroyer/tunic-randomizer (2026-08-27)
+source = { url = "https://github.com/silent-destroyer/tunic-randomizer/releases/download/5.0.2/TunicRandomizer.zip" }
+sha256 = "f152b7301ebb22d4e5be3c6bfa144fb6a89f72ec0a7c9e5f05542703fb3a01e9"
+max_bytes = 20000000               # fichier : 10 045 375 octets
+# Le zip contient le dossier « Tunic Randomizer/ » (TunicRandomizer.dll,
+# Archipelago.MultiClient.Net.dll, Newtonsoft.Json.dll ; vérifié) → BepInEx/plugins/Tunic Randomizer.
+# À vérifier : le guide demande de lancer le jeu une fois avant (BepInEx crée alors plugins/) ;
+# ici, le dossier plugins est créé par l'installation.
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins", strip_prefix = "" }
+
+[preserve]
+# Réglages de BepInEx, créés au premier lancement : non vu en vrai.
+paths = ["{game_dir}/BepInEx/config"]
+
+[cleanup]
+# Créés par BepInEx 6 IL2CPP au premier lancement (assemblages générés, journaux) : à vérifier en vrai.
+paths = ["{game_dir}/BepInEx/cache", "{game_dir}/BepInEx/unhollowed", "{game_dir}/BepInEx/LogOutput.log"]
+
+[launch]
+exe = "{game_dir}/Tunic.exe"
+# Vérifié : guide 0.6.8 : « Randomizer Mode » → Archipelago, puis « Edit Connection Info »
+# (champs Player, Hostname, Port, Password séparés).
+connect = { method = "manual", instructions = "À l'écran titre, choisis « Archipelago » dans « Randomizer Mode », puis « Edit Connection Info » : Player {slot}, Hostname {host}, Port {port}, Password s'il y en a un. Ferme avec « Close Connection Info » : « Status: Connected! » doit s'afficher. Le premier lancement est long : BepInEx prépare ses fichiers." }
