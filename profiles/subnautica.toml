@@ -1,0 +1,49 @@
+# Subnautica (mod Archipelago de Berserker66, BepInEx 5 fourni dans le zip), écrit le 2026-11-25,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/subnautica) : pas d'apworld à installer.
+# Guide officiel (worlds/subnautica/docs/setup_en.md, tag 0.6.8) : décompresser le zip dans le
+# dossier du jeu, pour que « Subnautica/BepInEx » existe.
+# Hash : sha256sum du fichier téléchargé le 2026-11-25, identique au digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "subnautica"
+name = "Subnautica"
+ap_game = "Subnautica"             # vérifié : game = "Subnautica" dans worlds/subnautica/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 264710               # vérifié : lien Steam du guide officiel
+expected_exe = "Subnautica.exe"    # à vérifier : nom courant de l'exécutable (non écrit dans le guide)
+
+[credits]
+authors = ["Berserker66 et contributeurs (ArchipelagoSubnauticaModSrc, MIT)", "équipe BepInEx (BepInEx, LGPL-2.1)"]
+# Vérifié : licence GitHub du dépôt du mod = MIT ; le zip embarque BepInEx (LGPL-2.1).
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "archipelago-subnautica"
+kind = "mod"
+name = "Archipelago (Subnautica)"
+version = "1.9.3"                  # vérifié : dernière release de Berserker66/ArchipelagoSubnauticaModSrc (2026-05-08)
+source = { url = "https://github.com/Berserker66/ArchipelagoSubnauticaModSrc/releases/download/1.9.3/Archipelago_193.zip" }
+sha256 = "c2165113cb9bf15723c946bb9b0ab314fbb8d8f9638453e634cdad0e0e1dc298"
+max_bytes = 5000000                # fichier : 722 733 octets
+# Le zip contient winhttp.dll, doorstop_config.ini, .doorstop_version, BepInEx/core/… et
+# BepInEx/plugins/Archipelago/… à la racine (vérifié par unzip -l).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[preserve]
+# Réglages de BepInEx, créés au premier lancement : non vu en vrai.
+paths = ["{game_dir}/BepInEx/config"]
+
+[cleanup]
+# Le guide cite BepInEx/LogOutput.txt ; le cache vient de la documentation de BepInEx (à vérifier).
+paths = ["{game_dir}/BepInEx/cache", "{game_dir}/BepInEx/LogOutput.txt", "{game_dir}/BepInEx/LogOutput.log"]
+
+[launch]
+exe = "{game_dir}/Subnautica.exe"
+# Vérifié : guide 0.6.8 : formulaire en haut à gauche du menu principal (Host avec le port,
+# PlayerName, Password).
+connect = { method = "manual", instructions = "Au menu principal, remplis le formulaire en haut à gauche : Host {address}, PlayerName {slot}, Password s'il y en a un. Une fois connecté, lance une nouvelle partie." }

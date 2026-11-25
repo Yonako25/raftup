@@ -804,3 +804,9 @@ untime2`.
 - **Pas vérifié** : rendu dans la vraie fenêtre regardé une fois par l'utilisatrice (badge de monde rétabli ensuite), pas depuis les points 23 à 25 (vus seulement en capture) ; « Installer le mod » sous la jaquette jamais cliqué sur un vrai jeu ; écran « Amis » une fois connecté ; noms de mods tiers des profils laissés tels quels ; branche `ergonomie-launcher` ni poussée ni fusionnée.
 - **Ne pas toucher** : `docs/profils-en-attente/` ; `cloud/adr-salon-rafthub` ; `docs/adr/0056-invitations-a-une-partie-par-rafthub.md` (session des invitations).
 - **Suite** : invitations à une partie par Rafthub (API du hub + ADR, avec le salon par le Rafthub), puis fusionner `ergonomie-launcher`.
+
+### 2026-11-25 · Profils d'installation, série 1
+- **Fait** : 10 profils en `untested` (DOOM 1993, DOOM II, Heretic, Hylics 2, Muse Dash, Noita, Subnautica, Timespinner, TUNIC, VVVVVV), empreintes calculées sur les fichiers téléchargés (égales aux digest GitHub), ajoutés à `EMBEDDED` ; tableau et jeux écartés dans `docs/profils-serie-1.md`. fmt, clippy `-D warnings` et `cargo test --workspace` passent.
+- **Pas vérifié** : aucun profil essayé avec le vrai jeu ; nom de l'exécutable de Hylics 2 supposé ; DOOM passe par Archipelago Doom 2.0 (`-game compat_*`) au lieu de la 1.2.0 du guide 0.6.8 ; deux limites du format notées pour l'utilisatrice (`expected_exe` à la racine seulement, pas de prérequis système).
+- **Ne pas toucher** : `docs/profils-en-attente/` ; `docs/adr/0056-*`.
+- **Suite** : essayer un des nouveaux profils sous Windows (Subnautica ou Timespinner, les plus simples), puis la série 2.

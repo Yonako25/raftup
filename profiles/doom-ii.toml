@@ -1,0 +1,51 @@
+# DOOM II (Archipelago Doom 2.0 d'ArchipelagoDoom), écrit le 2026-11-25, jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/doom_ii) : pas d'apworld à installer.
+# Le guide officiel (worlds/doom_ii/docs/setup_en.md, tag 0.6.8) renvoie à l'ancienne version 1.2.0
+# (Daivuk/apdoom), marquée « legacy » par ses auteurs : ils demandent d'utiliser la 2.0 même avec
+# les mondes intégrés (« 2.0 also supports playing games for the current, Core-verified versions »).
+# Raftup ne copie aucun WAD : Archipelago Doom trouve tout seul les WAD de la version Steam
+# (d_iwad.c, steam_install_subdirs : « steamapps/common/ultimate doom/base/doom2 ») ; on lui passe en plus
+# -iwad pour ne pas dépendre de cette recherche.
+# Hash : sha256sum du fichier téléchargé le 2026-11-25, identique au digest de GitHub.
+
+format_version = 1
+
+[game]
+id = "doom-ii"
+name = "DOOM II"
+ap_game = "DOOM II"             # vérifié : game: str = "DOOM II" dans worlds/doom_ii/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 2280          # vérifié : lien Steam du guide officiel
+# Pas d'expected_exe : le format veut un simple nom de fichier à la racine du jeu, et le nom de
+# l'exécutable racine de la version Steam n'est pas connu (à vérifier). Conséquence : seule la
+# détection Steam marche ; choisir le dossier à la main est refusé (NoExpectedExe).
+
+[credits]
+authors = ["Daivuk, Kaito Sinclaire et contributeurs (Archipelago Doom, fork de Crispy Doom, GPL-2.0)"]
+# Vérifié : license.txt du zip et licence GitHub du dépôt = GPL-2.0 ; « only » par prudence
+# (Crispy Doom est en GPL-2.0-or-later, à vérifier).
+license = "GPL-2.0-only"
+
+[[steps]]
+id = "apdoom"
+kind = "mod"
+name = "Archipelago Doom"
+version = "2.0.0"                  # vérifié : dernière release d'ArchipelagoDoom/APDoom (2026-07-18)
+source = { url = "https://github.com/ArchipelagoDoom/APDoom/releases/download/v2.0.0/APDoom-2.0-Windows-x64.zip" }
+sha256 = "9ed308f0b1fa2c8cc15a62a383895e934177c42336457db9e643220fae0c12e8"
+max_bytes = 20000000               # fichier : 8 564 850 octets
+# Zip à plat (vérifié par unzip -l) : apdoom-launcher.exe, archipelago-doom.exe,
+# archipelago-heretic.exe, DLL (SDL2, fluidsynth…), credits.txt, license.txt. Aucun WAD du jeu.
+# Dans un sous-dossier à lui, pour ne toucher à aucun fichier du jeu.
+install = { extract = "zip", into = "{game_dir}/apdoom", strip_prefix = "" }
+
+[launch]
+exe = "{game_dir}/apdoom/archipelago-doom.exe"
+# -game : nom court du monde « compatible » avec le monde intégré (short_name de
+# embed/compat_*_120.apworld, tag v2.0.0) ; à vérifier : qu'il corresponde bien à 0.6.8.
+args = ["-game", "compat_doom2", "-iwad", "{game_dir}/base/doom2/DOOM2.WAD"]
+# Méthode vérifiée dans le code (src/ap_basic.c, tag v2.0.0) : -apserver <adresse:port>,
+# -applayer <slot>, -password <mot de passe> (un mot de passe vide vaut « pas de mot de passe »).
+connect = { method = "cli_args", args = ["-apserver", "{address}", "-applayer", "{slot}", "-password", "{password}"] }

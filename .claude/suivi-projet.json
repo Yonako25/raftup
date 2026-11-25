@@ -3,7 +3,7 @@
   "description": "Jumeau d'Archipelago en Rust (serveur multiworld compatible) avec un launcher de bureau.",
   "status": "en cours",
   "created": "2026-11-11",
-  "updated": "2026-11-24",
+  "updated": "2026-11-25",
   "stack": [
     "Rust",
     "tokio",
@@ -509,7 +509,8 @@
     "Regarder à l'œil les écrans non contrôlés",
     "Jouer une partie APQuest sur seed Rust",
     "Tester le hub sur PostgreSQL, MySQL et MariaDB",
-    "ADR 0052, étape 4 : page « Parties » de la console"
+    "ADR 0052, étape 4 : page « Parties » de la console",
+    "Essayer un profil de la série 1 sous Windows (Subnautica ou Timespinner)"
   ],
   "blockers": [],
   "decisions": [
@@ -624,6 +625,11 @@
     {
       "date": "2026-11-25",
       "summary": "Bibliothèque et Catalogue réunis en un seul écran « Catalogue » : tous les jeux, prêts à jouer d'abord, les autres grisés, « Installer le mod » sous la jaquette d'un jeu trouvé sans mod ; point 25 de la revue.",
+      "tasks": []
+    },
+    {
+      "date": "2026-11-25",
+      "summary": "Catalogue : 10 profils d'installation de plus (DOOM 1993, DOOM II, Heretic, Hylics 2, Muse Dash, Noita, Subnautica, Timespinner, TUNIC, VVVVVV), en « non testé » ; jeux écartés et raisons dans docs/profils-serie-1.md.",
       "tasks": []
     }
   ]

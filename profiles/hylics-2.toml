@@ -1,0 +1,66 @@
+# Hylics 2 (mod ArchipelagoHylics2 de TRPG0, chargeur BepInEx 5 32 bits), écrit le 2026-11-25,
+# jamais essayé en vrai (status = "untested", ADR 0049).
+# Monde intégré à Archipelago 0.6.8 (worlds/hylics2) : pas d'apworld à installer.
+# Guide officiel (worlds/hylics2/docs/setup_en.md, tag 0.6.8) : BepInEx 5 32 bits (5.4.20 ou
+# plus), puis le contenu du zip du mod dans BepInEx\plugins.
+# Hashes : sha256sum des fichiers téléchargés le 2026-11-25, identiques aux digest de GitHub
+# (le zip x86 de BepInEx 5.4.23.5 n'a pas de digest publié : calculé seulement).
+
+format_version = 1
+
+[game]
+id = "hylics-2"
+name = "Hylics 2"
+ap_game = "Hylics 2"               # vérifié : game: str = "Hylics 2" dans worlds/hylics2/__init__.py (0.6.8)
+status = "untested"
+
+[game.detect]
+steam_appid = 1286710              # vérifié : lien Steam du guide officiel
+# À VÉRIFIER : nom de l'exécutable non trouvé (ni dans le guide, ni dans le dépôt du mod) ;
+# « Hylics 2.exe » est une supposition (nom habituel d'un jeu Unity).
+expected_exe = "Hylics 2.exe"
+
+[credits]
+authors = ["TRPG0 (ArchipelagoHylics2, MIT)", "équipe BepInEx (BepInEx, LGPL-2.1)"]
+# Vérifié : licence GitHub du dépôt du mod = MIT ; BepInEx = LGPL-2.1.
+license = "MIT AND LGPL-2.1-only"
+
+[[steps]]
+id = "bepinex"
+kind = "mod_loader"
+name = "BepInEx (32 bits)"
+version = "5.4.23.5"               # guide : BepInEx 5 32 bits, 5.4.20 ou plus récent
+source = { url = "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x86_5.4.23.5.zip" }
+sha256 = "37651c79e40d6f909572a4f461ac25350bb3ef8fe7fbd29f1aa8791a33b84c82"
+max_bytes = 5000000                # fichier : 638 544 octets
+# Le zip contient BepInEx/core/…, winhttp.dll, doorstop_config.ini, .doorstop_version et
+# changelog.txt à la racine (vérifié par unzip -l).
+install = { extract = "zip", into = "{game_dir}", strip_prefix = "" }
+
+[[steps]]
+id = "archipelago-hylics2"
+kind = "mod"
+name = "ArchipelagoHylics2"
+version = "1.0.11"                 # vérifié : dernière release de TRPG0/ArchipelagoHylics2 (2026-03-23)
+source = { url = "https://github.com/TRPG0/ArchipelagoHylics2/releases/download/1.0.11/ArchipelagoHylics2_1.0.11.zip" }
+sha256 = "5871bcc1b5be9e05b414b1adee33239b5c45b26249288a663f66341cf9dbe9e8"
+max_bytes = 2000000                # fichier : 556 425 octets
+# Zip à plat (vérifié) : ArchipelagoHylics2.dll, Archipelago.MultiClient.Net.dll,
+# Newtonsoft.Json.dll, websocket-sharp.dll, c-wspp-win32.dll, c-wspp-LICENSE.txt.
+# Le guide dit « dans BepInEx\plugins » ; un sous-dossier à lui garde les fichiers ensemble.
+# À vérifier : le guide demande de lancer le jeu une fois avant d'installer le mod (création
+# des fichiers de BepInEx) ; ici, le mod est posé avant ce premier lancement.
+install = { extract = "zip", into = "{game_dir}/BepInEx/plugins/ArchipelagoHylics2", strip_prefix = "" }
+
+[preserve]
+# Réglages de BepInEx, créés au premier lancement : non vu en vrai.
+paths = ["{game_dir}/BepInEx/config"]
+
+[cleanup]
+# Créés par BepInEx au premier lancement (d'après sa documentation ; à vérifier en vrai).
+paths = ["{game_dir}/BepInEx/cache", "{game_dir}/BepInEx/LogOutput.log"]
+
+[launch]
+exe = "{game_dir}/Hylics 2.exe"    # même supposition que expected_exe
+# Vérifié : guide 0.6.8 et README du mod : commande de console « /connect [adresse:port] [nom] [mot de passe] ».
+connect = { method = "manual", instructions = "Dans le jeu, ouvre la console (touche « / ») et tape : /connect {address} {slot}, suivi du mot de passe s'il y en a un. Connecte-toi au moins une fois avant de ramasser un objet." }

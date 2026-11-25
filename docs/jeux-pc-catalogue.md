@@ -8,6 +8,7 @@ Suivi des 46 jeux PC du monde intégré d'Archipelago 0.6.8 (`worlds/`), plus le
 | --- | --- |
 | 1 (MVP) | A Short Hike, Hollow Knight, Risk of Rain 2, Stardew Valley |
 | 2 | Aquaria, Blasphemous, Bomb Rush Cyberfunk, Choo-Choo Charles |
+| 3 (série 1, `docs/profils-serie-1.md`) | DOOM 1993, DOOM II, Heretic, Hylics 2, Muse Dash, Noita, Subnautica, Timespinner, TUNIC, VVVVVV |
 
 ## Bloqués (aucun profil), avec la raison
 
@@ -22,4 +23,4 @@ Suivi des 46 jeux PC du monde intégré d'Archipelago 0.6.8 (`worlds/`), plus le
 
 ## Reste à faire
 
-Lots suivants, par ordre alphabétique : Dark Souls III, DLCQuest, DOOM 1993, DOOM II, Factorio, Heretic, Hylics 2, Inscryption, Kingdom Hearts, Kingdom Hearts 2, Lingo, Meritous, Muse Dash, Noita, Old School RuneScape, Overcooked! 2, Raft, Satisfactory, Saving Princess, shapez, Shivers, Sonic Adventure 2: Battle, StarCraft II, Subnautica, Terraria, The Messenger, The Witness, Timespinner, TUNIC, Undertale, VVVVVV, Wargroove.
+Lots suivants, par ordre alphabétique : Dark Souls III, DLCQuest, Factorio, Inscryption, Kingdom Hearts, Kingdom Hearts 2, Lingo, Meritous, Old School RuneScape, Overcooked! 2, Raft, Satisfactory, Saving Princess, shapez, Shivers, Sonic Adventure 2: Battle, StarCraft II, Terraria, The Messenger, The Witness, Undertale, Wargroove (raisons des jeux écartés en série 1 : `docs/profils-serie-1.md`).
