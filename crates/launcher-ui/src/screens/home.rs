@@ -117,8 +117,7 @@ pub fn show(
         .and_then(|(id, _)| library.art_for(&ctx, id, ArtKind::Hero));
 
     super::page(ui, |ui| {
-        // Ligne de titre, comme les autres écrans : les boutons de fenêtre s'y posent au
-        // lieu de flotter sur l'image de la vitrine, et elle sert à déplacer la fenêtre.
+        // Ligne de titre, comme les autres écrans.
         crate::titlebar::title_row(ui, |ui| {
             ui.label(widgets::title("Accueil", 28.0));
         });

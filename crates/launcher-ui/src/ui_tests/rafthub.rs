@@ -224,8 +224,6 @@ pub(super) fn game_screen_with(games: HubGames) -> Harness<'static, HubGames> {
     let mut harness = builder().build_ui_state(
         |ui, games: &mut HubGames| {
             hub_game::show(ui, games);
-            // Les boutons de fenêtre, comme dans `App` (après l'écran).
-            crate::titlebar::show(ui.ctx());
         },
         games,
     );

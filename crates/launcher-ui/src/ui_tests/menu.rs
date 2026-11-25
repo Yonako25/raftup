@@ -87,18 +87,21 @@ fn les_liens_ouvrent_leur_ecran() {
     }
 }
 
-/// Plus de bande de titre : les trois boutons de fenêtre sont sur la ligne de titre de
-/// l'écran, dans le coin droit, et les actions de la page se rangent à leur gauche.
+/// Bande de titre (revue, point 24) : en haut, sur toute la largeur, avec le nom de Raftup
+/// à gauche et les trois boutons de fenêtre dans le coin droit ; l'écran commence dessous.
 #[test]
-fn boutons_de_fenetre_sur_la_ligne_de_titre() {
+fn bande_de_titre_avec_les_boutons_de_fenetre() {
     let mut harness = builder().build_ui_state(
         |ui, _: &mut ()| {
-            crate::screens::page(ui, |ui| {
-                crate::screens::header(ui, "Parties", "Un écran", |ui| {
-                    crate::widgets::primary_button(ui, "Action de la page", true);
+            // Comme `App` : la bande d'abord, puis l'écran.
+            crate::titlebar::show(ui);
+            egui::CentralPanel::no_frame().show(ui, |ui| {
+                crate::screens::page(ui, |ui| {
+                    crate::screens::header(ui, "Parties", "Un écran", |ui| {
+                        crate::widgets::primary_button(ui, "Action de la page", true);
+                    });
                 });
             });
-            crate::titlebar::show(ui.ctx());
         },
         (),
     );
@@ -108,32 +111,24 @@ fn boutons_de_fenetre_sur_la_ligne_de_titre() {
     let maximize = harness.get_by_label("Agrandir").rect();
     let minimize = harness.get_by_label("Réduire").rect();
     let action = harness.get_by_label("Action de la page").rect();
-    // « Fermer » le plus à droite, près du bord ; les trois dans l'ordre, sans chevauchement.
-    assert!(screen.right() - close.right() < 32.0, "{close:?}");
+    let name = harness.get_by_label("RAFTUP").rect();
+    // Le harnais garde une petite marge autour de l'écran : la bande se mesure depuis son
+    // milieu (celui des boutons), pas depuis le bord de l'image.
+    let middle = close.center().y;
+    let band_bottom = middle + crate::titlebar::HEIGHT / 2.0;
+    assert!(middle - screen.top() < crate::titlebar::HEIGHT, "{close:?}");
+    // « Fermer » le plus à droite, près du bord ; les trois dans l'ordre, sans chevauchement,
+    // sur la même ligne.
+    assert!(screen.right() - close.right() < 40.0, "{close:?}");
     assert!(minimize.right() <= maximize.left() + 0.5);
     assert!(maximize.right() <= close.left() + 0.5);
-    assert!((close.height() - crate::titlebar::HEIGHT).abs() < 0.5);
-    // Même ligne que l'action de la page (milieux alignés), avec un espace net entre eux.
-    assert!(
-        (close.center().y - action.center().y).abs() < 2.0,
-        "{close:?} / {action:?}"
-    );
-    assert!(
-        minimize.left() - action.right() >= 12.0,
-        "{action:?} / {minimize:?}"
-    );
-}
-
-/// Un écran sans ligne de titre (l'Accueil) : les boutons restent dans le coin, en haut.
-#[test]
-fn boutons_de_fenetre_sans_ligne_de_titre() {
-    let mut harness =
-        builder().build_ui_state(|ui, _: &mut ()| crate::titlebar::show(ui.ctx()), ());
-    harness.run();
-    let screen = harness.ctx.content_rect();
-    let close = harness.get_by_label("Fermer").rect();
-    assert!(screen.right() - close.right() < 32.0, "{close:?}");
-    assert!(close.top() - screen.top() < 30.0, "{close:?}");
+    for button in [minimize, maximize] {
+        assert!((button.center().y - middle).abs() < 0.5, "{button:?}");
+    }
+    // Le nom à gauche, sur la même ligne ; l'écran et ses actions sous la bande.
+    assert!(name.left() < 70.0, "{name:?}");
+    assert!((name.center().y - middle).abs() < 2.0, "{name:?}");
+    assert!(action.top() >= band_bottom, "{action:?}");
 }
 
 #[test]
