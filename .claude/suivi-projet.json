@@ -620,6 +620,11 @@
       "date": "2026-11-25",
       "summary": "Bande de titre remise (logo, nom, boutons de fenêtre) ; Bibliothèque sans « Rechercher des jeux » ni « Ajouter un dossier de jeu » dans l'en-tête (lien discret sous les jeux) ; point 24 de la revue.",
       "tasks": []
+    },
+    {
+      "date": "2026-11-25",
+      "summary": "Bibliothèque et Catalogue réunis en un seul écran « Catalogue » : tous les jeux, prêts à jouer d'abord, les autres grisés, « Installer le mod » sous la jaquette d'un jeu trouvé sans mod ; point 25 de la revue.",
+      "tasks": []
     }
   ]
 }

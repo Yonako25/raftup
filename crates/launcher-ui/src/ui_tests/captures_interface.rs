@@ -37,7 +37,7 @@ use crate::art_ui::{Artwork, Loader};
 use crate::screens::friends::{self, FriendsState};
 use crate::screens::join::{self, JoinState};
 use crate::screens::library::LibraryState;
-use crate::screens::{catalog, home, running, settings, setup, welcome};
+use crate::screens::{home, library, running, settings, setup, welcome};
 use crate::worker::{Shared, Worker};
 
 /// Dossier des images : `RAFTUP_CAPTURES_DIR`, sinon `target/captures/` du workspace
@@ -465,39 +465,57 @@ fn captures_interface() {
         tall(&mut harness);
         save(&mut harness, "12-accueil");
     }
-    // Catalogue (« Parcourir »), avec le faux hub.
+    // Catalogue (l'ancienne Bibliothèque et l'ancien Catalogue réunis), avec le faux hub.
     {
         struct Catalogue {
-            state: catalog::CatalogState,
             library: LibraryState,
+            shared: crate::worker::Shared,
             _root: tempfile::TempDir,
         }
         let root = tempfile::tempdir().unwrap();
         // Le vrai catalogue embarqué : une dizaine de jeux, pour voir la grille entière
         // (avec un seul jeu, le bug de la grille du 22 novembre 2026 ne se voyait pas).
+        // Slime Rancher est prêt ; Hollow Knight est trouvé sans le mod (grisé, bouton
+        // « Installer le mod ») ; les autres jeux ne sont pas sur ce PC (grisés).
+        let mut scan = super::bibliotheque::scan_ready();
+        scan.found.insert(
+            "hollow-knight".to_string(),
+            launcher_core::DetectedGame {
+                game_id: "hollow-knight".to_string(),
+                store: launcher_core::Store::Steam,
+                install_dir: PathBuf::from("C:/Jeux/Hollow Knight"),
+                build_id: None,
+                state: launcher_core::GameState::Ready,
+            },
+        );
+        scan.status.insert(
+            "hollow-knight".to_string(),
+            Ok(launcher_core::InstallStatus::NotInstalled),
+        );
         let mut library = LibraryState::for_tests(
             launcher_core::Catalog::embedded().unwrap(),
             launcher_core::Paths::under(root.path()),
-            super::bibliotheque::scan_ready(),
+            scan,
         );
         library.art = demo_art();
         let state = Catalogue {
-            state: catalog::CatalogState::default(),
             library,
+            shared: crate::worker::Shared::default(),
             _root: root,
         };
         let mut harness = builder().build_ui_state(
             |ui, s: &mut Catalogue| {
                 s.library.background(ui.ctx());
-                catalog::show(ui, &mut s.state, &mut s.library);
+                library::show(ui, &mut s.library, &s.shared, None);
             },
             state,
         );
         settle(&mut harness, |h| shows(h, "Jaquette de Slime Rancher"));
+        tall(&mut harness);
         save(&mut harness, "13-catalogue");
-        // Fiche d'information d'un jeu, ouverte d'un clic sur sa carte.
-        click(&mut harness, "Fiche de Slime Rancher");
-        settle(&mut harness, |h| shows(h, "Illustration de Slime Rancher"));
+        // Fiche d'un jeu qui n'est pas sur ce PC, ouverte d'un clic sur sa carte.
+        click(&mut harness, "Fiche de Hollow Knight");
+        settle(&mut harness, |h| shows(h, "Illustration de Hollow Knight"));
         tall(&mut harness);
         save(&mut harness, "13b-catalogue-fiche");
     }

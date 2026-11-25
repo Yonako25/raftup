@@ -4,8 +4,8 @@ use egui::{Align2, Color32, CornerRadius, Frame, Margin, RichText, Sense, Stroke
 
 use crate::format;
 use crate::screens::{
-    catalog, create, friends, home, hub_game, join, library, matches, past_games, running,
-    settings, setup, soon, welcome,
+    create, friends, home, hub_game, join, library, matches, past_games, running, settings, setup,
+    soon, welcome,
 };
 use crate::theme;
 use crate::widgets;
@@ -16,13 +16,12 @@ use crate::worker::{Command, Worker};
 pub enum Page {
     /// « Accueil » : le prochain pas, les parties en cours, les jeux prêts.
     Home,
-    /// « Parcourir » : les jeux pris en charge (catalogue embarqué et registre).
-    Catalog,
     /// « Mon profil » : pseudo, présence et Discord du compte Rafthub.
     Profile,
     /// « En cours » : la liste des parties lancées.
     InProgress,
-    /// « Bibliothèque » : les jeux du catalogue, leurs mods, le bouton « Lancer ».
+    /// « Catalogue » : tous les jeux pris en charge, ceux de ce PC d'abord, leurs mods,
+    /// le bouton « Lancer » (l'ancienne Bibliothèque et l'ancien Catalogue réunis).
     Library,
     /// La partie hébergée par ce PC, ou le formulaire d'hébergement s'il n'y en a pas.
     Hosted,
@@ -30,7 +29,7 @@ pub enum Page {
     HubGame,
     /// « Créer une partie » : générer une partie à partir des YAML des joueurs.
     Create,
-    /// « Rejoindre » : lire un lien d'invitation avant de continuer vers la Bibliothèque.
+    /// « Rejoindre » : lire un lien d'invitation avant de continuer vers le Catalogue.
     Join,
     /// « Amis » : compte sur le hub, amis et demandes (ADR 0035).
     Friends,
@@ -55,8 +54,6 @@ pub struct App {
     hub_games: hub_game::HubGames,
     /// Parties arrêtées de ce PC, à reprendre depuis « En cours ».
     past_games: past_games::PastGames,
-    /// Filtre de l'écran « Catalogue ».
-    catalog: catalog::CatalogState,
     /// Assistant du premier lancement (plan de l'interface, étape 5).
     welcome: welcome::WelcomeState,
     /// Vérification et installation de la mise à jour du launcher (F12).
@@ -101,7 +98,6 @@ impl App {
             friends: friends::FriendsState::new(),
             hub_games: hub_game::HubGames::default(),
             past_games: past_games::PastGames::new(launcher_core::Paths::from_os().ok()),
-            catalog: catalog::CatalogState::default(),
             welcome: welcome::load(),
             update: crate::update_ui::UpdateState::new(),
             error: None,
@@ -184,7 +180,7 @@ fn start_page() -> Page {
         Some("parametres") => Page::Settings,
         Some("telechargements") => Page::Soon("Téléchargements"),
         Some("salons") => Page::Soon("Salons"),
-        Some("catalogue") => Page::Catalog,
+        Some("catalogue") => Page::Library,
         Some("mises-a-jour") => Page::Soon("Mises à jour"),
         Some("profil") => Page::Profile,
         _ => Page::Home,
@@ -322,7 +318,7 @@ impl eframe::App for App {
                             &self.page,
                             &shared,
                             self.hub_games.count(),
-                            self.library.game_count(),
+                            self.library.ready_count(),
                             &summary,
                         ) {
                             goto = Some(page);
@@ -335,11 +331,6 @@ impl eframe::App for App {
             widgets::apply_fade(ui, self.page_since);
             let next = match &self.page {
                 Page::Home => home::show(ui, &shared, &mut self.library, &self.join),
-                Page::Catalog => {
-                    // Référentiel en lecture seule : il ne mène à aucun autre écran.
-                    catalog::show(ui, &mut self.catalog, &mut self.library);
-                    None
-                }
                 Page::Profile => friends::show_profile(ui, &mut self.friends),
                 Page::InProgress => matches::show(
                     ui,
@@ -492,7 +483,7 @@ pub(crate) fn sidebar(
     current: &Page,
     shared: &crate::worker::Shared,
     hub_games: usize,
-    games: usize,
+    ready_games: usize,
     friends: &friends::Summary,
 ) -> Option<Page> {
     let mut goto = None;
@@ -511,8 +502,8 @@ pub(crate) fn sidebar(
             "JEUX",
             vec![
                 ("Accueil", 0, Page::Home),
-                ("Bibliothèque", games, Page::Library),
-                ("Catalogue", 0, Page::Catalog),
+                // Un seul écran pour les jeux ; le compteur : les jeux prêts à jouer.
+                ("Catalogue", ready_games, Page::Library),
                 ("Téléchargements", 0, Page::Soon("Téléchargements")),
                 ("Mises à jour", 0, Page::Soon("Mises à jour")),
             ],
@@ -817,7 +808,7 @@ mod tests {
                 "JEUX",
                 vec![
                     ("Accueil", 0, Page::Soon("Accueil")),
-                    ("Bibliothèque", 2, Page::Library),
+                    ("Catalogue", 2, Page::Library),
                 ],
             ),
             ("CATALOGUE", vec![("Parcourir", 0, Page::Soon("Catalogue"))]),
@@ -826,6 +817,6 @@ mod tests {
         // « Accueil » disparaît ; « CATALOGUE », vidée, disparaît avec son titre.
         assert_eq!(visible.len(), 1);
         assert_eq!(visible[0].0, "JEUX");
-        assert_eq!(visible[0].1, vec![("Bibliothèque", 2, Page::Library)]);
+        assert_eq!(visible[0].1, vec![("Catalogue", 2, Page::Library)]);
     }
 }

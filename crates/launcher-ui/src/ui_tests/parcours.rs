@@ -13,11 +13,10 @@ use launcher_core::{
 
 use super::{builder, click, demo_catalog, shows, shows_part, type_into};
 use crate::app::Page;
-use crate::screens::catalog::{self, CatalogState};
 use crate::screens::friends::{self, FriendsState};
 use crate::screens::home;
 use crate::screens::join::JoinState;
-use crate::screens::library::{LibraryState, Scan};
+use crate::screens::library::{self, LibraryState, Scan};
 use crate::screens::running::{self, RunningState};
 use crate::screens::welcome::{self, WelcomeState};
 use crate::worker::{Shared, Worker};
@@ -144,7 +143,7 @@ fn accueil_jeu_pret_propose_un_salon() {
     assert!(shows(&harness, "Slime Rancher est prêt"));
     // Plus de panneau « Parties en cours » sur l'Accueil.
     assert!(!shows(&harness, "Parties en cours"));
-    assert!(shows(&harness, "Ta bibliothèque"));
+    assert!(shows(&harness, "Tes jeux"));
     click(&mut harness, "Nouvelle partie");
     assert_eq!(harness.state().asked, Some(Page::Create));
 
@@ -168,9 +167,9 @@ fn accueil_sans_jeu_pret_mene_a_la_bibliotheque() {
         JoinState::without_clipboard(),
     );
     assert!(shows(&harness, "Prépare ton premier jeu"));
-    // Le jeu est sur ce PC (mods pas installés) : il est dans « Ta bibliothèque ».
+    // Le jeu est sur ce PC (mods pas installés) : il est dans « Tes jeux ».
     assert!(shows(&harness, "Fiche de Slime Rancher"));
-    click(&mut harness, "Ouvrir la Bibliothèque");
+    click(&mut harness, "Ouvrir le Catalogue");
     assert_eq!(harness.state().asked, Some(Page::Library));
 }
 
@@ -198,25 +197,24 @@ fn accueil_partie_hebergee_et_invitation() {
 }
 
 // ---------------------------------------------------------------------------
-// Catalogue
+// Catalogue (l'ancienne Bibliothèque et l'ancien Catalogue réunis, revue point 25)
 // ---------------------------------------------------------------------------
 
 struct Catalogue {
-    state: CatalogState,
     library: LibraryState,
+    shared: Shared,
     _root: tempfile::TempDir,
 }
 
-fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
-    let (library, root) = library(scan);
+fn catalogue_with(library: LibraryState, root: tempfile::TempDir) -> Harness<'static, Catalogue> {
     let state = Catalogue {
-        state: CatalogState::default(),
         library,
+        shared: Shared::default(),
         _root: root,
     };
     let mut harness = builder().build_ui_state(
         |ui, s: &mut Catalogue| {
-            catalog::show(ui, &mut s.state, &mut s.library);
+            library::show(ui, &mut s.library, &s.shared, None);
         },
         state,
     );
@@ -224,90 +222,115 @@ fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
     harness
 }
 
+fn catalogue(scan: Scan) -> Harness<'static, Catalogue> {
+    let (library, root) = library(scan);
+    catalogue_with(library, root)
+}
+
+/// Le vrai catalogue (tous les profils), avec une détection donnée.
+fn full_catalogue(scan: Scan) -> Harness<'static, Catalogue> {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = launcher_core::Catalog::embedded().unwrap();
+    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), scan);
+    catalogue_with(library, root)
+}
+
 #[test]
-fn catalogue_liste_filtre_et_ouvre_la_fiche() {
+fn catalogue_cherche_un_jeu() {
     let mut harness = catalogue(scan(false));
-    assert!(shows(&harness, "Les jeux compatibles avec Raftup"));
-    assert!(shows(&harness, "1 jeu"));
-    assert!(shows(&harness, "Slime Rancher"));
     assert!(shows(&harness, "Catalogue"));
+    assert!(shows_part(&harness, "1 jeu · 0 prêt à jouer"));
+    assert!(shows(&harness, "Fiche de Slime Rancher"));
     // Sans hub, la jaquette est l'aplat avec le titre : pas d'image.
     assert!(!shows(&harness, "Jaquette de Slime Rancher"));
     type_into(&mut harness, "Chercher un jeu ou un auteur", "hollow");
-    assert!(shows(&harness, "0 jeu"));
-    assert!(shows(&harness, "Aucun jeu ne correspond à ce filtre."));
-
-    // Référentiel en lecture seule : aucun bouton pour ajouter un jeu.
-    let harness = catalogue(scan(false));
-    assert!(!shows(&harness, "Ajouter"));
-    assert!(!shows(&harness, "Dans la bibliothèque"));
+    assert!(!shows(&harness, "Fiche de Slime Rancher"));
+    // Par l'auteur des mods aussi.
+    let mut harness = catalogue(scan(false));
+    type_into(&mut harness, "Chercher un jeu ou un auteur", "creeper");
+    assert!(shows(&harness, "Fiche de Slime Rancher"));
 }
 
-/// Bug signalé le 22 novembre 2026 : avec le vrai catalogue (dix jeux), toutes les
-/// cartes tenaient sur une rangée qui sortait de l'écran. Le dernier jeu doit être dans
-/// la largeur de l'écran ; le Catalogue n'ajoute rien à la Bibliothèque.
+/// Jeu trouvé sans le mod : « Installer le mod » sous sa jaquette (et dans sa fiche).
+/// Jeu prêt : pas de bouton sous la jaquette.
+#[test]
+fn catalogue_bouton_installer_le_mod_sous_la_jaquette() {
+    let harness = catalogue(scan(false));
+    assert!(shows(&harness, "Mod non installé"));
+    assert!(super::count(&harness, "Installer le mod") >= 1);
+    let harness = catalogue(scan(true));
+    assert!(shows(&harness, "Prêt"));
+    assert!(!shows(&harness, "Installer le mod"));
+}
+
+/// Ordre de la grille : prêts à jouer, puis sur ce PC sans le mod, puis absents.
+#[test]
+fn catalogue_jeux_prets_en_premier() {
+    // Un jeu prêt (Slime Rancher) et un jeu trouvé sans le mod (Hollow Knight) ; les
+    // autres ne sont pas sur ce PC.
+    let mut detected = scan(true);
+    detected.found.insert(
+        "hollow-knight".to_string(),
+        DetectedGame {
+            game_id: "hollow-knight".to_string(),
+            store: Store::Steam,
+            install_dir: PathBuf::from("C:/Jeux/Hollow Knight"),
+            build_id: None,
+            state: GameState::Ready,
+        },
+    );
+    detected
+        .status
+        .insert("hollow-knight".to_string(), Ok(InstallStatus::NotInstalled));
+    let root = tempfile::tempdir().unwrap();
+    let catalog = launcher_core::Catalog::embedded().unwrap();
+    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), detected);
+    let order = library.catalog_order();
+    assert_eq!(order[0], "slime-rancher");
+    assert_eq!(order[1], "hollow-knight");
+    assert!(order.len() > 2);
+    // Le premier jeu (prêt) est sélectionné : sa fiche est ouverte.
+    let harness = catalogue_with(library, root);
+    assert!(shows(&harness, "Lancer le jeu"));
+}
+
+/// Bug signalé le 22 novembre 2026 : avec le vrai catalogue, toutes les cartes tenaient
+/// sur une rangée qui sortait de l'écran. Le dernier jeu doit être dans la largeur.
 #[test]
 fn catalogue_complet_tient_dans_la_largeur() {
-    let root = tempfile::tempdir().unwrap();
-    let catalog = launcher_core::Catalog::embedded().unwrap();
-    let last = catalog.profiles.values().last().unwrap().game.name.clone();
-    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), Scan::default());
-    let state = Catalogue {
-        state: CatalogState::default(),
-        library,
-        _root: root,
-    };
-    let mut harness = builder().build_ui_state(
-        |ui, s: &mut Catalogue| {
-            catalog::show(ui, &mut s.state, &mut s.library);
-        },
-        state,
-    );
-    harness.run();
+    let harness = full_catalogue(Scan::default());
+    let order = harness.state().library.catalog_order();
+    let catalog = harness.state().library.catalog().unwrap();
+    let last = catalog
+        .get(order.last().unwrap())
+        .unwrap()
+        .game
+        .name
+        .clone();
     let width = harness.ctx.content_rect().width();
-    // Le nom du dernier jeu (sous sa jaquette), le plus à droite de la dernière rangée.
-    let name = harness.query_all_by_label(&last).last().unwrap();
+    let label = format!("Fiche de {last}");
+    let card = harness.get_by_label(&label);
     assert!(
-        name.rect().right() <= width,
+        card.rect().right() <= width,
         "le dernier jeu sort de l'écran : {:?} (largeur {width})",
-        name.rect()
+        card.rect()
     );
-    assert!(!shows(&harness, "Ajouter"));
-    assert_eq!(harness.state().library.game_count(), 0);
 }
 
-/// Un clic sur une carte ouvre la fiche d'information du jeu (en lecture seule) ;
-/// « Fermer » la referme.
+/// Un jeu pas sur ce PC : sa fiche dit comment indiquer son dossier, montre ce que Raftup
+/// installerait, et ne propose ni « Lancer » ni « Installer le mod ».
 #[test]
-fn catalogue_fiche_d_information() {
-    let root = tempfile::tempdir().unwrap();
-    let catalog = launcher_core::Catalog::embedded().unwrap();
-    let library = LibraryState::for_tests(catalog, Paths::under(root.path()), Scan::default());
-    let state = Catalogue {
-        state: CatalogState::default(),
-        library,
-        _root: root,
-    };
-    let mut harness = builder().build_ui_state(
-        |ui, s: &mut Catalogue| {
-            catalog::show(ui, &mut s.state, &mut s.library);
-        },
-        state,
-    );
-    harness.run();
-    assert!(!shows(&harness, "CE QUE RAFTUP INSTALLE"));
+fn catalogue_fiche_d_un_jeu_absent() {
+    let mut harness = full_catalogue(Scan::default());
     click(&mut harness, "Fiche de Hollow Knight");
-    assert_eq!(
-        harness.state().state.selected.as_deref(),
-        Some("hollow-knight")
-    );
-    assert!(shows(&harness, "CE QUE RAFTUP INSTALLE"));
-    assert!(shows_part(&harness, "Hollow Knight Modding API"));
+    assert!(shows(&harness, "Pas sur ce PC"));
+    assert!(shows(&harness, "Indiquer le dossier du jeu"));
     assert!(shows_part(&harness, "Profil non testé"));
-    // Lecture seule : aucun bouton pour ajouter.
-    assert!(!shows(&harness, "Ajouter"));
-    click(&mut harness, "Fermer");
-    assert_eq!(harness.state().state.selected, None);
+    assert!(!shows(&harness, "Lancer le jeu"));
+    assert!(!shows(&harness, "Installer le mod"));
+    click(&mut harness, "Ce que Raftup installe");
+    assert!(shows_part(&harness, "Hollow Knight Modding API"));
+    assert!(shows_part(&harness, "Auteurs des mods"));
 }
 
 // ---------------------------------------------------------------------------

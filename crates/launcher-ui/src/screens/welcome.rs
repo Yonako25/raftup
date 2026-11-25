@@ -170,7 +170,7 @@ pub fn show(
                 let found: Vec<&GameSummary> = games.iter().filter(|g| g.detected).collect();
                 if found.is_empty() {
                     ui.label(widgets::dim(
-                        "Aucun jeu du catalogue trouvé sur ce PC. Dans la Bibliothèque, tu pourras indiquer le dossier d'un jeu.",
+                        "Aucun jeu du catalogue trouvé sur ce PC. Dans le Catalogue, tu pourras indiquer le dossier d'un jeu.",
                     ));
                 }
                 for game in found {
@@ -207,9 +207,9 @@ pub fn show(
                         }
                     }
                     FirstGame::Nothing => {
-                        ui.label("La Bibliothèque montre les jeux pris en charge et ce qu'il faut pour chacun.");
+                        ui.label("Le Catalogue montre les jeux pris en charge et ce qu'il faut pour chacun.");
                         ui.add_space(6.0);
-                        if widgets::primary_button(ui, "Ouvrir la Bibliothèque", true) {
+                        if widgets::primary_button(ui, "Ouvrir le Catalogue", true) {
                             outcome.page = Some(Page::Library);
                             finish = true;
                         }

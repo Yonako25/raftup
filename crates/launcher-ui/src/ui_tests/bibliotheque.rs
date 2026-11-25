@@ -86,8 +86,8 @@ fn address_field_shown(harness: &Harness<'_, Bibliotheque>) -> bool {
 #[test]
 fn la_carte_et_la_fiche_du_jeu_s_affichent() {
     let mut harness = bibliotheque();
-    assert!(shows(&harness, "Bibliothèque"));
-    assert!(shows(&harness, "1 jeu · 1 prêt"));
+    assert!(shows(&harness, "Catalogue"));
+    assert!(shows(&harness, "1 jeu · 1 prêt à jouer"));
     // Le nom du jeu : sous la jaquette de la carte, et en titre de la fiche.
     assert!(count(&harness, "Slime Rancher") >= 2);
     // La fiche : origine du profil, bouton principal, emplacement, étapes.

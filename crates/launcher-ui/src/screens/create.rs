@@ -671,7 +671,7 @@ fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
             .collect();
         ui.add_space(6.0);
         ui.label(
-            widgets::dim("Mondes pris automatiquement (installés par la Bibliothèque) :")
+            widgets::dim("Mondes pris automatiquement (installés depuis le Catalogue) :")
                 .size(13.0),
         );
         ui.label(

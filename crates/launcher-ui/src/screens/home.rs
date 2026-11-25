@@ -4,7 +4,7 @@
 //! - en haut, une **vitrine** : la grande image du jeu mis en avant ([`featured`]), avec
 //!   par-dessus **le prochain pas**, une seule action choisie par [`next_step`]
 //!   (fonctions pures, testées sans interface) ;
-//! - « Ta bibliothèque » : les jeux de ce PC en une rangée qui défile ;
+//! - « Tes jeux » : les jeux de ce PC en une rangée qui défile ;
 //! - les parties en cours (celle que ce PC héberge) ;
 //! - l'invitation reçue et pas encore suivie.
 //!
@@ -90,8 +90,8 @@ fn step_texts(step: &NextStep) -> (String, String, &'static str, Page) {
         ),
         NextStep::InstallGame => (
             "Prépare ton premier jeu".to_string(),
-            "La Bibliothèque trouve tes jeux et installe leurs mods en un clic.",
-            "Ouvrir la Bibliothèque",
+            "Le Catalogue trouve tes jeux et installe leurs mods en un clic.",
+            "Ouvrir le Catalogue",
             Page::Library,
         ),
     };
@@ -149,9 +149,9 @@ pub fn show(
         }
         ui.add_space(18.0);
 
-        // Ta bibliothèque : les jeux de ce PC, en une rangée qui défile.
+        // Tes jeux : les jeux de ce PC, en une rangée qui défile.
         let mine: Vec<&GameSummary> = games.iter().filter(|g| library.in_library(&g.id)).collect();
-        ui.label(widgets::title("Ta bibliothèque", 20.0));
+        ui.label(widgets::title("Tes jeux", 20.0));
         ui.add_space(8.0);
         if mine.is_empty() {
             ui.label(widgets::dim(
@@ -175,6 +175,7 @@ pub fn show(
                                 marker: None,
                                 cover,
                                 pin: library.pin_for(&game.ap_game),
+                                dimmed: false,
                             };
                             if cover_card(ui, &look, false) {
                                 library.select(&game.id);
