@@ -25,6 +25,12 @@ Un prompt d'agent dit : « suis `docs/regles-agents.md` », puis donne **seuleme
 | Fin de tâche | `cargo fmt --all`, `cargo clippy -p <crate> --all-targets -- -D warnings`, `cargo test -p <crate>` |
 | Fin d'étape (une seule fois, par le chef d'orchestre) | `cargo clippy --workspace --all-targets -- -D warnings` et `cargo test --workspace` |
 
+Décidé par l'utilisatrice le 25 novembre 2026 (une vérification complète prend 7 à 10 minutes : la moitié pour fmt et clippy, le reste pour compiler et exécuter les tests) :
+
+- **Tout le workspace une seule fois par tâche**, à la fin, juste avant de proposer la fusion ; jamais après chaque correction. Pendant le travail, seulement la crate modifiée (ligne « Pendant l'itération »).
+- **Captures du launcher** : `UPDATE_SNAPSHOTS=1` seulement sur `cargo test -p launcher-ui`, pas sur tout le workspace.
+- **À la fusion dans main**, pas de nouvelle vérification complète si la branche part du `main` actuel (`git merge-base main <branche>` égal à `main`) et que la session l'a faite sur sa branche : `cargo fmt --all -- --check` suffit, la CI GitHub refait tout après le push. Sinon (main a avancé, conflits résolus), la vérification complète une fois sur l'arbre fusionné.
+
 - Tests réels (vrai Python, vrai Archipelago) : `#[ignore]`, variable d'environnement, `--test-threads=1` ; jamais de téléchargement dans un test.
 - Sous Windows, un hook réécrit les commandes contenant « python » : si la première tentative est refusée, la réémettre telle quelle.
 
