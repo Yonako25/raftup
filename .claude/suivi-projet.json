@@ -615,6 +615,11 @@
       "date": "2026-11-25",
       "summary": "Launcher pour débutants : plus aucune mention d'Archipelago à l'écran, jargon remplacé (générateur classique, monde, fichier de réglages, joueur, badge « Classique ») ; point 23 de la revue d'ergonomie.",
       "tasks": []
+    },
+    {
+      "date": "2026-11-25",
+      "summary": "Bande de titre remise (logo, nom, boutons de fenêtre) ; Bibliothèque sans « Rechercher des jeux » ni « Ajouter un dossier de jeu » dans l'en-tête (lien discret sous les jeux) ; point 24 de la revue.",
+      "tasks": []
     }
   ]
 }

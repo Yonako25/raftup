@@ -49,6 +49,45 @@ fn captures_du_salon_et_de_la_bibliotheque() {
         harness.snapshot("bibliotheque");
         results.extend_harness(&mut harness);
     }
+    {
+        let mut harness = fenetre();
+        harness.snapshot("fenetre");
+        results.extend_harness(&mut harness);
+    }
     // Panique (le test échoue) si une image ne correspond pas à sa référence.
     results.unwrap();
+}
+
+/// La fenêtre entière, comme `App` la monte : bande de titre en haut, barre latérale, puis
+/// un écran simple (« Bientôt ») au centre. Taille de départ du launcher (1280 × 820).
+fn fenetre() -> egui_kittest::Harness<'static, crate::worker::Shared> {
+    let mut harness = super::builder()
+        .with_size(egui::vec2(1280.0, 820.0))
+        .build_ui_state(
+            |ui, shared: &mut crate::worker::Shared| {
+                crate::titlebar::show(ui);
+                egui::Panel::left("sidebar")
+                    .exact_size(220.0)
+                    .resizable(false)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(crate::theme::sidebar_fill())
+                            .inner_margin(egui::Margin::symmetric(0, 18)),
+                    )
+                    .show(ui, |ui| {
+                        let summary = crate::screens::friends::Summary {
+                            username: None,
+                            online: 0,
+                        };
+                        let page = crate::app::Page::Soon("Téléchargements");
+                        crate::app::sidebar(ui, &page, shared, 0, 1, &summary);
+                    });
+                egui::CentralPanel::no_frame().show(ui, |ui| {
+                    crate::screens::soon::show(ui, "Téléchargements");
+                });
+            },
+            crate::worker::Shared::default(),
+        );
+    harness.run();
+    harness
 }

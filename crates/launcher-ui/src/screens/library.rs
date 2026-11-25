@@ -1038,7 +1038,7 @@ pub fn show(
     }
 
     super::page(ui, |ui| {
-        header(ui, state, &ctx);
+        header(ui, state);
 
         if let Err(e) = &state.catalog {
             widgets::error_banner(ui, &format!("Catalogue illisible : {e}"));
@@ -1086,11 +1086,13 @@ pub fn show(
                 ui.vertical(|ui| {
                     ui.set_width(list_width);
                     grid(ui, state);
+                    rescan_link(ui, state, &ctx);
                 });
                 ui.vertical(|ui| detail(ui, state, shared, &ctx));
             });
         } else {
             grid(ui, state);
+            rescan_link(ui, state, &ctx);
             ui.add_space(12.0);
             detail(ui, state, shared, &ctx);
         }
@@ -1201,7 +1203,7 @@ fn prefill_address(form: &mut LaunchForm, hosted: &str) {
     form.prefilled_from = Some(hosted.to_string());
 }
 
-fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
+fn header(ui: &mut Ui, state: &LibraryState) {
     let total = state.game_count();
     let ready = state.scan.as_ref().map_or(0, |scan| {
         scan.status
@@ -1221,38 +1223,46 @@ fn header(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
         };
         summary.push_str(&format!(" · {natives} {mondes}"));
     }
-    let scanning = state.scanning.is_some();
-    let mut refresh = false;
-    let mut add_dir = false;
+    // Plus de boutons dans l'en-tête (revue, point 24) : la recherche se relance par le lien
+    // sous les jeux (`rescan_link`), et le dossier d'un jeu non trouvé s'indique dans sa fiche.
     let row = crate::titlebar::title_row(ui, |ui| {
         ui.label(widgets::title("Bibliothèque", 28.0));
         ui.label(widgets::dim(summary).size(14.0));
-        // De droite à gauche : le premier bouton ajouté est le plus à droite.
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if total == 0 {
-                return;
-            }
-            add_dir = big_button(ui, "Ajouter un dossier de jeu", true, true, 0.0);
-            if scanning {
-                ui.spinner();
-                ui.label(widgets::dim("Recherche des jeux…"));
-            } else {
-                refresh = big_button(ui, "Rechercher des jeux", false, true, 0.0);
-            }
-        });
     });
-    if refresh {
-        state.start_scan(ctx);
-    }
-    // Le dossier est demandé pour le jeu sélectionné (un profil = un exécutable attendu).
-    if add_dir {
-        state.pending_pick = state.selected.clone();
-    }
     // Trait fin sous l'en-tête, sur toute la largeur, comme sur la maquette.
     let y = row.response.rect.bottom() + 12.0;
     ui.painter()
         .hline(ui.max_rect().x_range(), y, Stroke::new(1.0, theme::BORDER));
     ui.add_space(32.0);
+}
+
+/// Sous les jeux, une ligne discrète pour relancer la recherche (un jeu installé depuis
+/// l'ouverture du launcher, par exemple). La recherche se fait déjà toute seule à la
+/// première ouverture de l'écran.
+fn rescan_link(ui: &mut Ui, state: &mut LibraryState, ctx: &egui::Context) {
+    ui.add_space(14.0);
+    ui.horizontal(|ui| {
+        if state.scanning.is_some() {
+            ui.spinner();
+            ui.label(widgets::dim("Recherche de tes jeux…").size(13.0));
+            return;
+        }
+        ui.label(widgets::dim("Un jeu manque ?").size(13.0));
+        let link = ui.add(
+            egui::Label::new(
+                RichText::new("Rechercher à nouveau")
+                    .color(theme::ACCENT)
+                    .size(13.0),
+            )
+            .sense(egui::Sense::click()),
+        );
+        if link.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if link.clicked() {
+            state.start_scan(ctx);
+        }
+    });
 }
 
 /// Bouton haut (40 px) des en-têtes et du panneau du jeu : bleu si `primary`, discret sinon.
