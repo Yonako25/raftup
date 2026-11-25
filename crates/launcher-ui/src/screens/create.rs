@@ -69,8 +69,8 @@ pub enum Started {
 }
 
 /// Avertissement obligatoire avant d'ajouter un apworld (contrat, « Avertissements »).
-pub const APWORLD_WARNING: &str = "Un apworld est du code qui s'exécute sur ton PC, sans bac \
-     à sable. N'ajoute que ceux que tu juges sûrs.";
+pub const APWORLD_WARNING: &str = "Un monde ajouté à la main (fichier .apworld) est du code qui \
+     s'exécute sur ton PC, sans bac à sable. N'ajoute que ceux que tu juges sûrs.";
 
 /// Boîte de dialogue à ouvrir après le dessin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -448,7 +448,7 @@ pub fn show(
             &format!("Tu organises · {count} joueur{plural}"),
             "Salon de préparation",
             |ui| {
-                if widgets::ghost_button(ui, "Héberger un fichier .archipelago") {
+                if widgets::ghost_button(ui, "Héberger un fichier de partie") {
                     goto = Some(Page::Hosted);
                 }
             },
@@ -597,7 +597,7 @@ fn world_panel(ui: &mut Ui, form: &mut CreateForm) {
                 ui.label(widgets::caps("Jeu"));
                 game_combo(ui, "salon_my_game", &form.games, &mut form.my_game, width);
                 let hint = if form.games.is_empty() {
-                    "Aucun jeu au catalogue : importe des YAML dans les options avancées."
+                    "Aucun jeu au catalogue : importe des fichiers de réglages dans les options avancées."
                 } else {
                     "Les jeux du catalogue de Raftup."
                 };
@@ -630,11 +630,14 @@ fn world_panel(ui: &mut Ui, form: &mut CreateForm) {
 
 /// Options d'expert de « Ton monde » : moteur Rust, YAML importés, apworlds en plus.
 fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
-    ui.checkbox(&mut form.rust_engine, "Moteur Rust (expérimental)");
+    ui.checkbox(
+        &mut form.rust_engine,
+        "Préparer sans le générateur classique (expérimental)",
+    );
     ui.label(
         widgets::dim(
-            "Génère sans Python quand tous les joueurs jouent à APQuest ; sinon, Archipelago \
-             construit les mondes et Raftup place les objets.",
+            "Raftup prépare la partie seul quand tous les joueurs jouent à APQuest ; sinon, le \
+             générateur classique construit les mondes et Raftup place les objets.",
         )
         .size(13.0),
     );
@@ -651,9 +654,12 @@ fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
         .size(13.0),
     );
     ui.add_space(8.0);
-    labelled(ui, "YAML écrits à la main (remplacent l'équipage)");
-    file_list(ui, &mut form.yamls, "Aucun YAML importé.");
-    if widgets::ghost_button(ui, "Importer des YAML…") {
+    labelled(
+        ui,
+        "Fichiers de réglages écrits à la main (.yaml, remplacent l'équipage)",
+    );
+    file_list(ui, &mut form.yamls, "Aucun fichier de réglages importé.");
+    if widgets::ghost_button(ui, "Importer des fichiers de réglages…") {
         form.pending_pick = Some(Pick::Yaml);
     }
     if !form.installed_apworlds.is_empty() {
@@ -665,7 +671,7 @@ fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
             .collect();
         ui.add_space(6.0);
         ui.label(
-            widgets::dim("Apworlds pris automatiquement (installés par la Bibliothèque) :")
+            widgets::dim("Mondes pris automatiquement (installés par la Bibliothèque) :")
                 .size(13.0),
         );
         ui.label(
@@ -678,7 +684,7 @@ fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
     widgets::advanced(
         ui,
         "create_apworlds",
-        "Apworlds en plus",
+        "Mondes en plus (fichiers .apworld)",
         &mut form.open_advanced_apworlds,
         |ui| {
             ui.label(
@@ -688,12 +694,12 @@ fn advanced_world(ui: &mut Ui, form: &mut CreateForm) {
             );
             ui.checkbox(&mut form.apworld_ack, "J'ai compris");
             ui.add_space(6.0);
-            file_list(ui, &mut form.apworlds, "Aucun apworld en plus.");
+            file_list(ui, &mut form.apworlds, "Aucun monde en plus.");
             ui.add_space(6.0);
             // `add_enabled` grise le bouton tant que l'avertissement n'est pas coché.
             let add = ui.add_enabled(
                 form.apworld_ack,
-                egui::Button::new(RichText::new("Ajouter des apworlds…").color(theme::TEXT)),
+                egui::Button::new(RichText::new("Ajouter des mondes…").color(theme::TEXT)),
             );
             if add.clicked() {
                 form.pending_pick = Some(Pick::Apworld);
@@ -772,7 +778,7 @@ fn crew_panel(ui: &mut Ui, form: &mut CreateForm) {
         widgets::panel(ui, "", |ui| {
             ui.label(
                 RichText::new(format!(
-                    "{} YAML importés remplacent l'équipage (options avancées de « Ton monde »).",
+                    "{} fichiers de réglages importés remplacent l'équipage (options avancées de « Ton monde »).",
                     form.yamls.len()
                 ))
                 .color(theme::AMBER),
@@ -839,11 +845,11 @@ fn crew_panel(ui: &mut Ui, form: &mut CreateForm) {
     });
 }
 
-/// Versions figées pour toute la partie, en une ligne discrète : « Archipelago 0.6.8 ·
+/// Versions figées pour toute la partie, en une ligne discrète : « Générateur 0.6.8 ·
 /// Raftup 0.1.0 ». Le détail (version du monde de chaque jeu) est au survol.
 fn versions_line(ui: &mut Ui, form: &CreateForm) {
     let mut details = vec![
-        format!("Archipelago (générateur) {AP_VERSION}"),
+        format!("Générateur classique {AP_VERSION}"),
         format!("Raftup {}", env!("CARGO_PKG_VERSION")),
     ];
     // Un monde par jeu de l'équipage, sans doublon, dans l'ordre de l'équipage.
@@ -861,7 +867,7 @@ fn versions_line(ui: &mut Ui, form: &CreateForm) {
     }
     ui.label(
         widgets::dim(format!(
-            "Archipelago {AP_VERSION} · Raftup {}",
+            "Générateur {AP_VERSION} · Raftup {}",
             env!("CARGO_PKG_VERSION")
         ))
         .size(12.0),
@@ -977,7 +983,10 @@ fn launch_panel(ui: &mut Ui, form: &mut CreateForm, error: &mut Option<String>) 
         let (ready, status) = match check_form(form) {
             Ok(_) if !form.yamls.is_empty() => (
                 true,
-                format!("{} YAML importés, prêts à générer.", form.yamls.len()),
+                format!(
+                    "{} fichiers de réglages importés, prêts à générer.",
+                    form.yamls.len()
+                ),
             ),
             Ok(_) => {
                 let n = form.player_count();
@@ -1256,7 +1265,7 @@ fn choose_engine(
         Err(reason) => (
             generation::Engine::Export,
             Some(format!(
-                "Moteur Rust seul impossible ({reason}) : Archipelago construit les mondes, Raftup place les objets."
+                "Raftup ne peut pas tout préparer seul ({reason}) : le générateur classique construit les mondes, Raftup place les objets."
             )),
         ),
     }
@@ -1379,15 +1388,15 @@ pub fn open_pending_dialog(form: &mut CreateForm) {
     match pick {
         Pick::Yaml => {
             let picked = rfd::FileDialog::new()
-                .set_title("Choisir les fichiers YAML des joueurs")
+                .set_title("Choisir les fichiers de réglages des joueurs (.yaml)")
                 .add_filter("Réglages de joueur", &["yaml", "yml"])
                 .pick_files();
             add_files(&mut form.yamls, picked.unwrap_or_default());
         }
         Pick::Apworld => {
             let picked = rfd::FileDialog::new()
-                .set_title("Choisir des apworlds")
-                .add_filter("Monde Archipelago", &["apworld"])
+                .set_title("Choisir des mondes (.apworld)")
+                .add_filter("Monde de jeu", &["apworld"])
                 .pick_files();
             add_files(&mut form.apworlds, picked.unwrap_or_default());
         }

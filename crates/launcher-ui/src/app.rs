@@ -588,7 +588,7 @@ pub(crate) fn sidebar(
     }
     ui.horizontal(|ui| {
         ui.add_space(18.0);
-        ui.label(widgets::dim("Compatible avec Archipelago 0.6.8").size(11.0));
+        ui.label(widgets::dim(format!("Raftup {}", env!("CARGO_PKG_VERSION"))).size(11.0));
     });
     let height = ui.cursor().top() - top;
     if (height - bottom_height).abs() > 0.5 {

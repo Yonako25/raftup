@@ -11,7 +11,7 @@ use egui_kittest::Harness;
 use launcher_core::art::ArtKind;
 use launcher_core::{DetectedGame, GameState, InstallStatus, Paths, Store};
 
-use super::{builder, click, count, demo_catalog, shows};
+use super::{builder, click, count, demo_catalog, shows, shows_part};
 use crate::art_ui::{Artwork, Loader};
 use crate::screens::library::{self, LibraryState, Scan};
 use crate::worker::Shared;
@@ -98,11 +98,13 @@ fn la_carte_et_la_fiche_du_jeu_s_affichent() {
     assert!(shows(&harness, "Lancer le jeu"));
     assert!(shows(&harness, "Détecté via Steam"));
     // La sorte de monde : badge sur la jaquette, badge et phrase dans la fiche.
-    assert!(count(&harness, "Archipelago") >= 1);
-    assert!(shows(
+    assert!(count(&harness, "Classique") >= 1);
+    assert!(shows_part(
         &harness,
-        "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+        "Monde classique : la partie est préparée"
     ));
+    // Aucun nom de projet tiers à l'écran (revue d'ergonomie, point 23).
+    assert!(!shows_part(&harness, "Archipelago"));
     // « Réinstaller » d'un jeu prêt : petit bouton à côté de « Désinstaller ».
     assert!(shows(&harness, "Réinstaller"));
     assert!(shows(&harness, "Désinstaller le mod"));

@@ -276,7 +276,7 @@ fn hero(
                         &format::party_title(&status.server.slots),
                         28.0,
                     ))
-                    .on_hover_text(format!("Seed {}", status.seed.seed_name));
+                    .on_hover_text(format!("Partie n° {}", status.seed.seed_name));
                     ui.label(widgets::dim(format!(
                         "{players} joueur{plural} · hébergée sur ce PC · {mode} · démarrée il y a {}{resumed}",
                         format::short_duration(now - status.started_at)
@@ -789,7 +789,7 @@ fn side_area(ui: &mut Ui, shared: &Shared, status: &HostStatus, now: f64) {
             let vote_plural = if votes > 1 { "s" } else { "" };
             ui.label(
                 RichText::new(format!(
-                    "{away} absent{away_plural} · {votes} vote{vote_plural} de release en cours"
+                    "{away} absent{away_plural} · {votes} vote{vote_plural} en cours pour donner des objets"
                 ))
                 .size(13.0)
                 .color(theme::AMBER),

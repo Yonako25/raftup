@@ -148,7 +148,7 @@ fn config_panel(
     shared: &Shared,
 ) {
     widgets::panel(ui, "Configuration", |ui| {
-        labelled(ui, "Fichier de partie (.archipelago)");
+        labelled(ui, "Fichier de partie");
         if file_row(ui, &form.seed_path) {
             form.pending_pick = Some(Pick::Seed);
         }
@@ -157,7 +157,7 @@ fn config_panel(
         } else if let Some(seed) = &form.seed {
             ui.label(
                 RichText::new(format!(
-                    "Partie {} · générée avec Archipelago {} · {} joueur{}",
+                    "Partie n° {} · générateur {} · {} joueur{}",
                     seed.seed_name,
                     seed.generator_version,
                     seed.players,
@@ -264,7 +264,7 @@ pub fn open_pending_dialog(form: &mut SetupForm, worker: &Worker) {
         Pick::Seed => {
             let picked = rfd::FileDialog::new()
                 .set_title("Choisir un fichier de partie")
-                .add_filter("Partie Archipelago", &["archipelago"])
+                .add_filter("Fichier de partie", &["archipelago"])
                 .pick_file();
             if let Some(path) = picked {
                 // Le worker lit la seed ; `take_loaded_seed` reprendra le résultat.
@@ -319,7 +319,7 @@ fn pick_pem(name: &str, extensions: &[&str]) -> Option<PathBuf> {
 fn build_options(form: &SetupForm) -> Result<HostOptions, String> {
     let seed = match (&form.seed_path, &form.seed) {
         (Some(path), Some(_)) => path.clone(),
-        _ => return Err("Choisis d'abord un fichier de partie (.archipelago) valide.".into()),
+        _ => return Err("Choisis d'abord un fichier de partie valide.".into()),
     };
     let port = format::parse_port(&form.port)?;
     let public_host = form.public_host.trim().to_string();
@@ -392,7 +392,7 @@ fn slots_panel(ui: &mut Ui, seed: Option<&SeedSummary>) {
                     ui.label(widgets::dim(subtitle).size(13.0));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(widgets::dim(format!("Slot {}", slot.slot)).size(13.0));
+                    ui.label(widgets::dim(format!("Joueur {}", slot.slot)).size(13.0));
                 });
             });
             ui.add_space(4.0);

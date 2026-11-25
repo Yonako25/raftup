@@ -610,6 +610,11 @@
       "date": "2026-11-24",
       "summary": "Revue d'ergonomie du launcher : 18 changements codés en six étapes (tutoiement, sans jargon, parties nommées, « Nouvelle partie » dans le menu, salon et écran Rafthub allégés) ; branche ergonomie-launcher, à regarder dans la vraie fenêtre.",
       "tasks": []
+    },
+    {
+      "date": "2026-11-25",
+      "summary": "Launcher pour débutants : plus aucune mention d'Archipelago à l'écran, jargon remplacé (générateur classique, monde, fichier de réglages, joueur, badge « Classique ») ; point 23 de la revue d'ergonomie.",
+      "tasks": []
     }
   ]
 }

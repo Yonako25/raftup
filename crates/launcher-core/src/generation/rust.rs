@@ -196,7 +196,7 @@ impl GeneratorBackend for RustBackend {
             ));
         }
         write_zip(&zip, &entries)?;
-        let _ = log.send(format!("Seed écrite : {}", zip.display()));
+        let _ = log.send(format!("Partie écrite : {}", zip.display()));
 
         let players = players
             .iter()

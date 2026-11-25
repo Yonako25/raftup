@@ -11,7 +11,7 @@ pub enum LauncherError {
     },
 
     /// Le fichier n'est pas une seed `.archipelago` valide.
-    #[error("seed invalide : {0}")]
+    #[error("fichier de partie invalide : {0}")]
     Seed(#[from] multidata::LoadError),
 
     /// Certificat ou clé refusés.

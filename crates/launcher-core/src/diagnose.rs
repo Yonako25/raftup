@@ -68,12 +68,12 @@ impl ConnectionProblem {
                     .to_string()
             }
             ConnectionProblem::InvalidSlot => {
-                "Ce nom de slot n'existe pas dans la partie. Vérifie l'orthographe, majuscules \
+                "Ce nom de joueur n'existe pas dans la partie. Vérifie l'orthographe, majuscules \
                  comprises."
                     .to_string()
             }
             ConnectionProblem::InvalidGame => {
-                "Ce slot est prévu pour un autre jeu. Choisis le slot qui correspond à ton jeu."
+                "Ce joueur est prévu pour un autre jeu. Choisis le nom de joueur qui correspond à ton jeu."
                     .to_string()
             }
             ConnectionProblem::IncompatibleVersion => {

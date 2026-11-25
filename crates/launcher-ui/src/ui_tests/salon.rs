@@ -61,7 +61,8 @@ fn le_salon_s_affiche() {
     assert!(shows(&harness, "AJOUTER UN JOUEUR"));
     // Les versions figées tiennent en une ligne (le panneau « Profil de session » est retiré).
     assert!(!shows(&harness, "PROFIL DE SESSION"));
-    assert!(shows_part(&harness, "Archipelago 0.6.8 · Raftup "));
+    assert!(shows_part(&harness, "Générateur 0.6.8 · Raftup "));
+    assert!(!shows_part(&harness, "Archipelago"));
     assert!(shows(&harness, "LANCER LA PARTIE"));
     assert!(shows(&harness, "Générer et héberger"));
     // L'hôte sans pseudo s'appelle « Toi » ; son jeu, seul au catalogue, est déjà choisi.

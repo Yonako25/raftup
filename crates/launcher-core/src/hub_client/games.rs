@@ -321,7 +321,7 @@ fn read_entry(
         .map_err(|e| HubClientError::BadExport(format!("{name} : {e}")))?;
     if bytes.len() as u64 > MAX_SEED_BYTES {
         return Err(HubClientError::TooLarge {
-            what: "sauvegarde ou seed",
+            what: "sauvegarde ou fichier de partie",
             bytes: bytes.len() as u64,
         });
     }

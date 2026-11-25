@@ -56,7 +56,7 @@ pub enum InviteError {
     MissingAddress,
     #[error("adresse de serveur refusée : {0}")]
     BadAddress(&'static str),
-    #[error("nom de slot refusé : {0}")]
+    #[error("nom de joueur refusé : {0}")]
     BadSlot(&'static str),
     #[error("nom de jeu refusé")]
     BadGame,

@@ -87,7 +87,7 @@ impl ExportBackend {
 
 /// Phrase du journal qui annonce le repli (gardée identique pour l'interface et les tests).
 pub fn fallback_line(reason: &str) -> String {
-    format!("Placement par Raftup impossible ({reason}) : Archipelago génère seul.")
+    format!("Placement par Raftup impossible ({reason}) : le générateur classique prépare tout.")
 }
 
 /// Pourquoi la génération repasse au générateur Python seul.
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(report.fallback.as_deref(), Some("règle non traduite"));
         assert_eq!(
             fallback_line("règle non traduite"),
-            "Placement par Raftup impossible (règle non traduite) : Archipelago génère seul."
+            "Placement par Raftup impossible (règle non traduite) : le générateur classique prépare tout."
         );
     }
 }

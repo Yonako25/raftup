@@ -58,7 +58,7 @@ pub enum RegistryLoadError {
     #[error("adresse du registre refusée : « {url} » : {reason}")]
     BadUrl { url: String, reason: String },
     /// Apworld demandée absente de l'index.
-    #[error("apworld « {0} » absente du registre")]
+    #[error("monde « {0} » absent du registre")]
     UnknownApworld(String),
     /// Un autre fichier porte déjà ce nom dans le dossier des mondes : on ne l'écrase pas
     /// (il peut venir d'un profil de la Bibliothèque, qui garde un reçu de ce fichier).
