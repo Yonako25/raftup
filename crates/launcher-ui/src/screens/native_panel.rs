@@ -262,7 +262,7 @@ pub fn detail(ui: &mut Ui, state: &mut NativeState, native_dir: &Path, uninstall
             ui.add_space(8.0);
             ui.label(
                 widgets::dim(format!(
-                    "Converti depuis {} (Archipelago {}) : {} point(s) à vérifier, listés en \
+                    "Converti depuis {} (version {}) : {} point(s) à vérifier, listés en \
                      tête de world.toml. Le monde décrit les options par défaut seulement.",
                     conversion.apworld, conversion.ap_version, conversion.notes
                 ))
@@ -277,8 +277,8 @@ pub fn detail(ui: &mut Ui, state: &mut NativeState, native_dir: &Path, uninstall
         super::library::code_box(ui, &world.path.display().to_string());
         ui.label(
             widgets::dim(
-                "Lu par le moteur Rust de « Créer une partie » (case « Moteur Rust ») : un \
-                 joueur dont le YAML nomme ce jeu est généré sans Python.",
+                "Lu par « Créer une partie » quand la case « Préparer sans le générateur \
+                 classique » est cochée : un joueur de ce jeu est alors préparé par Raftup seul.",
             )
             .size(12.0),
         );
@@ -333,7 +333,7 @@ pub fn conversion_block(
     widgets::advanced(
         ui,
         "library_convert_apworld",
-        "Convertir un apworld en monde natif",
+        "Convertir un monde classique en monde natif",
         &mut open_now,
         |ui| conversion_contents(ui, state, paths, worlds_dir),
     );
@@ -342,7 +342,7 @@ pub fn conversion_block(
 fn conversion_contents(ui: &mut Ui, state: &mut NativeState, paths: &Paths, worlds_dir: &Path) {
     let conv = &mut state.conversion;
     ui.label(widgets::dim(
-        "Raftup lance le générateur officiel d'Archipelago sur l'apworld choisi (un joueur, \
+        "Raftup lance le générateur classique sur le monde choisi (un joueur, \
          options par défaut), garde son export JSON (celui que lit « raftup-monde importer ») \
          puis le convertit en monde natif dans mondes-natifs. Le monde obtenu décrit ces \
          options-là seulement : relisez les points à vérifier en tête du fichier.",
@@ -354,7 +354,7 @@ fn conversion_contents(ui: &mut Ui, state: &mut NativeState, paths: &Paths, worl
     if apworlds.is_empty() {
         ui.label(
             widgets::dim(format!(
-                "Aucun apworld installé dans {} : installes-en un depuis « Mondes du registre » \
+                "Aucun monde classique installé dans {} : installes-en un depuis « Mondes du registre » \
                  ou avec le profil d'un jeu.",
                 worlds_dir.display()
             ))
@@ -371,7 +371,7 @@ fn conversion_contents(ui: &mut Ui, state: &mut NativeState, paths: &Paths, worl
         .num_columns(2)
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
-            ui.label(widgets::dim("Apworld"));
+            ui.label(widgets::dim("Monde"));
             let current = conv.apworld.as_deref().map(file_name).unwrap_or_default();
             egui::ComboBox::from_id_salt("native_convert_apworld")
                 .selected_text(current)
@@ -395,9 +395,7 @@ fn conversion_contents(ui: &mut Ui, state: &mut NativeState, paths: &Paths, worl
                 conv.game_from = conv.apworld.clone();
             }
             ui.label(widgets::dim("Jeu"));
-            ui.add(
-                egui::TextEdit::singleline(&mut conv.game).hint_text("nom du jeu côté Archipelago"),
-            );
+            ui.add(egui::TextEdit::singleline(&mut conv.game).hint_text("nom exact du jeu"));
             ui.end_row();
         });
     ui.add_space(6.0);
@@ -453,10 +451,7 @@ fn request_conversion(ctx: &egui::Context, conv: &mut Conversion, paths: &Paths)
 /// Le nom du jeu est obligatoire (il va dans le YAML du joueur).
 pub fn check_form(game: &str) -> Result<(), String> {
     if game.trim().is_empty() {
-        return Err(
-            "Indique le nom du jeu (celui des YAML d'Archipelago) : cet apworld ne le donne pas."
-                .to_string(),
-        );
+        return Err("Indique le nom exact du jeu : ce monde ne le donne pas.".to_string());
     }
     Ok(())
 }

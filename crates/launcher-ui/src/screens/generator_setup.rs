@@ -123,7 +123,7 @@ pub fn show(ui: &mut Ui, setup: &mut Setup) {
             ui.ctx().request_repaint_after(Duration::from_millis(200));
         }
         Setup::Installed => {
-            widgets::panel(ui, "Générateur Archipelago", |ui| {
+            widgets::panel(ui, "Générateur classique", |ui| {
                 ui.label(
                     RichText::new(
                         "Générateur installé et vérifié. Cliquez de nouveau sur « Générer la \
@@ -135,7 +135,7 @@ pub fn show(ui: &mut Ui, setup: &mut Setup) {
             });
         }
         Setup::Failed { message, pins } => {
-            widgets::panel(ui, "Générateur Archipelago", |ui| {
+            widgets::panel(ui, "Générateur classique", |ui| {
                 ui.label(RichText::new(message.as_str()).color(theme::RED_TEXT));
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -164,7 +164,7 @@ fn consent_panel(
     broken: Option<&str>,
     next: &mut Option<Setup>,
 ) {
-    widgets::panel(ui, "Installer le générateur Archipelago", |ui| {
+    widgets::panel(ui, "Installer le générateur classique", |ui| {
         if let Some(reason) = broken {
             ui.label(
                 RichText::new(format!(
@@ -176,8 +176,8 @@ fn consent_panel(
             ui.add_space(4.0);
         }
         ui.label(
-            "Pour générer une partie, Raftup utilise le générateur officiel d'Archipelago. \
-             Il n'est pas encore sur ce PC. Raftup va télécharger :",
+            "Pour préparer cette partie, Raftup a besoin du générateur classique. Il n'est \
+             pas encore sur ce PC : Raftup va télécharger, une seule fois :",
         );
         ui.add_space(4.0);
         for line in sources(pins) {
@@ -335,7 +335,7 @@ fn sources(pins: &GeneratorPins) -> Vec<String> {
             megabytes(pins.python.size)
         ),
         format!(
-            "Archipelago {}, depuis {} ({})",
+            "Générateur classique {}, depuis {} ({})",
             pins.archipelago.version,
             host(&pins.archipelago.url),
             megabytes(pins.archipelago.size)
@@ -368,7 +368,7 @@ fn host(url: &str) -> &str {
 fn step_label(step: &SetupStep) -> String {
     match step {
         SetupStep::Python => "Python".into(),
-        SetupStep::Archipelago => "Archipelago".into(),
+        SetupStep::Archipelago => "Générateur classique".into(),
         SetupStep::Wheel(name) => format!("Bibliothèque {name}"),
         SetupStep::Finalize => "Mise en place".into(),
     }
@@ -479,7 +479,10 @@ max_bytes = 3000000
             lines[0],
             "Python 3.12.0+1 autonome, depuis github.com (30,0 Mo)"
         );
-        assert_eq!(lines[1], "Archipelago 0.6.8, depuis github.com (40,0 Mo)");
+        assert_eq!(
+            lines[1],
+            "Générateur classique 0.6.8, depuis github.com (40,0 Mo)"
+        );
         assert_eq!(
             lines[2],
             "1 bibliothèque Python (pyyaml), depuis files.pythonhosted.org (2,0 Mo)"

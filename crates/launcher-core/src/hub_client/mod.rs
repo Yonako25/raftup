@@ -626,7 +626,7 @@ impl HubClient {
                 return Err(HubClientError::Api {
                     status: 413,
                     code: ErrorCode::SeedTooLarge,
-                    message: "seed trop grosse".to_string(),
+                    message: "fichier de partie trop gros".to_string(),
                 })
             }
             other => other?,

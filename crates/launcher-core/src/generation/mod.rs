@@ -65,7 +65,7 @@ pub enum GenerationError {
     },
 
     /// Apworld refusé (mauvaise extension, trop récent pour cet Archipelago…).
-    #[error("apworld refusé ({}) : {reason}", path.display())]
+    #[error("monde refusé ({}) : {reason}", path.display())]
     IncompatibleApworld {
         path: std::path::PathBuf,
         reason: String,
@@ -89,7 +89,7 @@ pub enum GenerationError {
 
     /// Le dossier d'Archipelago n'est pas sous les données de Raftup : on refuse d'y vider
     /// `custom_worlds` ou d'y copier des apworlds (on ne touche pas au dossier de quelqu'un d'autre).
-    #[error("dossier d'Archipelago hors des données de Raftup, apworlds refusés : {}", .0.display())]
+    #[error("dossier du générateur classique hors des données de Raftup, mondes refusés : {}", .0.display())]
     UnmanagedArchipelago(std::path::PathBuf),
 
     /// Une wheel ne peut pas être installée telle quelle (ex. dossier `.data`).
@@ -101,7 +101,7 @@ pub enum GenerationError {
     DuplicateWheelFile { wheel: String, path: String },
 
     /// Le zip produit ne contient aucun fichier `.archipelago`.
-    #[error("le générateur n'a produit aucun fichier .archipelago")]
+    #[error("le générateur n'a produit aucun fichier de partie")]
     NoOutput,
 
     /// Le zip produit est dangereux ou sort du dossier de sortie.
@@ -109,7 +109,7 @@ pub enum GenerationError {
     UnsafeOutput(std::path::PathBuf),
 
     /// La seed produite est illisible.
-    #[error("seed produite illisible : {0}")]
+    #[error("partie produite illisible : {0}")]
     Seed(String),
 }
 

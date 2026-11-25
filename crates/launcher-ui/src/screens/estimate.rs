@@ -61,7 +61,7 @@ pub fn show(ui: &mut Ui, output: Option<&GenerateOutput>) {
     widgets::panel(ui, "Durée estimée", |ui| match &remembered.estimate {
         Ok(estimate) => {
             ui.label(widgets::dim(format!(
-                "Seed {} · {}",
+                "Partie n° {} · {}",
                 remembered.seed_name,
                 summary(estimate)
             )));

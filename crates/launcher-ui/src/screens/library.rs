@@ -1566,19 +1566,20 @@ impl WorldPin {
         match self {
             WorldPin::Native => "Natif",
             WorldPin::Converted => "Converti",
-            WorldPin::Archipelago => "Archipelago",
+            WorldPin::Archipelago => "Classique",
         }
     }
 
     /// Phrase de la fiche du jeu : d'où vient le monde, et ce que ça change pour le joueur.
     pub fn description(self) -> &'static str {
         match self {
-            WorldPin::Native => "Monde natif : écrit pour Raftup, généré sans Python.",
+            WorldPin::Native => "Monde natif : écrit pour Raftup, qui prépare la partie seul.",
             WorldPin::Converted => {
-                "Monde converti depuis Archipelago : généré par Raftup, avec les mêmes règles."
+                "Monde converti : traduit pour Raftup, avec les mêmes règles que le monde classique."
             }
             WorldPin::Archipelago => {
-                "Monde d'Archipelago : généré par le générateur officiel d'Archipelago."
+                "Monde classique : la partie est préparée par le générateur classique, installé \
+                 une seule fois au premier besoin."
             }
         }
     }
@@ -2006,7 +2007,7 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
     let kind = match step.kind {
         StepKind::ModLoader => "Chargeur de mods",
         StepKind::Mod => "Mod du jeu",
-        StepKind::Apworld => "Règles Archipelago",
+        StepKind::Apworld => "Règles de la partie",
     };
     Frame::new()
         .fill(theme::FIELD)
@@ -2041,7 +2042,7 @@ fn step_row(ui: &mut Ui, step: &launcher_core::profile::Step, installed: bool) {
 /// Une ligne qui dit à quelle partie « Lancer le jeu » connectera.
 fn connection_summary(form: &LaunchForm) -> String {
     match launch_mode(form) {
-        LaunchMode::Connect(c) => format!("Slot {} sur {}", c.slot, c.address),
+        LaunchMode::Connect(c) => format!("Joueur {} sur {}", c.slot, c.address),
         LaunchMode::Offline => {
             "Aucune partie choisie : ouvre un lien d'invitation (« Rejoindre »).".to_string()
         }
@@ -2379,7 +2380,7 @@ connect = { method = "cli_args", args = ["--connect", "{address}", "--name", "{s
         form.slot = "Alice".into();
         assert_eq!(
             connection_summary(&form),
-            "Slot Alice sur ws://localhost:38281"
+            "Joueur Alice sur ws://localhost:38281"
         );
     }
 

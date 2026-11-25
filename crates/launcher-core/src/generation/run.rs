@@ -369,7 +369,7 @@ fn generate_in(
     }
 
     if backend.uses_apworlds() {
-        let _ = log.send("Préparation des apworlds".to_string());
+        let _ = log.send("Préparation des mondes".to_string());
         install_apworlds(paths, &archipelago_dir, &req.apworlds)?;
     }
 
@@ -389,7 +389,7 @@ fn generate_in(
         return Err(GenerationError::Cancelled);
     }
 
-    let _ = log.send("Lecture de la seed produite".to_string());
+    let _ = log.send("Lecture de la partie produite".to_string());
     // On ne fait pas confiance au chemin annoncé par le worker : on le reconstruit.
     let zip_file = expected_zip(&result.seed_name, &output_dir)?;
     let archipelago_file = extract_archipelago(&zip_file, &output_dir)?;
@@ -563,7 +563,7 @@ fn install_apworlds(
         if !names.insert(name) {
             return Err(GenerationError::IncompatibleApworld {
                 path: apworld.clone(),
-                reason: "un autre apworld porte le même nom de fichier".to_string(),
+                reason: "un autre monde porte le même nom de fichier".to_string(),
             });
         }
     }
@@ -643,14 +643,14 @@ fn check_apworld(apworld: &Path, ap_version: Option<&str>) -> Result<(), Generat
     if let Some(minimum) = json.get("minimum_ap_version").and_then(|v| v.as_str()) {
         if parse_version(minimum).is_some_and(|min| min > current) {
             return Err(refuse(format!(
-                "demande Archipelago {minimum} au minimum, version installée : {installed}"
+                "demande le générateur classique {minimum} au minimum, version installée : {installed}"
             )));
         }
     }
     if let Some(maximum) = json.get("maximum_ap_version").and_then(|v| v.as_str()) {
         if parse_version(maximum).is_some_and(|max| max < current) {
             return Err(refuse(format!(
-                "demande Archipelago {maximum} au maximum, version installée : {installed}"
+                "demande le générateur classique {maximum} au maximum, version installée : {installed}"
             )));
         }
     }

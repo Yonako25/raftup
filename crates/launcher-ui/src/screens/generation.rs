@@ -253,18 +253,19 @@ fn chosen(engine: Engine) -> EngineUsed {
 /// Phrase qui dit quel moteur a vraiment généré la partie.
 fn engine_line(report: &EngineReport) -> &'static str {
     match report.engine {
-        EngineUsed::Rust => "Moteur : Raftup seul (moteur Rust, sans Python).",
+        EngineUsed::Rust => "Préparée par Raftup seul.",
         EngineUsed::Export => {
-            "Moteur : Archipelago a construit les mondes, Raftup a placé les objets."
+            "Préparée à deux : le générateur classique a construit les mondes, Raftup a placé \
+             les objets."
         }
-        EngineUsed::Python => "Moteur : Archipelago seul.",
+        EngineUsed::Python => "Préparée par le générateur classique seul.",
     }
 }
 
-/// Phrase qui explique un repli sur Archipelago seul, s'il y en a eu un.
+/// Phrase qui explique un repli sur le générateur classique seul, s'il y en a eu un.
 fn fallback_text(report: &EngineReport) -> Option<String> {
     report.fallback.as_ref().map(|reason| {
-        format!("Raftup n'a pas pu placer les objets : {reason}. Archipelago a donc généré seul.")
+        format!("Raftup n'a pas pu placer les objets : {reason}. Le générateur classique a donc tout préparé.")
     })
 }
 
@@ -296,15 +297,17 @@ pub fn show(ui: &mut Ui, generation: &mut Generation) -> bool {
         Generation::Running(task) => {
             widgets::panel(ui, "Génération de la partie", |ui| {
                 let who = match task.engine {
-                    Engine::Python => "Archipelago génère la partie…",
-                    Engine::Rust => "Raftup génère la partie (moteur Rust)…",
-                    Engine::Export => "Archipelago construit les mondes, Raftup place les objets…",
+                    Engine::Python => "Le générateur classique prépare la partie…",
+                    Engine::Rust => "Raftup prépare la partie…",
+                    Engine::Export => {
+                        "Le générateur classique construit les mondes, Raftup place les objets…"
+                    }
                 };
                 ui.label(format!("{who} {}", elapsed(task.started.elapsed())));
                 if let Some(reason) = live_fallback(&task.log) {
                     ui.label(
                         RichText::new(format!(
-                            "Raftup ne peut pas placer les objets : {reason}. Archipelago génère seul."
+                            "Raftup ne peut pas placer les objets : {reason}. Le générateur classique prépare tout."
                         ))
                         .color(theme::AMBER)
                         .size(13.0),
@@ -452,7 +455,7 @@ fn failure(error: &GenerationError) -> Failure {
             .unwrap_or_else(|| path.display().to_string())
     };
     let message = match error {
-        GenerationError::NoPlayers => "Ajoute au moins un fichier YAML.".into(),
+        GenerationError::NoPlayers => "Ajoute au moins un joueur.".into(),
         GenerationError::InvalidPlayerFile { path, reason } => {
             format!("Le fichier {} n'est pas utilisable : {reason}.", name(path))
         }
@@ -466,7 +469,7 @@ fn failure(error: &GenerationError) -> Failure {
                     "Un des jeux demande ta copie de sa ROM ({file}), introuvable. \
                      Raftup ne fournit aucune ROM : ajoute ta copie, ou retire ce joueur."
                 ),
-                None => format!("Archipelago n'a pas pu générer la partie : {message}."),
+                None => format!("La partie n'a pas pu être préparée : {message}."),
             };
             return Failure {
                 message,
@@ -474,7 +477,7 @@ fn failure(error: &GenerationError) -> Failure {
             };
         }
         GenerationError::IncompatibleApworld { path, .. } => format!(
-            "L'apworld {} demande une autre version d'Archipelago.",
+            "Le monde {} demande une autre version du générateur classique.",
             name(path)
         ),
         GenerationError::Cancelled => "Génération annulée.".into(),
@@ -569,7 +572,7 @@ mod tests {
         );
         assert_eq!(
             failure(&GenerationError::NoPlayers).message,
-            "Ajoute au moins un fichier YAML."
+            "Ajoute au moins un joueur."
         );
         let invalid = GenerationError::InvalidPlayerFile {
             path: PathBuf::from("joueurs").join("meta.yaml"),
@@ -585,7 +588,7 @@ mod tests {
         };
         assert_eq!(
             failure(&apworld).message,
-            "L'apworld monde.apworld demande une autre version d'Archipelago."
+            "Le monde monde.apworld demande une autre version du générateur classique."
         );
     }
 
@@ -599,7 +602,7 @@ mod tests {
         let f = failure(&error);
         assert_eq!(
             f.message,
-            "Archipelago n'a pas pu générer la partie : pas assez de lieux."
+            "La partie n'a pas pu être préparée : pas assez de lieux."
         );
         assert_eq!(
             f.detail.as_deref(),
@@ -687,12 +690,15 @@ mod tests {
             engine: EngineUsed::Python,
             fallback: Some("règle « x » non traduite".into()),
         };
-        assert_eq!(engine_line(&repli), "Moteur : Archipelago seul.");
+        assert_eq!(
+            engine_line(&repli),
+            "Préparée par le générateur classique seul."
+        );
         assert_eq!(
             fallback_text(&repli).as_deref(),
             Some(
                 "Raftup n'a pas pu placer les objets : règle « x » non traduite. \
-                 Archipelago a donc généré seul."
+                 Le générateur classique a donc tout préparé."
             )
         );
     }

@@ -64,7 +64,7 @@ impl Readiness {
             Readiness::Tls => "Erreur TLS",
             Readiness::TimedOut => "Délai dépassé",
             Readiness::WrongVersion => "Mauvaise version",
-            Readiness::WrongSlot(_) => "Mauvais slot",
+            Readiness::WrongSlot(_) => "Mauvais nom de joueur",
             Readiness::Unreachable(_) => "Injoignable",
         }
     }
@@ -72,7 +72,9 @@ impl Readiness {
     /// Phrase en français qui dit quoi faire.
     pub fn message(&self) -> String {
         match self {
-            Readiness::Ready => "Le serveur accepte ce slot : le joueur peut se connecter.".into(),
+            Readiness::Ready => {
+                "Le serveur accepte ce nom de joueur : le joueur peut se connecter.".into()
+            }
             Readiness::Tls => ConnectionProblem::Tls.message(),
             Readiness::TimedOut => ConnectionProblem::Timeout.message(),
             Readiness::WrongVersion => ConnectionProblem::IncompatibleVersion.message(),

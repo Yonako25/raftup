@@ -154,15 +154,15 @@ pub fn parse_port(text: &str) -> Result<u16, String> {
 /// `auto`, qu'il contient.
 fn mode_text(mode: &str) -> &'static str {
     if mode.contains("auto-enabled") {
-        "automatiques à l'objectif et permis à tout moment"
+        "automatique à l'objectif, ou sur demande à tout moment"
     } else if mode.contains("auto") {
-        "automatiques à l'objectif"
+        "automatique à l'objectif"
     } else if mode.contains("goal") {
-        "permis après l'objectif"
+        "sur demande, après l'objectif"
     } else if mode.contains("enabled") {
-        "permis à tout moment"
+        "sur demande, à tout moment"
     } else {
-        "désactivés"
+        "jamais"
     }
 }
 
@@ -185,16 +185,18 @@ pub fn is_local_address(host: &str) -> bool {
     is_local_host(&format!("ws://{}:1", host.trim()))
 }
 
-/// « Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %. »
+/// « Options de la partie : objets restants donnés et repris : automatique à l'objectif ;
+/// coût d'un indice 10 %. » Sans les mots `release` / `collect` du protocole : « donner »
+/// ses objets restants aux autres, « reprendre » les siens restés chez eux.
 pub fn seed_options(release_mode: &str, collect_mode: &str, hint_cost: i64) -> String {
     let release = mode_text(release_mode);
     let collect = mode_text(collect_mode);
     let modes = if release == collect {
-        format!("release et collect {release}")
+        format!("objets restants donnés et repris : {release}")
     } else {
-        format!("release {release}, collect {collect}")
+        format!("objets restants donnés : {release} ; repris : {collect}")
     };
-    format!("Options de la seed : {modes}, coût d'un indice {hint_cost} %.")
+    format!("Options de la partie : {modes} ; coût d'un indice {hint_cost} %.")
 }
 
 /// Famille de couleur d'un statut.
@@ -333,7 +335,7 @@ pub fn invitation(
         .unwrap_or_default();
     let shown = game_address(address, fingerprint);
     format!(
-        "Partie Raftup (compatible avec Archipelago)\nAdresse : {shown}{link}\n{password}\nJoueurs : {}",
+        "Partie Raftup\nAdresse : {shown}{link}\n{password}\nJoueurs : {}",
         players.join(", ")
     )
 }
@@ -486,7 +488,7 @@ pub fn activity(event: &GameEvent) -> Vec<Piece> {
 }
 
 /// Mention d'absence et de votes d'un joueur, pour l'équipage :
-/// `absent · « lundi » · 1 vote de release`. Vide s'il n'y a rien à dire.
+/// `absent · « lundi » · 1 vote pour donner ses objets`. Vide s'il n'y a rien à dire.
 pub fn follow_note(slot: &SlotStatus) -> String {
     let mut parts = Vec::new();
     match slot.away.as_deref() {
@@ -496,8 +498,8 @@ pub fn follow_note(slot: &SlotStatus) -> String {
     }
     match slot.release_votes {
         0 => {}
-        1 => parts.push("1 vote de release".to_string()),
-        n => parts.push(format!("{n} votes de release")),
+        1 => parts.push("1 vote pour donner ses objets".to_string()),
+        n => parts.push(format!("{n} votes pour donner ses objets")),
     }
     parts.join(" · ")
 }
@@ -599,7 +601,10 @@ mod tests {
         assert_eq!(follow_note(&s), "absent");
         s.away = Some("lundi".into());
         s.release_votes = 2;
-        assert_eq!(follow_note(&s), "absent · « lundi » · 2 votes de release");
+        assert_eq!(
+            follow_note(&s),
+            "absent · « lundi » · 2 votes pour donner ses objets"
+        );
         let vote = GameEvent::ReleaseVote {
             time: 0.0,
             target: 2,
@@ -680,19 +685,22 @@ mod tests {
     fn options_de_la_seed() {
         assert_eq!(
             seed_options("auto", "auto", 10),
-            "Options de la seed : release et collect automatiques à l'objectif, coût d'un indice 10 %."
+            "Options de la partie : objets restants donnés et repris : automatique à \
+             l'objectif ; coût d'un indice 10 %."
         );
         // `auto-enabled` n'est pas `auto` : permis aussi avant l'objectif.
         assert_eq!(
             seed_options("auto", "auto-enabled", 10),
-            "Options de la seed : release automatiques à l'objectif, collect automatiques à \
-             l'objectif et permis à tout moment, coût d'un indice 10 %."
+            "Options de la partie : objets restants donnés : automatique à l'objectif ; \
+             repris : automatique à l'objectif, ou sur demande à tout moment ; coût d'un \
+             indice 10 %."
         );
         assert_eq!(
             seed_options("goal", "disabled", 5),
-            "Options de la seed : release permis après l'objectif, collect désactivés, coût d'un indice 5 %."
+            "Options de la partie : objets restants donnés : sur demande, après l'objectif ; \
+             repris : jamais ; coût d'un indice 5 %."
         );
-        assert_eq!(mode_text("enabled"), "permis à tout moment");
+        assert_eq!(mode_text("enabled"), "sur demande, à tout moment");
     }
 
     #[test]

@@ -539,9 +539,9 @@ fn confirm_texts(kind: PackageKind) -> (&'static str, &'static str) {
         ),
         _ => (
             "MONDE DU REGISTRE",
-            "Ce monde n'a pas été généré par la CI de Raftup. Une apworld est du code \
-             Python qui s'exécute sur ce PC pendant la génération : ne l'installez que si \
-             vous faites confiance à son auteur.",
+            "Ce monde n'a pas été vérifié par Raftup. Un monde est du code qui s'exécute \
+             sur ce PC pendant la préparation de la partie : ne l'installez que si vous \
+             faites confiance à son auteur.",
         ),
     }
 }
@@ -598,7 +598,7 @@ pub fn show(ui: &mut Ui, panel: &mut RegistryPanel, targets: Option<Targets<'_>>
             ui.add_space(14.0);
             widgets::panel(ui, "Mondes du registre", |ui| {
                 ui.label(widgets::dim(
-                    "Apworlds référencées par le registre signé de Raftup. « Installer » les \
+                    "Mondes référencés par le registre signé de Raftup. « Installer » les \
                      télécharge chez leur auteur et vérifie leur empreinte avant de les poser.",
                 ));
                 ui.add_space(6.0);
@@ -823,7 +823,9 @@ mod tests {
         );
         let (titre, texte) = confirm_texts(PackageKind::NativeWorld);
         assert!(titre.contains("NATIF") && texte.contains("sans code"));
-        assert!(confirm_texts(PackageKind::Apworld).1.contains("Python"));
+        assert!(confirm_texts(PackageKind::Apworld)
+            .1
+            .contains("du code qui s'exécute"));
 
         // Fin d'installation (simulée) : marqué installé, la Bibliothèque est prévenue une fois.
         let (sender, receiver) = mpsc::channel();

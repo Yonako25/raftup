@@ -235,7 +235,7 @@ async fn handle(
             let result = match loaded {
                 Ok(Ok((summary, _data))) => Ok(summary),
                 Ok(Err(e)) => Err(e.to_string()),
-                Err(e) => Err(format!("lecture de la seed interrompue : {e}")),
+                Err(e) => Err(format!("lecture de la partie interrompue : {e}")),
             };
             with_shared(shared, |s| s.seed = Some((path, result)));
         }

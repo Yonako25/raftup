@@ -306,7 +306,7 @@ pub fn install(
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
     if !ap_ok {
         return Err(InstallError::InvalidArgument(format!(
-            "version d'Archipelago : {}",
+            "version du générateur classique : {}",
             options.ap_version
         )));
     }

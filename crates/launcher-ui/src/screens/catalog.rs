@@ -215,7 +215,7 @@ fn info_panel(
             );
         }
         ui.add_space(10.0);
-        info_line(ui, "Nom chez Archipelago", &profile.game.ap_game);
+        info_line(ui, "Nom technique du jeu", &profile.game.ap_game);
         info_line(ui, "Auteurs des mods", &profile.credits.authors.join(", "));
         // « unlicensed » (pas de licence publiée par l'auteur) se dit en français.
         let license = match profile.credits.license.as_str() {
@@ -230,7 +230,7 @@ fn info_panel(
             let kind = match step.kind {
                 StepKind::ModLoader => "Chargeur de mods",
                 StepKind::Mod => "Mod du jeu",
-                StepKind::Apworld => "Règles Archipelago",
+                StepKind::Apworld => "Règles de la partie",
             };
             ui.label(
                 egui::RichText::new(format!("{} · {kind} · {}", step.name, step.version))

@@ -1,4 +1,4 @@
-//! Statut « prêt ? » d'un slot, avec le vrai serveur lancé dans le même processus (F08).
+﻿//! Statut « prêt ? » d'un slot, avec le vrai serveur lancé dans le même processus (F08).
 
 // Fichier de test : un unwrap() qui échoue fait simplement échouer le test.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -57,10 +57,10 @@ async fn mauvais_slot_et_mauvais_jeu() {
     let (_host, address) = start_host(Encryption::Plain, None).await;
     let r = check_slot(&address, "Personne", "ChecksFinder", None).await;
     assert!(matches!(r, Readiness::WrongSlot(_)), "{r:?}");
-    assert_eq!(r.label(), "Mauvais slot");
+    assert_eq!(r.label(), "Mauvais nom de joueur");
     let r = check_slot(&address, "Alice", "Pokemon Red", None).await;
     assert!(matches!(r, Readiness::WrongSlot(_)), "{r:?}");
-    assert!(r.message().contains("slot"));
+    assert!(r.message().contains("autre jeu"), "{}", r.message());
 }
 
 #[tokio::test]
